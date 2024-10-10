@@ -36,3 +36,14 @@ Thumbs.db
 
 # Temporary files
 *.tmp
+
+# Viper config files
+*.yaml
+*.yml
+*.json
+*.toml
+*.ini
+*.env
+
+# Except for the example config file
+!configs/example.yml
