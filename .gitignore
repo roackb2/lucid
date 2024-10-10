@@ -46,4 +46,4 @@ Thumbs.db
 *.env
 
 # Except for the example config file
-!configs/example.yml
+!example.yml

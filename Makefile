@@ -26,6 +26,6 @@ clean:
 swagger:
 	@echo "Generating Swagger documentation..."
 	@which swag > /dev/null || (echo "swag not found. Installing..." && go install github.com/swaggo/swag/cmd/swag@latest)
-	@swag init -g cmd/lucid/main.go -o api/swagger
+	@cd cmd/server && swag init -g main.go -o ../../api/swagger
 
 .PHONY: build clean swagger $(addprefix run-,$(EXECUTABLES))

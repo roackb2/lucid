@@ -9,9 +9,13 @@ import (
 var Config Configuration
 
 type Configuration struct {
+	Mode   string `mapstructure:"mode"`
 	OpenAI struct {
 		APIKey string `mapstructure:"api_key"`
 	} `mapstructure:"openai"`
+	Server struct {
+		Port string `mapstructure:"port"`
+	} `mapstructure:"server"`
 }
 
 func init() {

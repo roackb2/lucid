@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/roackb2/lucid/internal/foundation_models"
+	"github.com/roackb2/lucid/internal/pkg/foundation_models"
 )
 
 func main() {
