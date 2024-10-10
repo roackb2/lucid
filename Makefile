@@ -31,3 +31,12 @@ swagger:
 	@swag init -g main.go -d ./cmd/server,./internal/app/controllers -o api/swagger
 
 .PHONY: build clean swagger $(addprefix run-,$(EXECUTABLES))
+
+# Run migrations up
+migrate-up: build
+	./bin/migrate -up
+
+# Run migrations down
+migrate-down: build
+	./bin/migrate -down
+
