@@ -8,9 +8,15 @@ build:
 		fi \
 	done
 
-# Run the main application (assuming lucid is the main one)
-run: build
-	./bin/lucid
+# Generate run targets for each executable
+define generate_run_target
+$(1): build
+	./bin/$(1)
+endef
+
+# Find all executables in the bin folder and create run targets
+EXECUTABLES := $(notdir $(wildcard bin/*))
+$(foreach exec,$(EXECUTABLES),$(eval $(call generate_run_target,$(exec))))
 
 # Clean up build artifacts
 clean:
@@ -22,4 +28,4 @@ swagger:
 	@which swag > /dev/null || (echo "swag not found. Installing..." && go install github.com/swaggo/swag/cmd/swag@latest)
 	@swag init -g cmd/lucid/main.go -o api/swagger
 
-.PHONY: build run clean swagger
+.PHONY: build clean swagger $(addprefix run-,$(EXECUTABLES))
