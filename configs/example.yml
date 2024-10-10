@@ -1,4 +1,0 @@
-mode: dev
-
-openai:
-  api_key: "sk-proj-1234567890"
