@@ -24,8 +24,10 @@ clean:
 
 # Build Swagger documentation
 swagger:
+	@echo "Current directory: $$(pwd)"
 	@echo "Generating Swagger documentation..."
 	@which swag > /dev/null || (echo "swag not found. Installing..." && go install github.com/swaggo/swag/cmd/swag@latest)
-	@cd cmd/server && swag init -g main.go -o ../../api/swagger
+	@echo "Running swag init..."
+	@swag init -g main.go -d ./cmd/server,./internal/app/controllers -o api/swagger
 
 .PHONY: build clean swagger $(addprefix run-,$(EXECUTABLES))
