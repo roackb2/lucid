@@ -13,7 +13,7 @@ import (
 // @Accept json
 // @Produce json
 // @Success 200 {object} map[string]string
-// @Router /example/helloworld [get]
+// @Router /api/v1/example/helloworld [get]
 func HelloWorld(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Hello World",

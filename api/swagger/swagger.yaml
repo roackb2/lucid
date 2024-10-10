@@ -1,0 +1,96 @@
+definitions:
+  controllers.UserRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - email
+    - password
+    - username
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: roackb2@gmail.com
+    name: Jay / Fienna Liang
+    url: https://github.com/roackb2
+  description: This is the API for the Lucid project.
+  title: Lucid API
+  version: "1.0"
+paths:
+  /api/v1/example/helloworld:
+    get:
+      consumes:
+      - application/json
+      description: Hello World
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Hello World
+      tags:
+      - helloworld
+  /api/v1/users:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user with the provided details
+      parameters:
+      - description: User details
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.UserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User created successfully
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new user
+      tags:
+      - users
+  /healthz:
+    get:
+      description: Returns the health status of the application
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check endpoint
+      tags:
+      - healthz
+securityDefinitions:
+  None:
+    type: basic
+swagger: "2.0"

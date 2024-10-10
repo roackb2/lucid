@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -17,6 +19,7 @@ func main() {
 	up := flag.Bool("up", false, "Run migrations up")
 	down := flag.Bool("down", false, "Run migrations down")
 	version := flag.Int("version", -1, "Migrate to a specific version")
+	dumpSchema := flag.Bool("dump", false, "Dump database schema after migration")
 	flag.Parse()
 
 	// Construct the database URL
@@ -28,7 +31,7 @@ func main() {
 		config.Config.Database.DBName)
 
 	// Create a new migrate instance
-	m, err := migrate.New("file://internal/db/migrations", dbURL)
+	m, err := migrate.New("file://db/migrations", dbURL)
 	if err != nil {
 		log.Fatal("Error creating migrate instance:", err)
 	}
@@ -54,4 +57,36 @@ func main() {
 		fmt.Println("Please specify either -up, -down, or -version")
 		os.Exit(1)
 	}
+
+	// Dump schema if requested
+	if *dumpSchema {
+		if err := dumpDatabaseSchema(dbURL); err != nil {
+			log.Fatal("Error dumping database schema:", err)
+		}
+		fmt.Println("Database schema dumped successfully")
+	}
+}
+
+func dumpDatabaseSchema(dbURL string) error {
+	dbDir := "db"
+	// Set the path for the schema.sql file
+	schemaFile := filepath.Join(dbDir, "schema.sql")
+
+	// Create or truncate the schema.sql file
+	file, err := os.Create(schemaFile)
+	if err != nil {
+		return fmt.Errorf("failed to create schema file: %w", err)
+	}
+	defer file.Close()
+
+	// Run pg_dump to get the schema
+	cmd := exec.Command("pg_dump", "-s", "-O", "-x", dbURL)
+	cmd.Stdout = file
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to dump schema: %w", err)
+	}
+
+	return nil
 }

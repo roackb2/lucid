@@ -34,6 +34,10 @@ func main() {
 		{
 			eg.GET("/helloworld", example.HelloWorld)
 		}
+		users := v1.Group("/users")
+		{
+			users.POST("/", controllers.CreateMockUser)
+		}
 	}
 	r.GET("/healthz", controllers.Healthz)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))

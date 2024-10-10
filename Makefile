@@ -32,11 +32,17 @@ swagger:
 
 .PHONY: build clean swagger $(addprefix run-,$(EXECUTABLES))
 
+generate-db-models:
+	@echo "Generating database models..."
+	@sqlc generate -f db/sqlc.yml
+
 # Run migrations up
 migrate-up: build
-	./bin/migrate -up
+	./bin/migrate -up -dump
 
 # Run migrations down
 migrate-down: build
-	./bin/migrate -down
+	./bin/migrate -down -dump
 
+run-server: generate-db-models swagger build
+	./bin/server
