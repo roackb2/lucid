@@ -16,6 +16,13 @@ type Configuration struct {
 	Server struct {
 		Port string `mapstructure:"port"`
 	} `mapstructure:"server"`
+	Database struct {
+		Host     string `mapstructure:"host"`
+		Port     string `mapstructure:"port"`
+		User     string `mapstructure:"user"`
+		Password string `mapstructure:"password"`
+		DBName   string `mapstructure:"dbname"`
+	} `mapstructure:"database"`
 }
 
 func init() {

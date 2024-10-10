@@ -11,7 +11,7 @@ build:
 # Generate run targets for each executable
 define generate_run_target
 $(1): build
-	./bin/$(1)
+	./bin/$(1) $(ARGS)
 endef
 
 # Find all executables in the bin folder and create run targets
