@@ -1,0 +1,26 @@
+{
+  "name": "lucid-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "vite --port=3080",
+    "build": "vite build",
+    "serve": "vite preview",
+    "start": "vite"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@tanstack/router-plugin": "^1.65.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "vite": "^5.4.8"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "^1.65.0",
+    "@tanstack/router-devtools": "^1.65.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
