@@ -1,6 +1,8 @@
 package agents
 
 import (
+	"log/slog"
+
 	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 )
@@ -13,13 +15,14 @@ type Publisher struct {
 
 func NewPublisher(task string, storage storage.Storage) *Publisher {
 	return &Publisher{
-		model:   foundation.NewFoundationModel(storage),
+		model:   foundation.NewFoundationModel("publisher", storage),
 		storage: storage,
 		task:    task,
 	}
 }
 
 func (p *Publisher) StartTask(ch chan string) (string, error) {
+	slog.Info("Publisher: Starting task", "task", p.task)
 	response, err := p.model.Chat(p.task)
 	if err != nil {
 		return "", err

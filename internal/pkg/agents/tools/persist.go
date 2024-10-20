@@ -35,7 +35,7 @@ func NewPersistTool(storage storage.Storage) *PersistTool {
 			Type: openai.F(openai.ChatCompletionToolTypeFunction),
 			Function: openai.F(openai.FunctionDefinitionParam{
 				Name:        openai.String("search_content"),
-				Description: openai.String("Search the content in the storage"),
+				Description: openai.String("Search the content in the storage. Currently only supports exact match. Keep your query as short as possible, best to be single word."),
 				Parameters: openai.F(openai.FunctionParameters{
 					"type": "object",
 					"properties": map[string]interface{}{
