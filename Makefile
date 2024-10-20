@@ -10,7 +10,7 @@ build:
 
 # Generate run targets for each executable
 define generate_run_target
-$(1): build
+$(1): generate-db-models swagger build
 	./bin/$(1) $(ARGS)
 endef
 

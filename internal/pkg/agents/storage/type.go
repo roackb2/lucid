@@ -1,6 +1,6 @@
 package storage
 
 type Storage interface {
-	Save(content string)
-	Search(query string) []string
+	Save(content string) error
+	Search(query string) ([]string, error)
 }

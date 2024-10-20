@@ -2,7 +2,9 @@ package foundation
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -21,10 +23,9 @@ type FoundationModel interface {
 }
 
 type LLM struct {
-	role     string
-	client   *openai.Client
-	messages []openai.ChatCompletionMessageParamUnion
-	storage  storage.Storage
+	role    string
+	client  *openai.Client
+	storage storage.Storage
 }
 
 func NewFoundationModel(role string, storage storage.Storage) FoundationModel {
@@ -32,30 +33,27 @@ func NewFoundationModel(role string, storage storage.Storage) FoundationModel {
 		option.WithAPIKey(config.Config.OpenAI.APIKey),
 	)
 	return &LLM{
-		role:     role,
-		client:   client,
-		messages: []openai.ChatCompletionMessageParamUnion{},
-		storage:  storage,
+		role:    role,
+		client:  client,
+		storage: storage,
 	}
 }
 
 func (l *LLM) Chat(prompt string) (string, error) {
 	ctx := context.Background()
 
-	l.messages = append(l.messages, openai.SystemMessage(SystemPrompt))
-	l.messages = append(l.messages, openai.UserMessage(prompt))
-
 	persistTool := tools.NewPersistTool(l.storage)
 	flowTool := tools.NewFlowTool()
 	tools := append(persistTool.GetToolDefinition(), flowTool.GetToolDefinition()...)
 
 	params := openai.ChatCompletionNewParams{
-		Messages: openai.F(l.messages),
-		Tools:    openai.F(tools),
-		Model:    openai.F(openai.ChatModelGPT4o),
+		Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(SystemPrompt),
+			openai.UserMessage(prompt),
+		}),
+		Tools: openai.F(tools),
+		Model: openai.F(openai.ChatModelGPT4o),
 	}
-
-	resp := ""
 
 	for true {
 		chatCompletion, err := l.client.Chat.Completions.New(ctx, params)
@@ -63,21 +61,44 @@ func (l *LLM) Chat(prompt string) (string, error) {
 			return "", err
 		}
 
-		resp = chatCompletion.Choices[0].Message.Content
+		resp := chatCompletion.Choices[0].Message.Content
 		slog.Info("Agent chat response", "role", l.role, "response", resp)
-		for _, toolCall := range chatCompletion.Choices[0].Message.ToolCalls {
-			funcName := toolCall.Function.Name
-			slog.Info("Agent tool call", "role", l.role, "tool_call", funcName)
-			switch funcName {
-			case "save_content":
-				persistTool.SaveContent(ctx, toolCall)
-			case "search_content":
-				persistTool.SearchContent(ctx, toolCall)
-			case "done":
-				return resp, nil
+
+		if len(chatCompletion.Choices[0].Message.ToolCalls) > 0 {
+			for _, toolCall := range chatCompletion.Choices[0].Message.ToolCalls {
+				funcName := toolCall.Function.Name
+				slog.Info("Agent tool call", "role", l.role, "tool_call", funcName)
+
+				assistantMsgContent := ""
+				switch funcName {
+				case "save_content":
+					err = persistTool.SaveContent(ctx, toolCall)
+					if err != nil {
+						slog.Error("Agent tool call error", "role", l.role, "tool_call", funcName, "error", err)
+						assistantMsgContent = fmt.Sprintf("Error: %v", err)
+					} else {
+						assistantMsgContent = "Content saved successfully."
+					}
+				case "search_content":
+					toolRes, err := persistTool.SearchContent(ctx, toolCall)
+					if err != nil {
+						slog.Error("Agent tool call error", "role", l.role, "tool_call", funcName, "error", err)
+						assistantMsgContent = fmt.Sprintf("Error: %v", err)
+					} else {
+						assistantMsgContent = fmt.Sprintf("Results: %v", strings.Join(toolRes, ", "))
+					}
+				case "done":
+					slog.Info("Agent done tool call", "role", l.role, "tool_call", funcName)
+					return resp, nil
+				}
+				slog.Info("Agent assistant message", "role", l.role, "message", assistantMsgContent)
+				params.Messages.Value = append(params.Messages.Value, openai.AssistantMessage(assistantMsgContent))
 			}
+		} else {
+			params.Messages.Value = append(params.Messages.Value, openai.AssistantMessage(resp))
 		}
-		params.Messages.Value = append(params.Messages.Value, openai.AssistantMessage(resp))
+
+		slog.Info("Agent messages", "role", l.role, "messages", params.Messages.Value)
 
 		time.Sleep(SleepInterval)
 	}

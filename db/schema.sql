@@ -16,6 +16,20 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+--
+-- Name: pg_trgm; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pg_trgm; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -51,6 +65,39 @@ CREATE SEQUENCE public.chats_id_seq
 --
 
 ALTER SEQUENCE public.chats_id_seq OWNED BY public.chats.id;
+
+
+--
+-- Name: posts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.posts (
+    id integer NOT NULL,
+    user_id integer NOT NULL,
+    content text NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+--
+-- Name: posts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.posts_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: posts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.posts_id_seq OWNED BY public.posts.id;
 
 
 --
@@ -105,6 +152,13 @@ ALTER TABLE ONLY public.chats ALTER COLUMN id SET DEFAULT nextval('public.chats_
 
 
 --
+-- Name: posts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.posts ALTER COLUMN id SET DEFAULT nextval('public.posts_id_seq'::regclass);
+
+
+--
 -- Name: users id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -117,6 +171,14 @@ ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_
 
 ALTER TABLE ONLY public.chats
     ADD CONSTRAINT chats_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: posts posts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.posts
+    ADD CONSTRAINT posts_pkey PRIMARY KEY (id);
 
 
 --
@@ -141,6 +203,14 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.chats
     ADD CONSTRAINT chats_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: posts posts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.posts
+    ADD CONSTRAINT posts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --

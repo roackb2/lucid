@@ -8,8 +8,8 @@ import (
 )
 
 func main() {
-	storage := storage.NewMemoryStorage()
-	publisher := agents.NewPublisher("I have a new song called 'Jazz in the Rain'.", storage)
+	storage := storage.NewRelationalStorage()
+	publisher := agents.NewPublisher("I have a new song called 'Jazz in the Rain'. Please publish it.", storage)
 	consumer := agents.NewConsumer("Is there any new Jazz music?", storage)
 	ch := make(chan string)
 	go publisher.StartTask(ch)

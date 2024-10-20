@@ -60,15 +60,13 @@ func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompl
 	_ = json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 
 	content := args["content"].(string)
-	t.storage.Save(content)
-	return nil
+	return t.storage.Save(content)
 }
 
-func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) error {
+func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) ([]string, error) {
 	var args map[string]interface{}
 	_ = json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 
 	query := args["query"].(string)
-	t.storage.Search(query)
-	return nil
+	return t.storage.Search(query)
 }

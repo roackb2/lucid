@@ -16,6 +16,14 @@ type Chat struct {
 	UpdatedAt pgtype.Timestamp
 }
 
+type Post struct {
+	ID        int32
+	UserID    int32
+	Content   string
+	CreatedAt pgtype.Timestamp
+	UpdatedAt pgtype.Timestamp
+}
+
 type SchemaMigration struct {
 	Version int64
 	Dirty   bool
