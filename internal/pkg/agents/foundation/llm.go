@@ -2,6 +2,7 @@ package foundation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -61,44 +62,41 @@ func (l *LLM) Chat(prompt string) (string, error) {
 			return "", err
 		}
 
+		printMessages(chatCompletion)
+
 		resp := chatCompletion.Choices[0].Message.Content
 		slog.Info("Agent chat response", "role", l.role, "response", resp)
+		params.Messages.Value = append(params.Messages.Value, openai.AssistantMessage(resp))
 
-		if len(chatCompletion.Choices[0].Message.ToolCalls) > 0 {
-			for _, toolCall := range chatCompletion.Choices[0].Message.ToolCalls {
-				funcName := toolCall.Function.Name
-				slog.Info("Agent tool call", "role", l.role, "tool_call", funcName)
+		for _, toolCall := range chatCompletion.Choices[0].Message.ToolCalls {
+			funcName := toolCall.Function.Name
+			slog.Info("Agent tool call", "role", l.role, "tool_call", funcName)
 
-				assistantMsgContent := ""
-				switch funcName {
-				case "save_content":
-					err = persistTool.SaveContent(ctx, toolCall)
-					if err != nil {
-						slog.Error("Agent tool call error", "role", l.role, "tool_call", funcName, "error", err)
-						assistantMsgContent = fmt.Sprintf("Error: %v", err)
-					} else {
-						assistantMsgContent = "Content saved successfully."
-					}
-				case "search_content":
-					toolRes, err := persistTool.SearchContent(ctx, toolCall)
-					if err != nil {
-						slog.Error("Agent tool call error", "role", l.role, "tool_call", funcName, "error", err)
-						assistantMsgContent = fmt.Sprintf("Error: %v", err)
-					} else {
-						assistantMsgContent = fmt.Sprintf("Results: %v", strings.Join(toolRes, ", "))
-					}
-				case "done":
-					slog.Info("Agent done tool call", "role", l.role, "tool_call", funcName)
-					return resp, nil
+			toolMsgContent := ""
+			switch funcName {
+			case "save_content":
+				err = persistTool.SaveContent(ctx, toolCall)
+				if err != nil {
+					slog.Error("Agent tool call error", "role", l.role, "tool_call", funcName, "error", err)
+					toolMsgContent = fmt.Sprintf("Error: %v", err)
+				} else {
+					toolMsgContent = "Content saved successfully."
 				}
-				slog.Info("Agent assistant message", "role", l.role, "message", assistantMsgContent)
-				params.Messages.Value = append(params.Messages.Value, openai.AssistantMessage(assistantMsgContent))
+			case "search_content":
+				toolRes, err := persistTool.SearchContent(ctx, toolCall)
+				if err != nil {
+					slog.Error("Agent tool call error", "role", l.role, "tool_call", funcName, "error", err)
+					toolMsgContent = fmt.Sprintf("Error: %v", err)
+				} else {
+					toolMsgContent = fmt.Sprintf("Results: %v", strings.Join(toolRes, ", "))
+				}
+			case "done":
+				slog.Info("Agent done tool call", "role", l.role, "tool_call", funcName)
+				return resp, nil
 			}
-		} else {
-			params.Messages.Value = append(params.Messages.Value, openai.AssistantMessage(resp))
+			slog.Info("Agent tool message", "role", l.role, "message", toolMsgContent)
+			params.Messages.Value = append(params.Messages.Value, openai.ToolMessage(toolCall.ID, toolMsgContent))
 		}
-
-		slog.Info("Agent messages", "role", l.role, "messages", params.Messages.Value)
 
 		time.Sleep(SleepInterval)
 	}
@@ -106,6 +104,7 @@ func (l *LLM) Chat(prompt string) (string, error) {
 	return "", nil
 }
 
-func getWeather(location string) string {
-	return "The weather in " + location + " is sunny."
+func printMessages(messages *openai.ChatCompletion) {
+	messagesJson, _ := json.MarshalIndent(messages, "", "  ")
+	fmt.Printf("%s\n", messagesJson)
 }
