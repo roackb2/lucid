@@ -1,16 +1,21 @@
 package agents
 
-import "github.com/roackb2/lucid/internal/pkg/agents/foundation"
+import (
+	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
+	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+)
 
 type Consumer struct {
-	model foundation.FoundationModel
-	task  string
+	model   foundation.FoundationModel
+	storage storage.Storage
+	task    string
 }
 
-func NewConsumer(task string) *Consumer {
+func NewConsumer(task string, storage storage.Storage) *Consumer {
 	return &Consumer{
-		model: foundation.NewFoundationModel(),
-		task:  task,
+		model:   foundation.NewFoundationModel(),
+		storage: storage,
+		task:    task,
 	}
 }
 

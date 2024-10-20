@@ -1,16 +1,21 @@
 package agents
 
-import "github.com/roackb2/lucid/internal/pkg/agents/foundation"
+import (
+	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
+	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+)
 
 type Publisher struct {
-	model foundation.FoundationModel
-	task  string
+	model   foundation.FoundationModel
+	storage storage.Storage
+	task    string
 }
 
-func NewPublisher(task string) *Publisher {
+func NewPublisher(task string, storage storage.Storage) *Publisher {
 	return &Publisher{
-		model: foundation.NewFoundationModel(),
-		task:  task,
+		model:   foundation.NewFoundationModel(),
+		storage: storage,
+		task:    task,
 	}
 }
 

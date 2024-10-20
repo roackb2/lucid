@@ -4,11 +4,13 @@ import (
 	"fmt"
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
+	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 )
 
 func main() {
-	publisher := agents.NewPublisher("I have a new song called 'Jazz in the Rain'.")
-	consumer := agents.NewConsumer("Is there any new Jazz music?")
+	storage := storage.NewMemoryStorage()
+	publisher := agents.NewPublisher("I have a new song called 'Jazz in the Rain'.", storage)
+	consumer := agents.NewConsumer("Is there any new Jazz music?", storage)
 	ch := make(chan string)
 	go publisher.StartTask(ch)
 	go consumer.StartTask(ch)
