@@ -13,7 +13,7 @@ type Consumer struct {
 
 func NewConsumer(task string, storage storage.Storage) *Consumer {
 	return &Consumer{
-		model:   foundation.NewFoundationModel(),
+		model:   foundation.NewFoundationModel(storage),
 		storage: storage,
 		task:    task,
 	}

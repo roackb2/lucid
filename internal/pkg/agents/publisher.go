@@ -13,7 +13,7 @@ type Publisher struct {
 
 func NewPublisher(task string, storage storage.Storage) *Publisher {
 	return &Publisher{
-		model:   foundation.NewFoundationModel(),
+		model:   foundation.NewFoundationModel(storage),
 		storage: storage,
 		task:    task,
 	}
