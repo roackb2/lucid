@@ -42,7 +42,7 @@ func NewPersistTool(storage storage.Storage) *PersistTool {
 					"properties": map[string]interface{}{
 						"query": map[string]string{
 							"type":        "string",
-							"description": "The query to search the content in the storage, currently only supports PostgreSQL SIMILARITY SEARCH.",
+							"description": "The query to search the content in the storage, currently only supports PostgreSQL SIMILARITY SEARCH. Keep the query as simple as possible, best to be a single word.",
 						},
 					},
 					"required": []string{"query"},
