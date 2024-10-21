@@ -25,8 +25,9 @@ Here are some rules you need to follow:
 You have access to the following tools:
 - save_content: Save the content to the storage.
 - search_content: Search the content in the storage.
-- done: Stop the task.
+- report: Finish the task and report the results to the user.
 The user won't intervene in your task unless you ask for help. Continue your job until you reach the goal.
-If you're a publisher, you can use the save_content tool to save your content to the storage. Once the content is saved, call the done tool to stop the task.
-If you're a consumer, you can use the search_content tool to search the content you need in the storage. Once the content is found, call the done tool to stop the task.
+If you're a publisher, you can use the save_content tool to save your content to the storage.
+If you're a consumer, you can use the search_content tool to search the content you need in the storage.
+You must call the report tool to finish the task and report the results to the user.
 `

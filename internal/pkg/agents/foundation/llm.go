@@ -2,7 +2,6 @@ package foundation
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/tools"
+	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
 const (
@@ -57,18 +57,21 @@ func (l *LLM) Chat(prompt string) (string, error) {
 	}
 
 	for true {
+		l.debugStruct("Agent chat messages", params.Messages.Value)
+
+		// Ask the LLM
 		chatCompletion, err := l.client.Chat.Completions.New(ctx, params)
 		if err != nil {
+			slog.Error("Agent chat error", "role", l.role, "error", err)
 			return "", err
 		}
+		agentResponse := chatCompletion.Choices[0].Message
+		params.Messages.Value = append(params.Messages.Value, agentResponse)
 
-		printMessages(chatCompletion)
+		l.debugStruct("Agent chat completion", chatCompletion)
 
-		resp := chatCompletion.Choices[0].Message.Content
-		slog.Info("Agent chat response", "role", l.role, "response", resp)
-		params.Messages.Value = append(params.Messages.Value, openai.AssistantMessage(resp))
-
-		for _, toolCall := range chatCompletion.Choices[0].Message.ToolCalls {
+		// Handle tool calls
+		for _, toolCall := range agentResponse.ToolCalls {
 			funcName := toolCall.Function.Name
 			slog.Info("Agent tool call", "role", l.role, "tool_call", funcName)
 
@@ -90,21 +93,26 @@ func (l *LLM) Chat(prompt string) (string, error) {
 				} else {
 					toolMsgContent = fmt.Sprintf("Results: %v", strings.Join(toolRes, ", "))
 				}
-			case "done":
-				slog.Info("Agent done tool call", "role", l.role, "tool_call", funcName)
-				return resp, nil
+			case "report":
+				slog.Info("Agent report tool call", "role", l.role, "tool_call", funcName)
+				toolMsgContent, err := flowTool.Report(ctx, toolCall)
+				if err != nil {
+					slog.Error("Agent tool call error", "role", l.role, "tool_call", funcName, "error", err)
+					toolMsgContent = fmt.Sprintf("Error: %v", err)
+				}
+				return toolMsgContent, nil
 			}
 			slog.Info("Agent tool message", "role", l.role, "message", toolMsgContent)
 			params.Messages.Value = append(params.Messages.Value, openai.ToolMessage(toolCall.ID, toolMsgContent))
 		}
-
-		time.Sleep(SleepInterval)
 	}
+
+	time.Sleep(SleepInterval)
 
 	return "", nil
 }
 
-func printMessages(messages *openai.ChatCompletion) {
-	messagesJson, _ := json.MarshalIndent(messages, "", "  ")
-	fmt.Printf("%s\n", messagesJson)
+func (l *LLM) debugStruct(title string, v any) {
+	slog.Info(title, "role", l.role)
+	utils.PrintStruct(v)
 }

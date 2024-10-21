@@ -11,16 +11,19 @@ func main() {
 	storage := storage.NewRelationalStorage()
 	publisher := agents.NewPublisher("I have a new song called 'Jazz in the Rain'. Please publish it.", storage)
 	consumer := agents.NewConsumer("Is there any new Jazz music?", storage)
-	ch := make(chan string)
-	go publisher.StartTask(ch)
-	go consumer.StartTask(ch)
+	resCh := make(chan string)
+	errCh := make(chan error)
+	go publisher.StartTask(resCh, errCh)
+	go consumer.StartTask(resCh, errCh)
 
 	// Next step: collect published content and persists to storage
 	// Allow agent to search for content
 	for {
 		select {
-		case msg := <-ch:
+		case msg := <-resCh:
 			fmt.Println(msg)
+		case err := <-errCh:
+			fmt.Println(err)
 		}
 	}
 }

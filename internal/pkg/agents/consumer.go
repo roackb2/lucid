@@ -21,12 +21,13 @@ func NewConsumer(task string, storage storage.Storage) *Consumer {
 	}
 }
 
-func (c *Consumer) StartTask(ch chan string) (string, error) {
+func (c *Consumer) StartTask(resCh chan string, errCh chan error) {
 	slog.Info("Consumer: Starting task", "task", c.task)
 	response, err := c.model.Chat(c.task)
 	if err != nil {
-		return "", err
+		errCh <- err
+		return
 	}
-	ch <- response
-	return response, nil
+	slog.Info("Consumer: Task finished", "response", response)
+	resCh <- response
 }

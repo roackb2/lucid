@@ -21,12 +21,13 @@ func NewPublisher(task string, storage storage.Storage) *Publisher {
 	}
 }
 
-func (p *Publisher) StartTask(ch chan string) (string, error) {
+func (p *Publisher) StartTask(resCh chan string, errCh chan error) {
 	slog.Info("Publisher: Starting task", "task", p.task)
 	response, err := p.model.Chat(p.task)
 	if err != nil {
-		return "", err
+		errCh <- err
+		return
 	}
-	ch <- response
-	return response, nil
+	slog.Info("Publisher: Task finished", "response", response)
+	resCh <- response
 }

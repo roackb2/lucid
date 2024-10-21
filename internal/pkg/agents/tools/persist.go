@@ -24,7 +24,8 @@ func NewPersistTool(storage storage.Storage) *PersistTool {
 					"type": "object",
 					"properties": map[string]interface{}{
 						"content": map[string]string{
-							"type": "string",
+							"type":        "string",
+							"description": "The content to save to the storage",
 						},
 					},
 					"required": []string{"content"},
@@ -35,12 +36,13 @@ func NewPersistTool(storage storage.Storage) *PersistTool {
 			Type: openai.F(openai.ChatCompletionToolTypeFunction),
 			Function: openai.F(openai.FunctionDefinitionParam{
 				Name:        openai.String("search_content"),
-				Description: openai.String("Search the content in the storage. Currently only supports exact match. Keep your query as short as possible, best to be single word."),
+				Description: openai.String("Search the content in the storage."),
 				Parameters: openai.F(openai.FunctionParameters{
 					"type": "object",
 					"properties": map[string]interface{}{
 						"query": map[string]string{
-							"type": "string",
+							"type":        "string",
+							"description": "The query to search the content in the storage, currently only supports PostgreSQL SIMILARITY SEARCH.",
 						},
 					},
 					"required": []string{"query"},
@@ -57,7 +59,10 @@ func (t *PersistTool) GetToolDefinition() []openai.ChatCompletionToolParam {
 
 func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) error {
 	var args map[string]interface{}
-	_ = json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
+	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
+	if err != nil {
+		return err
+	}
 
 	content := args["content"].(string)
 	return t.storage.Save(content)
@@ -65,7 +70,10 @@ func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompl
 
 func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) ([]string, error) {
 	var args map[string]interface{}
-	_ = json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
+	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
+	if err != nil {
+		return nil, err
+	}
 
 	query := args["query"].(string)
 	return t.storage.Search(query)
