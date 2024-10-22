@@ -48,3 +48,6 @@ config/*.ini
 
 # Except for the example config file
 !config/example.yml
+
+# Data
+data/*

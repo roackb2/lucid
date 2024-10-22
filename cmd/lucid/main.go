@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
@@ -35,7 +37,7 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	resCh := make(chan string, len(publishers)+len(consumers))
+	resCh := make(chan agents.AgentResponse, len(publishers)+len(consumers))
 	errCh := make(chan error, 1)
 
 	numWorkers := len(publishers) + len(consumers)
@@ -68,15 +70,35 @@ func main() {
 	// Read from channels
 	for {
 		select {
-		case msg, ok := <-resCh:
+		case response, ok := <-resCh:
 			if !ok {
 				// resCh is closed and all messages are received
 				return
 			}
-			fmt.Println(msg)
+			fmt.Println(response)
+			writeToFile(fmt.Sprintf("%s_%s.txt", response.Role, response.Id), response.Message)
 		case err := <-errCh:
 			fmt.Println("Error:", err)
 			return // Exit on error
 		}
 	}
+}
+
+func writeToFile(filename string, content string) error {
+	outputDir := "data/output"
+	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
+		os.Mkdir(outputDir, 0755)
+	}
+
+	if _, err := os.Stat(filepath.Join(outputDir, filename)); os.IsNotExist(err) {
+		file, err := os.Create(filepath.Join(outputDir, filename))
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		_, err = file.WriteString(content)
+		return err
+	}
+	return nil
 }
