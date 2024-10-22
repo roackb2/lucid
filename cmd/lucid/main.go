@@ -10,6 +10,8 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 )
 
+var outputDir = "data/output"
+
 func main() {
 	// storage := storage.NewRelationalStorage()
 	storage, err := storage.NewVectorStorage()
@@ -20,11 +22,11 @@ func main() {
 
 	songs := []string{
 		"Jazz in the Rain",
-		// "Awesome Jazz Music Playlist",
-		// "Jazz Music for Relaxation",
-		// "Jazz Music for Focus",
-		// "Jazz Music for Studying",
-		// "Jazz Music for Working",
+		"Awesome Jazz Music Playlist",
+		"Jazz Music for Relaxation",
+		"Jazz Music for Focus",
+		"Jazz Music for Studying",
+		"Jazz Music for Working",
 	}
 	publishers := []agents.Publisher{}
 	for _, song := range songs {
@@ -33,8 +35,8 @@ func main() {
 
 	queries := []string{
 		"Is there any new Jazz music?",
-		// "I'm looking for some Jazz music to study to.",
-		// "I need some Jazz music to relax to.",
+		"I'm looking for some Jazz music to study to.",
+		"I need some Jazz music to relax to.",
 	}
 	consumers := []agents.Consumer{}
 	for _, query := range queries {
@@ -72,6 +74,12 @@ func main() {
 		close(resCh)
 	}()
 
+	// Remove all files in the output directory
+	if err := removeAllFiles(outputDir); err != nil {
+		fmt.Println("Error removing all files:", err)
+		return
+	}
+
 	// Read from channels
 	for {
 		select {
@@ -90,7 +98,6 @@ func main() {
 }
 
 func writeToFile(filename string, content string) error {
-	outputDir := "data/output"
 	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
 		os.Mkdir(outputDir, 0755)
 	}
@@ -104,6 +111,19 @@ func writeToFile(filename string, content string) error {
 
 		_, err = file.WriteString(content)
 		return err
+	}
+	return nil
+}
+
+func removeAllFiles(dir string) error {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to read directory: %w", err)
+	}
+	for _, f := range files {
+		if err := os.Remove(filepath.Join(dir, f.Name())); err != nil {
+			return fmt.Errorf("failed to remove file %s: %w", f.Name(), err)
+		}
 	}
 	return nil
 }

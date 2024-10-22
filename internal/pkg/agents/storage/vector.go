@@ -148,7 +148,7 @@ func (v *VectorStorage) createPostsCollection() error {
 	return nil
 }
 
-func (v *VectorStorage) Insert(content string, embeddings [][]float32) error {
+func (v *VectorStorage) InsertVector(content string, embeddings [][]float32) error {
 	contentColumn := entity.NewColumnVarChar("content", []string{content})
 	embeddingColumn := entity.NewColumnFloatVector("embedding", config.Config.Milvus.Dimension, embeddings)
 	res, err := v.client.Insert(context.Background(), collectionName, "", contentColumn, embeddingColumn)
@@ -160,6 +160,34 @@ func (v *VectorStorage) Insert(content string, embeddings [][]float32) error {
 	return nil
 }
 
+func (v *VectorStorage) SearchVector(embedding []float32) ([]milvusClient.SearchResult, error) {
+	slog.Info("VectorStorage: Searching for content")
+	topK := 5
+	outputFields := []string{"id", "content"}
+	sp, err := entity.NewIndexFlatSearchParam()
+	if err != nil {
+		slog.Error("VectorStorage: Failed to create search param", "error", err)
+		return nil, err
+	}
+	searchResult, err := v.client.Search(
+		context.Background(),
+		collectionName,
+		[]string{},
+		"",
+		outputFields,
+		[]entity.Vector{entity.FloatVector(embedding)},
+		"embedding",
+		entity.L2,
+		topK,
+		sp,
+	)
+	if err != nil {
+		slog.Error("VectorStorage: Failed to search", "error", err)
+		return nil, err
+	}
+	return searchResult, nil
+}
+
 func (v *VectorStorage) Save(content string) error {
 	slog.Info("VectorStorage: Saving content", "content", content)
 	embeddings, err := embedding.Embed(content)
@@ -168,7 +196,7 @@ func (v *VectorStorage) Save(content string) error {
 		return err
 	}
 	embeddingsFloat := embedding.ConvertToFloat32(embeddings)
-	err = v.Insert(content, embeddingsFloat)
+	err = v.InsertVector(content, embeddingsFloat)
 	if err != nil {
 		slog.Error("VectorStorage: Failed to insert", "error", err)
 		return err
@@ -178,5 +206,40 @@ func (v *VectorStorage) Save(content string) error {
 
 func (v *VectorStorage) Search(query string) ([]string, error) {
 	slog.Info("VectorStorage: Searching for content", "query", query)
-	return nil, nil
+	embeddings, err := embedding.Embed(query)
+	if err != nil {
+		slog.Error("VectorStorage: Failed to embed content", "error", err)
+		return nil, err
+	}
+	embeddingsFloat := embedding.ConvertToFloat32(embeddings)
+	searchResult, err := v.SearchVector(embeddingsFloat[0])
+	if err != nil {
+		slog.Error("VectorStorage: Failed to search", "error", err)
+		return nil, err
+	}
+	slog.Info("VectorStorage: Vector search results", "num_results", len(searchResult))
+	results, err := convertSearchResult(searchResult)
+	if err != nil {
+		slog.Error("VectorStorage: Failed to convert search result", "error", err)
+		return nil, err
+	}
+	slog.Info("VectorStorage: Final search results", "results", results)
+	return results, nil
+}
+
+func convertSearchResult(searchResult []milvusClient.SearchResult) ([]string, error) {
+	results := []string{}
+	for _, result := range searchResult {
+		for _, field := range result.Fields {
+			if field.Name() == "content" {
+				content, err := field.Get(0)
+				if err != nil {
+					slog.Error("VectorStorage: Failed to get content", "error", err)
+					return nil, err
+				}
+				results = append(results, content.(string))
+			}
+		}
+	}
+	return results, nil
 }
