@@ -1,3 +1,5 @@
+milvus-url = milvus-standalone.orb.local:19530
+
 # Build all executables in the cmd folder
 build:
 	@for dir in cmd/*; do \
@@ -46,3 +48,12 @@ migrate-down: build
 
 run-server: generate-db-models swagger build
 	./bin/server
+
+start-milvus:
+	cd milvus && ./standalone_embed.sh start
+
+stop-milvus:
+	cd milvus && ./standalone_embed.sh stop
+
+run-milvus-gui:
+	docker run --rm -p 8000:3000 -e MILVUS_URL=${milvus-url} zilliz/attu:v2.4

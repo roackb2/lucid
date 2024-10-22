@@ -8,9 +8,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/querier"
 )
 
-type RelationalStorage struct {
-	content []string
-}
+type RelationalStorage struct{}
 
 func NewRelationalStorage() *RelationalStorage {
 	return &RelationalStorage{}

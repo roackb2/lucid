@@ -51,3 +51,7 @@ config/*.ini
 
 # Data
 data/*
+
+# Milvus
+milvus/*
+!milvus/standalone_embed.sh
