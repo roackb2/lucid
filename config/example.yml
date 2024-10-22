@@ -12,3 +12,7 @@ database:
   user: lucid
   password: "12345678"
   dbname: lucid
+
+milvus:
+  address: localhost:19530
+  dimension: 1536

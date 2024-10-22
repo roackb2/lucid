@@ -23,6 +23,10 @@ type Configuration struct {
 		Password string `mapstructure:"password"`
 		DBName   string `mapstructure:"dbname"`
 	} `mapstructure:"database"`
+	Milvus struct {
+		Address   string `mapstructure:"address"`
+		Dimension int    `mapstructure:"dimension"`
+	} `mapstructure:"milvus"`
 }
 
 func init() {
