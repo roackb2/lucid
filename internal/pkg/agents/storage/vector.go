@@ -9,6 +9,7 @@ import (
 	milvusClient "github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 	"github.com/roackb2/lucid/config"
+	"github.com/roackb2/lucid/internal/pkg/agents/embedding"
 )
 
 var (
@@ -147,12 +148,31 @@ func (v *VectorStorage) createPostsCollection() error {
 	return nil
 }
 
-func (v *VectorStorage) ListCollections() error {
+func (v *VectorStorage) Insert(content string, embeddings [][]float32) error {
+	contentColumn := entity.NewColumnVarChar("content", []string{content})
+	embeddingColumn := entity.NewColumnFloatVector("embedding", config.Config.Milvus.Dimension, embeddings)
+	res, err := v.client.Insert(context.Background(), collectionName, "", contentColumn, embeddingColumn)
+	if err != nil {
+		slog.Error("VectorStorage: Failed to insert", "error", err)
+		return err
+	}
+	slog.Info("VectorStorage: Inserted", "result", res)
 	return nil
 }
 
 func (v *VectorStorage) Save(content string) error {
 	slog.Info("VectorStorage: Saving content", "content", content)
+	embeddings, err := embedding.Embed(content)
+	if err != nil {
+		slog.Error("VectorStorage: Failed to embed content", "error", err)
+		return err
+	}
+	embeddingsFloat := embedding.ConvertToFloat32(embeddings)
+	err = v.Insert(content, embeddingsFloat)
+	if err != nil {
+		slog.Error("VectorStorage: Failed to insert", "error", err)
+		return err
+	}
 	return nil
 }
 
