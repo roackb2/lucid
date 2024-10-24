@@ -1,3 +1,3 @@
-DROP TABLE chats;
 DROP TABLE posts;
 DROP TABLE users;
+DROP TABLE agent_states;

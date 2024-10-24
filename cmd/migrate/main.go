@@ -31,7 +31,7 @@ func main() {
 		config.Config.Database.DBName)
 
 	// Create a new migrate instance
-	m, err := migrate.New("file://db/migrations", dbURL)
+	m, err := migrate.New("file://database/migrations", dbURL)
 	if err != nil {
 		log.Fatal("Error creating migrate instance:", err)
 	}
@@ -68,7 +68,7 @@ func main() {
 }
 
 func dumpDatabaseSchema(dbURL string) error {
-	dbDir := "db"
+	dbDir := "database"
 	// Set the path for the schema.sql file
 	schemaFile := filepath.Join(dbDir, "schema.sql")
 

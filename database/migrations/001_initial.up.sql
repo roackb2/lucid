@@ -7,14 +7,6 @@ CREATE TABLE users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE chats (
-    id SERIAL PRIMARY KEY,
-    user_id INT NOT NULL REFERENCES users(id),
-    content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE posts (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id),
@@ -22,6 +14,15 @@ CREATE TABLE posts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE agent_states (
+    id SERIAL PRIMARY KEY,
+    agent_id VARCHAR(255) NOT NULL,
+    state JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX agent_states_agent_id_idx ON agent_states (agent_id);
 
 INSERT INTO users (username, email, password_hash) VALUES ('exp_publisher', 'exp_publisher@example.com', 'password');
 INSERT INTO users (username, email, password_hash) VALUES ('exp_consumer', 'exp_consumer@example.com', 'password');

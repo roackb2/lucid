@@ -10,8 +10,8 @@ import (
 
 type RelationalStorage struct{}
 
-func NewRelationalStorage() *RelationalStorage {
-	return &RelationalStorage{}
+func NewRelationalStorage() (*RelationalStorage, error) {
+	return &RelationalStorage{}, nil
 }
 
 func (m *RelationalStorage) Save(content string) error {

@@ -35,23 +35,23 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: chats; Type: TABLE; Schema: public; Owner: -
+-- Name: agent_states; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.chats (
+CREATE TABLE public.agent_states (
     id integer NOT NULL,
-    user_id integer NOT NULL,
-    content text NOT NULL,
+    agent_id character varying(255) NOT NULL,
+    state jsonb NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
 
 --
--- Name: chats_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: agent_states_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE public.chats_id_seq
+CREATE SEQUENCE public.agent_states_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -61,10 +61,10 @@ CREATE SEQUENCE public.chats_id_seq
 
 
 --
--- Name: chats_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: agent_states_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE public.chats_id_seq OWNED BY public.chats.id;
+ALTER SEQUENCE public.agent_states_id_seq OWNED BY public.agent_states.id;
 
 
 --
@@ -145,10 +145,10 @@ ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
 
 
 --
--- Name: chats id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: agent_states id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.chats ALTER COLUMN id SET DEFAULT nextval('public.chats_id_seq'::regclass);
+ALTER TABLE ONLY public.agent_states ALTER COLUMN id SET DEFAULT nextval('public.agent_states_id_seq'::regclass);
 
 
 --
@@ -166,11 +166,11 @@ ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_
 
 
 --
--- Name: chats chats_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: agent_states agent_states_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.chats
-    ADD CONSTRAINT chats_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.agent_states
+    ADD CONSTRAINT agent_states_pkey PRIMARY KEY (id);
 
 
 --
@@ -198,11 +198,10 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: chats chats_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: agent_states_agent_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.chats
-    ADD CONSTRAINT chats_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+CREATE UNIQUE INDEX agent_states_agent_id_idx ON public.agent_states USING btree (agent_id);
 
 
 --

@@ -8,10 +8,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Chat struct {
+type AgentState struct {
 	ID        int32
-	UserID    int32
-	Content   string
+	AgentID   string
+	State     []byte
 	CreatedAt pgtype.Timestamp
 	UpdatedAt pgtype.Timestamp
 }

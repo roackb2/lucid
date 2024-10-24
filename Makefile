@@ -36,7 +36,7 @@ swagger:
 
 generate-db-models:
 	@echo "Generating database models..."
-	@sqlc generate -f db/sqlc.yml
+	@sqlc generate -f database/sqlc.yml
 
 # Run migrations up
 migrate-up: build
