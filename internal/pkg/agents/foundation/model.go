@@ -137,9 +137,28 @@ func (f *FoundationModelImpl) Serialize() ([]byte, error) {
 }
 
 func (f *FoundationModelImpl) Deserialize(data []byte) error {
-	// TODO: Fix json unmarshalling
-	err := json.Unmarshal(data, f)
-	return err
+	content := string(data)
+	slog.Info("Deserializing FoundationModelImpl", "content", content)
+	var jsonMap map[string]any
+	err := json.Unmarshal(data, &jsonMap)
+	if err != nil {
+		slog.Error("FoundationModelImpl: Failed to deserialize", "error", err)
+		return err
+	}
+	slog.Info("Deserialized FoundationModelImpl", "jsonMap", jsonMap)
+	// TODO: Instead of deserializing back to the FoundationModelImpl struct,
+	// filter out the fields in jsonMap that are not needed for agents to know its previous work.
+
+	// -- debug --
+	backToJson, err := json.Marshal(jsonMap)
+	if err != nil {
+		slog.Error("FoundationModelImpl: Failed to serialize", "error", err)
+		return err
+	}
+	slog.Info("Back to JSON", "backToJson", string(backToJson))
+	// -- end of debug --
+
+	return nil
 }
 
 func (f *FoundationModelImpl) debugStruct(title string, v any) {
