@@ -119,28 +119,26 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 				}
 			case "report":
 				slog.Info("Agent report tool call", "role", f.Role, "tool_call", funcName)
-				toolMsgContent, err := flowTool.Report(ctx, toolCall)
+				toolCallResult, err = flowTool.Report(ctx, toolCall)
 				if err != nil {
 					slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-					toolMsgContent = fmt.Sprintf("Error: %v", err)
+					toolCallResult = fmt.Sprintf("Error: %v", err)
 				}
-				// Respond to the LLM that we're done with the tool call
-				_, err = f.chatCompletion(ctx, chatParams)
-				if err != nil {
-					slog.Error("Agent chat error", "role", f.Role, "error", err)
-					return "", err
-				}
-				return toolMsgContent, nil
+				finalResponse = toolCallResult
 			}
 			slog.Info("Agent tool message", "role", f.Role, "message", toolCallResult)
 			f.Messages = append(f.Messages, openai.ToolMessage(toolCall.ID, toolCallResult))
 			chatParams.Messages = openai.F(f.Messages)
+
+			if finalResponse != "" {
+				return finalResponse, nil
+			}
 		}
 	}
 
 	time.Sleep(SleepInterval)
 
-	return finalResponse, nil
+	return "", nil
 }
 
 func (f *FoundationModelImpl) Serialize() ([]byte, error) {
