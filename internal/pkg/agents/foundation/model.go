@@ -24,9 +24,10 @@ type FoundationModelImpl struct {
 	client  *openai.Client
 	storage storage.Storage
 
-	ID         *string                        `json:"id,required"`
-	Role       string                         `json:"role,required"`
-	ChatParams openai.ChatCompletionNewParams `json:"chat_params,required"`
+	ID       *string                                  `json:"id,required"`
+	Role     string                                   `json:"role,required"`
+	Model    openai.ChatModel                         `json:"model,required"`
+	Messages []openai.ChatCompletionMessageParamUnion `json:"messages,required"`
 }
 
 func NewFoundationModel(id *string, role string, storage storage.Storage) FoundationModel {
@@ -48,26 +49,28 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 	flowTool := tools.NewFlowTool()
 	tools := append(persistTool.GetToolDefinition(), flowTool.GetToolDefinition()...)
 
-	f.ChatParams = openai.ChatCompletionNewParams{
-		Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(SystemPrompt),
-			openai.UserMessage(prompt),
-		}),
-		Tools: openai.F(tools),
-		Model: openai.F(openai.ChatModelGPT4o),
+	f.Messages = []openai.ChatCompletionMessageParamUnion{
+		openai.SystemMessage(SystemPrompt),
+		openai.UserMessage(prompt),
+	}
+	f.Model = openai.ChatModelGPT4o
+	chatParams := openai.ChatCompletionNewParams{
+		Messages: openai.F(f.Messages),
+		Tools:    openai.F(tools),
+		Model:    openai.F(f.Model),
 	}
 
 	for true {
-		f.debugStruct("Agent chat messages", f.ChatParams.Messages.Value)
+		f.debugStruct("Agent chat messages", f.Messages)
 
 		// Ask the LLM
-		chatCompletion, err := f.client.Chat.Completions.New(ctx, f.ChatParams)
+		chatCompletion, err := f.client.Chat.Completions.New(ctx, chatParams)
 		if err != nil {
 			slog.Error("Agent chat error", "role", f.Role, "error", err)
 			return "", err
 		}
 		agentResponse := chatCompletion.Choices[0].Message
-		f.ChatParams.Messages.Value = append(f.ChatParams.Messages.Value, agentResponse)
+		f.Messages = append(f.Messages, agentResponse)
 
 		f.debugStruct("Agent chat completion", chatCompletion)
 
@@ -114,7 +117,8 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 				return toolMsgContent, nil
 			}
 			slog.Info("Agent tool message", "role", f.Role, "message", toolCallResult)
-			f.ChatParams.Messages.Value = append(f.ChatParams.Messages.Value, openai.ToolMessage(toolCall.ID, toolCallResult))
+			f.Messages = append(f.Messages, openai.ToolMessage(toolCall.ID, toolCallResult))
+			chatParams.Messages = openai.F(f.Messages)
 		}
 	}
 
@@ -133,6 +137,7 @@ func (f *FoundationModelImpl) Serialize() ([]byte, error) {
 }
 
 func (f *FoundationModelImpl) Deserialize(data []byte) error {
+	// TODO: Fix json unmarshalling
 	err := json.Unmarshal(data, f)
 	return err
 }

@@ -15,9 +15,10 @@ type AgentResponse struct {
 }
 
 type Agent interface {
+	GetID() string
 	StartTask(resCh chan AgentResponse, errCh chan error)
 	PersistState() error
-	RestoreState() error
+	RestoreState(agentID string) error
 }
 
 type BaseAgent struct {
@@ -39,6 +40,10 @@ func NewBaseAgent(storage storage.Storage, task string, role string) BaseAgent {
 	}
 }
 
+func (b *BaseAgent) GetID() string {
+	return b.id
+}
+
 func (b *BaseAgent) StartTask(resCh chan AgentResponse, errCh chan error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
 	response, err := b.model.Chat(b.task)
@@ -57,15 +62,25 @@ func (b *BaseAgent) PersistState() error {
 		slog.Error("Agent: Failed to serialize state", "agentID", b.id, "role", b.role, "error", err)
 		return err
 	}
-	return b.storage.SaveAgentState(b.id, state)
-}
-
-func (b *BaseAgent) RestoreState() error {
-	slog.Info("Agent: Restoring state", "agentID", b.id, "role", b.role)
-	state, err := b.storage.GetAgentState(b.id)
+	err = b.storage.SaveAgentState(b.id, state)
 	if err != nil {
-		slog.Error("Agent: Failed to get agent state", "agentID", b.id, "role", b.role, "error", err)
+		slog.Error("Agent: Failed to save state", "agentID", b.id, "role", b.role, "error", err)
 		return err
 	}
-	return b.model.Deserialize(state)
+	return nil
+}
+
+func (b *BaseAgent) RestoreState(agentID string) error {
+	slog.Info("Agent: Restoring state", "agentID", agentID)
+	state, err := b.storage.GetAgentState(agentID)
+	if err != nil {
+		slog.Error("Agent: Failed to get agent state", "agentID", agentID, "error", err)
+		return err
+	}
+	err = b.model.Deserialize(state)
+	if err != nil {
+		slog.Error("Agent: Failed to deserialize state", "agentID", agentID, "error", err)
+		return err
+	}
+	return nil
 }
