@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -45,13 +44,6 @@ func main() {
 			slog.Error("Error restoring state:", "error", err)
 			panic(err)
 		}
-		publisherState, err := json.Marshal(restoredPublisher)
-		if err != nil {
-			slog.Error("Error marshalling state:", "error", err)
-			panic(err)
-		}
-		slog.Info("Publisher state restored", "state", string(publisherState))
-
 	case err := <-errCh:
 		slog.Error("Publisher error", "error", err)
 	}
