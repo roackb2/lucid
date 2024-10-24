@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -13,16 +14,23 @@ import (
 var outputDir = "data/output"
 
 func main() {
+	defer func() {
+		r := recover()
+		if r != nil {
+			fmt.Println("Recovered from panic:", r)
+		}
+	}()
+
 	storage, err := storage.NewRelationalStorage()
 	// storage, err := storage.NewVectorStorage()
 	if err != nil {
-		fmt.Println("Error creating vector storage:", err)
-		return
+		slog.Error("Error creating vector storage:", "error", err)
+		panic(err)
 	}
 
 	songs := []string{
 		"Jazz in the Rain",
-		// "Awesome Jazz Music Playlist",
+		"Awesome Jazz Music Playlist",
 		// "Jazz Music for Relaxation",
 		// "Jazz Music for Focus",
 		// "Jazz Music for Studying",
@@ -57,6 +65,7 @@ func main() {
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
 			publisher.StartTask(resCh, errCh)
+			defer publisher.PersistState()
 		}()
 	}
 
@@ -65,6 +74,7 @@ func main() {
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
 			consumer.StartTask(resCh, errCh)
+			defer consumer.PersistState()
 		}()
 	}
 
@@ -76,8 +86,8 @@ func main() {
 
 	// Remove all files in the output directory
 	if err := removeAllFiles(outputDir); err != nil {
-		fmt.Println("Error removing all files:", err)
-		return
+		slog.Error("Error removing all files:", "error", err)
+		panic(err)
 	}
 
 	// Read from channels

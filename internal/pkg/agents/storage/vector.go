@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -188,8 +189,8 @@ func (v *VectorStorage) SearchVector(embedding []float32) ([]milvusClient.Search
 	return searchResult, nil
 }
 
-func (v *VectorStorage) Save(content string) error {
-	slog.Info("VectorStorage: Saving content", "content", content)
+func (v *VectorStorage) SavePost(content string) error {
+	slog.Info("VectorStorage: Saving post", "content", content)
 	embeddings, err := embedding.Embed(content)
 	if err != nil {
 		slog.Error("VectorStorage: Failed to embed content", "error", err)
@@ -204,11 +205,11 @@ func (v *VectorStorage) Save(content string) error {
 	return nil
 }
 
-func (v *VectorStorage) Search(query string) ([]string, error) {
-	slog.Info("VectorStorage: Searching for content", "query", query)
+func (v *VectorStorage) SearchPosts(query string) ([]string, error) {
+	slog.Info("VectorStorage: Searching for posts", "query", query)
 	embeddings, err := embedding.Embed(query)
 	if err != nil {
-		slog.Error("VectorStorage: Failed to embed content", "error", err)
+		slog.Error("VectorStorage: Failed to embed query", "error", err)
 		return nil, err
 	}
 	embeddingsFloat := embedding.ConvertToFloat32(embeddings)
@@ -242,4 +243,12 @@ func convertSearchResult(searchResult []milvusClient.SearchResult) ([]string, er
 		}
 	}
 	return results, nil
+}
+
+func (v *VectorStorage) SaveAgentState(agentID string, state []byte) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (v *VectorStorage) GetAgentState(agentID string) ([]byte, error) {
+	return nil, fmt.Errorf("not implemented")
 }

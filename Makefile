@@ -1,16 +1,20 @@
 milvus-url = milvus-standalone.orb.local:19530
 
-# Build all executables in the cmd folder
+# Recursively find all Go files in cmd and its subfolders
+GO_FILES := $(shell find cmd -name '*.go')
+
+# Extract unique directory names from GO_FILES
+CMD_DIRS := $(sort $(dir $(GO_FILES)))
+
+# Build all executables in the cmd folder and its subfolders
 build:
-	@for dir in cmd/*; do \
-		if [ -d "$$dir" ]; then \
-			app_name=$$(basename "$$dir"); \
-			echo "Building $$app_name..."; \
-			go build -o bin/$$app_name ./cmd/$$app_name; \
-		fi \
+	@for dir in $(CMD_DIRS); do \
+		app_name=$$(echo $$dir | sed 's|cmd/||g' | sed 's|/$$||' | tr '/' '_'); \
+		echo "Building $$app_name..."; \
+		go build -o bin/$$app_name ./$$dir; \
 	done
 
-# Generate run targets for each executable
+# Generate run targets for each executables
 define generate_run_target
 $(1): generate-db-models swagger build
 	./bin/$(1) $(ARGS)

@@ -65,7 +65,7 @@ func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompl
 	}
 
 	content := args["content"].(string)
-	return t.storage.Save(content)
+	return t.storage.SavePost(content)
 }
 
 func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) ([]string, error) {
@@ -76,5 +76,5 @@ func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCom
 	}
 
 	query := args["query"].(string)
-	return t.storage.Search(query)
+	return t.storage.SearchPosts(query)
 }

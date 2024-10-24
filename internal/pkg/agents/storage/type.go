@@ -1,6 +1,8 @@
 package storage
 
 type Storage interface {
-	Save(content string) error
-	Search(query string) ([]string, error)
+	SavePost(content string) error
+	SearchPosts(query string) ([]string, error)
+	SaveAgentState(agentID string, state []byte) error
+	GetAgentState(agentID string) ([]byte, error)
 }

@@ -49,3 +49,23 @@ func (b *BaseAgent) StartTask(resCh chan AgentResponse, errCh chan error) {
 	slog.Info("Agent: Task finished", "role", b.role, "response", response)
 	resCh <- AgentResponse{b.id, b.role, response}
 }
+
+func (b *BaseAgent) PersistState() error {
+	slog.Info("Agent: Persisting state", "agentID", b.id, "role", b.role)
+	state, err := b.model.Serialize()
+	if err != nil {
+		slog.Error("Agent: Failed to serialize state", "agentID", b.id, "role", b.role, "error", err)
+		return err
+	}
+	return b.storage.SaveAgentState(b.id, state)
+}
+
+func (b *BaseAgent) RestoreState() error {
+	slog.Info("Agent: Restoring state", "agentID", b.id, "role", b.role)
+	state, err := b.storage.GetAgentState(b.id)
+	if err != nil {
+		slog.Error("Agent: Failed to get agent state", "agentID", b.id, "role", b.role, "error", err)
+		return err
+	}
+	return b.model.Deserialize(state)
+}
