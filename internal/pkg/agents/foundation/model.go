@@ -86,11 +86,7 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 			funcName := toolCall.Function.Name
 			slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
 
-			toolCallResult, finalResponse, err := f.handleToolCall(ctx, persistTool, flowTool, toolCall)
-			if err != nil {
-				slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-				return "", err
-			}
+			toolCallResult, finalResponse := f.handleToolCall(ctx, persistTool, flowTool, toolCall)
 			slog.Info("Agent tool message", "role", f.Role, "message", toolCallResult)
 			f.Messages = append(f.Messages, openai.ToolMessage(toolCall.ID, toolCallResult))
 			chatParams.Messages = openai.F(f.Messages)
@@ -114,7 +110,6 @@ func (f *FoundationModelImpl) handleToolCall(
 ) (
 	toolCallResult string,
 	finalResponse string,
-	err error,
 ) {
 	funcName := toolCall.Function.Name
 	slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
@@ -133,7 +128,7 @@ func (f *FoundationModelImpl) handleToolCall(
 		finalResponse = toolCallResult
 	}
 
-	return toolCallResult, finalResponse, nil
+	return toolCallResult, finalResponse
 }
 
 func (f *FoundationModelImpl) Serialize() ([]byte, error) {

@@ -61,6 +61,7 @@ func (t *FlowTool) Report(ctx context.Context, toolCall openai.ChatCompletionMes
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	if err != nil {
+		slog.Error("Flow tool: Report", "error", err)
 		return fmt.Sprintf("Error: %v", err)
 	}
 
@@ -73,10 +74,10 @@ func (t *FlowTool) Wait(ctx context.Context, toolCall openai.ChatCompletionMessa
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	if err != nil {
+		slog.Error("Flow tool: Wait", "error", err)
 		return fmt.Sprintf("Error: %v", err)
 	}
 	duration := args["duration"].(float64)
 	slog.Info("Flow tool: Wait", "duration", duration)
-
 	return fmt.Sprintf("Waiting for %f seconds before continuing the task", duration)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/openai/openai-go"
@@ -63,10 +64,17 @@ func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompl
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	if err != nil {
+		slog.Error("Persist tool: SaveContent", "error", err)
 		return fmt.Sprintf("Error: %v", err)
 	}
 
 	content := args["content"].(string)
+	err = t.storage.SavePost(content)
+	if err != nil {
+		slog.Error("Persist tool: SaveContent", "error", err)
+		return fmt.Sprintf("Error: %v", err)
+	}
+	slog.Info("Persist tool: SaveContent", "content", content)
 	return fmt.Sprintf("Content saved successfully. (content total length: %d)", len(content))
 }
 
@@ -74,12 +82,15 @@ func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCom
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	if err != nil {
+		slog.Error("Persist tool: SearchContent", "error", err)
 		return fmt.Sprintf("Error: %v", err)
 	}
 
 	query := args["query"].(string)
 	content, err := t.storage.SearchPosts(query)
+	slog.Info("Persist tool: SearchContent", "query", query, "content", content)
 	if err != nil {
+		slog.Error("Persist tool: SearchContent", "error", err)
 		return fmt.Sprintf("Error: %v", err)
 	}
 
