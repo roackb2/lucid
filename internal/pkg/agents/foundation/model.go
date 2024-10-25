@@ -194,26 +194,8 @@ func (f *FoundationModelImpl) rebuildFromJsonMap(jsonMap map[string]any) error {
 			for _, message := range value.([]any) {
 				msg := message.(map[string]any)
 				role := msg["role"].(string)
-				content, ok := msg["content"]
-				if !ok {
-					continue
-				}
-				if len(content.([]any)) == 0 {
-					continue
-				}
-				firstContent := content.([]any)[0]
-				text := firstContent.(map[string]any)["text"].(string)
-				switch role {
-				case "system":
-					f.Messages = append(f.Messages, openai.SystemMessage(text))
-				case "user":
-					f.Messages = append(f.Messages, openai.UserMessage(text))
-				case "assistant":
-					f.Messages = append(f.Messages, openai.AssistantMessage(text))
-				case "tool":
-					id := msg["tool_call_id"].(string)
-					f.Messages = append(f.Messages, openai.ToolMessage(id, text))
-				}
+				f.rebuildContentMessage(msg, role)
+				f.rebuildToolCalls(msg)
 			}
 		}
 	}
@@ -221,6 +203,58 @@ func (f *FoundationModelImpl) rebuildFromJsonMap(jsonMap map[string]any) error {
 	f.debugStruct("Rebuilt FoundationModelImpl", f)
 
 	return nil
+}
+
+func (f *FoundationModelImpl) rebuildContentMessage(msg map[string]any, role string) {
+	content, ok := msg["content"]
+	if !ok {
+		return
+	}
+	if len(content.([]any)) == 0 {
+		return
+	}
+	firstContent := content.([]any)[0]
+	text := firstContent.(map[string]any)["text"].(string)
+	switch role {
+	case "system":
+		f.Messages = append(f.Messages, openai.SystemMessage(text))
+	case "user":
+		f.Messages = append(f.Messages, openai.UserMessage(text))
+	case "assistant":
+		f.Messages = append(f.Messages, openai.AssistantMessage(text))
+	case "tool":
+		id := msg["tool_call_id"].(string)
+		f.Messages = append(f.Messages, openai.ToolMessage(id, text))
+	}
+}
+
+func (f *FoundationModelImpl) rebuildToolCalls(msg map[string]any) []openai.ChatCompletionMessageToolCallParam {
+	toolCalls, ok := msg["tool_calls"]
+	if !ok || toolCalls == nil {
+		return nil
+	}
+	slog.Info("Tool calls", "tool_calls", toolCalls)
+	restoredToolCalls := []openai.ChatCompletionMessageToolCallParam{}
+	for _, toolCall := range toolCalls.([]any) {
+		toolCall := toolCall.(map[string]any)
+		id := toolCall["id"].(string)
+		function := toolCall["function"].(map[string]any)
+		restoredToolCall := openai.ChatCompletionMessageToolCallParam{
+			ID:   openai.F(id),
+			Type: openai.F(openai.ChatCompletionMessageToolCallTypeFunction),
+			Function: openai.F(openai.ChatCompletionMessageToolCallFunctionParam{
+				Name:      openai.F(function["name"].(string)),
+				Arguments: openai.F(function["arguments"].(string)),
+			}),
+		}
+		restoredToolCalls = append(restoredToolCalls, restoredToolCall)
+	}
+	restoredToolCallMsg := openai.ChatCompletionAssistantMessageParam{
+		Role:      openai.F(openai.ChatCompletionAssistantMessageParamRoleAssistant),
+		ToolCalls: openai.F(restoredToolCalls),
+	}
+	f.Messages = append(f.Messages, restoredToolCallMsg)
+	return restoredToolCalls
 }
 
 func (f *FoundationModelImpl) debugStruct(title string, v any) {
