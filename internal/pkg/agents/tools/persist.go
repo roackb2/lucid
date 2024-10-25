@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/openai/openai-go"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
@@ -57,24 +59,29 @@ func (t *PersistTool) GetToolDefinition() []openai.ChatCompletionToolParam {
 	return t.toolDefinition
 }
 
-func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) error {
+func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string {
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	if err != nil {
-		return err
+		return fmt.Sprintf("Error: %v", err)
 	}
 
 	content := args["content"].(string)
-	return t.storage.SavePost(content)
+	return fmt.Sprintf("Content saved successfully. (content total length: %d)", len(content))
 }
 
-func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) ([]string, error) {
+func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string {
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	if err != nil {
-		return nil, err
+		return fmt.Sprintf("Error: %v", err)
 	}
 
 	query := args["query"].(string)
-	return t.storage.SearchPosts(query)
+	content, err := t.storage.SearchPosts(query)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	return fmt.Sprintf("Results Found (separated by comma): %v", strings.Join(content, ", "))
 }

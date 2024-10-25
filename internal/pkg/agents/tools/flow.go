@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/openai/openai-go"
@@ -56,25 +57,26 @@ func (t *FlowTool) GetToolDefinition() []openai.ChatCompletionToolParam {
 	return t.toolDefinition
 }
 
-func (t *FlowTool) Report(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (string, error) {
+func (t *FlowTool) Report(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string {
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	if err != nil {
-		return "", err
+		return fmt.Sprintf("Error: %v", err)
 	}
 
 	content := args["content"].(string)
 	slog.Info("Flow tool: Report", "content", content)
-	return content, nil
+	return content
 }
 
-func (t *FlowTool) Wait(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) (float64, error) {
+func (t *FlowTool) Wait(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string {
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	if err != nil {
-		return -1, err
+		return fmt.Sprintf("Error: %v", err)
 	}
 	duration := args["duration"].(float64)
 	slog.Info("Flow tool: Wait", "duration", duration)
-	return duration, nil
+
+	return fmt.Sprintf("Waiting for %f seconds before continuing the task", duration)
 }

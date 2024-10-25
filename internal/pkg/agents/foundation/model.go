@@ -3,9 +3,7 @@ package foundation
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -123,38 +121,15 @@ func (f *FoundationModelImpl) handleToolCall(
 
 	switch funcName {
 	case "save_content":
-		err := persistTool.SaveContent(ctx, toolCall)
-		if err != nil {
-			slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-			toolCallResult = fmt.Sprintf("Error: %v", err)
-		} else {
-			toolCallResult = "Content saved successfully."
-		}
+		toolCallResult = persistTool.SaveContent(ctx, toolCall)
 	case "search_content":
-		toolRes, err := persistTool.SearchContent(ctx, toolCall)
-		if err != nil {
-			slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-			toolCallResult = fmt.Sprintf("Error: %v", err)
-		} else {
-			toolCallResult = fmt.Sprintf("Results Found (separated by comma): %v", strings.Join(toolRes, ", "))
-		}
+		toolCallResult = persistTool.SearchContent(ctx, toolCall)
 	case "wait":
 		// We currently don't actually wait for the given duration,
 		// just cheat the LLM by saying we're waiting to let it continue the task.
-		duration, err := flowTool.Wait(ctx, toolCall)
-		if err != nil {
-			slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-			toolCallResult = fmt.Sprintf("Error: %v", err)
-		} else {
-			toolCallResult = fmt.Sprintf("Waiting for %f seconds before continuing the task", duration)
-		}
+		toolCallResult = flowTool.Wait(ctx, toolCall)
 	case "report":
-		slog.Info("Agent report tool call", "role", f.Role, "tool_call", funcName)
-		toolCallResult, err := flowTool.Report(ctx, toolCall)
-		if err != nil {
-			slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-			toolCallResult = fmt.Sprintf("Error: %v", err)
-		}
+		toolCallResult = flowTool.Report(ctx, toolCall)
 		finalResponse = toolCallResult
 	}
 
