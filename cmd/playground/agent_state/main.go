@@ -37,13 +37,21 @@ func main() {
 			panic(err)
 		}
 		slog.Info("Publisher state persisted")
+		go storeAndResume(publisher.GetID(), storage)
+	case err := <-errCh:
+		slog.Error("Publisher error", "error", err)
+	}
+}
 
-		restoredPublisher := agents.NewPublisher("", storage)
-		err = restoredPublisher.RestoreState(publisher.GetID())
-		if err != nil {
-			slog.Error("Error restoring state:", "error", err)
-			panic(err)
-		}
+func storeAndResume(agentID string, storage storage.Storage) {
+	restoredPublisher := agents.NewPublisher("", storage)
+	resCh := make(chan agents.AgentResponse, 1)
+	errCh := make(chan error, 1)
+
+	go restoredPublisher.ResumeTask(agentID, resCh, errCh)
+	select {
+	case res := <-resCh:
+		slog.Info("Publisher response", "response", res)
 	case err := <-errCh:
 		slog.Error("Publisher error", "error", err)
 	}

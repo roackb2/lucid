@@ -18,7 +18,7 @@ type Agent interface {
 	GetID() string
 	StartTask(resCh chan AgentResponse, errCh chan error)
 	PersistState() error
-	RestoreState(agentID string) error
+	ResumeTask(agentID string, resCh chan AgentResponse, errCh chan error)
 }
 
 type BaseAgent struct {
@@ -55,6 +55,23 @@ func (b *BaseAgent) StartTask(resCh chan AgentResponse, errCh chan error) {
 	resCh <- AgentResponse{b.id, b.role, response}
 }
 
+func (b *BaseAgent) ResumeTask(agentID string, resCh chan AgentResponse, errCh chan error) {
+	slog.Info("Agent: Resuming task", "agentID", agentID, "role", b.role)
+	// Restore the agent state
+	err := b.restoreState(agentID)
+	if err != nil {
+		errCh <- err
+		return
+	}
+	// Resume the chat
+	response, err := b.model.ResumeChat()
+	if err != nil {
+		errCh <- err
+		return
+	}
+	resCh <- AgentResponse{b.id, b.role, response}
+}
+
 func (b *BaseAgent) PersistState() error {
 	slog.Info("Agent: Persisting state", "agentID", b.id, "role", b.role)
 	state, err := b.model.Serialize()
@@ -70,7 +87,7 @@ func (b *BaseAgent) PersistState() error {
 	return nil
 }
 
-func (b *BaseAgent) RestoreState(agentID string) error {
+func (b *BaseAgent) restoreState(agentID string) error {
 	slog.Info("Agent: Restoring state", "agentID", agentID)
 	state, err := b.storage.GetAgentState(agentID)
 	if err != nil {

@@ -75,12 +75,19 @@ func (f *FoundationModelImpl) chatCompletion(ctx context.Context) (*openai.ChatC
 
 func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 	ctx := context.Background()
-
 	f.Messages = []openai.ChatCompletionMessageParamUnion{
 		openai.SystemMessage(SystemPrompt),
 		openai.UserMessage(prompt),
 	}
+	return f.getAgentResponse(ctx)
+}
 
+func (f *FoundationModelImpl) ResumeChat() (string, error) {
+	ctx := context.Background()
+	return f.getAgentResponse(ctx)
+}
+
+func (f *FoundationModelImpl) getAgentResponse(ctx context.Context) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
 	for finalResponse == "" {
@@ -152,6 +159,7 @@ func (f *FoundationModelImpl) Serialize() ([]byte, error) {
 func (f *FoundationModelImpl) Deserialize(data []byte) error {
 	content := string(data)
 	slog.Info("Deserializing FoundationModelImpl", "content", content)
+
 	var jsonMap map[string]any
 	err := json.Unmarshal(data, &jsonMap)
 	if err != nil {
@@ -171,37 +179,27 @@ func (f *FoundationModelImpl) Deserialize(data []byte) error {
 
 func (f *FoundationModelImpl) rebuildFromJsonMap(jsonMap map[string]any) error {
 	for key, value := range jsonMap {
-		slog.Info("Key", "key", key, "value", value)
 		switch key {
 		case "id":
-			slog.Info("ID", "id", value)
 			id := value.(string)
 			f.ID = &id
 		case "role":
-			slog.Info("Role", "role", value)
 			f.Role = value.(string)
 		case "model":
-			slog.Info("Model", "model", value)
 			f.Model = value.(openai.ChatModel)
 		case "messages":
 			for _, message := range value.([]any) {
 				msg := message.(map[string]any)
-				slog.Info("Message", "message", len(msg))
 				role := msg["role"].(string)
-				slog.Info("Message role", "role", role)
 				content, ok := msg["content"]
 				if !ok {
 					continue
 				}
-				slog.Info("Message content", "content", content)
 				if len(content.([]any)) == 0 {
-					slog.Info("Message content is empty", "message", msg)
 					continue
 				}
 				firstContent := content.([]any)[0]
-				slog.Info("Message first content", "firstContent", firstContent)
 				text := firstContent.(map[string]any)["text"].(string)
-				slog.Info("Message text", "text", text)
 				switch role {
 				case "system":
 					f.Messages = append(f.Messages, openai.SystemMessage(text))
@@ -217,14 +215,7 @@ func (f *FoundationModelImpl) rebuildFromJsonMap(jsonMap map[string]any) error {
 		}
 	}
 
-	// -- debug --
-	data, err := json.Marshal(f)
-	if err != nil {
-		slog.Error("FoundationModelImpl: Failed to serialize", "error", err)
-		return err
-	}
-	slog.Info("Rebuilt FoundationModelImpl", "data", string(data))
-	// -- end of debug --
+	f.debugStruct("Rebuilt FoundationModelImpl", f)
 
 	return nil
 }
