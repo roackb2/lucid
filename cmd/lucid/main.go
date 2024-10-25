@@ -52,7 +52,7 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	resCh := make(chan agents.AgentResponse, len(publishers)+len(consumers))
+	resCh := make(chan *agents.AgentResponse, len(publishers)+len(consumers))
 	errCh := make(chan error, 1)
 
 	numWorkers := len(publishers) + len(consumers)
@@ -64,7 +64,12 @@ func main() {
 		// Launch publisher task
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
-			publisher.StartTask(resCh, errCh)
+			res, err := publisher.StartTask()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			resCh <- res
 			defer publisher.PersistState()
 		}()
 	}
@@ -73,7 +78,12 @@ func main() {
 		// Launch consumer task
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
-			consumer.StartTask(resCh, errCh)
+			res, err := consumer.StartTask()
+			if err != nil {
+				errCh <- err
+				return
+			}
+			resCh <- res
 			defer consumer.PersistState()
 		}()
 	}

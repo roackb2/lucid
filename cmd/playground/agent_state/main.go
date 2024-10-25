@@ -23,19 +23,12 @@ func main() {
 	}
 	publisher := agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage)
 
-	resCh := make(chan agents.AgentResponse, 1)
-	errCh := make(chan error, 1)
-
-	publisher.StartTask(resCh, errCh)
-
-	select {
-	case res := <-resCh:
-		slog.Info("Publisher response", "response", res)
-	case err := <-errCh:
+	res, err := publisher.StartTask()
+	if err != nil {
 		slog.Error("Publisher error", "error", err)
+		panic(err)
 	}
-	close(resCh)
-	close(errCh)
+	slog.Info("Publisher response", "response", res)
 
 	// Store the state
 	err = publisher.PersistState()
@@ -48,13 +41,10 @@ func main() {
 	// Restore the state
 	restoredPublisher := agents.NewPublisher("", storage)
 	newPrompt := "What is the length of the title of the song that you just published?"
-	resCh = make(chan agents.AgentResponse, 1)
-	errCh = make(chan error, 1)
-	restoredPublisher.ResumeTask(publisher.GetID(), &newPrompt, resCh, errCh)
-	select {
-	case res := <-resCh:
-		slog.Info("Publisher response", "response", res)
-	case err := <-errCh:
+	res, err = restoredPublisher.ResumeTask(publisher.GetID(), &newPrompt)
+	if err != nil {
 		slog.Error("Publisher error", "error", err)
+		panic(err)
 	}
+	slog.Info("Publisher response", "response", res)
 }
