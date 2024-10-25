@@ -22,25 +22,45 @@ type FoundationModelImpl struct {
 	client  *openai.Client
 	storage storage.Storage
 
-	ID       *string                                  `json:"id,required"`
-	Role     string                                   `json:"role,required"`
-	Model    openai.ChatModel                         `json:"model,required"`
-	Messages []openai.ChatCompletionMessageParamUnion `json:"messages,required"`
+	ID           *string                                  `json:"id,required"`
+	Role         string                                   `json:"role,required"`
+	Model        openai.ChatModel                         `json:"model,required"`
+	Messages     []openai.ChatCompletionMessageParamUnion `json:"messages,required"`
+	PersistTools *tools.PersistTool
+	FlowTools    *tools.FlowTool
 }
 
 func NewFoundationModel(id *string, role string, storage storage.Storage) FoundationModel {
 	client := openai.NewClient(
 		option.WithAPIKey(config.Config.OpenAI.APIKey),
 	)
+	persistTool := tools.NewPersistTool(storage)
+	flowTool := tools.NewFlowTool()
 	return &FoundationModelImpl{
-		ID:      id,
-		Role:    role,
 		client:  client,
 		storage: storage,
+
+		ID:           id,
+		Role:         role,
+		Model:        openai.ChatModelGPT4o,
+		PersistTools: persistTool,
+		FlowTools:    flowTool,
 	}
 }
 
-func (f *FoundationModelImpl) chatCompletion(ctx context.Context, chatParams openai.ChatCompletionNewParams) (*openai.ChatCompletionMessage, error) {
+func (f *FoundationModelImpl) assembleChatParams() openai.ChatCompletionNewParams {
+	tools := append(f.PersistTools.GetToolDefinition(), f.FlowTools.GetToolDefinition()...)
+	return openai.ChatCompletionNewParams{
+		Messages: openai.F(f.Messages),
+		Tools:    openai.F(tools),
+		Model:    openai.F(f.Model),
+	}
+}
+
+func (f *FoundationModelImpl) chatCompletion(ctx context.Context) (*openai.ChatCompletionMessage, error) {
+	chatParams := f.assembleChatParams()
+	f.debugStruct("Agent chat params messages", chatParams.Messages)
+
 	chatCompletion, err := f.client.Chat.Completions.New(ctx, chatParams)
 	if err != nil {
 		slog.Error("Agent chat error", "role", f.Role, "error", err)
@@ -56,19 +76,9 @@ func (f *FoundationModelImpl) chatCompletion(ctx context.Context, chatParams ope
 func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 	ctx := context.Background()
 
-	persistTool := tools.NewPersistTool(f.storage)
-	flowTool := tools.NewFlowTool()
-	tools := append(persistTool.GetToolDefinition(), flowTool.GetToolDefinition()...)
-
 	f.Messages = []openai.ChatCompletionMessageParamUnion{
 		openai.SystemMessage(SystemPrompt),
 		openai.UserMessage(prompt),
-	}
-	f.Model = openai.ChatModelGPT4o
-	chatParams := openai.ChatCompletionNewParams{
-		Messages: openai.F(f.Messages),
-		Tools:    openai.F(tools),
-		Model:    openai.F(f.Model),
 	}
 
 	// Loop until the LLM returns a non-empty finalResponse
@@ -77,14 +87,14 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 		f.debugStruct("Agent chat messages", f.Messages)
 
 		// Ask the LLM
-		agentResponse, err := f.chatCompletion(ctx, chatParams)
+		agentResponse, err := f.chatCompletion(ctx)
 		if err != nil {
 			slog.Error("Agent chat error", "role", f.Role, "error", err)
 			return "", err
 		}
 
 		// Handle tool calls
-		finalResponse = f.handleToolCalls(ctx, persistTool, flowTool, agentResponse.ToolCalls, &chatParams)
+		finalResponse = f.handleToolCalls(ctx, agentResponse.ToolCalls)
 		time.Sleep(SleepInterval)
 	}
 
@@ -93,19 +103,15 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 
 func (f *FoundationModelImpl) handleToolCalls(
 	ctx context.Context,
-	persistTool *tools.PersistTool,
-	flowTool *tools.FlowTool,
 	toolCalls []openai.ChatCompletionMessageToolCall,
-	chatParams *openai.ChatCompletionNewParams,
 ) (finalResponse string) {
 	for _, toolCall := range toolCalls {
 		funcName := toolCall.Function.Name
 		slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
 
-		toolCallResult := f.handleSingleToolCall(ctx, persistTool, flowTool, toolCall)
+		toolCallResult := f.handleSingleToolCall(ctx, toolCall)
 		slog.Info("Agent tool message", "role", f.Role, "message", toolCallResult)
 		f.Messages = append(f.Messages, openai.ToolMessage(toolCall.ID, toolCallResult))
-		chatParams.Messages = openai.F(f.Messages)
 
 		if funcName == "report" {
 			finalResponse = toolCallResult
@@ -118,18 +124,16 @@ func (f *FoundationModelImpl) handleToolCalls(
 
 func (f *FoundationModelImpl) handleSingleToolCall(
 	ctx context.Context,
-	persistTool *tools.PersistTool,
-	flowTool *tools.FlowTool,
 	toolCall openai.ChatCompletionMessageToolCall,
 ) (toolCallResult string) {
 	funcName := toolCall.Function.Name
 	slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
 
 	funcCallMap := map[string]func(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string{
-		"save_content":   persistTool.SaveContent,
-		"search_content": persistTool.SearchContent,
-		"wait":           flowTool.Wait,
-		"report":         flowTool.Report,
+		"save_content":   f.PersistTools.SaveContent,
+		"search_content": f.PersistTools.SearchContent,
+		"wait":           f.FlowTools.Wait,
+		"report":         f.FlowTools.Report,
 	}
 	toolCallResult = funcCallMap[funcName](ctx, toolCall)
 
