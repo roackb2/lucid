@@ -126,6 +126,9 @@ func writeToFile(filename string, content string) error {
 }
 
 func removeAllFiles(dir string) error {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil
+	}
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("failed to read directory: %w", err)

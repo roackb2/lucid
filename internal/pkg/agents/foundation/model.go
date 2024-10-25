@@ -73,7 +73,6 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 		Model:    openai.F(f.Model),
 	}
 
-	finalResponse := ""
 	for true {
 		f.debugStruct("Agent chat messages", f.Messages)
 
@@ -89,42 +88,10 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 			funcName := toolCall.Function.Name
 			slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
 
-			toolCallResult := ""
-			switch funcName {
-			case "save_content":
-				err = persistTool.SaveContent(ctx, toolCall)
-				if err != nil {
-					slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-					toolCallResult = fmt.Sprintf("Error: %v", err)
-				} else {
-					toolCallResult = "Content saved successfully."
-				}
-			case "search_content":
-				toolRes, err := persistTool.SearchContent(ctx, toolCall)
-				if err != nil {
-					slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-					toolCallResult = fmt.Sprintf("Error: %v", err)
-				} else {
-					toolCallResult = fmt.Sprintf("Results Found (separated by comma): %v", strings.Join(toolRes, ", "))
-				}
-			case "wait":
-				// We currently don't actually wait for the given duration,
-				// just cheat the LLM by saying we're waiting to let it continue the task.
-				duration, err := flowTool.Wait(ctx, toolCall)
-				if err != nil {
-					slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-					toolCallResult = fmt.Sprintf("Error: %v", err)
-				} else {
-					toolCallResult = fmt.Sprintf("Waiting for %f seconds before continuing the task", duration)
-				}
-			case "report":
-				slog.Info("Agent report tool call", "role", f.Role, "tool_call", funcName)
-				toolCallResult, err = flowTool.Report(ctx, toolCall)
-				if err != nil {
-					slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
-					toolCallResult = fmt.Sprintf("Error: %v", err)
-				}
-				finalResponse = toolCallResult
+			toolCallResult, finalResponse, err := f.handleToolCall(ctx, persistTool, flowTool, toolCall)
+			if err != nil {
+				slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
+				return "", err
 			}
 			slog.Info("Agent tool message", "role", f.Role, "message", toolCallResult)
 			f.Messages = append(f.Messages, openai.ToolMessage(toolCall.ID, toolCallResult))
@@ -139,6 +106,59 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 	time.Sleep(SleepInterval)
 
 	return "", nil
+}
+
+func (f *FoundationModelImpl) handleToolCall(
+	ctx context.Context,
+	persistTool *tools.PersistTool,
+	flowTool *tools.FlowTool,
+	toolCall openai.ChatCompletionMessageToolCall,
+) (
+	toolCallResult string,
+	finalResponse string,
+	err error,
+) {
+	funcName := toolCall.Function.Name
+	slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
+
+	switch funcName {
+	case "save_content":
+		err := persistTool.SaveContent(ctx, toolCall)
+		if err != nil {
+			slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
+			toolCallResult = fmt.Sprintf("Error: %v", err)
+		} else {
+			toolCallResult = "Content saved successfully."
+		}
+	case "search_content":
+		toolRes, err := persistTool.SearchContent(ctx, toolCall)
+		if err != nil {
+			slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
+			toolCallResult = fmt.Sprintf("Error: %v", err)
+		} else {
+			toolCallResult = fmt.Sprintf("Results Found (separated by comma): %v", strings.Join(toolRes, ", "))
+		}
+	case "wait":
+		// We currently don't actually wait for the given duration,
+		// just cheat the LLM by saying we're waiting to let it continue the task.
+		duration, err := flowTool.Wait(ctx, toolCall)
+		if err != nil {
+			slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
+			toolCallResult = fmt.Sprintf("Error: %v", err)
+		} else {
+			toolCallResult = fmt.Sprintf("Waiting for %f seconds before continuing the task", duration)
+		}
+	case "report":
+		slog.Info("Agent report tool call", "role", f.Role, "tool_call", funcName)
+		toolCallResult, err := flowTool.Report(ctx, toolCall)
+		if err != nil {
+			slog.Error("Agent tool call error", "role", f.Role, "tool_call", funcName, "error", err)
+			toolCallResult = fmt.Sprintf("Error: %v", err)
+		}
+		finalResponse = toolCallResult
+	}
+
+	return toolCallResult, finalResponse, nil
 }
 
 func (f *FoundationModelImpl) Serialize() ([]byte, error) {
