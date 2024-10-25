@@ -6,7 +6,7 @@ import (
 	"log"
 	"log/slog"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 )
@@ -16,11 +16,11 @@ var (
 )
 
 func init() {
-	dbConn, err := getDbConn()
+	dbPool, err := getDbPool()
 	if err != nil {
 		log.Fatal(err)
 	}
-	Querier = dbaccess.New(dbConn)
+	Querier = dbaccess.New(dbPool)
 }
 
 func getConnString() string {
@@ -33,9 +33,9 @@ func getConnString() string {
 	)
 }
 
-func getDbConn() (*pgx.Conn, error) {
+func getDbPool() (*pgxpool.Pool, error) {
 	connectionString := getConnString()
-	conn, err := pgx.Connect(context.Background(), connectionString)
+	conn, err := pgxpool.New(context.Background(), connectionString)
 	if err != nil {
 		return nil, err
 	}
@@ -44,13 +44,13 @@ func getDbConn() (*pgx.Conn, error) {
 
 func SearchPosts(query string) ([]dbaccess.Post, error) {
 	slog.Info("Searching posts", "query", query)
-	dbConn, err := getDbConn()
+	dbPool, err := getDbPool()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer dbConn.Close(context.Background())
+	defer dbPool.Close()
 	var posts []dbaccess.Post
-	rows, err := dbConn.Query(context.Background(), "SELECT * FROM posts WHERE SIMILARITY(content, $1::text) > 0.3", query)
+	rows, err := dbPool.Query(context.Background(), "SELECT * FROM posts WHERE SIMILARITY(content, $1::text) > 0.3", query)
 	if err != nil {
 		return nil, err
 	}

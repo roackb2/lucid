@@ -69,8 +69,8 @@ func main() {
 				errCh <- err
 				return
 			}
+			publisher.PersistState()
 			resCh <- res
-			defer publisher.PersistState()
 		}()
 	}
 
@@ -83,8 +83,8 @@ func main() {
 				errCh <- err
 				return
 			}
+			consumer.PersistState()
 			resCh <- res
-			defer consumer.PersistState()
 		}()
 	}
 
