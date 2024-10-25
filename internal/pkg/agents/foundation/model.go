@@ -86,13 +86,13 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 			funcName := toolCall.Function.Name
 			slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
 
-			toolCallResult, finalResponse := f.handleToolCall(ctx, persistTool, flowTool, toolCall)
+			toolCallResult := f.handleToolCall(ctx, persistTool, flowTool, toolCall)
 			slog.Info("Agent tool message", "role", f.Role, "message", toolCallResult)
 			f.Messages = append(f.Messages, openai.ToolMessage(toolCall.ID, toolCallResult))
 			chatParams.Messages = openai.F(f.Messages)
 
-			if finalResponse != "" {
-				return finalResponse, nil
+			if funcName == "report" {
+				return toolCallResult, nil
 			}
 		}
 	}
@@ -107,28 +107,19 @@ func (f *FoundationModelImpl) handleToolCall(
 	persistTool *tools.PersistTool,
 	flowTool *tools.FlowTool,
 	toolCall openai.ChatCompletionMessageToolCall,
-) (
-	toolCallResult string,
-	finalResponse string,
-) {
+) (toolCallResult string) {
 	funcName := toolCall.Function.Name
 	slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
 
-	switch funcName {
-	case "save_content":
-		toolCallResult = persistTool.SaveContent(ctx, toolCall)
-	case "search_content":
-		toolCallResult = persistTool.SearchContent(ctx, toolCall)
-	case "wait":
-		// We currently don't actually wait for the given duration,
-		// just cheat the LLM by saying we're waiting to let it continue the task.
-		toolCallResult = flowTool.Wait(ctx, toolCall)
-	case "report":
-		toolCallResult = flowTool.Report(ctx, toolCall)
-		finalResponse = toolCallResult
+	funcCallMap := map[string]func(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string{
+		"save_content":   persistTool.SaveContent,
+		"search_content": persistTool.SearchContent,
+		"wait":           flowTool.Wait,
+		"report":         flowTool.Report,
 	}
+	toolCallResult = funcCallMap[funcName](ctx, toolCall)
 
-	return toolCallResult, finalResponse
+	return toolCallResult
 }
 
 func (f *FoundationModelImpl) Serialize() ([]byte, error) {
