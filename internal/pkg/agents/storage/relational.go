@@ -11,7 +11,17 @@ import (
 type RelationalStorage struct{}
 
 func NewRelationalStorage() (*RelationalStorage, error) {
+	err := querier.Initialize()
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to initialize querier", "error", err)
+		return nil, err
+	}
 	return &RelationalStorage{}, nil
+}
+
+func (m *RelationalStorage) Close() error {
+	querier.Close()
+	return nil
 }
 
 func (m *RelationalStorage) SavePost(content string) error {

@@ -21,6 +21,8 @@ func main() {
 		slog.Error("Error creating vector storage:", "error", err)
 		panic(err)
 	}
+	defer storage.Close()
+
 	publisher := agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage)
 
 	res, err := publisher.StartTask()

@@ -252,3 +252,12 @@ func (v *VectorStorage) SaveAgentState(agentID string, state []byte) error {
 func (v *VectorStorage) GetAgentState(agentID string) ([]byte, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+
+func (v *VectorStorage) Close() error {
+	err := v.client.Close()
+	if err != nil {
+		slog.Error("VectorStorage: Failed to close client", "error", err)
+		return err
+	}
+	return nil
+}

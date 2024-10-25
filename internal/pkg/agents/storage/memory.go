@@ -45,3 +45,7 @@ func (m *MemoryStorage) GetAgentState(agentID string) ([]byte, error) {
 	}
 	return []byte(state), nil
 }
+
+func (m *MemoryStorage) Close() error {
+	return nil
+}

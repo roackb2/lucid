@@ -17,7 +17,7 @@ func main() {
 	defer func() {
 		r := recover()
 		if r != nil {
-			fmt.Println("Recovered from panic:", r)
+			slog.Error("Recovered from panic", "error", r)
 		}
 	}()
 
@@ -27,6 +27,7 @@ func main() {
 		slog.Error("Error creating vector storage:", "error", err)
 		panic(err)
 	}
+	defer storage.Close()
 
 	songs := []string{
 		"Jazz in the Rain",
@@ -108,10 +109,10 @@ func main() {
 				// resCh is closed and all messages are received
 				return
 			}
-			fmt.Println(response)
+			slog.Info("Received response", "response", response)
 			writeToFile(fmt.Sprintf("%s_%s.txt", response.Role, response.Id), response.Message)
 		case err := <-errCh:
-			fmt.Println("Error:", err)
+			slog.Error("Error", "error", err)
 			return // Exit on error
 		}
 	}

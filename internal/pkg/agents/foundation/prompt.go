@@ -49,6 +49,6 @@ If the content you're seeking for is not in the storage yet, keep calling the se
 You must call the report tool to finish the task and report the results to the user.
 The user might have you resume your task with a new prompt after you call the report tool.
 In this case, you should continue your task with the new prompt.
-When you find the required content or you decide to report progress, you must call the report tool.
+When you find the required content or you decide to report progress or just to answer a simple question, you must call the report tool so that the system knows your task is done and report the results to the user.
 This might happen multiple times, and you should always call the report tool to tell the user your progress or you decide to report progress.
 `

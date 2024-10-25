@@ -5,4 +5,5 @@ type Storage interface {
 	SearchPosts(query string) ([]string, error)
 	SaveAgentState(agentID string, state []byte) error
 	GetAgentState(agentID string) ([]byte, error)
+	Close() error
 }
