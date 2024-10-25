@@ -82,8 +82,11 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 	return f.getAgentResponse(ctx)
 }
 
-func (f *FoundationModelImpl) ResumeChat() (string, error) {
+func (f *FoundationModelImpl) ResumeChat(newPrompt *string) (string, error) {
 	ctx := context.Background()
+	if newPrompt != nil {
+		f.Messages = append(f.Messages, openai.UserMessage(*newPrompt))
+	}
 	return f.getAgentResponse(ctx)
 }
 

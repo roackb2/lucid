@@ -26,29 +26,27 @@ func main() {
 	resCh := make(chan agents.AgentResponse, 1)
 	errCh := make(chan error, 1)
 
-	go publisher.StartTask(resCh, errCh)
+	publisher.StartTask(resCh, errCh)
 
 	select {
 	case res := <-resCh:
 		slog.Info("Publisher response", "response", res)
-		err = publisher.PersistState()
-		if err != nil {
-			slog.Error("Error persisting state:", "error", err)
-			panic(err)
-		}
-		slog.Info("Publisher state persisted")
-		go storeAndResume(publisher.GetID(), storage)
 	case err := <-errCh:
 		slog.Error("Publisher error", "error", err)
 	}
-}
 
-func storeAndResume(agentID string, storage storage.Storage) {
+	// Store the state
+	err = publisher.PersistState()
+	if err != nil {
+		slog.Error("Error persisting state:", "error", err)
+		panic(err)
+	}
+	slog.Info("Publisher state persisted")
+
+	// Restore the state
 	restoredPublisher := agents.NewPublisher("", storage)
-	resCh := make(chan agents.AgentResponse, 1)
-	errCh := make(chan error, 1)
-
-	go restoredPublisher.ResumeTask(agentID, resCh, errCh)
+	newPrompt := "What is the length of the title of the song that you just published?"
+	restoredPublisher.ResumeTask(publisher.GetID(), &newPrompt, resCh, errCh)
 	select {
 	case res := <-resCh:
 		slog.Info("Publisher response", "response", res)
