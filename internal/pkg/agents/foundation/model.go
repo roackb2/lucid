@@ -71,7 +71,9 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 		Model:    openai.F(f.Model),
 	}
 
-	for true {
+	// Loop until the LLM returns a non-empty finalResponse
+	finalResponse := ""
+	for finalResponse == "" {
 		f.debugStruct("Agent chat messages", f.Messages)
 
 		// Ask the LLM
@@ -82,27 +84,39 @@ func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
 		}
 
 		// Handle tool calls
-		for _, toolCall := range agentResponse.ToolCalls {
-			funcName := toolCall.Function.Name
-			slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
+		finalResponse = f.handleToolCalls(ctx, persistTool, flowTool, agentResponse.ToolCalls, &chatParams)
+		time.Sleep(SleepInterval)
+	}
 
-			toolCallResult := f.handleToolCall(ctx, persistTool, flowTool, toolCall)
-			slog.Info("Agent tool message", "role", f.Role, "message", toolCallResult)
-			f.Messages = append(f.Messages, openai.ToolMessage(toolCall.ID, toolCallResult))
-			chatParams.Messages = openai.F(f.Messages)
+	return finalResponse, nil
+}
 
-			if funcName == "report" {
-				return toolCallResult, nil
-			}
+func (f *FoundationModelImpl) handleToolCalls(
+	ctx context.Context,
+	persistTool *tools.PersistTool,
+	flowTool *tools.FlowTool,
+	toolCalls []openai.ChatCompletionMessageToolCall,
+	chatParams *openai.ChatCompletionNewParams,
+) (finalResponse string) {
+	for _, toolCall := range toolCalls {
+		funcName := toolCall.Function.Name
+		slog.Info("Agent tool call", "role", f.Role, "tool_call", funcName)
+
+		toolCallResult := f.handleSingleToolCall(ctx, persistTool, flowTool, toolCall)
+		slog.Info("Agent tool message", "role", f.Role, "message", toolCallResult)
+		f.Messages = append(f.Messages, openai.ToolMessage(toolCall.ID, toolCallResult))
+		chatParams.Messages = openai.F(f.Messages)
+
+		if funcName == "report" {
+			finalResponse = toolCallResult
+			break
 		}
 	}
 
-	time.Sleep(SleepInterval)
-
-	return "", nil
+	return finalResponse
 }
 
-func (f *FoundationModelImpl) handleToolCall(
+func (f *FoundationModelImpl) handleSingleToolCall(
 	ctx context.Context,
 	persistTool *tools.PersistTool,
 	flowTool *tools.FlowTool,
