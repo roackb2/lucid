@@ -47,4 +47,8 @@ If you're a publisher, you can use the save_content tool to save your content to
 If you're a consumer, you can use the search_content tool to search the content you need in the storage.
 If the content you're seeking for is not in the storage yet, keep calling the search_content tool until you find it, or call the wait tool to wait for a period of time before continuing the task.
 You must call the report tool to finish the task and report the results to the user.
+The user might have you resume your task with a new prompt after you call the report tool.
+In this case, you should continue your task with the new prompt.
+When you find the required content or you decide to report progress, you must call the report tool.
+This might happen multiple times, and you should always call the report tool to tell the user your progress or you decide to report progress.
 `
