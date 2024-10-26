@@ -19,17 +19,9 @@ type AgentControllerConfig struct {
 type AgentController struct {
 	cfg AgentControllerConfig
 
-	storage  storage.Storage
-	tracking map[string]AgentTracking
-	bus      NotificationBus
-}
-
-type AgentTracking struct {
-	AgentID   string
-	Agent     *agents.Agent
-	CreatedAt time.Time
-	ControlCh foundation.ControlSenderCh
-	ReportCh  foundation.ReportReceiverCh
+	storage storage.Storage
+	tracker AgentTracker
+	bus     NotificationBus
 }
 
 func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus NotificationBus) *AgentController {
@@ -41,6 +33,7 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		cfg:     cfg,
 		storage: storage,
 		bus:     bus,
+		tracker: NewMemoryAgentTracker(),
 	}
 	return controller
 }
@@ -49,9 +42,11 @@ func (c *AgentController) Start() {
 	for {
 		time.Sleep(1 * time.Second)
 
-		for _, tracking := range c.tracking {
+		for _, tracking := range c.tracker.GetAllTrackings() {
 			if time.Since(tracking.CreatedAt) > *c.cfg.DefaultRunningDuration {
 				tracking.ControlCh <- foundation.CmdTerminate
+				status := <-tracking.ReportCh
+				slog.Info("Agent terminated", "agent_id", tracking.AgentID, "status", status)
 			}
 		}
 	}
@@ -79,13 +74,13 @@ func (c *AgentController) KickoffTask(ctx context.Context, task string, role str
 		c.bus.Publish(agent.GetID(), resp)
 	}()
 
-	c.tracking[agent.GetID()] = AgentTracking{
+	c.tracker.AddTracking(agent.GetID(), AgentTracking{
 		AgentID:   agent.GetID(),
 		Agent:     &agent,
 		ControlCh: controlCh,
 		ReportCh:  reportCh,
 		CreatedAt: time.Now(),
-	}
+	})
 
 	return nil
 }
