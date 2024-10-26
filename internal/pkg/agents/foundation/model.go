@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/looplab/fsm"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
@@ -93,38 +94,44 @@ func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlCh,
 func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlCh, reportCh ReportCh) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
-	for finalResponse == "" {
-		select {
-		case cmd := <-controlCh:
-			switch cmd {
-			case "terminate":
+	taskFSM := fsm.NewFSM(
+		"running",
+		fsm.Events{
+			{Name: "pause", Src: []string{"running"}, Dst: "paused"},
+			{Name: "resume", Src: []string{"paused"}, Dst: "running"},
+			{Name: "terminate", Src: []string{"running", "paused"}, Dst: "terminated"},
+		},
+		fsm.Callbacks{
+			"enter_state": func(_ context.Context, e *fsm.Event) {
+				slog.Info("Transitioned to state", "from", e.Src, "to", e.Dst)
+			},
+			"after_pause": func(_ context.Context, e *fsm.Event) {
+				reportCh <- "paused"
+			},
+			"after_resume": func(_ context.Context, e *fsm.Event) {
+				reportCh <- "resumed"
+			},
+			"after_terminate": func(_ context.Context, e *fsm.Event) {
 				f.CleanUp()
 				reportCh <- "terminated"
-				return finalResponse, nil
-			case "pause":
-				reportCh <- "paused"
-			PauseLoop:
-				for {
-					select {
-					case cmd := <-controlCh:
-						switch cmd {
-						case "resume":
-							reportCh <- "resumed"
-							break PauseLoop
-						case "terminate":
-							f.CleanUp()
-							reportCh <- "terminated"
-							return finalResponse, nil
-						default:
-							slog.Error("Unknown command during pause", "role", f.Role, "command", cmd)
-						}
-					}
-				}
-			default:
-				slog.Error("Unknown command", "role", f.Role, "command", cmd)
+			},
+		},
+	)
+
+	for finalResponse == "" && taskFSM.Current() != "terminated" {
+		select {
+		case cmd := <-controlCh:
+			err := taskFSM.Event(context.Background(), cmd)
+			if err != nil {
+				slog.Error("Error processing event", "error", err)
 			}
 		default:
-			finalResponse = f.getAgentResponse(ctx)
+			if taskFSM.Current() == "running" {
+				finalResponse = f.getAgentResponse(ctx)
+			} else {
+				// When paused, sleep briefly to prevent tight loop
+				time.Sleep(100 * time.Millisecond)
+			}
 		}
 	}
 
