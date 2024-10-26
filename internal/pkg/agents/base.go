@@ -31,6 +31,10 @@ func (b *BaseAgent) GetID() string {
 	return b.id
 }
 
+func (b *BaseAgent) GetStatus() string {
+	return b.model.GetStatus()
+}
+
 func (b *BaseAgent) StartTask(controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*AgentResponse, error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
 	response, err := b.model.Chat(b.task, controlCh, reportCh)

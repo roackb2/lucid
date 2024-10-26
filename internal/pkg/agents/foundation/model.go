@@ -20,8 +20,9 @@ const (
 )
 
 type FoundationModelImpl struct {
-	client  *openai.Client
-	storage storage.Storage
+	client       *openai.Client
+	storage      storage.Storage
+	stateMachine *fsm.FSM
 
 	ID           *string                                  `json:"id,required"`
 	Role         string                                   `json:"role,required"`
@@ -38,12 +39,14 @@ func NewFoundationModel(id *string, role string, storage storage.Storage) Founda
 	persistTool := tools.NewPersistTool(storage)
 	flowTool := tools.NewFlowTool()
 	return &FoundationModelImpl{
-		client:  client,
-		storage: storage,
+		client:       client,
+		storage:      storage,
+		stateMachine: nil, // Should init when start or resume task
 
 		ID:           id,
 		Role:         role,
 		Model:        openai.ChatModelGPT4o,
+		Messages:     []openai.ChatCompletionMessageParamUnion{},
 		PersistTools: persistTool,
 		FlowTools:    flowTool,
 	}
@@ -75,37 +78,37 @@ func (f *FoundationModelImpl) chatCompletion(ctx context.Context) (*openai.ChatC
 }
 
 func (f *FoundationModelImpl) Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
+	f.initAgentStateMachine(reportCh)
 	ctx := context.Background()
 	f.Messages = []openai.ChatCompletionMessageParamUnion{
 		openai.SystemMessage(SystemPrompt),
 		openai.UserMessage(prompt),
 	}
-	return f.getAgentResponseWithFlowControl(ctx, controlCh, reportCh)
+	return f.getAgentResponseWithFlowControl(ctx, controlCh)
 }
 
 func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
+	f.initAgentStateMachine(reportCh)
 	ctx := context.Background()
 	if newPrompt != nil {
 		f.Messages = append(f.Messages, openai.UserMessage(*newPrompt))
 	}
-	return f.getAgentResponseWithFlowControl(ctx, controlCh, reportCh)
+	return f.getAgentResponseWithFlowControl(ctx, controlCh)
 }
 
-func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
-	taskFSM := f.getAgentStateMachine(reportCh)
-
+func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlReceiverCh) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
-	for finalResponse == "" && taskFSM.Current() != StateTerminated {
+	for finalResponse == "" && f.GetStatus() != StateTerminated {
 		select {
 		case cmd := <-controlCh:
-			err := taskFSM.Event(context.Background(), cmd)
+			err := f.stateMachine.Event(context.Background(), cmd)
 			if err != nil {
 				slog.Error("Error processing event", "error", err)
 			}
 		default:
-			slog.Info("FoundationModelImpl: current state", "agentID", *f.ID, "role", f.Role, "state", taskFSM.Current())
-			switch taskFSM.Current() {
+			slog.Info("FoundationModelImpl: current state", "agentID", *f.ID, "role", f.Role, "state", f.GetStatus())
+			switch f.GetStatus() {
 			// No need to handle StateTerminated, as it will be handled in the loop condition
 			case StateRunning:
 				finalResponse = f.getAgentResponse(ctx)
@@ -119,8 +122,8 @@ func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Contex
 	return finalResponse, nil
 }
 
-func (f *FoundationModelImpl) getAgentStateMachine(reportCh ReportSenderCh) *fsm.FSM {
-	taskFSM := fsm.NewFSM(
+func (f *FoundationModelImpl) initAgentStateMachine(reportCh ReportSenderCh) {
+	f.stateMachine = fsm.NewFSM(
 		"running",
 		fsm.Events{
 			{Name: CmdPause, Src: []string{StateRunning}, Dst: StatePaused},
@@ -143,7 +146,6 @@ func (f *FoundationModelImpl) getAgentStateMachine(reportCh ReportSenderCh) *fsm
 			},
 		},
 	)
-	return taskFSM
 }
 
 func (f *FoundationModelImpl) CleanUp() {
@@ -208,6 +210,13 @@ func (f *FoundationModelImpl) handleSingleToolCall(
 	toolCallResult = funcCallMap[funcName](ctx, toolCall)
 
 	return toolCallResult
+}
+
+func (f *FoundationModelImpl) GetStatus() string {
+	if f.stateMachine == nil {
+		return StateTerminated
+	}
+	return f.stateMachine.Current()
 }
 
 func (f *FoundationModelImpl) PersistState() error {

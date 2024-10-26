@@ -13,4 +13,5 @@ type Agent interface {
 	StartTask(controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*AgentResponse, error)
 	PersistState() error
 	ResumeTask(agentID string, newPrompt *string, controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*AgentResponse, error)
+	GetStatus() string
 }

@@ -39,17 +39,27 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 }
 
 func (c *AgentController) Start() {
-	for {
-		time.Sleep(1 * time.Second)
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
 
-		for _, tracking := range c.tracker.GetAllTrackings() {
-			if time.Since(tracking.CreatedAt) > *c.cfg.DefaultRunningDuration {
-				tracking.ControlCh <- foundation.CmdTerminate
-				status := <-tracking.ReportCh
-				slog.Info("Agent terminated", "agent_id", tracking.AgentID, "status", status)
+			for _, tracking := range c.tracker.GetAllTrackings() {
+				if time.Since(tracking.CreatedAt) > *c.cfg.DefaultRunningDuration {
+					tracking.ControlCh <- foundation.CmdTerminate
+					status := <-tracking.ReportCh
+					slog.Info("Agent terminated", "agent_id", tracking.AgentID, "status", status)
+					c.tracker.UpdateTracking(tracking.AgentID, AgentTracking{
+						AgentID:   tracking.AgentID,
+						Agent:     tracking.Agent,
+						Status:    tracking.Agent.GetStatus(),
+						ControlCh: tracking.ControlCh,
+						ReportCh:  tracking.ReportCh,
+						CreatedAt: tracking.CreatedAt,
+					})
+				}
 			}
 		}
-	}
+	}()
 }
 
 func (c *AgentController) KickoffTask(ctx context.Context, task string, role string) error {
@@ -71,12 +81,13 @@ func (c *AgentController) KickoffTask(ctx context.Context, task string, role str
 		if err != nil {
 			slog.Error("Error starting task", "error", err)
 		}
-		c.bus.Publish(agent.GetID(), resp)
+		c.bus.WriteResponse(resp)
 	}()
 
 	c.tracker.AddTracking(agent.GetID(), AgentTracking{
 		AgentID:   agent.GetID(),
-		Agent:     &agent,
+		Agent:     agent,
+		Status:    "running",
 		ControlCh: controlCh,
 		ReportCh:  reportCh,
 		CreatedAt: time.Now(),
