@@ -5,13 +5,12 @@ import (
 	"log/slog"
 
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
-	"github.com/roackb2/lucid/internal/pkg/querier"
 )
 
 type RelationalStorage struct{}
 
 func NewRelationalStorage() (*RelationalStorage, error) {
-	err := querier.Initialize()
+	err := dbaccess.Initialize()
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to initialize querier", "error", err)
 		return nil, err
@@ -20,7 +19,7 @@ func NewRelationalStorage() (*RelationalStorage, error) {
 }
 
 func (m *RelationalStorage) Close() error {
-	querier.Close()
+	dbaccess.Close()
 	return nil
 }
 
@@ -29,7 +28,7 @@ func (m *RelationalStorage) SavePost(content string) error {
 		UserID:  1,
 		Content: content,
 	}
-	err := querier.Querier.CreatePost(context.Background(), createPostParams)
+	err := dbaccess.Querier.CreatePost(context.Background(), createPostParams)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to save post", "error", err)
 		return err
@@ -41,7 +40,7 @@ func (m *RelationalStorage) SavePost(content string) error {
 func (m *RelationalStorage) SearchPosts(query string) ([]string, error) {
 	slog.Info("RelationalStorage: Searching for posts", "query", query)
 
-	results, err := querier.SearchPosts(query)
+	results, err := dbaccess.SearchPosts(query)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to search posts", "error", err)
 		return nil, err
@@ -61,7 +60,7 @@ func (m *RelationalStorage) SaveAgentState(agentID string, state []byte) error {
 		AgentID: agentID,
 		State:   state,
 	}
-	err := querier.Querier.CreateAgentState(context.Background(), params)
+	err := dbaccess.Querier.CreateAgentState(context.Background(), params)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to save agent state", "error", err)
 		return err
@@ -72,7 +71,7 @@ func (m *RelationalStorage) SaveAgentState(agentID string, state []byte) error {
 
 func (m *RelationalStorage) GetAgentState(agentID string) ([]byte, error) {
 	slog.Info("RelationalStorage: Getting agent state", "agentID", agentID)
-	state, err := querier.Querier.GetAgentState(context.Background(), agentID)
+	state, err := dbaccess.Querier.GetAgentState(context.Background(), agentID)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to get agent state", "error", err)
 		return nil, err

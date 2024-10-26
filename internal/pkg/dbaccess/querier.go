@@ -1,4 +1,4 @@
-package querier
+package dbaccess
 
 import (
 	"context"
@@ -7,12 +7,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/roackb2/lucid/config"
-	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 )
 
 var (
 	dbPool  *pgxpool.Pool
-	Querier *dbaccess.Queries
+	Querier *Queries
 )
 
 func Initialize() error {
@@ -22,7 +21,7 @@ func Initialize() error {
 		slog.Error("Failed to get db pool", "error", err)
 		return err
 	}
-	Querier = dbaccess.New(dbPool)
+	Querier = New(dbPool)
 	return nil
 }
 
@@ -61,9 +60,9 @@ func getDbPool() (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func SearchPosts(query string) ([]dbaccess.Post, error) {
+func SearchPosts(query string) ([]Post, error) {
 	slog.Info("Searching posts", "query", query)
-	var posts []dbaccess.Post
+	var posts []Post
 	conn, err := dbPool.Acquire(context.Background())
 	if err != nil {
 		slog.Error("Failed to acquire connection", "error", err)
@@ -77,7 +76,7 @@ func SearchPosts(query string) ([]dbaccess.Post, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var post dbaccess.Post
+		var post Post
 		err := rows.Scan(&post.ID, &post.UserID, &post.Content, &post.CreatedAt, &post.UpdatedAt)
 		if err != nil {
 			slog.Error("Failed to scan post", "error", err)

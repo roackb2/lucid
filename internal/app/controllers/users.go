@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
-	"github.com/roackb2/lucid/internal/pkg/querier"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -47,7 +46,7 @@ func CreateMockUser(c *gin.Context) {
 		PasswordHash: string(hashedPassword),
 	}
 
-	err = querier.Querier.CreateUser(context.Background(), createUserRes)
+	err = dbaccess.Querier.CreateUser(context.Background(), createUserRes)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
