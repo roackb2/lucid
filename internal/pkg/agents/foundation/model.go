@@ -92,8 +92,31 @@ func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlCh,
 }
 
 func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlCh, reportCh ReportCh) (string, error) {
+	taskFSM := f.getAgentStateMachine(reportCh)
+
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
+	for finalResponse == "" && taskFSM.Current() != "terminated" {
+		select {
+		case cmd := <-controlCh:
+			err := taskFSM.Event(context.Background(), cmd)
+			if err != nil {
+				slog.Error("Error processing event", "error", err)
+			}
+		default:
+			if taskFSM.Current() == "running" {
+				finalResponse = f.getAgentResponse(ctx)
+			} else {
+				// When paused, sleep briefly to prevent tight loop
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}
+
+	return finalResponse, nil
+}
+
+func (f *FoundationModelImpl) getAgentStateMachine(reportCh ReportCh) *fsm.FSM {
 	taskFSM := fsm.NewFSM(
 		"running",
 		fsm.Events{
@@ -117,25 +140,7 @@ func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Contex
 			},
 		},
 	)
-
-	for finalResponse == "" && taskFSM.Current() != "terminated" {
-		select {
-		case cmd := <-controlCh:
-			err := taskFSM.Event(context.Background(), cmd)
-			if err != nil {
-				slog.Error("Error processing event", "error", err)
-			}
-		default:
-			if taskFSM.Current() == "running" {
-				finalResponse = f.getAgentResponse(ctx)
-			} else {
-				// When paused, sleep briefly to prevent tight loop
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
-	}
-
-	return finalResponse, nil
+	return taskFSM
 }
 
 func (f *FoundationModelImpl) getAgentResponse(ctx context.Context) string {
