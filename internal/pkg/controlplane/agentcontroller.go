@@ -9,6 +9,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
 type AgentControllerConfig struct {
@@ -26,18 +27,9 @@ type AgentController struct {
 }
 
 func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus NotificationBus) *AgentController {
-	scanInterval := cfg.ScanInterval
-	if scanInterval == 0 {
-		scanInterval = (1 * time.Second)
-	}
-	agentLifeTime := cfg.AgentLifeTime
-	if agentLifeTime == 0 {
-		agentLifeTime = (5 * time.Minute)
-	}
-	maxRespChSize := cfg.MaxRespChSize
-	if maxRespChSize <= 0 {
-		maxRespChSize = 65536
-	}
+	scanInterval := utils.GetOrDefault(cfg.ScanInterval, 1*time.Second)
+	agentLifeTime := utils.GetOrDefault(cfg.AgentLifeTime, 5*time.Minute)
+	maxRespChSize := utils.GetOrDefault(cfg.MaxRespChSize, 65536)
 	mergedCfg := AgentControllerConfig{
 		ScanInterval:  scanInterval,
 		AgentLifeTime: agentLifeTime,
