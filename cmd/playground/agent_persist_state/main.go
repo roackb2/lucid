@@ -23,9 +23,12 @@ func main() {
 	}
 	defer storage.Close()
 
+	controlCh := make(chan string, 1)
+	reportCh := make(chan string, 1)
+
 	publisher := agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage)
 
-	res, err := publisher.StartTask()
+	res, err := publisher.StartTask(controlCh, reportCh)
 	if err != nil {
 		slog.Error("Publisher error", "error", err)
 		panic(err)
@@ -43,7 +46,7 @@ func main() {
 	// Restore the state
 	restoredPublisher := agents.NewPublisher("", storage)
 	newPrompt := "What is the length of the title of the song that you just published?"
-	res, err = restoredPublisher.ResumeTask(publisher.GetID(), &newPrompt)
+	res, err = restoredPublisher.ResumeTask(publisher.GetID(), &newPrompt, controlCh, reportCh)
 	if err != nil {
 		slog.Error("Publisher error", "error", err)
 		panic(err)

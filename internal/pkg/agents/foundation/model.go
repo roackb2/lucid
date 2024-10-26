@@ -73,39 +73,71 @@ func (f *FoundationModelImpl) chatCompletion(ctx context.Context) (*openai.ChatC
 	return &agentResponse, nil
 }
 
-func (f *FoundationModelImpl) Chat(prompt string) (string, error) {
+func (f *FoundationModelImpl) Chat(prompt string, controlCh ControlCh, reportCh ReportCh) (string, error) {
 	ctx := context.Background()
 	f.Messages = []openai.ChatCompletionMessageParamUnion{
 		openai.SystemMessage(SystemPrompt),
 		openai.UserMessage(prompt),
 	}
-	return f.getAgentResponse(ctx)
+	return f.getAgentResponse(ctx, controlCh, reportCh)
 }
 
-func (f *FoundationModelImpl) ResumeChat(newPrompt *string) (string, error) {
+func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlCh, reportCh ReportCh) (string, error) {
 	ctx := context.Background()
 	if newPrompt != nil {
 		f.Messages = append(f.Messages, openai.UserMessage(*newPrompt))
 	}
-	return f.getAgentResponse(ctx)
+	return f.getAgentResponse(ctx, controlCh, reportCh)
 }
 
-func (f *FoundationModelImpl) getAgentResponse(ctx context.Context) (string, error) {
+func (f *FoundationModelImpl) getAgentResponse(ctx context.Context, controlCh ControlCh, reportCh ReportCh) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
 	for finalResponse == "" {
-		f.debugStruct("Agent chat messages", f.Messages)
+		select {
+		case cmd := <-controlCh:
+			switch cmd {
+			case "terminate":
+				f.CleanUp()
+				reportCh <- "terminated"
+				return finalResponse, nil
+			case "pause":
+				reportCh <- "paused"
+			PauseLoop:
+				for {
+					select {
+					case cmd := <-controlCh:
+						switch cmd {
+						case "resume":
+							reportCh <- "resumed"
+							break PauseLoop
+						case "terminate":
+							f.CleanUp()
+							reportCh <- "terminated"
+							return finalResponse, nil
+						default:
+							slog.Error("Unknown command during pause", "role", f.Role, "command", cmd)
+						}
+					}
+				}
+			default:
+				slog.Error("Unknown command", "role", f.Role, "command", cmd)
+			}
+		default:
+			// Ask the LLM
+			agentResponse, err := f.chatCompletion(ctx)
+			if err != nil {
+				slog.Error("Agent chat error", "role", f.Role, "error", err)
+				return "", err
+			}
 
-		// Ask the LLM
-		agentResponse, err := f.chatCompletion(ctx)
-		if err != nil {
-			slog.Error("Agent chat error", "role", f.Role, "error", err)
-			return "", err
+			// Handle tool calls
+			finalResponse = f.handleToolCalls(ctx, agentResponse.ToolCalls)
+
+			f.debugStruct("Agent chat messages", f.Messages)
+
+			time.Sleep(SleepInterval)
 		}
-
-		// Handle tool calls
-		finalResponse = f.handleToolCalls(ctx, agentResponse.ToolCalls)
-		time.Sleep(SleepInterval)
 	}
 
 	return finalResponse, nil
@@ -148,6 +180,10 @@ func (f *FoundationModelImpl) handleSingleToolCall(
 	toolCallResult = funcCallMap[funcName](ctx, toolCall)
 
 	return toolCallResult
+}
+
+func (f *FoundationModelImpl) CleanUp() {
+	// TODO: Implement cleanup
 }
 
 func (f *FoundationModelImpl) Serialize() ([]byte, error) {

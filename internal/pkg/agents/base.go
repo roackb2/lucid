@@ -16,9 +16,9 @@ type AgentResponse struct {
 
 type Agent interface {
 	GetID() string
-	StartTask() (*AgentResponse, error)
+	StartTask(controlCh foundation.ControlCh, reportCh foundation.ReportCh) (*AgentResponse, error)
 	PersistState() error
-	ResumeTask(agentID string, newPrompt *string) (*AgentResponse, error)
+	ResumeTask(agentID string, newPrompt *string, controlCh foundation.ControlCh, reportCh foundation.ReportCh) (*AgentResponse, error)
 }
 
 type BaseAgent struct {
@@ -44,9 +44,9 @@ func (b *BaseAgent) GetID() string {
 	return b.id
 }
 
-func (b *BaseAgent) StartTask() (*AgentResponse, error) {
+func (b *BaseAgent) StartTask(controlCh foundation.ControlCh, reportCh foundation.ReportCh) (*AgentResponse, error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
-	response, err := b.model.Chat(b.task)
+	response, err := b.model.Chat(b.task, controlCh, reportCh)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (b *BaseAgent) StartTask() (*AgentResponse, error) {
 	return &AgentResponse{b.id, b.role, response}, nil
 }
 
-func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string) (*AgentResponse, error) {
+func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string, controlCh foundation.ControlCh, reportCh foundation.ReportCh) (*AgentResponse, error) {
 	slog.Info("Agent: Resuming task", "agentID", agentID, "role", b.role)
 	// Restore the agent state
 	err := b.restoreState(agentID)
@@ -62,7 +62,7 @@ func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string) (*AgentRespons
 		return nil, err
 	}
 	// Resume the chat
-	response, err := b.model.ResumeChat(newPrompt)
+	response, err := b.model.ResumeChat(newPrompt, controlCh, reportCh)
 	if err != nil {
 		return nil, err
 	}
