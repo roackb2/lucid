@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
@@ -36,6 +37,7 @@ func main() {
 			panic(err)
 		}
 		fmt.Println("Response:", response)
+		os.Exit(0)
 	}()
 
 	time.Sleep(1 * time.Second)
