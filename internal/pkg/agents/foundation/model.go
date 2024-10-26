@@ -204,6 +204,36 @@ func (f *FoundationModelImpl) CleanUp() {
 	// TODO: Implement cleanup
 }
 
+func (f *FoundationModelImpl) PersistState() error {
+	slog.Info("FoundationModelImpl: Persisting state", "agentID", *f.ID, "role", f.Role)
+	state, err := f.Serialize()
+	if err != nil {
+		slog.Error("FoundationModelImpl: Failed to serialize", "error", err)
+		return err
+	}
+	err = f.storage.SaveAgentState(*f.ID, state)
+	if err != nil {
+		slog.Error("FoundationModelImpl: Failed to save state", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (f *FoundationModelImpl) RestoreState(agentID string) error {
+	slog.Info("FoundationModelImpl: Restoring state", "agentID", agentID)
+	state, err := f.storage.GetAgentState(agentID)
+	if err != nil {
+		slog.Error("FoundationModelImpl: Failed to get agent state", "agentID", agentID, "error", err)
+		return err
+	}
+	err = f.Deserialize(state)
+	if err != nil {
+		slog.Error("FoundationModelImpl: Failed to deserialize state", "agentID", agentID, "error", err)
+		return err
+	}
+	return nil
+}
+
 func (f *FoundationModelImpl) Serialize() ([]byte, error) {
 	data, err := json.Marshal(f)
 	if err != nil {

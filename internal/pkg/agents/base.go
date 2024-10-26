@@ -71,29 +71,20 @@ func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string, controlCh foun
 
 func (b *BaseAgent) PersistState() error {
 	slog.Info("Agent: Persisting state", "agentID", b.id, "role", b.role)
-	state, err := b.model.Serialize()
+	err := b.model.PersistState()
 	if err != nil {
-		slog.Error("Agent: Failed to serialize state", "agentID", b.id, "role", b.role, "error", err)
-		return err
-	}
-	err = b.storage.SaveAgentState(b.id, state)
-	if err != nil {
-		slog.Error("Agent: Failed to save state", "agentID", b.id, "role", b.role, "error", err)
+		slog.Error("Agent: Failed to persist state", "agentID", b.id, "role", b.role, "error", err)
 		return err
 	}
 	return nil
 }
 
+// Do not expose this method, users should use ResumeTask instead
 func (b *BaseAgent) restoreState(agentID string) error {
 	slog.Info("Agent: Restoring state", "agentID", agentID)
-	state, err := b.storage.GetAgentState(agentID)
+	err := b.model.RestoreState(agentID)
 	if err != nil {
-		slog.Error("Agent: Failed to get agent state", "agentID", agentID, "error", err)
-		return err
-	}
-	err = b.model.Deserialize(state)
-	if err != nil {
-		slog.Error("Agent: Failed to deserialize state", "agentID", agentID, "error", err)
+		slog.Error("Agent: Failed to restore state", "agentID", agentID, "error", err)
 		return err
 	}
 	return nil

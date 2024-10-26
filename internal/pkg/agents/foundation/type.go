@@ -14,4 +14,6 @@ type FoundationModel interface {
 	ResumeChat(newPrompt *string, controlCh ControlCh, reportCh ReportCh) (string, error)
 	Serialize() ([]byte, error)
 	Deserialize(state []byte) error
+	PersistState() error
+	RestoreState(agentID string) error
 }
