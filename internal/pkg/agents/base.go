@@ -8,19 +8,6 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 )
 
-type AgentResponse struct {
-	Id      string
-	Role    string
-	Message string
-}
-
-type Agent interface {
-	GetID() string
-	StartTask(controlCh foundation.ControlCh, reportCh foundation.ReportCh) (*AgentResponse, error)
-	PersistState() error
-	ResumeTask(agentID string, newPrompt *string, controlCh foundation.ControlCh, reportCh foundation.ReportCh) (*AgentResponse, error)
-}
-
 type BaseAgent struct {
 	id      string
 	role    string
@@ -44,7 +31,7 @@ func (b *BaseAgent) GetID() string {
 	return b.id
 }
 
-func (b *BaseAgent) StartTask(controlCh foundation.ControlCh, reportCh foundation.ReportCh) (*AgentResponse, error) {
+func (b *BaseAgent) StartTask(controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*AgentResponse, error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
 	response, err := b.model.Chat(b.task, controlCh, reportCh)
 	if err != nil {
@@ -54,7 +41,7 @@ func (b *BaseAgent) StartTask(controlCh foundation.ControlCh, reportCh foundatio
 	return &AgentResponse{b.id, b.role, response}, nil
 }
 
-func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string, controlCh foundation.ControlCh, reportCh foundation.ReportCh) (*AgentResponse, error) {
+func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string, controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*AgentResponse, error) {
 	slog.Info("Agent: Resuming task", "agentID", agentID, "role", b.role)
 	// Restore the agent state
 	err := b.restoreState(agentID)

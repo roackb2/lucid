@@ -74,7 +74,7 @@ func (f *FoundationModelImpl) chatCompletion(ctx context.Context) (*openai.ChatC
 	return &agentResponse, nil
 }
 
-func (f *FoundationModelImpl) Chat(prompt string, controlCh ControlCh, reportCh ReportCh) (string, error) {
+func (f *FoundationModelImpl) Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
 	ctx := context.Background()
 	f.Messages = []openai.ChatCompletionMessageParamUnion{
 		openai.SystemMessage(SystemPrompt),
@@ -83,7 +83,7 @@ func (f *FoundationModelImpl) Chat(prompt string, controlCh ControlCh, reportCh 
 	return f.getAgentResponseWithFlowControl(ctx, controlCh, reportCh)
 }
 
-func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlCh, reportCh ReportCh) (string, error) {
+func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
 	ctx := context.Background()
 	if newPrompt != nil {
 		f.Messages = append(f.Messages, openai.UserMessage(*newPrompt))
@@ -91,7 +91,7 @@ func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlCh,
 	return f.getAgentResponseWithFlowControl(ctx, controlCh, reportCh)
 }
 
-func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlCh, reportCh ReportCh) (string, error) {
+func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
 	taskFSM := f.getAgentStateMachine(reportCh)
 
 	// Loop until the LLM returns a non-empty finalResponse
@@ -119,7 +119,7 @@ func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Contex
 	return finalResponse, nil
 }
 
-func (f *FoundationModelImpl) getAgentStateMachine(reportCh ReportCh) *fsm.FSM {
+func (f *FoundationModelImpl) getAgentStateMachine(reportCh ReportSenderCh) *fsm.FSM {
 	taskFSM := fsm.NewFSM(
 		"running",
 		fsm.Events{

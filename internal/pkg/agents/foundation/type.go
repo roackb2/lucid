@@ -1,7 +1,14 @@
 package foundation
 
-type ControlCh <-chan string
-type ReportCh chan<- string
+type ControlSenderCh chan<- string
+type ControlReceiverCh <-chan string
+type ReportSenderCh chan<- string
+type ReportReceiverCh <-chan string
+
+const (
+	RolePublisher = "publisher"
+	RoleConsumer  = "consumer"
+)
 
 const (
 	CmdPause     = "pause"
@@ -16,8 +23,8 @@ const (
 )
 
 type FoundationModel interface {
-	Chat(prompt string, controlCh ControlCh, reportCh ReportCh) (string, error)
-	ResumeChat(newPrompt *string, controlCh ControlCh, reportCh ReportCh) (string, error)
+	Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error)
+	ResumeChat(newPrompt *string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error)
 	Serialize() ([]byte, error)
 	Deserialize(state []byte) error
 	PersistState() error
