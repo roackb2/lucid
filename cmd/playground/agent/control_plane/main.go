@@ -8,9 +8,12 @@ import (
 
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/controlplane"
+	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
 func main() {
+	defer utils.RecoverPanic()
+
 	ctx := context.Background()
 	storage, err := storage.NewRelationalStorage()
 	if err != nil {

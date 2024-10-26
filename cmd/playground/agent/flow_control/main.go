@@ -9,15 +9,11 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
 func main() {
-	defer func() {
-		r := recover()
-		if r != nil {
-			fmt.Println("Recovered from panic:", r)
-		}
-	}()
+	defer utils.RecoverPanic()
 
 	storage, err := storage.NewRelationalStorage()
 	if err != nil {
