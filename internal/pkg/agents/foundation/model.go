@@ -96,7 +96,7 @@ func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Contex
 
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
-	for finalResponse == "" && taskFSM.Current() != "terminated" {
+	for finalResponse == "" && taskFSM.Current() != StateTerminated {
 		select {
 		case cmd := <-controlCh:
 			err := taskFSM.Event(context.Background(), cmd)
@@ -104,9 +104,12 @@ func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Contex
 				slog.Error("Error processing event", "error", err)
 			}
 		default:
-			if taskFSM.Current() == "running" {
+			slog.Info("FoundationModelImpl: current state", "agentID", *f.ID, "role", f.Role, "state", taskFSM.Current())
+			switch taskFSM.Current() {
+			// No need to handle StateTerminated, as it will be handled in the loop condition
+			case StateRunning:
 				finalResponse = f.getAgentResponse(ctx)
-			} else {
+			case StatePaused:
 				// When paused, sleep briefly to prevent tight loop
 				time.Sleep(100 * time.Millisecond)
 			}
@@ -120,27 +123,34 @@ func (f *FoundationModelImpl) getAgentStateMachine(reportCh ReportCh) *fsm.FSM {
 	taskFSM := fsm.NewFSM(
 		"running",
 		fsm.Events{
-			{Name: "pause", Src: []string{"running"}, Dst: "paused"},
-			{Name: "resume", Src: []string{"paused"}, Dst: "running"},
-			{Name: "terminate", Src: []string{"running", "paused"}, Dst: "terminated"},
+			{Name: CmdPause, Src: []string{StateRunning}, Dst: StatePaused},
+			{Name: CmdResume, Src: []string{StatePaused}, Dst: StateRunning},
+			{Name: CmdTerminate, Src: []string{StateRunning, StatePaused}, Dst: StateTerminated},
 		},
 		fsm.Callbacks{
 			"enter_state": func(_ context.Context, e *fsm.Event) {
 				slog.Info("Transitioned to state", "from", e.Src, "to", e.Dst)
 			},
 			"after_pause": func(_ context.Context, e *fsm.Event) {
-				reportCh <- "paused"
+				reportCh <- StatePaused
 			},
 			"after_resume": func(_ context.Context, e *fsm.Event) {
-				reportCh <- "resumed"
+				reportCh <- StateRunning
 			},
 			"after_terminate": func(_ context.Context, e *fsm.Event) {
 				f.CleanUp()
-				reportCh <- "terminated"
+				reportCh <- StateTerminated
 			},
 		},
 	)
 	return taskFSM
+}
+
+func (f *FoundationModelImpl) CleanUp() {
+	if err := f.PersistState(); err != nil {
+		slog.Error("FoundationModelImpl: Failed to persist state", "error", err)
+	}
+	slog.Info("FoundationModelImpl: Cleaned up", "agentID", *f.ID, "role", f.Role)
 }
 
 func (f *FoundationModelImpl) getAgentResponse(ctx context.Context) string {
@@ -198,10 +208,6 @@ func (f *FoundationModelImpl) handleSingleToolCall(
 	toolCallResult = funcCallMap[funcName](ctx, toolCall)
 
 	return toolCallResult
-}
-
-func (f *FoundationModelImpl) CleanUp() {
-	// TODO: Implement cleanup
 }
 
 func (f *FoundationModelImpl) PersistState() error {

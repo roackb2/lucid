@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
+	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 )
 
@@ -28,35 +29,36 @@ func main() {
 	controlCh := make(chan string, 1)
 	reportCh := make(chan string, 1)
 
-	publisher := agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage)
+	// Create a consumer with task that should not finish
+	consumer := agents.NewConsumer("Is there any rock song? Keep searching until you find it.", storage)
 
 	go func() {
-		response, err := publisher.StartTask(controlCh, reportCh)
+		response, err := consumer.StartTask(controlCh, reportCh)
 		if err != nil {
-			slog.Error("Publisher error", "error", err)
+			slog.Error("Consumer error", "error", err)
 			panic(err)
 		}
 		fmt.Println("Response:", response)
 		os.Exit(0)
 	}()
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(300 * time.Millisecond)
 
-	controlCh <- "pause"
+	controlCh <- foundation.CmdPause
 	slog.Info("Sent pause command")
 	status := <-reportCh
 	slog.Info("Received:", "status", status)
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(300 * time.Millisecond)
 
-	controlCh <- "resume"
+	controlCh <- foundation.CmdResume
 	slog.Info("Sent resume command")
 	status = <-reportCh
 	slog.Info("Received:", "status", status)
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(300 * time.Millisecond)
 
-	controlCh <- "terminate"
+	controlCh <- foundation.CmdTerminate
 	slog.Info("Sent terminate command")
 	status = <-reportCh
 	slog.Info("Received:", "status", status)
