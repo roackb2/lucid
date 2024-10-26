@@ -79,7 +79,7 @@ func (f *FoundationModelImpl) Chat(prompt string, controlCh ControlCh, reportCh 
 		openai.SystemMessage(SystemPrompt),
 		openai.UserMessage(prompt),
 	}
-	return f.getAgentResponse(ctx, controlCh, reportCh)
+	return f.getAgentResponseWithFlowControl(ctx, controlCh, reportCh)
 }
 
 func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlCh, reportCh ReportCh) (string, error) {
@@ -87,10 +87,10 @@ func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlCh,
 	if newPrompt != nil {
 		f.Messages = append(f.Messages, openai.UserMessage(*newPrompt))
 	}
-	return f.getAgentResponse(ctx, controlCh, reportCh)
+	return f.getAgentResponseWithFlowControl(ctx, controlCh, reportCh)
 }
 
-func (f *FoundationModelImpl) getAgentResponse(ctx context.Context, controlCh ControlCh, reportCh ReportCh) (string, error) {
+func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlCh, reportCh ReportCh) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
 	for finalResponse == "" {
@@ -124,23 +124,29 @@ func (f *FoundationModelImpl) getAgentResponse(ctx context.Context, controlCh Co
 				slog.Error("Unknown command", "role", f.Role, "command", cmd)
 			}
 		default:
-			// Ask the LLM
-			agentResponse, err := f.chatCompletion(ctx)
-			if err != nil {
-				slog.Error("Agent chat error", "role", f.Role, "error", err)
-				return "", err
-			}
-
-			// Handle tool calls
-			finalResponse = f.handleToolCalls(ctx, agentResponse.ToolCalls)
-
-			f.debugStruct("Agent chat messages", f.Messages)
-
-			time.Sleep(SleepInterval)
+			finalResponse = f.getAgentResponse(ctx)
 		}
 	}
 
 	return finalResponse, nil
+}
+
+func (f *FoundationModelImpl) getAgentResponse(ctx context.Context) string {
+	// Ask the LLM
+	agentResponse, err := f.chatCompletion(ctx)
+	if err != nil {
+		slog.Error("Agent chat error", "role", f.Role, "error", err)
+		return ""
+	}
+
+	// Handle tool calls
+	finalResponse := f.handleToolCalls(ctx, agentResponse.ToolCalls)
+
+	f.debugStruct("Agent chat messages", f.Messages)
+
+	time.Sleep(SleepInterval)
+
+	return finalResponse
 }
 
 func (f *FoundationModelImpl) handleToolCalls(
