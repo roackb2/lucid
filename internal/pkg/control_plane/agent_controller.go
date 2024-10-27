@@ -1,4 +1,4 @@
-package controlplane
+package control_plane
 
 import (
 	"context"
@@ -10,6 +10,11 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/utils"
+)
+
+var (
+	// Exported for testing
+	NewAgentFunc = newAgent
 )
 
 type AgentControllerConfig struct {
@@ -26,7 +31,7 @@ type AgentController struct {
 	bus     NotificationBus
 }
 
-func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus NotificationBus) *AgentController {
+func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus NotificationBus, tracker AgentTracker) *AgentController {
 	scanInterval := utils.GetOrDefault(cfg.ScanInterval, 1*time.Second)
 	agentLifeTime := utils.GetOrDefault(cfg.AgentLifeTime, 5*time.Minute)
 	maxRespChSize := utils.GetOrDefault(cfg.MaxRespChSize, 65536)
@@ -39,7 +44,7 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		cfg:     mergedCfg,
 		storage: storage,
 		bus:     bus,
-		tracker: NewMemoryAgentTracker(),
+		tracker: tracker,
 	}
 	return controller
 }
@@ -96,19 +101,22 @@ func (c *AgentController) putAgentToSleep(tracking AgentTracking) {
 	})
 }
 
-func (c *AgentController) KickoffTask(ctx context.Context, task string, role string) error {
-	slog.Info("AgentController kicking off task", "task", task, "role", role)
-	var agent agents.Agent
+func newAgent(task string, role string, storage storage.Storage) (agents.Agent, error) {
 	switch role {
 	case foundation.RolePublisher:
-		slog.Info("AgentController creating publisher agent")
-		agent = agents.NewPublisher(task, c.storage)
+		return agents.NewPublisher(task, storage), nil
 	case foundation.RoleConsumer:
-		slog.Info("AgentController creating consumer agent")
-		agent = agents.NewConsumer(task, c.storage)
+		return agents.NewConsumer(task, storage), nil
 	default:
-		slog.Error("AgentController invalid agent role", "role", role)
-		return fmt.Errorf("invalid agent role: %s", role)
+		return nil, fmt.Errorf("invalid agent role: %s", role)
+	}
+}
+
+func (c *AgentController) KickoffTask(ctx context.Context, task string, role string) error {
+	slog.Info("AgentController kicking off task", "task", task, "role", role)
+	agent, err := NewAgentFunc(task, role, c.storage)
+	if err != nil {
+		return err
 	}
 
 	controlCh := make(chan string)

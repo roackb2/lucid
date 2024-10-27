@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"log/slog"
 
 	"github.com/spf13/viper"
 )
@@ -29,20 +29,23 @@ type Configuration struct {
 	} `mapstructure:"milvus"`
 }
 
-func init() {
-	viper.SetConfigName("dev")    // name of config file (without extension)
+func LoadConfig(name string) error {
+	viper.SetConfigName(name)
 	viper.SetConfigType("yaml")   // required if config file doesn't have an extension
 	viper.AddConfigPath("config") // look for config in the working directory
 
 	viper.AutomaticEnv() // override config file with environment variables
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Fatalf("Error reading config file: %s", err)
+		slog.Error("Error reading config file", "error", err)
+		return err
 	}
 
 	if err := viper.Unmarshal(&Config); err != nil {
-		log.Fatalf("Unable to decode into struct: %s", err)
+		slog.Error("Unable to decode into struct", "error", err)
+		return err
 	}
 
-	log.Println("Configuration loaded successfully")
+	slog.Info("Configuration loaded successfully")
+	return nil
 }

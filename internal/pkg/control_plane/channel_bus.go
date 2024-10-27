@@ -1,4 +1,4 @@
-package controlplane
+package control_plane
 
 import "github.com/roackb2/lucid/internal/pkg/agents"
 

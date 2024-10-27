@@ -1,4 +1,4 @@
-package controlplane
+package control_plane
 
 import (
 	"time"

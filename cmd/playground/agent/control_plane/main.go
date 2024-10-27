@@ -6,13 +6,19 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
-	"github.com/roackb2/lucid/internal/pkg/controlplane"
+	"github.com/roackb2/lucid/internal/pkg/control_plane"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
 func main() {
 	defer utils.RecoverPanic()
+
+	if err := config.LoadConfig("dev"); err != nil {
+		slog.Error("Error loading configuration:", "error", err)
+		panic(err)
+	}
 
 	ctx := context.Background()
 	storage, err := storage.NewRelationalStorage()
@@ -20,7 +26,8 @@ func main() {
 		panic(err)
 	}
 
-	bus := controlplane.NewChannelBus(65536)
+	tracker := control_plane.NewMemoryAgentTracker()
+	bus := control_plane.NewChannelBus(65536)
 	go func() {
 		for {
 			// Bus should guarantee thread safety, so we can read from another goroutine
@@ -29,10 +36,10 @@ func main() {
 		}
 	}()
 
-	config := controlplane.AgentControllerConfig{
+	config := control_plane.AgentControllerConfig{
 		AgentLifeTime: 3 * time.Second,
 	}
-	controller := controlplane.NewAgentController(config, storage, bus)
+	controller := control_plane.NewAgentController(config, storage, bus, tracker)
 	controlCh := make(chan string)
 	reportCh := make(chan string)
 	controller.Start(controlCh, reportCh)

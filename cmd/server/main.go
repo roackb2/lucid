@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	docs "github.com/roackb2/lucid/api/swagger"
@@ -27,6 +28,11 @@ import (
 func main() {
 	r := gin.Default()
 	docs.SwaggerInfo.BasePath = "/api/v1"
+
+	if err := config.LoadConfig("dev"); err != nil {
+		slog.Error("Error loading configuration:", "error", err)
+		panic(err)
+	}
 
 	v1 := r.Group("/api/v1")
 	{

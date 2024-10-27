@@ -24,6 +24,10 @@ endef
 EXECUTABLES := $(notdir $(wildcard bin/*))
 $(foreach exec,$(EXECUTABLES),$(eval $(call generate_run_target,$(exec))))
 
+test:
+	go test ./... -v
+
+
 # Clean up build artifacts
 clean:
 	rm -f bin/*
@@ -41,6 +45,12 @@ swagger:
 generate-db-models:
 	@echo "Generating database models..."
 	@sqlc generate -f database/sqlc.yml
+
+generate-mocks:
+	mockgen -source internal/pkg/agents/storage/type.go -destination internal/pkg/mocks/storage/mock_type.go
+	mockgen -source internal/pkg/control_plane/type.go -destination internal/pkg/mocks/control_plane/mock_type.go
+	mockgen -source internal/pkg/agents/foundation/type.go -destination internal/pkg/mocks/foundation/mock_type.go
+	mockgen -source internal/pkg/agents/type.go -destination internal/pkg/mocks/agents/mock_type.go
 
 # Run migrations up
 migrate-up: build

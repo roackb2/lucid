@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 )
@@ -20,6 +21,11 @@ func main() {
 			slog.Error("Recovered from panic", "error", r)
 		}
 	}()
+
+	if err := config.LoadConfig("dev"); err != nil {
+		slog.Error("Error loading configuration:", "error", err)
+		panic(err)
+	}
 
 	storage, err := storage.NewRelationalStorage()
 	// storage, err := storage.NewVectorStorage()

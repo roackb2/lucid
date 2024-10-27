@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/utils"
@@ -11,6 +12,11 @@ import (
 
 func main() {
 	defer utils.RecoverPanic()
+
+	if err := config.LoadConfig("dev"); err != nil {
+		slog.Error("Error loading configuration:", "error", err)
+		panic(err)
+	}
 
 	storage, err := storage.NewRelationalStorage()
 	if err != nil {

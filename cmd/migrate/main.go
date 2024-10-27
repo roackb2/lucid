@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,11 @@ func main() {
 	version := flag.Int("version", -1, "Migrate to a specific version")
 	dumpSchema := flag.Bool("dump", false, "Dump database schema after migration")
 	flag.Parse()
+
+	if err := config.LoadConfig("dev"); err != nil {
+		slog.Error("Error loading configuration:", "error", err)
+		panic(err)
+	}
 
 	// Construct the database URL
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
