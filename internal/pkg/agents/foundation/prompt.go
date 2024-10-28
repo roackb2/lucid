@@ -1,6 +1,6 @@
 package foundation
 
-const SystemPrompt = `
+var SystemPrompt string = `
 # System Prompt
 
 ## Introduction

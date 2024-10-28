@@ -96,6 +96,7 @@ func (f *FoundationModelImpl) ResumeChat(newPrompt *string, controlCh ControlRec
 	return f.getAgentResponseWithFlowControl(ctx, controlCh)
 }
 
+// MARK: Pure logic without provider implementation detail
 func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlReceiverCh) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
@@ -122,6 +123,7 @@ func (f *FoundationModelImpl) getAgentResponseWithFlowControl(ctx context.Contex
 	return finalResponse, nil
 }
 
+// MARK: Pure logic without provider implementation detail
 func (f *FoundationModelImpl) initAgentStateMachine(reportCh ReportSenderCh) {
 	f.stateMachine = fsm.NewFSM(
 		"running",
