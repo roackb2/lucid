@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -19,7 +18,7 @@ func NewPersistTool(storage storage.Storage) *PersistTool {
 	return &PersistTool{storage: storage}
 }
 
-func (t *PersistTool) saveContentImpl(ctx context.Context, arguments string) string {
+func (t *PersistTool) saveContentImpl(arguments string) string {
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(arguments), &args)
 	if err != nil {
@@ -37,11 +36,11 @@ func (t *PersistTool) saveContentImpl(ctx context.Context, arguments string) str
 	return fmt.Sprintf("Content saved successfully. (content total length: %d)", len(content))
 }
 
-func (t *PersistTool) SaveContent(ctx context.Context, toolCall providers.ToolCall) string {
-	return t.saveContentImpl(ctx, toolCall.Args)
+func (t *PersistTool) SaveContent(toolCall providers.ToolCall) string {
+	return t.saveContentImpl(toolCall.Args)
 }
 
-func (t *PersistTool) searchContentImpl(ctx context.Context, arguments string) string {
+func (t *PersistTool) searchContentImpl(arguments string) string {
 	var args map[string]interface{}
 	err := json.Unmarshal([]byte(arguments), &args)
 	if err != nil {
@@ -60,6 +59,6 @@ func (t *PersistTool) searchContentImpl(ctx context.Context, arguments string) s
 	return fmt.Sprintf("Results Found (separated by comma): %v", strings.Join(content, ", "))
 }
 
-func (t *PersistTool) SearchContent(ctx context.Context, toolCall providers.ToolCall) string {
-	return t.searchContentImpl(ctx, toolCall.Args)
+func (t *PersistTool) SearchContent(toolCall providers.ToolCall) string {
+	return t.searchContentImpl(toolCall.Args)
 }

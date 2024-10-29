@@ -46,7 +46,6 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 
 func (w *WorkerImpl) Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
 	w.initAgentStateMachine(reportCh)
-	ctx := context.Background()
 	w.Messages = []providers.ChatMessage{{
 		Content: &SystemPrompt,
 		Role:    "system",
@@ -54,22 +53,21 @@ func (w *WorkerImpl) Chat(prompt string, controlCh ControlReceiverCh, reportCh R
 		Content: &prompt,
 		Role:    "user",
 	}}
-	return w.getAgentResponseWithFlowControl(ctx, controlCh)
+	return w.getAgentResponseWithFlowControl(controlCh)
 }
 
 func (w *WorkerImpl) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
 	w.initAgentStateMachine(reportCh)
-	ctx := context.Background()
 	if newPrompt != nil {
 		w.Messages = append(w.Messages, providers.ChatMessage{
 			Content: newPrompt,
 			Role:    "user",
 		})
 	}
-	return w.getAgentResponseWithFlowControl(ctx, controlCh)
+	return w.getAgentResponseWithFlowControl(controlCh)
 }
 
-func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlReceiverCh) (string, error) {
+func (w *WorkerImpl) getAgentResponseWithFlowControl(controlCh ControlReceiverCh) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
 	for finalResponse == "" && w.GetStatus() != StateTerminated {
@@ -84,7 +82,7 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context, contro
 			switch w.GetStatus() {
 			// No need to handle StateTerminated, as it will be handled in the loop condition
 			case StateRunning:
-				finalResponse = w.getAgentResponse(ctx)
+				finalResponse = w.getAgentResponse()
 			case StatePaused:
 				// When paused, sleep briefly to prevent tight loop
 				time.Sleep(100 * time.Millisecond)
@@ -128,7 +126,7 @@ func (w *WorkerImpl) CleanUp() {
 	slog.Info("Worker: Cleaned up", "agentID", *w.ID, "role", w.Role)
 }
 
-func (w *WorkerImpl) getAgentResponse(ctx context.Context) string {
+func (w *WorkerImpl) getAgentResponse() string {
 	// Ask the LLM
 	agentResponse, err := w.chatProvider.Chat(w.Messages)
 	if err != nil {
@@ -145,7 +143,7 @@ func (w *WorkerImpl) getAgentResponse(ctx context.Context) string {
 	w.Messages = append(w.Messages, msg)
 
 	// Handle tool calls
-	finalResponse := w.handleToolCalls(ctx, agentResponse.ToolCalls)
+	finalResponse := w.handleToolCalls(agentResponse.ToolCalls)
 
 	w.debugStruct("Agent chat messages", w.Messages)
 
@@ -155,14 +153,13 @@ func (w *WorkerImpl) getAgentResponse(ctx context.Context) string {
 }
 
 func (w *WorkerImpl) handleToolCalls(
-	ctx context.Context,
 	toolCalls []providers.ToolCall,
 ) (finalResponse string) {
 	for _, toolCall := range toolCalls {
 		funcName := toolCall.FunctionName
 		slog.Info("Agent tool call", "role", w.Role, "tool_call", funcName)
 
-		toolCallResult := w.handleSingleToolCall(ctx, toolCall)
+		toolCallResult := w.handleSingleToolCall(toolCall)
 		slog.Info("Agent tool message", "role", w.Role, "message", toolCallResult)
 
 		if funcName == "report" {
@@ -175,19 +172,18 @@ func (w *WorkerImpl) handleToolCalls(
 }
 
 func (w *WorkerImpl) handleSingleToolCall(
-	ctx context.Context,
 	toolCall providers.ToolCall,
 ) (toolCallResult string) {
 	funcName := toolCall.FunctionName
 	slog.Info("Agent tool call", "role", w.Role, "tool_call", funcName)
 
-	toolCallFuncMap := map[string]func(ctx context.Context, toolCall providers.ToolCall) string{
+	toolCallFuncMap := map[string]func(toolCall providers.ToolCall) string{
 		"save_content":   w.PersistTools.SaveContent,
 		"search_content": w.PersistTools.SearchContent,
 		"wait":           w.FlowTools.Wait,
 		"report":         w.FlowTools.Report,
 	}
-	toolCallResult = toolCallFuncMap[funcName](ctx, toolCall)
+	toolCallResult = toolCallFuncMap[funcName](toolCall)
 	w.Messages = append(w.Messages, providers.ChatMessage{
 		Content:  &toolCallResult,
 		Role:     "tool",
