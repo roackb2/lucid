@@ -8,6 +8,7 @@ import (
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
+	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
@@ -101,20 +102,20 @@ func (c *AgentController) putAgentToSleep(tracking AgentTracking) {
 	})
 }
 
-func newAgent(task string, role string, storage storage.Storage) (agents.Agent, error) {
+func newAgent(task string, role string, storage storage.Storage, provider providers.ChatProvider) (agents.Agent, error) {
 	switch role {
 	case foundation.RolePublisher:
-		return agents.NewPublisher(task, storage), nil
+		return agents.NewPublisher(task, storage, provider), nil
 	case foundation.RoleConsumer:
-		return agents.NewConsumer(task, storage), nil
+		return agents.NewConsumer(task, storage, provider), nil
 	default:
 		return nil, fmt.Errorf("invalid agent role: %s", role)
 	}
 }
 
-func (c *AgentController) KickoffTask(ctx context.Context, task string, role string) error {
+func (c *AgentController) KickoffTask(ctx context.Context, task string, role string, provider providers.ChatProvider) error {
 	slog.Info("AgentController kicking off task", "task", task, "role", role)
-	agent, err := NewAgentFunc(task, role, c.storage)
+	agent, err := NewAgentFunc(task, role, c.storage, provider)
 	if err != nil {
 		return err
 	}

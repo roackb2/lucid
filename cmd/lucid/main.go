@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents"
+	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 )
 
@@ -35,6 +38,9 @@ func main() {
 	}
 	defer storage.Close()
 
+	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
+	provider := providers.NewOpenAIChatProvider(client)
+
 	songs := []string{
 		"Jazz in the Rain",
 		"Awesome Jazz Music Playlist",
@@ -45,7 +51,7 @@ func main() {
 	}
 	publishers := []agents.Publisher{}
 	for _, song := range songs {
-		publishers = append(publishers, *agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage))
+		publishers = append(publishers, *agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage, provider))
 	}
 
 	queries := []string{
@@ -55,7 +61,7 @@ func main() {
 	}
 	consumers := []agents.Consumer{}
 	for _, query := range queries {
-		consumers = append(consumers, *agents.NewConsumer(query, storage))
+		consumers = append(consumers, *agents.NewConsumer(query, storage, provider))
 	}
 
 	var wg sync.WaitGroup

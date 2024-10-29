@@ -6,9 +6,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
+	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
@@ -31,8 +34,11 @@ func main() {
 	controlCh := make(chan string, 1)
 	reportCh := make(chan string, 1)
 
+	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
+	provider := providers.NewOpenAIChatProvider(client)
+
 	// Create a consumer with task that should not finish
-	consumer := agents.NewConsumer("Is there any rock song? Keep searching until you find it.", storage)
+	consumer := agents.NewConsumer("Is there any rock song? Keep searching until you find it.", storage, provider)
 
 	go func() {
 		response, err := consumer.StartTask(controlCh, reportCh)

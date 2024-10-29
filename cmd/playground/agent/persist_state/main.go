@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents"
+	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
@@ -28,7 +31,10 @@ func main() {
 	controlCh := make(chan string, 1)
 	reportCh := make(chan string, 1)
 
-	publisher := agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage)
+	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
+	provider := providers.NewOpenAIChatProvider(client)
+
+	publisher := agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage, provider)
 
 	res, err := publisher.StartTask(controlCh, reportCh)
 	if err != nil {
@@ -46,7 +52,7 @@ func main() {
 	slog.Info("Publisher state persisted")
 
 	// Restore the state
-	restoredPublisher := agents.NewPublisher("", storage)
+	restoredPublisher := agents.NewPublisher("", storage, provider)
 	newPrompt := "What is the length of the title of the song that you just published?"
 	res, err = restoredPublisher.ResumeTask(publisher.GetID(), &newPrompt, controlCh, reportCh)
 	if err != nil {

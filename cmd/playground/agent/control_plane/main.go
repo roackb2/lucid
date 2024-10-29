@@ -6,7 +6,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
+	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
 	"github.com/roackb2/lucid/internal/pkg/utils"
@@ -36,12 +39,14 @@ func main() {
 		}
 	}()
 
-	config := control_plane.AgentControllerConfig{
+	controllerConfig := control_plane.AgentControllerConfig{
 		AgentLifeTime: 3 * time.Second,
 	}
-	controller := control_plane.NewAgentController(config, storage, bus, tracker)
+	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
 	controlCh := make(chan string)
 	reportCh := make(chan string)
+	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
+	provider := providers.NewOpenAIChatProvider(client)
 	controller.Start(controlCh, reportCh)
 
 	tasks := []string{
@@ -50,7 +55,7 @@ func main() {
 	}
 
 	for _, task := range tasks {
-		controller.KickoffTask(ctx, fmt.Sprintf("%s Keep looking for the item until you find it", task), "consumer")
+		controller.KickoffTask(ctx, fmt.Sprintf("%s Keep looking for the item until you find it", task), "consumer", provider)
 	}
 
 	time.Sleep(5 * time.Second)
