@@ -1,11 +1,9 @@
 package providers
 
-import "context"
-
 type ToolCall struct {
 	ID           string
 	FunctionName string
-	Args         map[string]interface{}
+	Args         string
 }
 
 type ChatMessage struct {
@@ -21,11 +19,8 @@ type ChatResponse struct {
 }
 
 type ChatProvider interface {
-	PrepareMessages(systemPrompt *string, userPrompt *string) error
-	Chat() (ChatResponse, error)
-	AppendMessage(message ChatMessage) error
+	Chat(messages []ChatMessage) (ChatResponse, error)
 	GetMessages() []ChatMessage
-	RunTool(ctx context.Context, toolCall ToolCall) string
 	Serialize() (string, error)
 	RebuildMessagesFromJsonMap(jsonMap map[string]any) error
 }

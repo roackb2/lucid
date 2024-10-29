@@ -21,6 +21,7 @@ type Worker struct {
 	chatProvider providers.ChatProvider
 	storage      storage.Storage
 	stateMachine *fsm.FSM
+	messages     []providers.ChatMessage
 
 	ID           *string `json:"id,required"`
 	Role         string  `json:"role,required"`
@@ -46,7 +47,13 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 func (w *Worker) Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
 	w.initAgentStateMachine(reportCh)
 	ctx := context.Background()
-	w.chatProvider.PrepareMessages(&SystemPrompt, &prompt)
+	w.messages = []providers.ChatMessage{{
+		Content: &SystemPrompt,
+		Role:    "system",
+	}, {
+		Content: &prompt,
+		Role:    "user",
+	}}
 	return w.getAgentResponseWithFlowControl(ctx, controlCh)
 }
 
@@ -54,7 +61,10 @@ func (w *Worker) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, repo
 	w.initAgentStateMachine(reportCh)
 	ctx := context.Background()
 	if newPrompt != nil {
-		w.chatProvider.PrepareMessages(nil, newPrompt)
+		w.messages = append(w.messages, providers.ChatMessage{
+			Content: newPrompt,
+			Role:    "user",
+		})
 	}
 	return w.getAgentResponseWithFlowControl(ctx, controlCh)
 }
@@ -122,7 +132,7 @@ func (w *Worker) CleanUp() {
 
 func (w *Worker) getAgentResponse(ctx context.Context) string {
 	// Ask the LLM
-	agentResponse, err := w.chatProvider.Chat()
+	agentResponse, err := w.chatProvider.Chat(w.messages)
 	if err != nil {
 		slog.Error("Agent chat error", "role", w.Role, "error", err)
 		return ""
@@ -148,7 +158,7 @@ func (w *Worker) handleToolCalls(
 
 		toolCallResult := w.handleSingleToolCall(ctx, toolCall)
 		slog.Info("Agent tool message", "role", w.Role, "message", toolCallResult)
-		w.chatProvider.AppendMessage(providers.ChatMessage{
+		w.messages = append(w.messages, providers.ChatMessage{
 			Content: &toolCallResult,
 			Role:    "assistant",
 		})
@@ -175,7 +185,13 @@ func (w *Worker) handleSingleToolCall(
 	// 	"wait":           w.FlowTools.Wait,
 	// 	"report":         w.FlowTools.Report,
 	// }
-	toolCallResult = w.chatProvider.RunTool(ctx, toolCall)
+	toolCallFuncMap := map[string]func(ctx context.Context, toolCall providers.ToolCall) string{
+		"save_content":   w.PersistTools.SaveContentForProvider,
+		"search_content": w.PersistTools.SearchContentForProvider,
+		"wait":           w.FlowTools.WaitForProvider,
+		"report":         w.FlowTools.ReportForProvider,
+	}
+	toolCallResult = toolCallFuncMap[funcName](ctx, toolCall)
 
 	return toolCallResult
 }

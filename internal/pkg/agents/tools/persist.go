@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
+	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 )
 
@@ -60,9 +61,9 @@ func (t *PersistTool) GetToolDefinition() []openai.ChatCompletionToolParam {
 	return t.toolDefinition
 }
 
-func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string {
+func (t *PersistTool) saveContentImpl(ctx context.Context, arguments string) string {
 	var args map[string]interface{}
-	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
+	err := json.Unmarshal([]byte(arguments), &args)
 	if err != nil {
 		slog.Error("Persist tool: SaveContent", "error", err)
 		return fmt.Sprintf("Error: %v", err)
@@ -78,9 +79,17 @@ func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompl
 	return fmt.Sprintf("Content saved successfully. (content total length: %d)", len(content))
 }
 
-func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string {
+func (t *PersistTool) SaveContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string {
+	return t.saveContentImpl(ctx, toolCall.Function.Arguments)
+}
+
+func (t *PersistTool) SaveContentForProvider(ctx context.Context, toolCall providers.ToolCall) string {
+	return t.saveContentImpl(ctx, toolCall.Args)
+}
+
+func (t *PersistTool) searchContentImpl(ctx context.Context, arguments string) string {
 	var args map[string]interface{}
-	err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
+	err := json.Unmarshal([]byte(arguments), &args)
 	if err != nil {
 		slog.Error("Persist tool: SearchContent", "error", err)
 		return fmt.Sprintf("Error: %v", err)
@@ -95,4 +104,12 @@ func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCom
 	}
 
 	return fmt.Sprintf("Results Found (separated by comma): %v", strings.Join(content, ", "))
+}
+
+func (t *PersistTool) SearchContent(ctx context.Context, toolCall openai.ChatCompletionMessageToolCall) string {
+	return t.searchContentImpl(ctx, toolCall.Function.Arguments)
+}
+
+func (t *PersistTool) SearchContentForProvider(ctx context.Context, toolCall providers.ToolCall) string {
+	return t.searchContentImpl(ctx, toolCall.Args)
 }
