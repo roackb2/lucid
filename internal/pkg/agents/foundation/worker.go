@@ -69,7 +69,6 @@ func (w *WorkerImpl) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, 
 	return w.getAgentResponseWithFlowControl(ctx, controlCh)
 }
 
-// MARK: Pure logic without provider implementation detail
 func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlReceiverCh) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
@@ -96,7 +95,6 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context, contro
 	return finalResponse, nil
 }
 
-// MARK: Pure logic without provider implementation detail
 func (w *WorkerImpl) initAgentStateMachine(reportCh ReportSenderCh) {
 	w.stateMachine = fsm.NewFSM(
 		"running",
@@ -137,11 +135,14 @@ func (w *WorkerImpl) getAgentResponse(ctx context.Context) string {
 		slog.Error("Agent chat error", "role", w.Role, "error", err)
 		return ""
 	}
-	w.Messages = append(w.Messages, providers.ChatMessage{
-		Content:  agentResponse.Content,
-		Role:     "assistant",
-		ToolCall: &agentResponse.ToolCalls[0],
-	})
+	msg := providers.ChatMessage{
+		Content: agentResponse.Content,
+		Role:    "assistant",
+	}
+	if len(agentResponse.ToolCalls) > 0 {
+		msg.ToolCall = &agentResponse.ToolCalls[0]
+	}
+	w.Messages = append(w.Messages, msg)
 
 	// Handle tool calls
 	finalResponse := w.handleToolCalls(ctx, agentResponse.ToolCalls)

@@ -5,16 +5,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
+	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
 	mock_agents "github.com/roackb2/lucid/internal/pkg/mocks/agents"
 	mock_control_plane "github.com/roackb2/lucid/internal/pkg/mocks/control_plane"
+	mock_providers "github.com/roackb2/lucid/internal/pkg/mocks/providers"
 	mock_storage "github.com/roackb2/lucid/internal/pkg/mocks/storage"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
 )
 
 type AgentControllerTestSuite struct {
@@ -22,10 +24,11 @@ type AgentControllerTestSuite struct {
 	config              control_plane.AgentControllerConfig
 	mockCtrl            *gomock.Controller
 	mockStorage         *mock_storage.MockStorage
+	mockChatProvider    *mock_providers.MockChatProvider
 	mockAgent           *mock_agents.MockAgent
 	mockAgentTracker    *mock_control_plane.MockAgentTracker
 	mockNotificationBus *mock_control_plane.MockNotificationBus
-	originalNewAgent    func(task string, role string, storage storage.Storage) (agents.Agent, error)
+	originalNewAgent    func(task string, role string, storage storage.Storage, provider providers.ChatProvider) (agents.Agent, error)
 	doneCh              chan struct{}
 }
 
@@ -38,6 +41,7 @@ func (suite *AgentControllerTestSuite) SetupTest() {
 	}
 	suite.mockCtrl = gomock.NewController(suite.T())
 	suite.mockStorage = mock_storage.NewMockStorage(suite.mockCtrl)
+	suite.mockChatProvider = mock_providers.NewMockChatProvider(suite.mockCtrl)
 	suite.mockAgent = mock_agents.NewMockAgent(suite.mockCtrl)
 	suite.mockAgentTracker = mock_control_plane.NewMockAgentTracker(suite.mockCtrl)
 	suite.mockNotificationBus = mock_control_plane.NewMockNotificationBus(suite.mockCtrl)
@@ -45,7 +49,7 @@ func (suite *AgentControllerTestSuite) SetupTest() {
 
 	// Override NewAgentFunc to return the mock agent
 	suite.originalNewAgent = control_plane.NewAgentFunc
-	control_plane.NewAgentFunc = func(task string, role string, storage storage.Storage) (agents.Agent, error) {
+	control_plane.NewAgentFunc = func(task string, role string, storage storage.Storage, provider providers.ChatProvider) (agents.Agent, error) {
 		return suite.mockAgent, nil
 	}
 }
@@ -87,7 +91,7 @@ func (suite *AgentControllerTestSuite) TestKickoffAgent() {
 	agentController := control_plane.NewAgentController(suite.config, suite.mockStorage, suite.mockNotificationBus, suite.mockAgentTracker)
 
 	// Run KickoffTask, which triggers StartTask asynchronously
-	err := agentController.KickoffTask(context.Background(), "test task", "publisher")
+	err := agentController.KickoffTask(context.Background(), "test task", "publisher", suite.mockChatProvider)
 	suite.NoError(err)
 
 	// Wait for the result on doneCh to simulate task completion
