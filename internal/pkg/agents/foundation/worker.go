@@ -21,10 +21,10 @@ type Worker struct {
 	chatProvider providers.ChatProvider
 	storage      storage.Storage
 	stateMachine *fsm.FSM
-	messages     []providers.ChatMessage
 
-	ID           *string `json:"id,required"`
-	Role         string  `json:"role,required"`
+	ID           *string                 `json:"id,required"`
+	Role         string                  `json:"role,required"`
+	Messages     []providers.ChatMessage `json:"messages"`
 	PersistTools *tools.PersistTool
 	FlowTools    *tools.FlowTool
 }
@@ -47,7 +47,7 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 func (w *Worker) Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
 	w.initAgentStateMachine(reportCh)
 	ctx := context.Background()
-	w.messages = []providers.ChatMessage{{
+	w.Messages = []providers.ChatMessage{{
 		Content: &SystemPrompt,
 		Role:    "system",
 	}, {
@@ -61,7 +61,7 @@ func (w *Worker) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, repo
 	w.initAgentStateMachine(reportCh)
 	ctx := context.Background()
 	if newPrompt != nil {
-		w.messages = append(w.messages, providers.ChatMessage{
+		w.Messages = append(w.Messages, providers.ChatMessage{
 			Content: newPrompt,
 			Role:    "user",
 		})
@@ -132,12 +132,12 @@ func (w *Worker) CleanUp() {
 
 func (w *Worker) getAgentResponse(ctx context.Context) string {
 	// Ask the LLM
-	agentResponse, err := w.chatProvider.Chat(w.messages)
+	agentResponse, err := w.chatProvider.Chat(w.Messages)
 	if err != nil {
 		slog.Error("Agent chat error", "role", w.Role, "error", err)
 		return ""
 	}
-	w.messages = append(w.messages, providers.ChatMessage{
+	w.Messages = append(w.Messages, providers.ChatMessage{
 		Content:  agentResponse.Content,
 		Role:     "assistant",
 		ToolCall: &agentResponse.ToolCalls[0],
@@ -146,7 +146,7 @@ func (w *Worker) getAgentResponse(ctx context.Context) string {
 	// Handle tool calls
 	finalResponse := w.handleToolCalls(ctx, agentResponse.ToolCalls)
 
-	w.debugStruct("Agent chat messages", w.messages)
+	w.debugStruct("Agent chat messages", w.Messages)
 
 	time.Sleep(SleepInterval)
 
@@ -163,10 +163,6 @@ func (w *Worker) handleToolCalls(
 
 		toolCallResult := w.handleSingleToolCall(ctx, toolCall)
 		slog.Info("Agent tool message", "role", w.Role, "message", toolCallResult)
-		// w.messages = append(w.messages, providers.ChatMessage{
-		// 	Content: &toolCallResult,
-		// 	Role:    "assistant",
-		// })
 
 		if funcName == "report" {
 			finalResponse = toolCallResult
@@ -197,7 +193,7 @@ func (w *Worker) handleSingleToolCall(
 		"report":         w.FlowTools.ReportForProvider,
 	}
 	toolCallResult = toolCallFuncMap[funcName](ctx, toolCall)
-	w.messages = append(w.messages, providers.ChatMessage{
+	w.Messages = append(w.Messages, providers.ChatMessage{
 		Content:  &toolCallResult,
 		Role:     "tool",
 		ToolCall: &toolCall,
@@ -244,17 +240,7 @@ func (w *Worker) RestoreState(agentID string) error {
 }
 
 func (w *Worker) Serialize() ([]byte, error) {
-	serializedChatProvider, err := w.chatProvider.Serialize()
-	if err != nil {
-		slog.Error("Worker: Failed to serialize chat provider", "error", err)
-		return nil, err
-	}
-	state := map[string]any{
-		"id":            w.ID,
-		"role":          w.Role,
-		"chat_provider": serializedChatProvider,
-	}
-	data, err := json.Marshal(state)
+	data, err := json.Marshal(w)
 	if err != nil {
 		slog.Error("Worker: Failed to serialize", "error", err)
 		return nil, err
@@ -266,123 +252,14 @@ func (w *Worker) Deserialize(data []byte) error {
 	content := string(data)
 	slog.Info("Deserializing Worker", "content", content)
 
-	var jsonMap map[string]any
-	err := json.Unmarshal(data, &jsonMap)
+	err := json.Unmarshal(data, &w)
 	if err != nil {
 		slog.Error("Worker: Failed to deserialize", "error", err)
-		return err
-	}
-	slog.Info("Deserialized Worker", "jsonMap", jsonMap)
-
-	w.ID = jsonMap["id"].(*string)
-	w.Role = jsonMap["role"].(string)
-	serializedChatProvider, ok := jsonMap["chat_provider"]
-	if !ok {
-		slog.Error("Worker: Failed to deserialize chat provider", "error", err)
-		return err
-	}
-	err = w.chatProvider.RebuildMessagesFromJsonMap(serializedChatProvider.(map[string]any))
-	if err != nil {
-		slog.Error("Worker: Failed to rebuild from jsonMap", "error", err)
 		return err
 	}
 
 	return nil
 }
-
-// func (w *Worker) rebuildFromJsonMap(jsonMap map[string]any) error {
-// 	for key, value := range jsonMap {
-// 		switch key {
-// 		case "id":
-// 			id := value.(string)
-// 			w.ID = &id
-// 		case "role":
-// 			w.Role = value.(string)
-// 		case "model":
-// 			w.Model = value.(openai.ChatModel)
-// 		case "messages":
-// 			for _, message := range value.([]any) {
-// 				msg := message.(map[string]any)
-// 				// role := msg["role"].(string)
-// 				// w.rebuildContentMessage(msg, role)
-// 				// w.rebuildToolCalls(msg)
-// 				w.chatProvider.RebuildMessagesFromJsonMap(msg)
-// 			}
-// 		}
-// 	}
-
-// 	w.debugStruct("Rebuilt Worker", w)
-
-// 	return nil
-// }
-
-// func (w *Worker) rebuildContentMessage(msg map[string]any, role string) {
-// 	content, ok := msg["content"]
-// 	if !ok {
-// 		return
-// 	}
-// 	if len(content.([]any)) == 0 {
-// 		return
-// 	}
-// 	firstContent := content.([]any)[0]
-// 	text := firstContent.(map[string]any)["text"].(string)
-// 	switch role {
-// 	case "system":
-// 		w.chatProvider.AppendMessage(providers.ChatMessage{
-// 			Content: &text,
-// 			Role:    role,
-// 		})
-// 	case "user":
-// 		w.chatProvider.AppendMessage(providers.ChatMessage{
-// 			Content: &text,
-// 			Role:    role,
-// 		})
-// 	case "assistant":
-// 		w.chatProvider.AppendMessage(providers.ChatMessage{
-// 			Content: &text,
-// 			Role:    role,
-// 		})
-// 	case "tool":
-// 		id := msg["tool_call_id"].(string)
-// 		w.chatProvider.AppendMessage(providers.ChatMessage{
-// 			Content: &text,
-// 			Role:    role,
-// 			ToolCall: &providers.ToolCall{
-// 				ID:           id,
-// 				FunctionName: funcName,
-// 			},
-// 		})
-// 	}
-// }
-
-// func (w *Worker) rebuildToolCalls(msg map[string]any) []openai.ChatCompletionMessageToolCallParam {
-// 	toolCalls, ok := msg["tool_calls"]
-// 	if !ok || toolCalls == nil {
-// 		return nil
-// 	}
-// 	slog.Info("Tool calls", "tool_calls", toolCalls)
-// 	restoredToolCalls := []openai.ChatCompletionMessageToolCallParam{}
-// 	for _, toolCall := range toolCalls.([]any) {
-// 		toolCall := toolCall.(map[string]any)
-// 		id := toolCall["id"].(string)
-// 		function := toolCall["function"].(map[string]any)
-// 		restoredToolCall := openai.ChatCompletionMessageToolCallParam{
-// 			ID:   openai.F(id),
-// 			Type: openai.F(openai.ChatCompletionMessageToolCallTypeFunction),
-// 			Function: openai.F(openai.ChatCompletionMessageToolCallFunctionParam{
-// 				Name:      openai.F(function["name"].(string)),
-// 				Arguments: openai.F(function["arguments"].(string)),
-// 			}),
-// 		}
-// 		restoredToolCalls = append(restoredToolCalls, restoredToolCall)
-// 	}
-// 	restoredToolCallMsg := openai.ChatCompletionAssistantMessageParam{
-// 		Role:      openai.F(openai.ChatCompletionAssistantMessageParamRoleAssistant),
-// 		ToolCalls: openai.F(restoredToolCalls),
-// 	}
-// 	w.Messages = append(w.Messages, restoredToolCallMsg)
-// 	return restoredToolCalls
-// }
 
 func (w *Worker) debugStruct(title string, v any) {
 	slog.Info(title, "role", w.Role)

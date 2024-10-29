@@ -188,11 +188,3 @@ func (p *OpenAIChatProvider) debugStruct(title string, v any) {
 	slog.Info(title)
 	utils.PrintStruct(v)
 }
-
-func (p *OpenAIChatProvider) Serialize() (string, error) {
-	return "", nil
-}
-
-func (p *OpenAIChatProvider) RebuildMessagesFromJsonMap(jsonMap map[string]any) error {
-	return nil
-}

@@ -1,25 +1,23 @@
 package providers
 
 type ToolCall struct {
-	ID           string
-	FunctionName string
-	Args         string
+	ID           string `json:"id"`
+	FunctionName string `json:"function_name"`
+	Args         string `json:"args"`
 }
 
 type ChatMessage struct {
-	Content  *string
-	Role     string
-	ToolCall *ToolCall
+	Content  *string   `json:"content"`
+	Role     string    `json:"role"`
+	ToolCall *ToolCall `json:"tool_call"`
 }
 
 type ChatResponse struct {
-	Content   *string
-	Role      string
-	ToolCalls []ToolCall
+	Content   *string    `json:"content"`
+	Role      string     `json:"role"`
+	ToolCalls []ToolCall `json:"tool_calls"`
 }
 
 type ChatProvider interface {
 	Chat(messages []ChatMessage) (ChatResponse, error)
-	Serialize() (string, error)
-	RebuildMessagesFromJsonMap(jsonMap map[string]any) error
 }
