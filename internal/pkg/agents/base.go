@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
+	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 )
 
@@ -16,12 +17,13 @@ type BaseAgent struct {
 	task    string
 }
 
-func NewBaseAgent(storage storage.Storage, task string, role string) BaseAgent {
+func NewBaseAgent(storage storage.Storage, task string, role string, chatProvider providers.ChatProvider) BaseAgent {
 	id := uuid.New().String()
 	return BaseAgent{
-		id:      id,
-		role:    role,
-		model:   foundation.NewFoundationModel(&id, role, storage),
+		id:   id,
+		role: role,
+		// model:   foundation.NewFoundationModel(&id, role, storage),
+		model:   foundation.NewWorker(&id, role, storage, chatProvider),
 		storage: storage,
 		task:    task,
 	}

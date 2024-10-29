@@ -141,7 +141,7 @@ func (w *Worker) getAgentResponse(ctx context.Context) string {
 	// Handle tool calls
 	finalResponse := w.handleToolCalls(ctx, agentResponse.ToolCalls)
 
-	w.debugStruct("Agent chat messages", w.chatProvider.GetMessages())
+	w.debugStruct("Agent chat messages", w.messages)
 
 	time.Sleep(SleepInterval)
 

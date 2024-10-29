@@ -20,7 +20,6 @@ type ChatResponse struct {
 
 type ChatProvider interface {
 	Chat(messages []ChatMessage) (ChatResponse, error)
-	GetMessages() []ChatMessage
 	Serialize() (string, error)
 	RebuildMessagesFromJsonMap(jsonMap map[string]any) error
 }
