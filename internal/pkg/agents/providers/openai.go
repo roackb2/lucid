@@ -117,16 +117,16 @@ func (p *OpenAIChatProvider) assembleChatParams(messages []ChatMessage) openai.C
 
 func (p *OpenAIChatProvider) chatCompletion(ctx context.Context, messages []ChatMessage) (*openai.ChatCompletionMessage, error) {
 	chatParams := p.assembleChatParams(messages)
-	p.debugStruct("Agent chat params messages", chatParams.Messages)
+	p.debugStruct("OpenAI chat params messages", chatParams.Messages)
 
 	chatCompletion, err := p.Client.Chat.Completions.New(ctx, chatParams)
 	if err != nil {
-		slog.Error("Agent chat error", "error", err)
+		slog.Error("OpenAI chat error", "error", err)
 		return nil, err
 	}
 	respMessage := chatCompletion.Choices[0].Message
 
-	p.debugStruct("Agent chat completion", chatCompletion)
+	p.debugStruct("OpenAI chat completion", chatCompletion)
 	return &respMessage, nil
 }
 
@@ -145,7 +145,20 @@ func (p *OpenAIChatProvider) convertFromChatMessage(msg ChatMessage) openai.Chat
 	case "user":
 		return openai.UserMessage(*msg.Content)
 	case "assistant":
-		return openai.AssistantMessage(*msg.Content)
+		assistantMsg := openai.AssistantMessage(*msg.Content)
+		if msg.ToolCall != nil {
+			assistantMsg.ToolCalls = openai.F([]openai.ChatCompletionMessageToolCallParam{
+				{
+					ID: openai.F(msg.ToolCall.ID),
+					Function: openai.F(openai.ChatCompletionMessageToolCallFunctionParam{
+						Name:      openai.F(msg.ToolCall.FunctionName),
+						Arguments: openai.F(msg.ToolCall.Args),
+					}),
+					Type: openai.F(openai.ChatCompletionMessageToolCallTypeFunction),
+				},
+			})
+		}
+		return assistantMsg
 	case "tool":
 		return openai.ToolMessage(msg.ToolCall.ID, *msg.Content)
 	}
@@ -155,6 +168,7 @@ func (p *OpenAIChatProvider) convertFromChatMessage(msg ChatMessage) openai.Chat
 func (p *OpenAIChatProvider) convertToChatResponse(agentResponse *openai.ChatCompletionMessage) ChatResponse {
 	resp := ChatResponse{
 		Content: &agentResponse.Content,
+		Role:    "assistant",
 	}
 	if agentResponse.ToolCalls != nil {
 		resp.ToolCalls = make([]ToolCall, len(agentResponse.ToolCalls))
@@ -166,6 +180,7 @@ func (p *OpenAIChatProvider) convertToChatResponse(agentResponse *openai.ChatCom
 			}
 		}
 	}
+	p.debugStruct("OpenAI converted chat response", resp)
 	return resp
 }
 

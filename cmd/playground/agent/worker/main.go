@@ -34,7 +34,7 @@ func main() {
 	provider := providers.NewOpenAIChatProvider(client)
 
 	// Create a consumer with task that should not finish
-	consumer := agents.NewConsumer("Is there any rock song? Keep searching until you find it.", storage, provider)
+	consumer := agents.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider)
 
 	doneCh := make(chan struct{}, 1)
 	go (func() {

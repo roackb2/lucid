@@ -137,6 +137,11 @@ func (w *Worker) getAgentResponse(ctx context.Context) string {
 		slog.Error("Agent chat error", "role", w.Role, "error", err)
 		return ""
 	}
+	w.messages = append(w.messages, providers.ChatMessage{
+		Content:  agentResponse.Content,
+		Role:     "assistant",
+		ToolCall: &agentResponse.ToolCalls[0],
+	})
 
 	// Handle tool calls
 	finalResponse := w.handleToolCalls(ctx, agentResponse.ToolCalls)
@@ -158,10 +163,10 @@ func (w *Worker) handleToolCalls(
 
 		toolCallResult := w.handleSingleToolCall(ctx, toolCall)
 		slog.Info("Agent tool message", "role", w.Role, "message", toolCallResult)
-		w.messages = append(w.messages, providers.ChatMessage{
-			Content: &toolCallResult,
-			Role:    "assistant",
-		})
+		// w.messages = append(w.messages, providers.ChatMessage{
+		// 	Content: &toolCallResult,
+		// 	Role:    "assistant",
+		// })
 
 		if funcName == "report" {
 			finalResponse = toolCallResult
@@ -192,6 +197,11 @@ func (w *Worker) handleSingleToolCall(
 		"report":         w.FlowTools.ReportForProvider,
 	}
 	toolCallResult = toolCallFuncMap[funcName](ctx, toolCall)
+	w.messages = append(w.messages, providers.ChatMessage{
+		Content:  &toolCallResult,
+		Role:     "tool",
+		ToolCall: &toolCall,
+	})
 
 	return toolCallResult
 }
