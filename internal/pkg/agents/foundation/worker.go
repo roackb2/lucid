@@ -13,11 +13,11 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
-// const (
-// 	SleepInterval = 1 * time.Second
-// )
+const (
+	SleepInterval = 1 * time.Second
+)
 
-type Worker struct {
+type WorkerImpl struct {
 	chatProvider providers.ChatProvider
 	storage      storage.Storage
 	stateMachine *fsm.FSM
@@ -29,10 +29,10 @@ type Worker struct {
 	FlowTools    *tools.FlowTool
 }
 
-func NewWorker(id *string, role string, storage storage.Storage, chatProvider providers.ChatProvider) *Worker {
+func NewWorker(id *string, role string, storage storage.Storage, chatProvider providers.ChatProvider) *WorkerImpl {
 	persistTool := tools.NewPersistTool(storage)
 	flowTool := tools.NewFlowTool()
-	return &Worker{
+	return &WorkerImpl{
 		chatProvider: chatProvider,
 		storage:      storage,
 		stateMachine: nil, // Should init when start or resume task
@@ -44,7 +44,7 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 	}
 }
 
-func (w *Worker) Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
+func (w *WorkerImpl) Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
 	w.initAgentStateMachine(reportCh)
 	ctx := context.Background()
 	w.Messages = []providers.ChatMessage{{
@@ -57,7 +57,7 @@ func (w *Worker) Chat(prompt string, controlCh ControlReceiverCh, reportCh Repor
 	return w.getAgentResponseWithFlowControl(ctx, controlCh)
 }
 
-func (w *Worker) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
+func (w *WorkerImpl) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error) {
 	w.initAgentStateMachine(reportCh)
 	ctx := context.Background()
 	if newPrompt != nil {
@@ -70,7 +70,7 @@ func (w *Worker) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, repo
 }
 
 // MARK: Pure logic without provider implementation detail
-func (w *Worker) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlReceiverCh) (string, error) {
+func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context, controlCh ControlReceiverCh) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
 	for finalResponse == "" && w.GetStatus() != StateTerminated {
@@ -97,7 +97,7 @@ func (w *Worker) getAgentResponseWithFlowControl(ctx context.Context, controlCh 
 }
 
 // MARK: Pure logic without provider implementation detail
-func (w *Worker) initAgentStateMachine(reportCh ReportSenderCh) {
+func (w *WorkerImpl) initAgentStateMachine(reportCh ReportSenderCh) {
 	w.stateMachine = fsm.NewFSM(
 		"running",
 		fsm.Events{
@@ -123,14 +123,14 @@ func (w *Worker) initAgentStateMachine(reportCh ReportSenderCh) {
 	)
 }
 
-func (w *Worker) CleanUp() {
+func (w *WorkerImpl) CleanUp() {
 	if err := w.PersistState(); err != nil {
 		slog.Error("Worker: Failed to persist state", "error", err)
 	}
 	slog.Info("Worker: Cleaned up", "agentID", *w.ID, "role", w.Role)
 }
 
-func (w *Worker) getAgentResponse(ctx context.Context) string {
+func (w *WorkerImpl) getAgentResponse(ctx context.Context) string {
 	// Ask the LLM
 	agentResponse, err := w.chatProvider.Chat(w.Messages)
 	if err != nil {
@@ -153,7 +153,7 @@ func (w *Worker) getAgentResponse(ctx context.Context) string {
 	return finalResponse
 }
 
-func (w *Worker) handleToolCalls(
+func (w *WorkerImpl) handleToolCalls(
 	ctx context.Context,
 	toolCalls []providers.ToolCall,
 ) (finalResponse string) {
@@ -173,24 +173,18 @@ func (w *Worker) handleToolCalls(
 	return finalResponse
 }
 
-func (w *Worker) handleSingleToolCall(
+func (w *WorkerImpl) handleSingleToolCall(
 	ctx context.Context,
 	toolCall providers.ToolCall,
 ) (toolCallResult string) {
 	funcName := toolCall.FunctionName
 	slog.Info("Agent tool call", "role", w.Role, "tool_call", funcName)
 
-	// funcCallMap := map[string]func(ctx context.Context, toolCall providers.ToolCall) string{
-	// 	"save_content":   w.PersistTools.SaveContent,
-	// 	"search_content": w.PersistTools.SearchContent,
-	// 	"wait":           w.FlowTools.Wait,
-	// 	"report":         w.FlowTools.Report,
-	// }
 	toolCallFuncMap := map[string]func(ctx context.Context, toolCall providers.ToolCall) string{
-		"save_content":   w.PersistTools.SaveContentForProvider,
-		"search_content": w.PersistTools.SearchContentForProvider,
-		"wait":           w.FlowTools.WaitForProvider,
-		"report":         w.FlowTools.ReportForProvider,
+		"save_content":   w.PersistTools.SaveContent,
+		"search_content": w.PersistTools.SearchContent,
+		"wait":           w.FlowTools.Wait,
+		"report":         w.FlowTools.Report,
 	}
 	toolCallResult = toolCallFuncMap[funcName](ctx, toolCall)
 	w.Messages = append(w.Messages, providers.ChatMessage{
@@ -202,14 +196,14 @@ func (w *Worker) handleSingleToolCall(
 	return toolCallResult
 }
 
-func (w *Worker) GetStatus() string {
+func (w *WorkerImpl) GetStatus() string {
 	if w.stateMachine == nil {
 		return StateTerminated
 	}
 	return w.stateMachine.Current()
 }
 
-func (w *Worker) PersistState() error {
+func (w *WorkerImpl) PersistState() error {
 	slog.Info("Worker: Persisting state", "agentID", *w.ID, "role", w.Role)
 	state, err := w.Serialize()
 	if err != nil {
@@ -224,7 +218,7 @@ func (w *Worker) PersistState() error {
 	return nil
 }
 
-func (w *Worker) RestoreState(agentID string) error {
+func (w *WorkerImpl) RestoreState(agentID string) error {
 	slog.Info("Worker: Restoring state", "agentID", agentID)
 	state, err := w.storage.GetAgentState(agentID)
 	if err != nil {
@@ -239,7 +233,7 @@ func (w *Worker) RestoreState(agentID string) error {
 	return nil
 }
 
-func (w *Worker) Serialize() ([]byte, error) {
+func (w *WorkerImpl) Serialize() ([]byte, error) {
 	data, err := json.Marshal(w)
 	if err != nil {
 		slog.Error("Worker: Failed to serialize", "error", err)
@@ -248,7 +242,7 @@ func (w *Worker) Serialize() ([]byte, error) {
 	return data, nil
 }
 
-func (w *Worker) Deserialize(data []byte) error {
+func (w *WorkerImpl) Deserialize(data []byte) error {
 	content := string(data)
 	slog.Info("Deserializing Worker", "content", content)
 
@@ -261,7 +255,7 @@ func (w *Worker) Deserialize(data []byte) error {
 	return nil
 }
 
-func (w *Worker) debugStruct(title string, v any) {
+func (w *WorkerImpl) debugStruct(title string, v any) {
 	slog.Info(title, "role", w.Role)
 	utils.PrintStruct(v)
 }

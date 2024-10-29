@@ -12,7 +12,7 @@ import (
 type BaseAgent struct {
 	id      string
 	role    string
-	model   foundation.FoundationModel
+	worker  foundation.Worker
 	storage storage.Storage
 	task    string
 }
@@ -22,8 +22,8 @@ func NewBaseAgent(storage storage.Storage, task string, role string, chatProvide
 	return BaseAgent{
 		id:   id,
 		role: role,
-		// model:   foundation.NewFoundationModel(&id, role, storage),
-		model:   foundation.NewWorker(&id, role, storage, chatProvider),
+
+		worker:  foundation.NewWorker(&id, role, storage, chatProvider),
 		storage: storage,
 		task:    task,
 	}
@@ -34,12 +34,12 @@ func (b *BaseAgent) GetID() string {
 }
 
 func (b *BaseAgent) GetStatus() string {
-	return b.model.GetStatus()
+	return b.worker.GetStatus()
 }
 
 func (b *BaseAgent) StartTask(controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*AgentResponse, error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
-	response, err := b.model.Chat(b.task, controlCh, reportCh)
+	response, err := b.worker.Chat(b.task, controlCh, reportCh)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string, controlCh foun
 		return nil, err
 	}
 	// Resume the chat
-	response, err := b.model.ResumeChat(newPrompt, controlCh, reportCh)
+	response, err := b.worker.ResumeChat(newPrompt, controlCh, reportCh)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string, controlCh foun
 
 func (b *BaseAgent) PersistState() error {
 	slog.Info("Agent: Persisting state", "agentID", b.id, "role", b.role)
-	err := b.model.PersistState()
+	err := b.worker.PersistState()
 	if err != nil {
 		slog.Error("Agent: Failed to persist state", "agentID", b.id, "role", b.role, "error", err)
 		return err
@@ -75,7 +75,7 @@ func (b *BaseAgent) PersistState() error {
 // Do not expose this method, users should use ResumeTask instead
 func (b *BaseAgent) restoreState(agentID string) error {
 	slog.Info("Agent: Restoring state", "agentID", agentID)
-	err := b.model.RestoreState(agentID)
+	err := b.worker.RestoreState(agentID)
 	if err != nil {
 		slog.Error("Agent: Failed to restore state", "agentID", agentID, "error", err)
 		return err

@@ -22,7 +22,7 @@ const (
 	StateTerminated = "terminated"
 )
 
-type FoundationModel interface {
+type Worker interface {
 	Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error)
 	ResumeChat(newPrompt *string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error)
 	Serialize() ([]byte, error)
