@@ -207,7 +207,9 @@ func (w *WorkerImpl) PersistState() error {
 		slog.Error("Worker: Failed to serialize", "error", err)
 		return err
 	}
-	err = w.storage.SaveAgentState(*w.ID, state)
+	now := time.Now()
+	// Terminating agent and putting it to sleep
+	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), nil, &now)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
 		return err
@@ -225,6 +227,13 @@ func (w *WorkerImpl) RestoreState(agentID string) error {
 	err = w.Deserialize(state)
 	if err != nil {
 		slog.Error("Worker: Failed to deserialize state", "agentID", agentID, "error", err)
+		return err
+	}
+	now := time.Now()
+	// Awakening agent and update its status accordingly
+	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), &now, nil)
+	if err != nil {
+		slog.Error("Worker: Failed to save state", "error", err)
 		return err
 	}
 	return nil

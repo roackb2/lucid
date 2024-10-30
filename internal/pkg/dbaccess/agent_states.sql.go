@@ -12,16 +12,25 @@ import (
 )
 
 const createAgentState = `-- name: CreateAgentState :exec
-INSERT INTO agent_states (agent_id, state) VALUES ($1, $2)
+INSERT INTO agent_states (agent_id, state, status, awakened_at, asleep_at) VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateAgentStateParams struct {
-	AgentID string
-	State   []byte
+	AgentID    string
+	State      []byte
+	Status     string
+	AwakenedAt pgtype.Timestamp
+	AsleepAt   pgtype.Timestamp
 }
 
 func (q *Queries) CreateAgentState(ctx context.Context, arg CreateAgentStateParams) error {
-	_, err := q.db.Exec(ctx, createAgentState, arg.AgentID, arg.State)
+	_, err := q.db.Exec(ctx, createAgentState,
+		arg.AgentID,
+		arg.State,
+		arg.Status,
+		arg.AwakenedAt,
+		arg.AsleepAt,
+	)
 	return err
 }
 
@@ -79,12 +88,13 @@ func (q *Queries) SearchAgentByStatus(ctx context.Context, status string) ([]Age
 }
 
 const updateAgentState = `-- name: UpdateAgentState :exec
-UPDATE agent_states SET status = $2, awakened_at = $3, asleep_at = $4 WHERE agent_id = $1
+UPDATE agent_states SET status = $2, state = $3, awakened_at = $4, asleep_at = $5 WHERE agent_id = $1
 `
 
 type UpdateAgentStateParams struct {
 	AgentID    string
 	Status     string
+	State      []byte
 	AwakenedAt pgtype.Timestamp
 	AsleepAt   pgtype.Timestamp
 }
@@ -93,6 +103,7 @@ func (q *Queries) UpdateAgentState(ctx context.Context, arg UpdateAgentStatePara
 	_, err := q.db.Exec(ctx, updateAgentState,
 		arg.AgentID,
 		arg.Status,
+		arg.State,
 		arg.AwakenedAt,
 		arg.AsleepAt,
 	)

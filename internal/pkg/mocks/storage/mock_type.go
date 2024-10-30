@@ -11,6 +11,7 @@ package mock_storage
 
 import (
 	reflect "reflect"
+	time "time"
 
 	gomock "go.uber.org/mock/gomock"
 )
@@ -69,17 +70,17 @@ func (mr *MockStorageMockRecorder) GetAgentState(agentID any) *gomock.Call {
 }
 
 // SaveAgentState mocks base method.
-func (m *MockStorage) SaveAgentState(agentID string, state []byte) error {
+func (m *MockStorage) SaveAgentState(agentID string, state []byte, status string, awakenedAt, asleepAt *time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveAgentState", agentID, state)
+	ret := m.ctrl.Call(m, "SaveAgentState", agentID, state, status, awakenedAt, asleepAt)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SaveAgentState indicates an expected call of SaveAgentState.
-func (mr *MockStorageMockRecorder) SaveAgentState(agentID, state any) *gomock.Call {
+func (mr *MockStorageMockRecorder) SaveAgentState(agentID, state, status, awakenedAt, asleepAt any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveAgentState", reflect.TypeOf((*MockStorage)(nil).SaveAgentState), agentID, state)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveAgentState", reflect.TypeOf((*MockStorage)(nil).SaveAgentState), agentID, state, status, awakenedAt, asleepAt)
 }
 
 // SavePost mocks base method.

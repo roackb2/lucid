@@ -3,8 +3,11 @@ package storage
 import (
 	"context"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
+	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
 type RelationalStorage struct{}
@@ -54,18 +57,65 @@ func (m *RelationalStorage) SearchPosts(query string) ([]string, error) {
 	return content, nil
 }
 
-func (m *RelationalStorage) SaveAgentState(agentID string, state []byte) error {
-	slog.Info("RelationalStorage: Saving agent state", "agentID", agentID)
+func (m *RelationalStorage) SaveAgentState(agentID string, state []byte, status string, awakenedAt *time.Time, asleepAt *time.Time) error {
+	slog.Info("RelationalStorage: Saving agent state", "agentID", agentID, "status", status, "awakenedAt", awakenedAt, "asleepAt", asleepAt)
+	_, err := dbaccess.Querier.GetAgentState(context.Background(), agentID)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			slog.Info("RelationalStorage: No existing agent state found, creating new state", "agentID", agentID)
+			err = m.createAgentState(agentID, state, status, awakenedAt, asleepAt)
+			if err != nil {
+				slog.Error("RelationalStorage: Failed to create agent state", "error", err)
+				return err
+			}
+		} else {
+			slog.Error("RelationalStorage: Failed to get existing agent state", "error", err)
+			return err
+		}
+	}
+	err = m.updateAgentState(agentID, state, status, awakenedAt, asleepAt)
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to update agent state", "error", err)
+		return err
+	}
+	slog.Info("RelationalStorage: Saved agent state", "agentID", agentID)
+	return nil
+}
+
+func (m *RelationalStorage) createAgentState(agentID string, state []byte, status string, awakenedAt *time.Time, asleepAt *time.Time) error {
+	slog.Info("RelationalStorage: Creating agent state", "agentID", agentID, "status", status, "awakenedAt", awakenedAt, "asleepAt", asleepAt)
 	params := dbaccess.CreateAgentStateParams{
-		AgentID: agentID,
-		State:   state,
+		AgentID:    agentID,
+		State:      state,
+		Status:     status,
+		AwakenedAt: utils.ConvertToPgTimestamp(awakenedAt),
+		AsleepAt:   utils.ConvertToPgTimestamp(asleepAt),
 	}
 	err := dbaccess.Querier.CreateAgentState(context.Background(), params)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to save agent state", "error", err)
 		return err
 	}
-	slog.Info("RelationalStorage: Saved agent state", "agentID", agentID)
+	slog.Info("RelationalStorage: Created agent state", "agentID", agentID)
+	return nil
+}
+
+func (m *RelationalStorage) updateAgentState(agentID string, state []byte, status string, awakenedAt *time.Time, asleepAt *time.Time) error {
+	slog.Info("RelationalStorage: Updating agent state", "agentID", agentID, "status", status, "awakenedAt", awakenedAt, "asleepAt", asleepAt)
+
+	params := dbaccess.UpdateAgentStateParams{
+		AgentID:    agentID,
+		State:      state,
+		Status:     status,
+		AwakenedAt: utils.ConvertToPgTimestamp(awakenedAt),
+		AsleepAt:   utils.ConvertToPgTimestamp(asleepAt),
+	}
+	err := dbaccess.Querier.UpdateAgentState(context.Background(), params)
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to update agent state", "error", err)
+		return err
+	}
+	slog.Info("RelationalStorage: Updated agent state", "agentID", agentID)
 	return nil
 }
 
