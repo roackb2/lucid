@@ -7,6 +7,8 @@ package dbaccess
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createAgentState = `-- name: CreateAgentState :exec
@@ -24,7 +26,7 @@ func (q *Queries) CreateAgentState(ctx context.Context, arg CreateAgentStatePara
 }
 
 const getAgentState = `-- name: GetAgentState :one
-SELECT id, agent_id, state, created_at, updated_at FROM agent_states WHERE agent_id = $1
+SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at FROM agent_states WHERE agent_id = $1
 `
 
 func (q *Queries) GetAgentState(ctx context.Context, agentID string) (AgentState, error) {
@@ -33,9 +35,66 @@ func (q *Queries) GetAgentState(ctx context.Context, agentID string) (AgentState
 	err := row.Scan(
 		&i.ID,
 		&i.AgentID,
+		&i.Status,
 		&i.State,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AwakenedAt,
+		&i.AsleepAt,
 	)
 	return i, err
+}
+
+const searchAgentByStatus = `-- name: SearchAgentByStatus :many
+SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at FROM agent_states WHERE status = $1
+`
+
+func (q *Queries) SearchAgentByStatus(ctx context.Context, status string) ([]AgentState, error) {
+	rows, err := q.db.Query(ctx, searchAgentByStatus, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentState
+	for rows.Next() {
+		var i AgentState
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.Status,
+			&i.State,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AwakenedAt,
+			&i.AsleepAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateAgentState = `-- name: UpdateAgentState :exec
+UPDATE agent_states SET status = $2, awakened_at = $3, asleep_at = $4 WHERE agent_id = $1
+`
+
+type UpdateAgentStateParams struct {
+	AgentID    string
+	Status     string
+	AwakenedAt pgtype.Timestamp
+	AsleepAt   pgtype.Timestamp
+}
+
+func (q *Queries) UpdateAgentState(ctx context.Context, arg UpdateAgentStateParams) error {
+	_, err := q.db.Exec(ctx, updateAgentState,
+		arg.AgentID,
+		arg.Status,
+		arg.AwakenedAt,
+		arg.AsleepAt,
+	)
+	return err
 }

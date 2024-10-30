@@ -9,11 +9,14 @@ import (
 )
 
 type AgentState struct {
-	ID        int32
-	AgentID   string
-	State     []byte
-	CreatedAt pgtype.Timestamp
-	UpdatedAt pgtype.Timestamp
+	ID         int32
+	AgentID    string
+	Status     string
+	State      []byte
+	CreatedAt  pgtype.Timestamp
+	UpdatedAt  pgtype.Timestamp
+	AwakenedAt pgtype.Timestamp
+	AsleepAt   pgtype.Timestamp
 }
 
 type Post struct {

@@ -18,9 +18,12 @@ CREATE TABLE posts (
 CREATE TABLE agent_states (
     id SERIAL PRIMARY KEY,
     agent_id VARCHAR(255) NOT NULL,
+    status VARCHAR(255) NOT NULL,
     state JSONB NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    awakened_at TIMESTAMP,
+    asleep_at TIMESTAMP
 );
 CREATE UNIQUE INDEX agent_states_agent_id_idx ON agent_states (agent_id);
 

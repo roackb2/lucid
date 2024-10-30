@@ -41,9 +41,12 @@ SET default_table_access_method = heap;
 CREATE TABLE public.agent_states (
     id integer NOT NULL,
     agent_id character varying(255) NOT NULL,
+    status character varying(255) NOT NULL,
     state jsonb NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    awakened_at timestamp without time zone,
+    asleep_at timestamp without time zone
 );
 
 
