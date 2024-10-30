@@ -91,8 +91,9 @@ func (suite *AgentControllerTestSuite) TestKickoffAgent() {
 	agentController := control_plane.NewAgentController(suite.config, suite.mockStorage, suite.mockNotificationBus, suite.mockAgentTracker)
 
 	// Run KickoffTask, which triggers StartTask asynchronously
-	err := agentController.KickoffTask(context.Background(), "test task", "publisher", suite.mockChatProvider)
+	agentID, err := agentController.KickoffTask(context.Background(), "test task", "publisher", suite.mockChatProvider)
 	suite.NoError(err)
+	suite.Equal("test-agent-id", agentID)
 
 	// Wait for the result on doneCh to simulate task completion
 	select {

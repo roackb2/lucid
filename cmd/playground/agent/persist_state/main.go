@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -10,6 +12,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -50,6 +53,18 @@ func main() {
 		panic(err)
 	}
 	slog.Info("Publisher state persisted")
+
+	// Make sure the state is stored in the database
+	agentState, err := dbaccess.Querier.GetAgentState(context.Background(), publisher.GetID())
+	if err != nil {
+		slog.Error("Error getting agent state:", "error", err)
+		panic(err)
+	}
+	// Make sure the state contains the song title
+	if !strings.Contains(string(agentState.State), "Jazz in the Rain") {
+		slog.Error("Agent state does not contain the song title", "state", string(agentState.State))
+		panic("Agent state does not contain the song title")
+	}
 
 	// Restore the state
 	restoredPublisher := agents.NewPublisher("", storage, provider)

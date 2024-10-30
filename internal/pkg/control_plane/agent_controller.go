@@ -113,11 +113,11 @@ func newAgent(task string, role string, storage storage.Storage, provider provid
 	}
 }
 
-func (c *AgentController) KickoffTask(ctx context.Context, task string, role string, provider providers.ChatProvider) error {
+func (c *AgentController) KickoffTask(ctx context.Context, task string, role string, provider providers.ChatProvider) (string, error) {
 	slog.Info("AgentController kicking off task", "task", task, "role", role)
 	agent, err := NewAgentFunc(task, role, c.storage, provider)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	controlCh := make(chan string)
@@ -143,5 +143,13 @@ func (c *AgentController) KickoffTask(ctx context.Context, task string, role str
 		CreatedAt: time.Now(),
 	})
 
-	return nil
+	return agent.GetID(), nil
+}
+
+func (c *AgentController) GetAgentStatus(agentID string) (string, error) {
+	tracking, ok := c.tracker.GetTracking(agentID)
+	if !ok {
+		return "", fmt.Errorf("agent not found")
+	}
+	return tracking.Status, nil
 }

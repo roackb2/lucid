@@ -70,7 +70,7 @@ func (w *WorkerImpl) ResumeChat(newPrompt *string, controlCh ControlReceiverCh, 
 func (w *WorkerImpl) getAgentResponseWithFlowControl(controlCh ControlReceiverCh) (string, error) {
 	// Loop until the LLM returns a non-empty finalResponse
 	finalResponse := ""
-	for finalResponse == "" && w.GetStatus() != StateTerminated {
+	for finalResponse == "" && w.GetStatus() != StatusTerminated {
 		select {
 		case cmd := <-controlCh:
 			err := w.stateMachine.Event(context.Background(), cmd)
@@ -80,10 +80,10 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(controlCh ControlReceiverCh
 		default:
 			slog.Info("Worker: current state", "agentID", *w.ID, "role", w.Role, "state", w.GetStatus())
 			switch w.GetStatus() {
-			// No need to handle StateTerminated, as it will be handled in the loop condition
-			case StateRunning:
+			// No need to handle StatusTerminated, as it will be handled in the loop condition
+			case StatusRunning:
 				finalResponse = w.getAgentResponse()
-			case StatePaused:
+			case StatusPaused:
 				// When paused, sleep briefly to prevent tight loop
 				time.Sleep(100 * time.Millisecond)
 			}
@@ -97,23 +97,23 @@ func (w *WorkerImpl) initAgentStateMachine(reportCh ReportSenderCh) {
 	w.stateMachine = fsm.NewFSM(
 		"running",
 		fsm.Events{
-			{Name: CmdPause, Src: []string{StateRunning}, Dst: StatePaused},
-			{Name: CmdResume, Src: []string{StatePaused}, Dst: StateRunning},
-			{Name: CmdTerminate, Src: []string{StateRunning, StatePaused}, Dst: StateTerminated},
+			{Name: CmdPause, Src: []string{StatusRunning}, Dst: StatusPaused},
+			{Name: CmdResume, Src: []string{StatusPaused}, Dst: StatusRunning},
+			{Name: CmdTerminate, Src: []string{StatusRunning, StatusPaused}, Dst: StatusTerminated},
 		},
 		fsm.Callbacks{
 			"enter_state": func(_ context.Context, e *fsm.Event) {
 				slog.Info("Transitioned to state", "from", e.Src, "to", e.Dst)
 			},
 			"after_pause": func(_ context.Context, e *fsm.Event) {
-				reportCh <- StatePaused
+				reportCh <- StatusPaused
 			},
 			"after_resume": func(_ context.Context, e *fsm.Event) {
-				reportCh <- StateRunning
+				reportCh <- StatusRunning
 			},
 			"after_terminate": func(_ context.Context, e *fsm.Event) {
 				w.CleanUp()
-				reportCh <- StateTerminated
+				reportCh <- StatusTerminated
 			},
 		},
 	)
@@ -195,7 +195,7 @@ func (w *WorkerImpl) handleSingleToolCall(
 
 func (w *WorkerImpl) GetStatus() string {
 	if w.stateMachine == nil {
-		return StateTerminated
+		return StatusTerminated
 	}
 	return w.stateMachine.Current()
 }

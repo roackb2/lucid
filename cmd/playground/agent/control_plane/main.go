@@ -9,6 +9,7 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
+	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
@@ -54,12 +55,30 @@ func main() {
 		"Find me a KPOP song with exciting beats.",
 	}
 
+	agentIDs := []string{}
 	for _, task := range tasks {
-		controller.KickoffTask(ctx, fmt.Sprintf("%s Keep looking for the item until you find it", task), "consumer", provider)
+		agentID, err := controller.KickoffTask(ctx, fmt.Sprintf("%s Keep looking for the item until you find it", task), "consumer", provider)
+		if err != nil {
+			slog.Error("Error kicking off task", "error", err)
+			panic(err)
+		}
+		slog.Info("Kicked off task", "agent_id", agentID)
+		agentIDs = append(agentIDs, agentID)
 	}
 
 	time.Sleep(5 * time.Second)
 	controlCh <- "stop"
+	for _, agentID := range agentIDs {
+		status, err := controller.GetAgentStatus(agentID)
+		if err != nil {
+			slog.Error("Error getting agent status", "error", err)
+			panic(err)
+		}
+		if status != foundation.StatusTerminated {
+			slog.Error("Agent status is not terminated", "agent_id", agentID, "status", status)
+			panic("Agent status is not terminated")
+		}
+	}
 	msg := <-reportCh
 	slog.Info("Agent controller stopped", "message", msg)
 }

@@ -17,9 +17,9 @@ const (
 )
 
 const (
-	StateRunning    = "running"
-	StatePaused     = "paused"
-	StateTerminated = "terminated"
+	StatusRunning    = "running"
+	StatusPaused     = "paused"
+	StatusTerminated = "terminated"
 )
 
 type Worker interface {

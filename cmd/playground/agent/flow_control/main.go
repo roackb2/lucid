@@ -56,6 +56,10 @@ func main() {
 	slog.Info("Sent pause command")
 	status := <-reportCh
 	slog.Info("Received:", "status", status)
+	if consumer.GetStatus() != foundation.StatusPaused {
+		slog.Error("Consumer state is not paused", "state", consumer.GetStatus())
+		panic("Consumer state is not paused")
+	}
 
 	time.Sleep(300 * time.Millisecond)
 
@@ -63,6 +67,10 @@ func main() {
 	slog.Info("Sent resume command")
 	status = <-reportCh
 	slog.Info("Received:", "status", status)
+	if consumer.GetStatus() != foundation.StatusRunning {
+		slog.Error("Consumer state is not running", "state", consumer.GetStatus())
+		panic("Consumer state is not running")
+	}
 
 	time.Sleep(300 * time.Millisecond)
 
@@ -70,24 +78,10 @@ func main() {
 	slog.Info("Sent terminate command")
 	status = <-reportCh
 	slog.Info("Received:", "status", status)
+	if consumer.GetStatus() != foundation.StatusTerminated {
+		slog.Error("Consumer state is not terminated", "state", consumer.GetStatus())
+		panic("Consumer state is not terminated")
+	}
 
 	slog.Info("Done")
-
-	// // Store the state
-	// err = publisher.PersistState()
-	// if err != nil {
-	// 	slog.Error("Error persisting state:", "error", err)
-	// 	panic(err)
-	// }
-	// slog.Info("Publisher state persisted")
-
-	// // Restore the state
-	// restoredPublisher := agents.NewPublisher("", storage)
-	// newPrompt := "What is the length of the title of the song that you just published?"
-	// res, err := restoredPublisher.ResumeTask(publisher.GetID(), &newPrompt, controlCh, reportCh)
-	// if err != nil {
-	// 	slog.Error("Publisher error", "error", err)
-	// 	panic(err)
-	// }
-	// slog.Info("Publisher response", "response", res)
 }
