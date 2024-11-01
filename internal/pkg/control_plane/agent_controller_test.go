@@ -67,13 +67,13 @@ func TestAgentController(t *testing.T) {
 func (suite *AgentControllerTestSuite) TestKickoffAgent() {
 	// Set up expectations for StartTask
 	mockAgentResponse := &agents.AgentResponse{Id: "test-agent-id", Role: "publisher", Message: "task completed"}
-	mockStartTaskFunc := func(ctrlCh foundation.ControlReceiverCh, rptCh foundation.ReportSenderCh) (*agents.AgentResponse, error) {
+	mockStartTaskFunc := func(ctx context.Context, onPause foundation.CommandCallback, onResume foundation.CommandCallback, onTerminate foundation.CommandCallback) (*agents.AgentResponse, error) {
 		go func() {
 			suite.doneCh <- struct{}{} // Simulate task completion
 		}()
 		return mockAgentResponse, nil
 	}
-	suite.mockAgent.EXPECT().StartTask(gomock.Any(), gomock.Any()).DoAndReturn(mockStartTaskFunc)
+	suite.mockAgent.EXPECT().StartTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(mockStartTaskFunc)
 	suite.mockAgent.EXPECT().GetID().Return("test-agent-id").AnyTimes()
 
 	// Set up expectations for the agent tracker

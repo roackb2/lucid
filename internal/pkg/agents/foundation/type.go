@@ -1,9 +1,8 @@
 package foundation
 
-type ControlSenderCh chan<- string
-type ControlReceiverCh <-chan string
-type ReportSenderCh chan<- string
-type ReportReceiverCh <-chan string
+import "context"
+
+type CommandCallback func(string)
 
 const (
 	RolePublisher = "publisher"
@@ -23,8 +22,15 @@ const (
 )
 
 type Worker interface {
-	Chat(prompt string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error)
-	ResumeChat(newPrompt *string, controlCh ControlReceiverCh, reportCh ReportSenderCh) (string, error)
+	Chat(
+		ctx context.Context, prompt string,
+		onPause CommandCallback, onResume CommandCallback, onTerminate CommandCallback,
+	) (string, error)
+	ResumeChat(
+		ctx context.Context, newPrompt *string,
+		onPause CommandCallback, onResume CommandCallback, onTerminate CommandCallback,
+	) (string, error)
+	SendCommand(command string)
 	Serialize() ([]byte, error)
 	Deserialize(state []byte) error
 	PersistState() error

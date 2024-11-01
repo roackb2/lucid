@@ -30,6 +30,10 @@ type AgentController struct {
 	storage storage.Storage
 	tracker AgentTracker
 	bus     NotificationBus
+
+	onPause     foundation.CommandCallback
+	onResume    foundation.CommandCallback
+	onTerminate foundation.CommandCallback
 }
 
 func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus NotificationBus, tracker AgentTracker) *AgentController {
@@ -41,38 +45,47 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		AgentLifeTime: agentLifeTime,
 		MaxRespChSize: maxRespChSize,
 	}
+	// TODO: Report status to the caller
+	onPause := func(status string) { slog.Info("AgentController onPause", "status", status) }
+	onResume := func(status string) { slog.Info("AgentController onResume", "status", status) }
+	onTerminate := func(status string) { slog.Info("AgentController onTerminate", "status", status) }
 	controller := &AgentController{
-		cfg:     mergedCfg,
-		storage: storage,
-		bus:     bus,
-		tracker: tracker,
+		cfg:         mergedCfg,
+		storage:     storage,
+		bus:         bus,
+		tracker:     tracker,
+		onPause:     onPause,
+		onResume:    onResume,
+		onTerminate: onTerminate,
 	}
 	return controller
 }
 
-func (c *AgentController) Start(controlCh chan string, reportCh chan string) {
+func (c *AgentController) Start(ctx context.Context, controlCh chan string, commandCallback func(string)) {
 	slog.Info("AgentController started")
-	go func() {
-		for {
-			time.Sleep(c.cfg.ScanInterval)
-
-			select {
-			case cmd := <-controlCh:
-				slog.Info("AgentController received command", "command", cmd)
-				switch cmd {
-				case "stop":
-					slog.Info("AgentController stopping")
-					reportCh <- "stopped"
-					return
-				default:
-					slog.Warn("AgentController received unknown command", "command", cmd)
-				}
+	ticker := time.NewTicker(c.cfg.ScanInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Info("AgentController stopping")
+			commandCallback("stopped")
+			return
+		case <-ticker.C:
+			slog.Info("AgentController scanning agents")
+			c.scanAgents()
+		case cmd := <-controlCh:
+			slog.Info("AgentController received command", "command", cmd)
+			switch cmd {
+			case "stop":
+				slog.Info("AgentController stopping")
+				commandCallback("stopped")
+				return
 			default:
-				slog.Info("AgentController scanning agents")
-				c.scanAgents()
+				slog.Warn("AgentController received unknown command", "command", cmd)
 			}
 		}
-	}()
+	}
 }
 
 func (c *AgentController) scanAgents() {
@@ -81,23 +94,19 @@ func (c *AgentController) scanAgents() {
 		slog.Info("AgentController scanning agent", "agent_id", tracking.AgentID, "created_at", tracking.CreatedAt, "agent_awake_duration", agentAwakeDuration.String())
 		if agentAwakeDuration > c.cfg.AgentLifeTime {
 			slog.Info("AgentController agent lifetime exceeded", "agent_id", tracking.AgentID, "created_at", tracking.CreatedAt, "agent_awake_duration", agentAwakeDuration.String())
-			// Agent termination might take time, so we put it to sleep in a separate goroutine
-			go c.putAgentToSleep(tracking)
+			c.putAgentToSleep(tracking)
 		}
 	}
 }
 
 func (c *AgentController) putAgentToSleep(tracking AgentTracking) {
 	slog.Info("AgentController putting agent to sleep", "agent_id", tracking.AgentID)
-	tracking.ControlCh <- foundation.CmdTerminate
-	status := <-tracking.ReportCh
-	slog.Info("AgentController agent terminated", "agent_id", tracking.AgentID, "status", status)
+	tracking.Agent.SendCommand(foundation.CmdTerminate)
+	slog.Info("AgentController agent terminated", "agent_id", tracking.AgentID)
 	c.tracker.UpdateTracking(tracking.AgentID, AgentTracking{
 		AgentID:   tracking.AgentID,
 		Agent:     tracking.Agent,
 		Status:    tracking.Agent.GetStatus(), // Update agent status
-		ControlCh: tracking.ControlCh,
-		ReportCh:  tracking.ReportCh,
 		CreatedAt: tracking.CreatedAt,
 	})
 }
@@ -120,12 +129,9 @@ func (c *AgentController) KickoffTask(ctx context.Context, task string, role str
 		return "", err
 	}
 
-	controlCh := make(chan string)
-	reportCh := make(chan string)
-
 	go func() {
 		slog.Info("AgentController starting agent task")
-		resp, err := agent.StartTask(controlCh, reportCh)
+		resp, err := agent.StartTask(ctx, c.onPause, c.onResume, c.onTerminate)
 		if err != nil {
 			slog.Error("AgentController error starting task", "error", err)
 		}
@@ -138,8 +144,6 @@ func (c *AgentController) KickoffTask(ctx context.Context, task string, role str
 		AgentID:   agent.GetID(),
 		Agent:     agent,
 		Status:    "running",
-		ControlCh: controlCh,
-		ReportCh:  reportCh,
 		CreatedAt: time.Now(),
 	})
 

@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
-	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 )
 
 // Bus should guarantee thread safety
@@ -18,8 +17,6 @@ type AgentTracking struct {
 	Agent     agents.Agent
 	Status    string
 	CreatedAt time.Time
-	ControlCh foundation.ControlSenderCh
-	ReportCh  foundation.ReportReceiverCh
 }
 
 // Tracker should guarantee thread safety
