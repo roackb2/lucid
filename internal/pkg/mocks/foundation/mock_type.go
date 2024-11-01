@@ -10,6 +10,7 @@
 package mock_foundation
 
 import (
+	context "context"
 	reflect "reflect"
 
 	foundation "github.com/roackb2/lucid/internal/pkg/agents/foundation"
@@ -41,18 +42,18 @@ func (m *MockWorker) EXPECT() *MockWorkerMockRecorder {
 }
 
 // Chat mocks base method.
-func (m *MockWorker) Chat(prompt string, controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (string, error) {
+func (m *MockWorker) Chat(ctx context.Context, prompt string, onPause, onResume, onTerminate foundation.CommandCallback) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Chat", prompt, controlCh, reportCh)
+	ret := m.ctrl.Call(m, "Chat", ctx, prompt, onPause, onResume, onTerminate)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Chat indicates an expected call of Chat.
-func (mr *MockWorkerMockRecorder) Chat(prompt, controlCh, reportCh any) *gomock.Call {
+func (mr *MockWorkerMockRecorder) Chat(ctx, prompt, onPause, onResume, onTerminate any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Chat", reflect.TypeOf((*MockWorker)(nil).Chat), prompt, controlCh, reportCh)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Chat", reflect.TypeOf((*MockWorker)(nil).Chat), ctx, prompt, onPause, onResume, onTerminate)
 }
 
 // Deserialize mocks base method.
@@ -112,18 +113,30 @@ func (mr *MockWorkerMockRecorder) RestoreState(agentID any) *gomock.Call {
 }
 
 // ResumeChat mocks base method.
-func (m *MockWorker) ResumeChat(newPrompt *string, controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (string, error) {
+func (m *MockWorker) ResumeChat(ctx context.Context, newPrompt *string, onPause, onResume, onTerminate foundation.CommandCallback) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResumeChat", newPrompt, controlCh, reportCh)
+	ret := m.ctrl.Call(m, "ResumeChat", ctx, newPrompt, onPause, onResume, onTerminate)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ResumeChat indicates an expected call of ResumeChat.
-func (mr *MockWorkerMockRecorder) ResumeChat(newPrompt, controlCh, reportCh any) *gomock.Call {
+func (mr *MockWorkerMockRecorder) ResumeChat(ctx, newPrompt, onPause, onResume, onTerminate any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResumeChat", reflect.TypeOf((*MockWorker)(nil).ResumeChat), newPrompt, controlCh, reportCh)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResumeChat", reflect.TypeOf((*MockWorker)(nil).ResumeChat), ctx, newPrompt, onPause, onResume, onTerminate)
+}
+
+// SendCommand mocks base method.
+func (m *MockWorker) SendCommand(command string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SendCommand", command)
+}
+
+// SendCommand indicates an expected call of SendCommand.
+func (mr *MockWorkerMockRecorder) SendCommand(command any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCommand", reflect.TypeOf((*MockWorker)(nil).SendCommand), command)
 }
 
 // Serialize mocks base method.

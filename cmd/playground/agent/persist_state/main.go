@@ -19,6 +19,9 @@ import (
 func main() {
 	defer utils.RecoverPanic()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if err := config.LoadConfig("dev"); err != nil {
 		slog.Error("Error loading configuration:", "error", err)
 		panic(err)
@@ -31,15 +34,21 @@ func main() {
 	}
 	defer storage.Close()
 
-	controlCh := make(chan string, 1)
-	reportCh := make(chan string, 1)
-
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
 
 	publisher := agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage, provider)
 
-	res, err := publisher.StartTask(controlCh, reportCh)
+	onPause := func(status string) {
+		slog.Info("Command callback", "status", status)
+	}
+	onResume := func(status string) {
+		slog.Info("Command callback", "status", status)
+	}
+	onTerminate := func(status string) {
+		slog.Info("Command callback", "status", status)
+	}
+	res, err := publisher.StartTask(ctx, onPause, onResume, onTerminate)
 	if err != nil {
 		slog.Error("Publisher error", "error", err)
 		panic(err)
@@ -69,7 +78,7 @@ func main() {
 	// Restore the state
 	restoredPublisher := agents.NewPublisher("", storage, provider)
 	newPrompt := "What is the length of the title of the song that you just published?"
-	res, err = restoredPublisher.ResumeTask(publisher.GetID(), &newPrompt, controlCh, reportCh)
+	res, err = restoredPublisher.ResumeTask(ctx, publisher.GetID(), &newPrompt, onPause, onResume, onTerminate)
 	if err != nil {
 		slog.Error("Publisher error", "error", err)
 		panic(err)

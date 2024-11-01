@@ -10,6 +10,7 @@
 package mock_agents
 
 import (
+	context "context"
 	reflect "reflect"
 
 	agents "github.com/roackb2/lucid/internal/pkg/agents"
@@ -84,31 +85,43 @@ func (mr *MockAgentMockRecorder) PersistState() *gomock.Call {
 }
 
 // ResumeTask mocks base method.
-func (m *MockAgent) ResumeTask(agentID string, newPrompt *string, controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*agents.AgentResponse, error) {
+func (m *MockAgent) ResumeTask(ctx context.Context, agentID string, newPrompt *string, onPause, onResume, onTerminate foundation.CommandCallback) (*agents.AgentResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResumeTask", agentID, newPrompt, controlCh, reportCh)
+	ret := m.ctrl.Call(m, "ResumeTask", ctx, agentID, newPrompt, onPause, onResume, onTerminate)
 	ret0, _ := ret[0].(*agents.AgentResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ResumeTask indicates an expected call of ResumeTask.
-func (mr *MockAgentMockRecorder) ResumeTask(agentID, newPrompt, controlCh, reportCh any) *gomock.Call {
+func (mr *MockAgentMockRecorder) ResumeTask(ctx, agentID, newPrompt, onPause, onResume, onTerminate any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResumeTask", reflect.TypeOf((*MockAgent)(nil).ResumeTask), agentID, newPrompt, controlCh, reportCh)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResumeTask", reflect.TypeOf((*MockAgent)(nil).ResumeTask), ctx, agentID, newPrompt, onPause, onResume, onTerminate)
+}
+
+// SendCommand mocks base method.
+func (m *MockAgent) SendCommand(command string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SendCommand", command)
+}
+
+// SendCommand indicates an expected call of SendCommand.
+func (mr *MockAgentMockRecorder) SendCommand(command any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCommand", reflect.TypeOf((*MockAgent)(nil).SendCommand), command)
 }
 
 // StartTask mocks base method.
-func (m *MockAgent) StartTask(controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*agents.AgentResponse, error) {
+func (m *MockAgent) StartTask(ctx context.Context, onPause, onResume, onTerminate foundation.CommandCallback) (*agents.AgentResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartTask", controlCh, reportCh)
+	ret := m.ctrl.Call(m, "StartTask", ctx, onPause, onResume, onTerminate)
 	ret0, _ := ret[0].(*agents.AgentResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // StartTask indicates an expected call of StartTask.
-func (mr *MockAgentMockRecorder) StartTask(controlCh, reportCh any) *gomock.Call {
+func (mr *MockAgentMockRecorder) StartTask(ctx, onPause, onResume, onTerminate any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTask", reflect.TypeOf((*MockAgent)(nil).StartTask), controlCh, reportCh)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTask", reflect.TypeOf((*MockAgent)(nil).StartTask), ctx, onPause, onResume, onTerminate)
 }

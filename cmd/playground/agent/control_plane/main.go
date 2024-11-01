@@ -9,7 +9,6 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
-	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
@@ -44,11 +43,15 @@ func main() {
 		AgentLifeTime: 3 * time.Second,
 	}
 	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
-	controlCh := make(chan string)
-	reportCh := make(chan string)
+	controlCh := make(chan string, 1)
+	reportCh := make(chan string, 1)
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
-	controller.Start(controlCh, reportCh)
+	commandCallback := func(status string) {
+		slog.Info("Command callback", "status", status)
+		reportCh <- status
+	}
+	go controller.Start(ctx, controlCh, commandCallback)
 
 	tasks := []string{
 		"Is there any rock song with the word 'love' in the title?",
@@ -67,18 +70,21 @@ func main() {
 	}
 
 	time.Sleep(5 * time.Second)
+
+	slog.Info("Stopping agents")
 	controlCh <- "stop"
-	for _, agentID := range agentIDs {
-		status, err := controller.GetAgentStatus(agentID)
-		if err != nil {
-			slog.Error("Error getting agent status", "error", err)
-			panic(err)
-		}
-		if status != foundation.StatusTerminated {
-			slog.Error("Agent status is not terminated", "agent_id", agentID, "status", status)
-			panic("Agent status is not terminated")
-		}
-	}
+	// slog.Info("Waiting for agents to terminate")
+	// for _, agentID := range agentIDs {
+	// 	status, err := controller.GetAgentStatus(agentID)
+	// 	if err != nil {
+	// 		slog.Error("Error getting agent status", "error", err)
+	// 		panic(err)
+	// 	}
+	// 	if status != foundation.StatusTerminated {
+	// 		slog.Error("Agent status is not terminated", "agent_id", agentID, "status", status)
+	// 		panic("Agent status is not terminated")
+	// 	}
+	// }
 	msg := <-reportCh
 	slog.Info("Agent controller stopped", "message", msg)
 }

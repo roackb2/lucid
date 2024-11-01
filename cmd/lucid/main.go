@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,17 +14,16 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
 var outputDir = "data/output"
 
 func main() {
-	defer func() {
-		r := recover()
-		if r != nil {
-			slog.Error("Recovered from panic", "error", r)
-		}
-	}()
+	utils.RecoverPanic()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	if err := config.LoadConfig("dev"); err != nil {
 		slog.Error("Error loading configuration:", "error", err)
@@ -67,19 +67,27 @@ func main() {
 	var wg sync.WaitGroup
 	resCh := make(chan *agents.AgentResponse, len(publishers)+len(consumers))
 	errCh := make(chan error, 1)
-	controlCh := make(chan string, 1)
-	reportCh := make(chan string, 1)
 
 	numWorkers := len(publishers) + len(consumers)
 
 	// Increment WaitGroup counter for each task
 	wg.Add(numWorkers)
 
+	onPause := func(status string) {
+		slog.Info("onPause", "status", status)
+	}
+	onResume := func(status string) {
+		slog.Info("onResume", "status", status)
+	}
+	onTerminate := func(status string) {
+		slog.Info("onTerminate", "status", status)
+	}
+
 	for _, publisher := range publishers {
 		// Launch publisher task
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
-			res, err := publisher.StartTask(controlCh, reportCh)
+			res, err := publisher.StartTask(ctx, onPause, onResume, onTerminate)
 			if err != nil {
 				errCh <- err
 				return
@@ -93,7 +101,7 @@ func main() {
 		// Launch consumer task
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
-			res, err := consumer.StartTask(controlCh, reportCh)
+			res, err := consumer.StartTask(ctx, onPause, onResume, onTerminate)
 			if err != nil {
 				errCh <- err
 				return

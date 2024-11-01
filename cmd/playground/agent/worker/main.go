@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/openai/openai-go"
@@ -15,6 +16,9 @@ import (
 func main() {
 	defer utils.RecoverPanic()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if err := config.LoadConfig("dev"); err != nil {
 		slog.Error("Error loading configuration:", "error", err)
 		panic(err)
@@ -27,9 +31,6 @@ func main() {
 	}
 	defer storage.Close()
 
-	controlCh := make(chan string, 1)
-	reportCh := make(chan string, 1)
-
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
 
@@ -37,8 +38,17 @@ func main() {
 	consumer := agents.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider)
 
 	doneCh := make(chan struct{}, 1)
+	onPause := func(status string) {
+		slog.Info("Command callback", "status", status)
+	}
+	onResume := func(status string) {
+		slog.Info("Command callback", "status", status)
+	}
+	onTerminate := func(status string) {
+		slog.Info("Command callback", "status", status)
+	}
 	go (func() {
-		resp, err := consumer.StartTask(controlCh, reportCh)
+		resp, err := consumer.StartTask(ctx, onPause, onResume, onTerminate)
 		if err != nil {
 			slog.Error("Error starting task:", "error", err)
 		}

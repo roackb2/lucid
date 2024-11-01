@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log/slog"
 	"os"
 	"time"
@@ -19,6 +19,9 @@ import (
 func main() {
 	defer utils.RecoverPanic()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if err := config.LoadConfig("dev"); err != nil {
 		slog.Error("Error loading configuration:", "error", err)
 		panic(err)
@@ -31,9 +34,6 @@ func main() {
 	}
 	defer storage.Close()
 
-	controlCh := make(chan string, 1)
-	reportCh := make(chan string, 1)
-
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
 
@@ -41,47 +41,47 @@ func main() {
 	consumer := agents.NewConsumer("Is there any rock song? Keep searching until you find it.", storage, provider)
 
 	go func() {
-		response, err := consumer.StartTask(controlCh, reportCh)
+		onPause := func(status string) {
+			slog.Info("Status:", "status", status)
+			if status != foundation.StatusPaused {
+				slog.Error("Consumer state is not paused", "state", status)
+				panic("Consumer state is not paused")
+			}
+		}
+		onResume := func(status string) {
+			slog.Info("Status:", "status", status)
+			if status != foundation.StatusRunning {
+				slog.Error("Consumer state is not running", "state", status)
+				panic("Consumer state is not running")
+			}
+		}
+		onTerminate := func(status string) {
+			slog.Info("Status:", "status", status)
+			if status != foundation.StatusTerminated {
+				slog.Error("Consumer state is not terminated", "state", status)
+				panic("Consumer state is not terminated")
+			}
+		}
+		response, err := consumer.StartTask(ctx, onPause, onResume, onTerminate)
 		if err != nil {
 			slog.Error("Consumer error", "error", err)
 			panic(err)
 		}
-		fmt.Println("Response:", response)
+		slog.Info("Response:", "response", response)
 		os.Exit(0)
 	}()
 
 	time.Sleep(300 * time.Millisecond)
 
-	controlCh <- foundation.CmdPause
-	slog.Info("Sent pause command")
-	status := <-reportCh
-	slog.Info("Received:", "status", status)
-	if consumer.GetStatus() != foundation.StatusPaused {
-		slog.Error("Consumer state is not paused", "state", consumer.GetStatus())
-		panic("Consumer state is not paused")
-	}
+	consumer.SendCommand(foundation.CmdPause)
 
 	time.Sleep(300 * time.Millisecond)
 
-	controlCh <- foundation.CmdResume
-	slog.Info("Sent resume command")
-	status = <-reportCh
-	slog.Info("Received:", "status", status)
-	if consumer.GetStatus() != foundation.StatusRunning {
-		slog.Error("Consumer state is not running", "state", consumer.GetStatus())
-		panic("Consumer state is not running")
-	}
+	consumer.SendCommand(foundation.CmdResume)
 
 	time.Sleep(300 * time.Millisecond)
 
-	controlCh <- foundation.CmdTerminate
-	slog.Info("Sent terminate command")
-	status = <-reportCh
-	slog.Info("Received:", "status", status)
-	if consumer.GetStatus() != foundation.StatusTerminated {
-		slog.Error("Consumer state is not terminated", "state", consumer.GetStatus())
-		panic("Consumer state is not terminated")
-	}
+	consumer.SendCommand(foundation.CmdTerminate)
 
 	slog.Info("Done")
 }

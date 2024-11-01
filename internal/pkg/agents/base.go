@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -37,9 +38,14 @@ func (b *BaseAgent) GetStatus() string {
 	return b.worker.GetStatus()
 }
 
-func (b *BaseAgent) StartTask(controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*AgentResponse, error) {
+func (b *BaseAgent) StartTask(
+	ctx context.Context,
+	onPause foundation.CommandCallback,
+	onResume foundation.CommandCallback,
+	onTerminate foundation.CommandCallback,
+) (*AgentResponse, error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
-	response, err := b.worker.Chat(b.task, controlCh, reportCh)
+	response, err := b.worker.Chat(ctx, b.task, onPause, onResume, onTerminate)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +53,14 @@ func (b *BaseAgent) StartTask(controlCh foundation.ControlReceiverCh, reportCh f
 	return &AgentResponse{b.id, b.role, response}, nil
 }
 
-func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string, controlCh foundation.ControlReceiverCh, reportCh foundation.ReportSenderCh) (*AgentResponse, error) {
+func (b *BaseAgent) ResumeTask(
+	ctx context.Context,
+	agentID string,
+	newPrompt *string,
+	onPause foundation.CommandCallback,
+	onResume foundation.CommandCallback,
+	onTerminate foundation.CommandCallback,
+) (*AgentResponse, error) {
 	slog.Info("Agent: Resuming task", "agentID", agentID, "role", b.role)
 	// Restore the agent state
 	err := b.restoreState(agentID)
@@ -55,11 +68,15 @@ func (b *BaseAgent) ResumeTask(agentID string, newPrompt *string, controlCh foun
 		return nil, err
 	}
 	// Resume the chat
-	response, err := b.worker.ResumeChat(newPrompt, controlCh, reportCh)
+	response, err := b.worker.ResumeChat(ctx, newPrompt, onPause, onResume, onTerminate)
 	if err != nil {
 		return nil, err
 	}
 	return &AgentResponse{b.id, b.role, response}, nil
+}
+
+func (b *BaseAgent) SendCommand(command string) {
+	b.worker.SendCommand(command)
 }
 
 func (b *BaseAgent) PersistState() error {
