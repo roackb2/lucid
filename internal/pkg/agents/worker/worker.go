@@ -163,7 +163,7 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 			case StatusPaused:
 				// Do nothing; the ticker handles pacing
 			case StatusAsleep:
-				// Do nothing; the ticker handles pacing and waiting for clean up to finish
+				return "", nil
 			case StatusTerminated:
 				return "", nil
 			}
