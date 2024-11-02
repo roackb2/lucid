@@ -51,6 +51,7 @@ func main() {
 		},
 	}
 	go func() {
+		defer consumer.Close()
 		resp, err := consumer.StartTask(ctx, callbacks)
 		if err != nil {
 			slog.Error("Error starting task:", "error", err)

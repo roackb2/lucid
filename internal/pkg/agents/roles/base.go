@@ -100,3 +100,7 @@ func (b *BaseAgent) restoreState(agentID string) error {
 	}
 	return nil
 }
+
+func (b *BaseAgent) Close() {
+	b.worker.Close()
+}

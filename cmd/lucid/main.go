@@ -91,6 +91,7 @@ func main() {
 		// Launch publisher task
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
+			defer publisher.Close()
 			res, err := publisher.StartTask(ctx, callbacks)
 			if err != nil {
 				errCh <- err
@@ -105,6 +106,7 @@ func main() {
 		// Launch consumer task
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
+			defer consumer.Close()
 			res, err := consumer.StartTask(ctx, callbacks)
 			if err != nil {
 				errCh <- err

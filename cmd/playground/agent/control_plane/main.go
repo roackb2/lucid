@@ -47,8 +47,6 @@ func main() {
 	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
 	controlCh := make(chan string, 1)
 	reportCh := make(chan string, 1)
-	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
-	provider := providers.NewOpenAIChatProvider(client)
 	go func() {
 		defer close(controlCh)
 		defer close(reportCh)
@@ -66,6 +64,8 @@ func main() {
 		"Find me a KPOP song with exciting beats.",
 	}
 
+	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
+	provider := providers.NewOpenAIChatProvider(client)
 	agentIDs := []string{}
 	for _, task := range tasks {
 		agentID, err := controller.KickoffTask(ctx, fmt.Sprintf("%s Keep looking for the item until you find it", task), "consumer", provider)

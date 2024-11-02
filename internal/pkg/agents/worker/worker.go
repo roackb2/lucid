@@ -56,6 +56,15 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 	}
 }
 
+// For testing purposes
+func (w *WorkerImpl) SetControlCh(ch chan string) {
+	w.controlCh = ch
+}
+
+func (w *WorkerImpl) Close() {
+	close(w.controlCh)
+}
+
 func (w *WorkerImpl) Chat(
 	ctx context.Context,
 	prompt string,
@@ -172,7 +181,7 @@ func (w *WorkerImpl) initAgentStateMachine() {
 				}
 			},
 			"after_sleep": func(_ context.Context, e *fsm.Event) {
-				w.CleanUp()
+				w.cleanUp()
 				if callback, ok := w.callbacks[OnSleep]; ok {
 					callback(*w.ID, StatusAsleep)
 				}
@@ -181,7 +190,7 @@ func (w *WorkerImpl) initAgentStateMachine() {
 	)
 }
 
-func (w *WorkerImpl) CleanUp() {
+func (w *WorkerImpl) cleanUp() {
 	if err := w.PersistState(); err != nil {
 		slog.Error("Worker: Failed to persist state", "error", err)
 	}

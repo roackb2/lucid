@@ -52,6 +52,8 @@ func main() {
 		},
 	}
 	res, err := publisher.StartTask(ctx, callbacks)
+	defer publisher.Close()
+
 	if err != nil {
 		slog.Error("Publisher error", "error", err)
 		panic(err)
