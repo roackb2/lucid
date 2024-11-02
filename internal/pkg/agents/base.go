@@ -5,15 +5,15 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 )
 
 type BaseAgent struct {
 	id      string
 	role    string
-	worker  foundation.Worker
+	worker  worker.Worker
 	storage storage.Storage
 	task    string
 }
@@ -24,7 +24,7 @@ func NewBaseAgent(storage storage.Storage, task string, role string, chatProvide
 		id:   id,
 		role: role,
 
-		worker:  foundation.NewWorker(&id, role, storage, chatProvider),
+		worker:  worker.NewWorker(&id, role, storage, chatProvider),
 		storage: storage,
 		task:    task,
 	}
@@ -40,12 +40,10 @@ func (b *BaseAgent) GetStatus() string {
 
 func (b *BaseAgent) StartTask(
 	ctx context.Context,
-	onPause foundation.CommandCallback,
-	onResume foundation.CommandCallback,
-	onTerminate foundation.CommandCallback,
+	callbacks worker.WorkerCallbacks,
 ) (*AgentResponse, error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
-	response, err := b.worker.Chat(ctx, b.task, onPause, onResume, onTerminate)
+	response, err := b.worker.Chat(ctx, b.task, callbacks)
 	if err != nil {
 		return nil, err
 	}
@@ -57,9 +55,7 @@ func (b *BaseAgent) ResumeTask(
 	ctx context.Context,
 	agentID string,
 	newPrompt *string,
-	onPause foundation.CommandCallback,
-	onResume foundation.CommandCallback,
-	onTerminate foundation.CommandCallback,
+	callbacks worker.WorkerCallbacks,
 ) (*AgentResponse, error) {
 	slog.Info("Agent: Resuming task", "agentID", agentID, "role", b.role)
 	// Restore the agent state
@@ -68,7 +64,7 @@ func (b *BaseAgent) ResumeTask(
 		return nil, err
 	}
 	// Resume the chat
-	response, err := b.worker.ResumeChat(ctx, newPrompt, onPause, onResume, onTerminate)
+	response, err := b.worker.ResumeChat(ctx, newPrompt, callbacks)
 	if err != nil {
 		return nil, err
 	}

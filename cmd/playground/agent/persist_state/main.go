@@ -12,6 +12,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
@@ -39,16 +40,18 @@ func main() {
 
 	publisher := agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage, provider)
 
-	onPause := func(status string) {
-		slog.Info("Command callback", "status", status)
+	callbacks := worker.WorkerCallbacks{
+		worker.OnPause: func(agentID string, status string) {
+			slog.Info("Command callback", "agentID", agentID, "status", status)
+		},
+		worker.OnResume: func(agentID string, status string) {
+			slog.Info("Command callback", "agentID", agentID, "status", status)
+		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("Command callback", "agentID", agentID, "status", status)
+		},
 	}
-	onResume := func(status string) {
-		slog.Info("Command callback", "status", status)
-	}
-	onTerminate := func(status string) {
-		slog.Info("Command callback", "status", status)
-	}
-	res, err := publisher.StartTask(ctx, onPause, onResume, onTerminate)
+	res, err := publisher.StartTask(ctx, callbacks)
 	if err != nil {
 		slog.Error("Publisher error", "error", err)
 		panic(err)
@@ -78,7 +81,7 @@ func main() {
 	// Restore the state
 	restoredPublisher := agents.NewPublisher("", storage, provider)
 	newPrompt := "What is the length of the title of the song that you just published?"
-	res, err = restoredPublisher.ResumeTask(ctx, publisher.GetID(), &newPrompt, onPause, onResume, onTerminate)
+	res, err = restoredPublisher.ResumeTask(ctx, publisher.GetID(), &newPrompt, callbacks)
 	if err != nil {
 		slog.Error("Publisher error", "error", err)
 		panic(err)

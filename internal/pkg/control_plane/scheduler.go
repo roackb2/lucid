@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 )
 
@@ -54,7 +54,7 @@ func (s *Scheduler) Start(ctx context.Context, controlCh chan string, reportCh c
 
 func (s *Scheduler) searchAgents(ctx context.Context) error {
 	// TODO: Change status to asleep
-	agents, err := dbaccess.Querier.SearchAgentByStatus(ctx, foundation.StatusTerminated)
+	agents, err := dbaccess.Querier.SearchAgentByStatus(ctx, worker.StatusAsleep)
 	if err != nil {
 		slog.Error("Scheduler failed to search agents", "error", err)
 		return err
@@ -65,7 +65,7 @@ func (s *Scheduler) searchAgents(ctx context.Context) error {
 		if time.Now().After(agent.AsleepAt.Time.Add(AgentSleepDuration)) {
 			// dbaccess.Querier.UpdateAgentState(ctx, dbaccess.UpdateAgentStateParams{
 			// 	AgentID: agent.AgentID,
-			// 	Status:  foundation.StatusRunning,
+			// 	Status:  worker.StatusRunning,
 			// })
 			slog.Info("Scheduler handling asleep agent, waking up", "agent_id", agent.AgentID)
 			// TODO: Register to agent controller

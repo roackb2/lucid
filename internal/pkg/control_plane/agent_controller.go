@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
-	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -31,9 +31,7 @@ type AgentController struct {
 	tracker AgentTracker
 	bus     NotificationBus
 
-	onPause     foundation.CommandCallback
-	onResume    foundation.CommandCallback
-	onTerminate foundation.CommandCallback
+	callbacks worker.WorkerCallbacks
 }
 
 func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus NotificationBus, tracker AgentTracker) *AgentController {
@@ -46,17 +44,23 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		MaxRespChSize: maxRespChSize,
 	}
 	// TODO: Report status to the caller
-	onPause := func(status string) { slog.Info("AgentController onPause", "status", status) }
-	onResume := func(status string) { slog.Info("AgentController onResume", "status", status) }
-	onTerminate := func(status string) { slog.Info("AgentController onTerminate", "status", status) }
+	callbacks := worker.WorkerCallbacks{
+		worker.OnPause: func(agentID string, status string) {
+			slog.Info("AgentController onPause", "agentID", agentID, "status", status)
+		},
+		worker.OnResume: func(agentID string, status string) {
+			slog.Info("AgentController onResume", "agentID", agentID, "status", status)
+		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("AgentController onSleep", "agentID", agentID, "status", status)
+		},
+	}
 	controller := &AgentController{
-		cfg:         mergedCfg,
-		storage:     storage,
-		bus:         bus,
-		tracker:     tracker,
-		onPause:     onPause,
-		onResume:    onResume,
-		onTerminate: onTerminate,
+		cfg:       mergedCfg,
+		storage:   storage,
+		bus:       bus,
+		tracker:   tracker,
+		callbacks: callbacks,
 	}
 	return controller
 }
@@ -79,7 +83,6 @@ func (c *AgentController) Start(ctx context.Context, controlCh chan string, comm
 				switch cmd {
 				case "stop":
 					slog.Info("AgentController stopping")
-					c.terminateAgents()
 					commandCallback("stopped")
 					return
 				default:
@@ -106,7 +109,7 @@ func (c *AgentController) scanAgents() {
 
 func (c *AgentController) putAgentToSleep(tracking AgentTracking) {
 	slog.Info("AgentController putting agent to sleep", "agent_id", tracking.AgentID)
-	tracking.Agent.SendCommand(foundation.CmdTerminate)
+	tracking.Agent.SendCommand(worker.CmdSleep)
 	slog.Info("AgentController agent terminated", "agent_id", tracking.AgentID)
 	c.tracker.UpdateTracking(tracking.AgentID, AgentTracking{
 		AgentID:   tracking.AgentID,
@@ -119,15 +122,15 @@ func (c *AgentController) putAgentToSleep(tracking AgentTracking) {
 func (c *AgentController) terminateAgents() {
 	for _, tracking := range c.tracker.GetAllTrackings() {
 		slog.Info("AgentController terminating agent", "agent_id", tracking.AgentID)
-		tracking.Agent.SendCommand(foundation.CmdTerminate)
+		tracking.Agent.SendCommand(worker.CmdSleep)
 	}
 }
 
 func newAgent(task string, role string, storage storage.Storage, provider providers.ChatProvider) (agents.Agent, error) {
 	switch role {
-	case foundation.RolePublisher:
+	case worker.RolePublisher:
 		return agents.NewPublisher(task, storage, provider), nil
-	case foundation.RoleConsumer:
+	case worker.RoleConsumer:
 		return agents.NewConsumer(task, storage, provider), nil
 	default:
 		return nil, fmt.Errorf("invalid agent role: %s", role)
@@ -143,7 +146,7 @@ func (c *AgentController) KickoffTask(ctx context.Context, task string, role str
 
 	go func() {
 		slog.Info("AgentController starting agent task")
-		resp, err := agent.StartTask(ctx, c.onPause, c.onResume, c.onTerminate)
+		resp, err := agent.StartTask(ctx, c.callbacks)
 		if err != nil {
 			slog.Error("AgentController error starting task", "error", err)
 		}

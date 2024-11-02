@@ -7,9 +7,9 @@ import (
 
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents"
-	"github.com/roackb2/lucid/internal/pkg/agents/foundation"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
 	mock_agents "github.com/roackb2/lucid/internal/pkg/mocks/agents"
 	mock_control_plane "github.com/roackb2/lucid/internal/pkg/mocks/control_plane"
@@ -67,13 +67,13 @@ func TestAgentController(t *testing.T) {
 func (suite *AgentControllerTestSuite) TestKickoffAgent() {
 	// Set up expectations for StartTask
 	mockAgentResponse := &agents.AgentResponse{Id: "test-agent-id", Role: "publisher", Message: "task completed"}
-	mockStartTaskFunc := func(ctx context.Context, onPause foundation.CommandCallback, onResume foundation.CommandCallback, onTerminate foundation.CommandCallback) (*agents.AgentResponse, error) {
+	mockStartTaskFunc := func(ctx context.Context, callbacks worker.WorkerCallbacks) (*agents.AgentResponse, error) {
 		go func() {
 			suite.doneCh <- struct{}{} // Simulate task completion
 		}()
 		return mockAgentResponse, nil
 	}
-	suite.mockAgent.EXPECT().StartTask(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(mockStartTaskFunc)
+	suite.mockAgent.EXPECT().StartTask(gomock.Any(), gomock.Any()).DoAndReturn(mockStartTaskFunc)
 	suite.mockAgent.EXPECT().GetID().Return("test-agent-id").AnyTimes()
 
 	// Set up expectations for the agent tracker

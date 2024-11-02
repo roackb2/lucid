@@ -10,6 +10,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -38,23 +39,25 @@ func main() {
 	consumer := agents.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider)
 
 	doneCh := make(chan struct{}, 1)
-	onPause := func(status string) {
-		slog.Info("Command callback", "status", status)
+	callbacks := worker.WorkerCallbacks{
+		worker.OnPause: func(agentID string, status string) {
+			slog.Info("Command callback", "agentID", agentID, "status", status)
+		},
+		worker.OnResume: func(agentID string, status string) {
+			slog.Info("Command callback", "agentID", agentID, "status", status)
+		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("Command callback", "agentID", agentID, "status", status)
+		},
 	}
-	onResume := func(status string) {
-		slog.Info("Command callback", "status", status)
-	}
-	onTerminate := func(status string) {
-		slog.Info("Command callback", "status", status)
-	}
-	go (func() {
-		resp, err := consumer.StartTask(ctx, onPause, onResume, onTerminate)
+	go func() {
+		resp, err := consumer.StartTask(ctx, callbacks)
 		if err != nil {
 			slog.Error("Error starting task:", "error", err)
 		}
 		slog.Info("Task response:", "response", resp)
 		doneCh <- struct{}{}
-	})()
+	}()
 
 	<-doneCh
 }

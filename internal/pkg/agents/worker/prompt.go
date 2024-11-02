@@ -1,4 +1,4 @@
-package foundation
+package worker
 
 var SystemPrompt string = `
 # System Prompt

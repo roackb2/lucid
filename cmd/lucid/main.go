@@ -14,6 +14,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -73,21 +74,23 @@ func main() {
 	// Increment WaitGroup counter for each task
 	wg.Add(numWorkers)
 
-	onPause := func(status string) {
-		slog.Info("onPause", "status", status)
-	}
-	onResume := func(status string) {
-		slog.Info("onResume", "status", status)
-	}
-	onTerminate := func(status string) {
-		slog.Info("onTerminate", "status", status)
+	callbacks := worker.WorkerCallbacks{
+		worker.OnPause: func(agentID string, status string) {
+			slog.Info("onPause", "agentID", agentID, "status", status)
+		},
+		worker.OnResume: func(agentID string, status string) {
+			slog.Info("onResume", "agentID", agentID, "status", status)
+		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("onSleep", "agentID", agentID, "status", status)
+		},
 	}
 
 	for _, publisher := range publishers {
 		// Launch publisher task
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
-			res, err := publisher.StartTask(ctx, onPause, onResume, onTerminate)
+			res, err := publisher.StartTask(ctx, callbacks)
 			if err != nil {
 				errCh <- err
 				return
@@ -101,7 +104,7 @@ func main() {
 		// Launch consumer task
 		go func() {
 			defer wg.Done() // Decrement counter when task is done
-			res, err := consumer.StartTask(ctx, onPause, onResume, onTerminate)
+			res, err := consumer.StartTask(ctx, callbacks)
 			if err != nil {
 				errCh <- err
 				return

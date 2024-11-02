@@ -1,4 +1,4 @@
-package foundation
+package worker
 
 import (
 	"context"
@@ -24,9 +24,7 @@ type WorkerImpl struct {
 	storage      storage.Storage
 	stateMachine *fsm.FSM
 	controlCh    chan string
-	onPause      CommandCallback
-	onResume     CommandCallback
-	onTerminate  CommandCallback
+	callbacks    WorkerCallbacks
 
 	stateMachineMux sync.Mutex
 	messageMux      sync.Mutex
@@ -61,13 +59,9 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 func (w *WorkerImpl) Chat(
 	ctx context.Context,
 	prompt string,
-	onPause CommandCallback,
-	onResume CommandCallback,
-	onTerminate CommandCallback,
+	callbacks WorkerCallbacks,
 ) (string, error) {
-	w.onPause = onPause
-	w.onResume = onResume
-	w.onTerminate = onTerminate
+	w.callbacks = callbacks
 	w.initAgentStateMachine()
 	w.Messages = []providers.ChatMessage{{
 		Content: &SystemPrompt,
@@ -86,13 +80,9 @@ func (w *WorkerImpl) Chat(
 func (w *WorkerImpl) ResumeChat(
 	ctx context.Context,
 	newPrompt *string,
-	onPause CommandCallback,
-	onResume CommandCallback,
-	onTerminate CommandCallback,
+	callbacks WorkerCallbacks,
 ) (string, error) {
-	w.onPause = onPause
-	w.onResume = onResume
-	w.onTerminate = onTerminate
+	w.callbacks = callbacks
 	w.initAgentStateMachine()
 	if newPrompt != nil {
 		w.appendMessage(providers.ChatMessage{
@@ -138,7 +128,7 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 					}
 				case StatusPaused:
 					// Do nothing; the ticker handles pacing
-				case StatusTerminated:
+				case StatusAsleep:
 					return "", nil
 				}
 			}
@@ -160,26 +150,26 @@ func (w *WorkerImpl) initAgentStateMachine() {
 		fsm.Events{
 			{Name: CmdPause, Src: []string{StatusRunning}, Dst: StatusPaused},
 			{Name: CmdResume, Src: []string{StatusPaused}, Dst: StatusRunning},
-			{Name: CmdTerminate, Src: []string{StatusRunning, StatusPaused}, Dst: StatusTerminated},
+			{Name: CmdSleep, Src: []string{StatusRunning, StatusPaused}, Dst: StatusAsleep},
 		},
 		fsm.Callbacks{
 			"enter_state": func(_ context.Context, e *fsm.Event) {
 				slog.Info("Transitioned to state", "from", e.Src, "to", e.Dst)
 			},
 			"after_pause": func(_ context.Context, e *fsm.Event) {
-				if w.onPause != nil {
-					w.onPause(StatusPaused)
+				if callback, ok := w.callbacks[OnPause]; ok {
+					callback(*w.ID, StatusPaused)
 				}
 			},
 			"after_resume": func(_ context.Context, e *fsm.Event) {
-				if w.onResume != nil {
-					w.onResume(StatusRunning)
+				if callback, ok := w.callbacks[OnResume]; ok {
+					callback(*w.ID, StatusRunning)
 				}
 			},
-			"after_terminate": func(_ context.Context, e *fsm.Event) {
+			"after_sleep": func(_ context.Context, e *fsm.Event) {
 				w.CleanUp()
-				if w.onTerminate != nil {
-					w.onTerminate(StatusTerminated)
+				if callback, ok := w.callbacks[OnSleep]; ok {
+					callback(*w.ID, StatusAsleep)
 				}
 			},
 		},
@@ -269,7 +259,7 @@ func (w *WorkerImpl) GetStatus() string {
 	w.stateMachineMux.Lock()
 	defer w.stateMachineMux.Unlock()
 	if w.stateMachine == nil {
-		return StatusTerminated
+		return StatusAsleep
 	}
 	return w.stateMachine.Current()
 }
@@ -282,7 +272,6 @@ func (w *WorkerImpl) PersistState() error {
 		return err
 	}
 	now := time.Now()
-	// Terminating agent and putting it to sleep
 	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), nil, &now)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
