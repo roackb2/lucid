@@ -16,16 +16,18 @@ SELECT *
 FROM agent_states
 WHERE status = @status;
 
--- name: SearchAgentByAwakeDuration :many
+-- name: SearchAgentByAwakeDurationAndStatus :many
 SELECT *
 FROM agent_states
 WHERE awakened_at + @duration::interval < now()
+  AND status = ANY(@statuses::varchar[])
 ORDER BY awakened_at ASC
 LIMIT @max_agents;
 
--- name: SearchAgentByAsleepDuration :many
+-- name: SearchAgentByAsleepDurationAndStatus :many
 SELECT *
 FROM agent_states
 WHERE asleep_at + @duration::interval < now()
+  AND status = ANY(@statuses::varchar[])
 ORDER BY asleep_at ASC
 LIMIT @max_agents;

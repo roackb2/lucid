@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
@@ -81,10 +82,12 @@ func (s *SchedulerImpl) Start(ctx context.Context) error {
 }
 
 func (s *SchedulerImpl) searchAgents(ctx context.Context) error {
-	agents, err := dbaccess.Querier.SearchAgentByAsleepDuration(ctx, dbaccess.SearchAgentByAsleepDurationParams{
+	params := dbaccess.SearchAgentByAsleepDurationAndStatusParams{
 		Duration:  utils.ConvertToPgInterval(AgentSleepDuration),
+		Statuses:  []string{worker.StatusRunning},
 		MaxAgents: BatchProcessAgentNum,
-	})
+	}
+	agents, err := dbaccess.Querier.SearchAgentByAsleepDurationAndStatus(ctx, params)
 	if err != nil {
 		slog.Error("Scheduler failed to search agents", "error", err)
 		return err

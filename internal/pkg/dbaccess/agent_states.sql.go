@@ -56,21 +56,23 @@ func (q *Queries) GetAgentState(ctx context.Context, agentID string) (AgentState
 	return i, err
 }
 
-const searchAgentByAsleepDuration = `-- name: SearchAgentByAsleepDuration :many
+const searchAgentByAsleepDurationAndStatus = `-- name: SearchAgentByAsleepDurationAndStatus :many
 SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
 FROM agent_states
 WHERE asleep_at + $1::interval < now()
+  AND status = ANY($2::varchar[])
 ORDER BY asleep_at ASC
-LIMIT $2
+LIMIT $3
 `
 
-type SearchAgentByAsleepDurationParams struct {
+type SearchAgentByAsleepDurationAndStatusParams struct {
 	Duration  pgtype.Interval
+	Statuses  []string
 	MaxAgents int32
 }
 
-func (q *Queries) SearchAgentByAsleepDuration(ctx context.Context, arg SearchAgentByAsleepDurationParams) ([]AgentState, error) {
-	rows, err := q.db.Query(ctx, searchAgentByAsleepDuration, arg.Duration, arg.MaxAgents)
+func (q *Queries) SearchAgentByAsleepDurationAndStatus(ctx context.Context, arg SearchAgentByAsleepDurationAndStatusParams) ([]AgentState, error) {
+	rows, err := q.db.Query(ctx, searchAgentByAsleepDurationAndStatus, arg.Duration, arg.Statuses, arg.MaxAgents)
 	if err != nil {
 		return nil, err
 	}
@@ -98,21 +100,23 @@ func (q *Queries) SearchAgentByAsleepDuration(ctx context.Context, arg SearchAge
 	return items, nil
 }
 
-const searchAgentByAwakeDuration = `-- name: SearchAgentByAwakeDuration :many
+const searchAgentByAwakeDurationAndStatus = `-- name: SearchAgentByAwakeDurationAndStatus :many
 SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
 FROM agent_states
 WHERE awakened_at + $1::interval < now()
+  AND status = ANY($2::varchar[])
 ORDER BY awakened_at ASC
-LIMIT $2
+LIMIT $3
 `
 
-type SearchAgentByAwakeDurationParams struct {
+type SearchAgentByAwakeDurationAndStatusParams struct {
 	Duration  pgtype.Interval
+	Statuses  []string
 	MaxAgents int32
 }
 
-func (q *Queries) SearchAgentByAwakeDuration(ctx context.Context, arg SearchAgentByAwakeDurationParams) ([]AgentState, error) {
-	rows, err := q.db.Query(ctx, searchAgentByAwakeDuration, arg.Duration, arg.MaxAgents)
+func (q *Queries) SearchAgentByAwakeDurationAndStatus(ctx context.Context, arg SearchAgentByAwakeDurationAndStatusParams) ([]AgentState, error) {
+	rows, err := q.db.Query(ctx, searchAgentByAwakeDurationAndStatus, arg.Duration, arg.Statuses, arg.MaxAgents)
 	if err != nil {
 		return nil, err
 	}
