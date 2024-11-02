@@ -9,3 +9,9 @@ UPDATE agent_states SET status = $2, state = $3, awakened_at = $4, asleep_at = $
 
 -- name: SearchAgentByStatus :many
 SELECT * FROM agent_states WHERE status = $1;
+
+-- name: SearchAgentByAwakeDuration :many
+SELECT * FROM agent_states WHERE awakened_at < $1;
+
+-- name: SearchAgentByAsleepDuration :many
+SELECT * FROM agent_states WHERE asleep_at < $1;

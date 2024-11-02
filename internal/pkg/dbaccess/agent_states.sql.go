@@ -54,6 +54,72 @@ func (q *Queries) GetAgentState(ctx context.Context, agentID string) (AgentState
 	return i, err
 }
 
+const searchAgentByAsleepDuration = `-- name: SearchAgentByAsleepDuration :many
+SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at FROM agent_states WHERE asleep_at < $1
+`
+
+func (q *Queries) SearchAgentByAsleepDuration(ctx context.Context, asleepAt pgtype.Timestamp) ([]AgentState, error) {
+	rows, err := q.db.Query(ctx, searchAgentByAsleepDuration, asleepAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentState
+	for rows.Next() {
+		var i AgentState
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.Status,
+			&i.State,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AwakenedAt,
+			&i.AsleepAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchAgentByAwakeDuration = `-- name: SearchAgentByAwakeDuration :many
+SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at FROM agent_states WHERE awakened_at < $1
+`
+
+func (q *Queries) SearchAgentByAwakeDuration(ctx context.Context, awakenedAt pgtype.Timestamp) ([]AgentState, error) {
+	rows, err := q.db.Query(ctx, searchAgentByAwakeDuration, awakenedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentState
+	for rows.Next() {
+		var i AgentState
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.Status,
+			&i.State,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AwakenedAt,
+			&i.AsleepAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchAgentByStatus = `-- name: SearchAgentByStatus :many
 SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at FROM agent_states WHERE status = $1
 `

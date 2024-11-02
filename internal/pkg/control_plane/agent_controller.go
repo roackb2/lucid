@@ -65,16 +65,17 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 	return controller
 }
 
-func (c *AgentController) Start(ctx context.Context, controlCh chan string, commandCallback func(string)) {
+func (c *AgentController) Start(ctx context.Context, controlCh chan string) error {
 	slog.Info("AgentController started")
 	ticker := time.NewTicker(c.cfg.ScanInterval)
 	defer ticker.Stop()
+
 	for {
+		slog.Info("AgentController waiting for command or ticker")
 		select {
 		case <-ctx.Done():
 			slog.Info("AgentController stopping")
-			commandCallback("stopped")
-			return
+			return ctx.Err()
 		case <-ticker.C:
 			slog.Info("AgentController ticker")
 			select {
@@ -83,16 +84,18 @@ func (c *AgentController) Start(ctx context.Context, controlCh chan string, comm
 				switch cmd {
 				case "stop":
 					slog.Info("AgentController stopping")
-					commandCallback("stopped")
-					return
+					// c.terminateAgents()
+					return nil
 				default:
 					slog.Warn("AgentController received unknown command", "command", cmd)
+					return fmt.Errorf("unknown command: %s", cmd)
 				}
 			default:
 				slog.Info("AgentController scanning agents")
 				c.scanAgents()
 			}
 		}
+		slog.Info("AgentController done with ticker")
 	}
 }
 
@@ -114,9 +117,10 @@ func (c *AgentController) putAgentToSleep(tracking AgentTracking) {
 	c.tracker.UpdateTracking(tracking.AgentID, AgentTracking{
 		AgentID:   tracking.AgentID,
 		Agent:     tracking.Agent,
-		Status:    tracking.Agent.GetStatus(), // Update agent status
+		Status:    worker.StatusAsleep, // Assume agent status is updated to prevent race condition
 		CreatedAt: tracking.CreatedAt,
 	})
+	slog.Info("AgentController updated tracking", "agent_id", tracking.AgentID)
 }
 
 func (c *AgentController) terminateAgents() {

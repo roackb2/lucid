@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	dbaccess "github.com/roackb2/lucid/internal/pkg/dbaccess"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -95,6 +96,36 @@ func (m *MockStorage) SavePost(content string) error {
 func (mr *MockStorageMockRecorder) SavePost(content any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SavePost", reflect.TypeOf((*MockStorage)(nil).SavePost), content)
+}
+
+// SearchAgentByAsleepDuration mocks base method.
+func (m *MockStorage) SearchAgentByAsleepDuration(duration time.Duration) ([]dbaccess.AgentState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchAgentByAsleepDuration", duration)
+	ret0, _ := ret[0].([]dbaccess.AgentState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchAgentByAsleepDuration indicates an expected call of SearchAgentByAsleepDuration.
+func (mr *MockStorageMockRecorder) SearchAgentByAsleepDuration(duration any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchAgentByAsleepDuration", reflect.TypeOf((*MockStorage)(nil).SearchAgentByAsleepDuration), duration)
+}
+
+// SearchAgentByAwakeDuration mocks base method.
+func (m *MockStorage) SearchAgentByAwakeDuration(duration time.Duration) ([]dbaccess.AgentState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchAgentByAwakeDuration", duration)
+	ret0, _ := ret[0].([]dbaccess.AgentState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchAgentByAwakeDuration indicates an expected call of SearchAgentByAwakeDuration.
+func (mr *MockStorageMockRecorder) SearchAgentByAwakeDuration(duration any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchAgentByAwakeDuration", reflect.TypeOf((*MockStorage)(nil).SearchAgentByAwakeDuration), duration)
 }
 
 // SearchPosts mocks base method.

@@ -129,3 +129,24 @@ func (m *RelationalStorage) GetAgentState(agentID string) ([]byte, error) {
 	slog.Info("RelationalStorage: Got agent state", "agentID", agentID)
 	return state.State, nil
 }
+func (m *RelationalStorage) SearchAgentByAwakeDuration(duration time.Duration) ([]dbaccess.AgentState, error) {
+	slog.Info("RelationalStorage: Searching for agents by awake duration", "duration", duration)
+	cutoff := time.Now().Add(-duration)
+	agents, err := dbaccess.Querier.SearchAgentByAwakeDuration(context.Background(), utils.ConvertToPgTimestamp(&cutoff))
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to search for agents by awake duration", "error", err)
+		return nil, err
+	}
+	return agents, nil
+}
+
+func (m *RelationalStorage) SearchAgentByAsleepDuration(duration time.Duration) ([]dbaccess.AgentState, error) {
+	slog.Info("RelationalStorage: Searching for agents by asleep duration", "duration", duration)
+	cutoff := time.Now().Add(-duration)
+	agents, err := dbaccess.Querier.SearchAgentByAsleepDuration(context.Background(), utils.ConvertToPgTimestamp(&cutoff))
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to search for agents by asleep duration", "error", err)
+		return nil, err
+	}
+	return agents, nil
+}

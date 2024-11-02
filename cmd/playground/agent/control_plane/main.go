@@ -47,11 +47,17 @@ func main() {
 	reportCh := make(chan string, 1)
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
-	commandCallback := func(status string) {
-		slog.Info("Command callback", "status", status)
-		reportCh <- status
-	}
-	go controller.Start(ctx, controlCh, commandCallback)
+	go func() {
+		err := controller.Start(ctx, controlCh)
+		if err != nil {
+			slog.Error("Error starting controller", "error", err)
+		}
+		slog.Info("Controller done")
+		reportCh <- "done"
+
+		close(controlCh)
+		close(reportCh)
+	}()
 
 	tasks := []string{
 		"Is there any rock song with the word 'love' in the title?",
@@ -85,6 +91,7 @@ func main() {
 	// 		panic("Agent status is not terminated")
 	// 	}
 	// }
+	slog.Info("Waiting for agent controller to stop")
 	msg := <-reportCh
 	slog.Info("Agent controller stopped", "message", msg)
 }

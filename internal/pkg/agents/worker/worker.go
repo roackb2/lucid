@@ -107,15 +107,20 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 	defer ticker.Stop()
 
 	for {
+		slog.Info("Worker: waiting for command or ticker")
 		select {
 		case <-ctx.Done():
+			slog.Info("Worker: context done")
 			return "", ctx.Err()
 		case <-ticker.C:
+			slog.Info("Worker: ticker")
 			select {
 			case cmd := <-w.controlCh:
+				slog.Info("Worker: received command", "command", cmd)
 				w.stateMachineMux.Lock()
 				err := w.stateMachine.Event(context.Background(), cmd)
 				w.stateMachineMux.Unlock()
+				slog.Info("Worker: processed command", "command", cmd, "error", err)
 				if err != nil {
 					slog.Error("Error processing event", "error", err)
 				}
@@ -256,12 +261,16 @@ func (w *WorkerImpl) appendMessage(msg providers.ChatMessage) {
 }
 
 func (w *WorkerImpl) GetStatus() string {
+	slog.Info("Worker: Getting status", "agentID", *w.ID, "role", w.Role)
 	w.stateMachineMux.Lock()
 	defer w.stateMachineMux.Unlock()
 	if w.stateMachine == nil {
+		slog.Info("Worker: State machine is nil", "agentID", *w.ID, "role", w.Role)
 		return StatusAsleep
 	}
-	return w.stateMachine.Current()
+	status := w.stateMachine.Current()
+	slog.Info("Worker: Got status", "agentID", *w.ID, "role", w.Role, "status", status)
+	return status
 }
 
 func (w *WorkerImpl) PersistState() error {
