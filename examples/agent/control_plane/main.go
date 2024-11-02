@@ -11,6 +11,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
@@ -45,18 +46,15 @@ func main() {
 		AgentLifeTime: 3 * time.Second,
 	}
 	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
-	controlCh := make(chan string, 1)
-	reportCh := make(chan string, 1)
-	go func() {
-		defer close(controlCh)
-		defer close(reportCh)
 
-		err := controller.Start(ctx, controlCh)
+	doneCh := make(chan struct{})
+	go func() {
+		err := controller.Start(ctx)
 		if err != nil {
 			slog.Error("Error starting controller", "error", err)
 		}
 		slog.Info("Controller done")
-		reportCh <- "done"
+		doneCh <- struct{}{}
 	}()
 
 	tasks := []string{
@@ -66,24 +64,37 @@ func main() {
 
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
-	agentIDs := []string{}
+	callbacks := worker.WorkerCallbacks{
+		worker.OnPause: func(agentID string, status string) {
+			slog.Info("Pausing agent", "agent_id", agentID, "status", status)
+		},
+		worker.OnResume: func(agentID string, status string) {
+			slog.Info("Resuming agent", "agent_id", agentID, "status", status)
+		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("Agent sleeping", "agent_id", agentID, "status", status)
+		},
+	}
 	for _, task := range tasks {
 		consumer := roles.NewConsumer(task, storage, provider)
+		consumer.StartTask(ctx, callbacks)
 		agentID, err := controller.RegisterAgent(ctx, consumer)
 		if err != nil {
 			slog.Error("Error kicking off task", "error", err)
 			panic(err)
 		}
 		slog.Info("Kicked off task", "agent_id", agentID)
-		agentIDs = append(agentIDs, agentID)
 	}
 
 	time.Sleep(5 * time.Second)
 
 	slog.Info("Stopping agents")
-	controlCh <- "stop"
+	err = controller.SendCommand(ctx, "stop")
+	if err != nil {
+		slog.Error("Error stopping agents", "error", err)
+	}
 
 	slog.Info("Waiting for agent controller to stop")
-	msg := <-reportCh
-	slog.Info("Agent controller stopped", "message", msg)
+	<-doneCh
+	slog.Info("Agent controller stopped")
 }

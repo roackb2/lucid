@@ -35,10 +35,7 @@ func (b *BaseAgent) GetID() string {
 	return b.id
 }
 
-func (b *BaseAgent) StartTask(
-	ctx context.Context,
-	callbacks worker.WorkerCallbacks,
-) (*agents.AgentResponse, error) {
+func (b *BaseAgent) StartTask(ctx context.Context, callbacks worker.WorkerCallbacks) (*agents.AgentResponse, error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
 	response, err := b.worker.Chat(ctx, b.task, callbacks)
 	if err != nil {
@@ -52,12 +49,7 @@ func (b *BaseAgent) StartTask(
 	}, nil
 }
 
-func (b *BaseAgent) ResumeTask(
-	ctx context.Context,
-	agentID string,
-	newPrompt *string,
-	callbacks worker.WorkerCallbacks,
-) (*agents.AgentResponse, error) {
+func (b *BaseAgent) ResumeTask(ctx context.Context, agentID string, newPrompt *string, callbacks worker.WorkerCallbacks) (*agents.AgentResponse, error) {
 	slog.Info("Agent: Resuming task", "agentID", agentID, "role", b.role)
 	// Restore the agent state
 	err := b.restoreState(agentID)

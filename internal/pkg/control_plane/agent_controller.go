@@ -21,9 +21,10 @@ type AgentControllerConfig struct {
 type AgentController struct {
 	cfg AgentControllerConfig
 
-	storage storage.Storage
-	tracker AgentTracker
-	bus     NotificationBus
+	storage   storage.Storage
+	tracker   AgentTracker
+	bus       NotificationBus
+	controlCh chan string
 
 	callbacks worker.WorkerCallbacks
 }
@@ -54,12 +55,24 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		storage:   storage,
 		bus:       bus,
 		tracker:   tracker,
+		controlCh: make(chan string),
 		callbacks: callbacks,
 	}
 	return controller
 }
 
-func (c *AgentController) Start(ctx context.Context, controlCh chan string) error {
+func (c *AgentController) SendCommand(ctx context.Context, command string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case c.controlCh <- command:
+		return nil
+	case <-time.After(1 * time.Second):
+		return fmt.Errorf("command timeout")
+	}
+}
+
+func (c *AgentController) Start(ctx context.Context) error {
 	slog.Info("AgentController started")
 	ticker := time.NewTicker(c.cfg.ScanInterval)
 	defer ticker.Stop()
@@ -69,28 +82,25 @@ func (c *AgentController) Start(ctx context.Context, controlCh chan string) erro
 		case <-ctx.Done():
 			slog.Info("AgentController stopping")
 			return ctx.Err()
-		case <-ticker.C:
-			select {
-			case cmd, ok := <-controlCh:
-				if !ok {
-					slog.Error("AgentController control channel closed")
-					return fmt.Errorf("control channel closed")
-				}
-				slog.Info("AgentController received command", "command", cmd)
-				switch cmd {
-				case "stop":
-					slog.Info("AgentController stopping")
-					return nil
-				default:
-					slog.Warn("AgentController received unknown command", "command", cmd)
-					return fmt.Errorf("unknown command: %s", cmd)
-				}
+		case cmd, ok := <-c.controlCh:
+			if !ok {
+				slog.Error("AgentController control channel closed")
+				return fmt.Errorf("control channel closed")
+			}
+			slog.Info("AgentController received command", "command", cmd)
+			switch cmd {
+			case "stop":
+				slog.Info("AgentController stopping")
+				return nil
 			default:
-				slog.Info("AgentController scanning agents")
-				err := c.scanAgents(ctx)
-				if err != nil {
-					slog.Error("AgentController error scanning agents", "error", err)
-				}
+				slog.Warn("AgentController received unknown command", "command", cmd)
+				return fmt.Errorf("unknown command: %s", cmd)
+			}
+		case <-ticker.C:
+			slog.Info("AgentController scanning agents")
+			err := c.scanAgents(ctx)
+			if err != nil {
+				slog.Error("AgentController error scanning agents", "error", err)
 			}
 		}
 	}

@@ -17,6 +17,11 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+const (
+	AgentScanInterval = 10 * time.Millisecond
+	AgentLifeTime     = 10 * time.Millisecond
+)
+
 type AgentControllerTestSuite struct {
 	suite.Suite
 	config              control_plane.AgentControllerConfig
@@ -33,8 +38,8 @@ type AgentControllerTestSuite struct {
 func (suite *AgentControllerTestSuite) SetupTest() {
 	// config.LoadConfig("test")
 	suite.config = control_plane.AgentControllerConfig{
-		ScanInterval:  1 * time.Second,
-		AgentLifeTime: 5 * time.Minute,
+		ScanInterval:  AgentScanInterval,
+		AgentLifeTime: AgentLifeTime,
 		MaxRespChSize: 65536,
 	}
 	suite.mockCtrl = gomock.NewController(suite.T())
@@ -67,4 +72,37 @@ func (suite *AgentControllerTestSuite) TestRegisterAgent() {
 	agentID, err := agentController.RegisterAgent(context.Background(), suite.mockAgent)
 	suite.NoError(err)
 	suite.Equal("test-agent-id", agentID)
+}
+
+func (suite *AgentControllerTestSuite) TestStart() {
+	suite.mockAgent.EXPECT().GetID().Return("test-agent-id").AnyTimes()
+	agentController := control_plane.NewAgentController(suite.config, suite.mockStorage, suite.mockNotificationBus, suite.mockAgentTracker)
+
+	suite.mockAgentTracker.EXPECT().GetAllTrackings().AnyTimes().Return([]control_plane.AgentTracking{
+		{
+			AgentID:   "test-agent-id",
+			Agent:     suite.mockAgent,
+			Status:    "running",
+			CreatedAt: time.Now().Add(-6 * time.Minute),
+		},
+	})
+
+	suite.mockAgent.EXPECT().SendCommand(gomock.Any(), gomock.Any()).AnyTimes().Return(nil)
+
+	suite.mockAgentTracker.EXPECT().UpdateTracking("test-agent-id", gomock.Any()).AnyTimes().Do(func(agentID string, tracking control_plane.AgentTracking) {
+		suite.Equal("test-agent-id", tracking.AgentID)
+		suite.Equal("asleep", tracking.Status)
+	})
+
+	doneCh := make(chan struct{})
+	go func() {
+		err := agentController.Start(context.Background())
+		suite.NoError(err)
+		doneCh <- struct{}{}
+	}()
+
+	time.Sleep(2 * AgentScanInterval)
+	agentController.SendCommand(context.Background(), "stop")
+
+	<-doneCh
 }
