@@ -109,15 +109,18 @@ func main() {
 
 	time.Sleep(5 * time.Second)
 
+	// Stop scheduler first to prevent registering new agents
+	err = scheduler.SendCommand(ctx, "stop")
+	if err != nil {
+		slog.Error("Error stopping scheduler", "error", err)
+	}
+
+	time.Sleep(2 * time.Second)
+
 	slog.Info("Stopping agents")
 	err = controller.SendCommand(ctx, "stop")
 	if err != nil {
 		slog.Error("Error stopping agents", "error", err)
-	}
-
-	err = scheduler.SendCommand(ctx, "stop")
-	if err != nil {
-		slog.Error("Error stopping scheduler", "error", err)
 	}
 
 	slog.Info("Waiting for agent controller to stop")

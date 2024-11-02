@@ -100,6 +100,11 @@ func (c *AgentControllerImpl) Start(ctx context.Context) error {
 			switch cmd {
 			case "stop":
 				slog.Info("AgentController stopping")
+				err := c.terminateAllAgents(ctx)
+				if err != nil {
+					slog.Error("AgentController error terminating all agents", "error", err)
+				}
+				// TODO: Controller should stop only when all agents are asleep
 				return nil
 			default:
 				slog.Warn("AgentController received unknown command", "command", cmd)
@@ -126,8 +131,10 @@ func (c *AgentControllerImpl) scanAgents(ctx context.Context) error {
 				slog.Error("AgentController error putting agent to sleep", "agent_id", tracking.AgentID, "error", err)
 				return err
 			}
+		} else if tracking.Agent.GetStatus() == worker.StatusAsleep {
+			slog.Info("AgentController agent is asleep, removing tracking", "agent_id", tracking.AgentID)
+			c.tracker.RemoveTracking(tracking.AgentID)
 		}
-		// TODO: Delete tracking if agent is asleep
 	}
 	return nil
 }
@@ -149,6 +156,17 @@ func (c *AgentControllerImpl) putAgentToSleep(ctx context.Context, tracking Agen
 		CreatedAt: tracking.CreatedAt,
 	})
 	slog.Info("AgentController updated tracking", "agent_id", tracking.AgentID)
+	return nil
+}
+
+func (c *AgentControllerImpl) terminateAllAgents(ctx context.Context) error {
+	for _, tracking := range c.tracker.GetAllTrackings() {
+		err := c.putAgentToSleep(ctx, tracking)
+		if err != nil {
+			slog.Error("AgentController error terminating agent", "agent_id", tracking.AgentID, "error", err)
+			return err
+		}
+	}
 	return nil
 }
 
