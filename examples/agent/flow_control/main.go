@@ -77,15 +77,27 @@ func main() {
 
 	time.Sleep(300 * time.Millisecond)
 
-	consumer.SendCommand(worker.CmdPause)
+	err = consumer.SendCommand(context.Background(), worker.CmdPause)
+	if err != nil {
+		slog.Error("Consumer error sending command", "error", err)
+		panic(err)
+	}
 
 	time.Sleep(300 * time.Millisecond)
 
-	consumer.SendCommand(worker.CmdResume)
+	err = consumer.SendCommand(context.Background(), worker.CmdResume)
+	if err != nil {
+		slog.Error("Consumer error sending command", "error", err)
+		panic(err)
+	}
 
 	time.Sleep(300 * time.Millisecond)
 
-	consumer.SendCommand(worker.CmdSleep)
+	err = consumer.SendCommand(context.Background(), worker.CmdSleep)
+	if err != nil {
+		slog.Error("Consumer error sending command", "error", err)
+		panic(err)
+	}
 
 	slog.Info("Done")
 }

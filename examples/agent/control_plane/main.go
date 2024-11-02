@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
+	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
 	"github.com/roackb2/lucid/internal/pkg/utils"
@@ -68,7 +68,8 @@ func main() {
 	provider := providers.NewOpenAIChatProvider(client)
 	agentIDs := []string{}
 	for _, task := range tasks {
-		agentID, err := controller.KickoffTask(ctx, fmt.Sprintf("%s Keep looking for the item until you find it", task), "consumer", provider)
+		consumer := roles.NewConsumer(task, storage, provider)
+		agentID, err := controller.RegisterAgent(ctx, consumer)
 		if err != nil {
 			slog.Error("Error kicking off task", "error", err)
 			panic(err)

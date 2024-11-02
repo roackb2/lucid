@@ -62,8 +62,8 @@ func (s *WorkerTestSuite) TestNewWorker() {
 	assert.NotNil(s.T(), s.worker)
 	assert.Equal(s.T(), &s.id, s.worker.ID)
 	assert.Equal(s.T(), s.role, s.worker.Role)
-	assert.NotNil(s.T(), s.worker.PersistTools)
-	assert.NotNil(s.T(), s.worker.FlowTools)
+	assert.NotNil(s.T(), s.worker.persistTools)
+	assert.NotNil(s.T(), s.worker.flowTools)
 	assert.NotNil(s.T(), s.worker.controlCh)
 }
 
@@ -72,6 +72,10 @@ func (s *WorkerTestSuite) TestChat() {
 	s.mockProvider.EXPECT().
 		Chat(gomock.Any()).
 		Return(s.mockReportResponse, nil)
+
+	s.mockStorage.EXPECT().
+		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
 
 	s.mockStorage.EXPECT().
 		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).

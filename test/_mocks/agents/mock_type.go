@@ -42,6 +42,18 @@ func (m *MockAgent) EXPECT() *MockAgentMockRecorder {
 	return m.recorder
 }
 
+// Close mocks base method.
+func (m *MockAgent) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockAgentMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockAgent)(nil).Close))
+}
+
 // GetID mocks base method.
 func (m *MockAgent) GetID() string {
 	m.ctrl.T.Helper()
@@ -54,6 +66,20 @@ func (m *MockAgent) GetID() string {
 func (mr *MockAgentMockRecorder) GetID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetID", reflect.TypeOf((*MockAgent)(nil).GetID))
+}
+
+// GetStatus mocks base method.
+func (m *MockAgent) GetStatus() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStatus")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetStatus indicates an expected call of GetStatus.
+func (mr *MockAgentMockRecorder) GetStatus() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatus", reflect.TypeOf((*MockAgent)(nil).GetStatus))
 }
 
 // PersistState mocks base method.
@@ -86,15 +112,17 @@ func (mr *MockAgentMockRecorder) ResumeTask(ctx, agentID, newPrompt, callbacks a
 }
 
 // SendCommand mocks base method.
-func (m *MockAgent) SendCommand(command string) {
+func (m *MockAgent) SendCommand(ctx context.Context, command string) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SendCommand", command)
+	ret := m.ctrl.Call(m, "SendCommand", ctx, command)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // SendCommand indicates an expected call of SendCommand.
-func (mr *MockAgentMockRecorder) SendCommand(command any) *gomock.Call {
+func (mr *MockAgentMockRecorder) SendCommand(ctx, command any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCommand", reflect.TypeOf((*MockAgent)(nil).SendCommand), command)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCommand", reflect.TypeOf((*MockAgent)(nil).SendCommand), ctx, command)
 }
 
 // StartTask mocks base method.

@@ -116,11 +116,21 @@ type Worker interface {
 	// SendCommand sends a command to the Worker.
 	//
 	// Parameters:
+	// - ctx: The context used for cancellation and timeouts.
 	// - command: The command to send to the Worker.
+	//
+	// Returns:
+	// - An error if the command could not be sent.
 	//
 	// Note:
 	// Ensure that the Worker is running before sending commands.
-	SendCommand(command string)
+	SendCommand(ctx context.Context, command string) error
+
+	// GetStatus returns the current status of the Worker.
+	//
+	// Returns:
+	// - The current status of the Worker.
+	GetStatus() string
 
 	// Serialize serializes the Worker's state to a byte slice.
 	//

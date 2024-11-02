@@ -7,16 +7,9 @@ import (
 	"time"
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
-	"github.com/roackb2/lucid/internal/pkg/agents/providers"
-	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
-)
-
-var (
-	// Exported for testing
-	NewAgentFunc = newAgent
 )
 
 type AgentControllerConfig struct {
@@ -72,13 +65,11 @@ func (c *AgentController) Start(ctx context.Context, controlCh chan string) erro
 	defer ticker.Stop()
 
 	for {
-		slog.Info("AgentController waiting for command or ticker")
 		select {
 		case <-ctx.Done():
 			slog.Info("AgentController stopping")
 			return ctx.Err()
 		case <-ticker.C:
-			slog.Info("AgentController ticker")
 			select {
 			case cmd, ok := <-controlCh:
 				if !ok {
@@ -89,7 +80,6 @@ func (c *AgentController) Start(ctx context.Context, controlCh chan string) erro
 				switch cmd {
 				case "stop":
 					slog.Info("AgentController stopping")
-					// c.terminateAgents()
 					return nil
 				default:
 					slog.Warn("AgentController received unknown command", "command", cmd)
@@ -97,27 +87,37 @@ func (c *AgentController) Start(ctx context.Context, controlCh chan string) erro
 				}
 			default:
 				slog.Info("AgentController scanning agents")
-				c.scanAgents()
+				err := c.scanAgents(ctx)
+				if err != nil {
+					slog.Error("AgentController error scanning agents", "error", err)
+				}
 			}
 		}
-		slog.Info("AgentController done with ticker")
 	}
 }
 
-func (c *AgentController) scanAgents() {
+func (c *AgentController) scanAgents(ctx context.Context) error {
 	for _, tracking := range c.tracker.GetAllTrackings() {
 		agentAwakeDuration := time.Since(tracking.CreatedAt)
 		slog.Info("AgentController scanning agent", "agent_id", tracking.AgentID, "created_at", tracking.CreatedAt, "agent_awake_duration", agentAwakeDuration.String())
 		if agentAwakeDuration > c.cfg.AgentLifeTime {
 			slog.Info("AgentController agent lifetime exceeded", "agent_id", tracking.AgentID, "created_at", tracking.CreatedAt, "agent_awake_duration", agentAwakeDuration.String())
-			c.putAgentToSleep(tracking)
+			err := c.putAgentToSleep(ctx, tracking)
+			if err != nil {
+				slog.Error("AgentController error putting agent to sleep", "agent_id", tracking.AgentID, "error", err)
+				return err
+			}
 		}
 	}
+	return nil
 }
 
-func (c *AgentController) putAgentToSleep(tracking AgentTracking) {
+func (c *AgentController) putAgentToSleep(ctx context.Context, tracking AgentTracking) error {
 	slog.Info("AgentController putting agent to sleep", "agent_id", tracking.AgentID)
-	tracking.Agent.SendCommand(worker.CmdSleep)
+	err := tracking.Agent.SendCommand(ctx, worker.CmdSleep)
+	if err != nil {
+		slog.Error("AgentController error sending command", "agent_id", tracking.AgentID, "error", err)
+	}
 	slog.Info("AgentController agent terminated", "agent_id", tracking.AgentID)
 	c.tracker.UpdateTracking(tracking.AgentID, AgentTracking{
 		AgentID: tracking.AgentID,
@@ -128,44 +128,11 @@ func (c *AgentController) putAgentToSleep(tracking AgentTracking) {
 		CreatedAt: tracking.CreatedAt,
 	})
 	slog.Info("AgentController updated tracking", "agent_id", tracking.AgentID)
+	return nil
 }
 
-func (c *AgentController) terminateAgents() {
-	for _, tracking := range c.tracker.GetAllTrackings() {
-		slog.Info("AgentController terminating agent", "agent_id", tracking.AgentID)
-		tracking.Agent.SendCommand(worker.CmdSleep)
-	}
-}
-
-func newAgent(task string, role string, storage storage.Storage, provider providers.ChatProvider) (agents.Agent, error) {
-	switch role {
-	case worker.RolePublisher:
-		return roles.NewPublisher(task, storage, provider), nil
-	case worker.RoleConsumer:
-		return roles.NewConsumer(task, storage, provider), nil
-	default:
-		return nil, fmt.Errorf("invalid agent role: %s", role)
-	}
-}
-
-func (c *AgentController) KickoffTask(ctx context.Context, task string, role string, provider providers.ChatProvider) (string, error) {
-	slog.Info("AgentController kicking off task", "task", task, "role", role)
-	agent, err := NewAgentFunc(task, role, c.storage, provider)
-	if err != nil {
-		return "", err
-	}
-
-	go func() {
-		slog.Info("AgentController starting agent task")
-		resp, err := agent.StartTask(ctx, c.callbacks)
-		if err != nil {
-			slog.Error("AgentController error starting task", "error", err)
-		}
-		slog.Info("AgentController writing response to bus", "response", resp)
-		c.bus.WriteResponse(resp)
-	}()
-
-	slog.Info("AgentController adding agent to tracker", "agent_id", agent.GetID())
+func (c *AgentController) RegisterAgent(ctx context.Context, agent agents.Agent) (string, error) {
+	slog.Info("AgentController registering agent", "agent_id", agent.GetID())
 	c.tracker.AddTracking(agent.GetID(), AgentTracking{
 		AgentID:   agent.GetID(),
 		Agent:     agent,

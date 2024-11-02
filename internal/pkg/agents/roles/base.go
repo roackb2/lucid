@@ -76,8 +76,8 @@ func (b *BaseAgent) ResumeTask(
 	}, nil
 }
 
-func (b *BaseAgent) SendCommand(command string) {
-	b.worker.SendCommand(command)
+func (b *BaseAgent) SendCommand(ctx context.Context, command string) error {
+	return b.worker.SendCommand(ctx, command)
 }
 
 func (b *BaseAgent) PersistState() error {
@@ -99,6 +99,10 @@ func (b *BaseAgent) restoreState(agentID string) error {
 		return err
 	}
 	return nil
+}
+
+func (b *BaseAgent) GetStatus() string {
+	return b.worker.GetStatus()
 }
 
 func (b *BaseAgent) Close() {

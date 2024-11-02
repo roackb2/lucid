@@ -16,25 +16,23 @@ import (
 )
 
 const (
-	SleepInterval = 1 * time.Second
+	SleepInterval = 500 * time.Millisecond
 	ControlChSize = 10
 )
 
 type WorkerImpl struct {
-	chatProvider providers.ChatProvider
-	storage      storage.Storage
-	stateMachine *fsm.FSM
-	controlCh    chan string
-	callbacks    WorkerCallbacks
+	chatProvider providers.ChatProvider `json:"-"`
+	storage      storage.Storage        `json:"-"`
+	stateMachine *fsm.FSM               `json:"-"` // FSM already implements mutex
+	controlCh    chan string            `json:"-"`
+	callbacks    WorkerCallbacks        `json:"-"`
+	messageMux   sync.RWMutex           `json:"-"`
+	persistTools *tools.PersistTool     `json:"-"`
+	flowTools    *tools.FlowTool        `json:"-"`
 
-	stateMachineMux sync.Mutex
-	messageMux      sync.Mutex
-
-	ID           *string                 `json:"id,required"`
-	Role         string                  `json:"role,required"`
-	Messages     []providers.ChatMessage `json:"messages"`
-	PersistTools *tools.PersistTool
-	FlowTools    *tools.FlowTool
+	ID       *string                 `json:"id,required"`
+	Role     string                  `json:"role,required"`
+	Messages []providers.ChatMessage `json:"messages"`
 }
 
 func NewWorker(id *string, role string, storage storage.Storage, chatProvider providers.ChatProvider) *WorkerImpl {
@@ -46,14 +44,12 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 		storage:      storage,
 		stateMachine: nil, // Should init when start or resume task
 		controlCh:    make(chan string, ControlChSize),
+		persistTools: persistTool,
+		flowTools:    flowTool,
+		messageMux:   sync.RWMutex{},
 
-		stateMachineMux: sync.Mutex{},
-		messageMux:      sync.Mutex{},
-
-		ID:           id,
-		Role:         role,
-		PersistTools: persistTool,
-		FlowTools:    flowTool,
+		ID:   id,
+		Role: role,
 	}
 }
 
@@ -62,9 +58,29 @@ func (w *WorkerImpl) SetControlCh(ch chan string) {
 	w.controlCh = ch
 }
 
+func (w *WorkerImpl) atomicGetMessages() []providers.ChatMessage {
+	w.messageMux.RLock()
+	defer w.messageMux.RUnlock()
+	messagesCopy := make([]providers.ChatMessage, len(w.Messages))
+	copy(messagesCopy, w.Messages)
+	return messagesCopy
+}
+
+func (w *WorkerImpl) atomicAppendMessage(msg providers.ChatMessage) {
+	w.messageMux.Lock()
+	defer w.messageMux.Unlock()
+	w.Messages = append(w.Messages, msg)
+}
+
+func (w *WorkerImpl) GetStatus() string {
+	if w.stateMachine == nil {
+		return StatusAsleep
+	}
+	return w.stateMachine.Current()
+}
+
 func (w *WorkerImpl) Close() {
 	slog.Info("Worker: Closing control channel", "agentID", *w.ID, "role", w.Role)
-	close(w.controlCh)
 }
 
 func (w *WorkerImpl) Chat(
@@ -74,13 +90,14 @@ func (w *WorkerImpl) Chat(
 ) (string, error) {
 	w.callbacks = callbacks
 	w.initAgentStateMachine()
-	w.Messages = []providers.ChatMessage{{
+	w.atomicAppendMessage(providers.ChatMessage{
 		Content: &SystemPrompt,
 		Role:    "system",
-	}, {
+	})
+	w.atomicAppendMessage(providers.ChatMessage{
 		Content: &prompt,
 		Role:    "user",
-	}}
+	})
 	// Save initial state
 	if err := w.PersistState(); err != nil {
 		slog.Error("Worker: Failed to persist state", "error", err)
@@ -96,7 +113,7 @@ func (w *WorkerImpl) ResumeChat(
 	w.callbacks = callbacks
 	w.initAgentStateMachine()
 	if newPrompt != nil {
-		w.appendMessage(providers.ChatMessage{
+		w.atomicAppendMessage(providers.ChatMessage{
 			Content: newPrompt,
 			Role:    "user",
 		})
@@ -114,7 +131,7 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 		return "", fmt.Errorf("control channel not initialized")
 	}
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(SleepInterval)
 	defer ticker.Stop()
 
 	for {
@@ -123,45 +140,46 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 		case <-ctx.Done():
 			slog.Info("Worker: context done")
 			return "", ctx.Err()
+		case cmd, ok := <-w.controlCh:
+			if !ok {
+				slog.Error("Worker: control channel closed")
+				return "", fmt.Errorf("control channel closed")
+			}
+			slog.Info("Worker: received command", "command", cmd)
+			if err := w.stateMachine.Event(context.Background(), cmd); err != nil {
+				slog.Error("Error processing event", "error", err)
+			}
 		case <-ticker.C:
-			slog.Info("Worker: ticker")
-			select {
-			case cmd, ok := <-w.controlCh:
-				if !ok {
-					slog.Error("Worker: control channel closed")
-					return "", fmt.Errorf("control channel closed")
+			status := w.GetStatus()
+			slog.Info("Worker: current state", "agentID", *w.ID, "role", w.Role, "state", status)
+			switch status {
+			case StatusRunning:
+				if response := w.getAgentResponse(); response != "" {
+					return response, nil
 				}
-				slog.Info("Worker: received command", "command", cmd)
-				w.stateMachineMux.Lock()
-				err := w.stateMachine.Event(context.Background(), cmd)
-				w.stateMachineMux.Unlock()
-				slog.Info("Worker: processed command", "command", cmd, "error", err)
-				if err != nil {
-					slog.Error("Error processing event", "error", err)
-				}
-			default:
-				slog.Info("Worker: current state", "agentID", *w.ID, "role", w.Role, "state", w.getStatus())
-				switch w.getStatus() {
-				case StatusRunning:
-					if response := w.getAgentResponse(); response != "" {
-						return response, nil
-					}
-				case StatusPaused:
-					// Do nothing; the ticker handles pacing
-				case StatusAsleep:
-					return "", nil
-				}
+			case StatusPaused:
+				// Do nothing; the ticker handles pacing
+			case StatusAsleep:
+				return "", nil
 			}
 		}
 	}
 }
 
-func (w *WorkerImpl) SendCommand(command string) {
+func (w *WorkerImpl) SendCommand(ctx context.Context, command string) error {
 	if w.controlCh == nil {
 		slog.Error("Worker: Control channel not initialized", "agentID", *w.ID, "role", w.Role)
-		return
+		return nil
 	}
-	w.controlCh <- command
+	select {
+	case w.controlCh <- command:
+		slog.Info("Worker: Sent command", "agentID", *w.ID, "role", w.Role, "command", command)
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("context canceled, cannot send command")
+	case <-time.After(1 * time.Second):
+		return fmt.Errorf("sending command timed out")
+	}
 }
 
 func (w *WorkerImpl) initAgentStateMachine() {
@@ -205,7 +223,8 @@ func (w *WorkerImpl) cleanUp() {
 
 func (w *WorkerImpl) getAgentResponse() string {
 	// Ask the LLM
-	agentResponse, err := w.chatProvider.Chat(w.Messages)
+	messages := w.atomicGetMessages()
+	agentResponse, err := w.chatProvider.Chat(messages)
 	if err != nil {
 		slog.Error("Agent chat error", "role", w.Role, "error", err)
 		return ""
@@ -217,13 +236,14 @@ func (w *WorkerImpl) getAgentResponse() string {
 	if len(agentResponse.ToolCalls) > 0 {
 		msg.ToolCall = &agentResponse.ToolCalls[0]
 	}
-	w.appendMessage(msg)
+	w.atomicAppendMessage(msg)
 
 	// Handle tool calls
 	finalResponse := w.handleToolCalls(agentResponse.ToolCalls)
 	slog.Info("Agent final response", "role", w.Role, "response", finalResponse)
 
-	w.debugStruct("Agent chat messages", w.Messages)
+	messages = w.atomicGetMessages()
+	w.debugStruct("Agent chat messages", messages)
 
 	return finalResponse
 }
@@ -254,38 +274,19 @@ func (w *WorkerImpl) handleSingleToolCall(
 	slog.Info("Agent tool call", "role", w.Role, "tool_call", funcName)
 
 	toolCallFuncMap := map[string]func(toolCall providers.ToolCall) string{
-		"save_content":   w.PersistTools.SaveContent,
-		"search_content": w.PersistTools.SearchContent,
-		"wait":           w.FlowTools.Wait,
-		"report":         w.FlowTools.Report,
+		"save_content":   w.persistTools.SaveContent,
+		"search_content": w.persistTools.SearchContent,
+		"wait":           w.flowTools.Wait,
+		"report":         w.flowTools.Report,
 	}
 	toolCallResult = toolCallFuncMap[funcName](toolCall)
-	w.appendMessage(providers.ChatMessage{
+	w.atomicAppendMessage(providers.ChatMessage{
 		Content:  &toolCallResult,
 		Role:     "tool",
 		ToolCall: &toolCall,
 	})
 
 	return toolCallResult
-}
-
-func (w *WorkerImpl) appendMessage(msg providers.ChatMessage) {
-	w.messageMux.Lock()
-	defer w.messageMux.Unlock()
-	w.Messages = append(w.Messages, msg)
-}
-
-func (w *WorkerImpl) getStatus() string {
-	slog.Info("Worker: Getting status", "agentID", *w.ID, "role", w.Role)
-	w.stateMachineMux.Lock()
-	defer w.stateMachineMux.Unlock()
-	if w.stateMachine == nil {
-		slog.Info("Worker: State machine is nil", "agentID", *w.ID, "role", w.Role)
-		return StatusAsleep
-	}
-	status := w.stateMachine.Current()
-	slog.Info("Worker: Got status", "agentID", *w.ID, "role", w.Role, "status", status)
-	return status
 }
 
 func (w *WorkerImpl) PersistState() error {
@@ -296,7 +297,7 @@ func (w *WorkerImpl) PersistState() error {
 		return err
 	}
 	now := time.Now()
-	err = w.storage.SaveAgentState(*w.ID, state, w.getStatus(), nil, &now)
+	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), nil, &now)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
 		return err
@@ -318,7 +319,7 @@ func (w *WorkerImpl) RestoreState(agentID string) error {
 	}
 	now := time.Now()
 	// Awakening agent and update its status accordingly
-	err = w.storage.SaveAgentState(*w.ID, state, w.getStatus(), &now, nil)
+	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), &now, nil)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
 		return err
