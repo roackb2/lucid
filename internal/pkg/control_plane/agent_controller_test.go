@@ -90,22 +90,22 @@ func (suite *AgentControllerTestSuite) TestStart() {
 		},
 	})
 
-	suite.mockAgent.EXPECT().SendCommand(gomock.Any(), worker.CmdTerminate).Return(nil)
+	suite.mockAgent.EXPECT().SendCommand(gomock.Any(), worker.CmdSleep).Return(nil)
 	suite.mockAgentTracker.EXPECT().UpdateTracking("test-agent-id", gomock.Any()).Do(func(agentID string, tracking control_plane.AgentTracking) {
 		suite.Equal("test-agent-id", tracking.AgentID)
-		suite.Equal(worker.StatusTerminated, tracking.Status)
+		suite.Equal(worker.StatusAsleep, tracking.Status)
 	})
 
-	// Second run, agent is terminated
+	// Second run, agent is asleep
 	suite.mockAgentTracker.EXPECT().GetAllTrackings().Return([]control_plane.AgentTracking{
 		{
 			AgentID:   "test-agent-id",
 			Agent:     suite.mockAgent,
-			Status:    worker.StatusTerminated,
+			Status:    worker.StatusAsleep,
 			CreatedAt: time.Now().Add(-6 * time.Minute),
 		},
 	})
-	suite.mockAgent.EXPECT().GetStatus().Return(worker.StatusTerminated)
+	suite.mockAgent.EXPECT().GetStatus().Return(worker.StatusAsleep)
 	suite.mockAgentTracker.EXPECT().RemoveTracking("test-agent-id")
 
 	// For following, no tracking is returned

@@ -34,6 +34,8 @@ const (
 	CmdPause = "pause"
 	// CmdResume instructs the Worker to resume execution.
 	CmdResume = "resume"
+	// CmdSleep instructs the Worker to put itself to sleep.
+	CmdSleep = "sleep"
 	// CmdTerminate instructs the Worker to persist its state and terminate.
 	CmdTerminate = "terminate"
 )
@@ -44,7 +46,9 @@ const (
 	StatusRunning = "running"
 	// StatusPaused indicates the Worker is currently paused.
 	StatusPaused = "paused"
-	// StatusTerminated indicates the Worker has terminated.
+	// StatusAsleep indicates the Worker is currently put to sleep by the control plane.
+	StatusAsleep = "asleep"
+	// StatusTerminated indicates the Worker has final response and terminated.
 	StatusTerminated = "terminated"
 )
 
@@ -57,6 +61,8 @@ const (
 	OnPause WorkerEventKey = "onPause"
 	// OnResume is the event key for the resume callback.
 	OnResume WorkerEventKey = "onResume"
+	// OnSleep is the event key for the sleep callback.
+	OnSleep WorkerEventKey = "onSleep"
 	// OnTerminate is the event key for the terminate callback.
 	OnTerminate WorkerEventKey = "onTerminate"
 )

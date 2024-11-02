@@ -161,6 +161,8 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 					return response, nil
 				}
 			case StatusPaused:
+				// Do nothing; the ticker handles pacing
+			case StatusAsleep:
 				// Do nothing; the ticker handles pacing and waiting for clean up to finish
 			case StatusTerminated:
 				return "", nil
@@ -169,15 +171,15 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 	}
 }
 
-// SendCommand is idempotent, it will have no effect if the Worker is terminating or terminated.
+// SendCommand is idempotent, it will have no effect if the Worker is asleep or terminated.
 func (w *WorkerImpl) SendCommand(ctx context.Context, command string) error {
 	if w.controlCh == nil {
 		slog.Error("Worker: Control channel not initialized", "agentID", *w.ID, "role", w.Role)
 		return fmt.Errorf("control channel not initialized")
 	}
 	status := w.GetStatus()
-	if status == StatusTerminated {
-		slog.Warn("Worker: Agent is terminated, ignore send command", "agentID", *w.ID, "role", w.Role, "command", command)
+	if status == StatusAsleep || status == StatusTerminated {
+		slog.Warn("Worker: Agent is asleep or terminated, ignore send command", "agentID", *w.ID, "role", w.Role, "command", command)
 		return nil
 	}
 	select {
@@ -197,6 +199,7 @@ func (w *WorkerImpl) initAgentStateMachine() {
 		fsm.Events{
 			{Name: CmdPause, Src: []string{StatusRunning}, Dst: StatusPaused},
 			{Name: CmdResume, Src: []string{StatusPaused}, Dst: StatusRunning},
+			{Name: CmdSleep, Src: []string{StatusRunning, StatusPaused}, Dst: StatusAsleep},
 			{Name: CmdTerminate, Src: []string{StatusRunning, StatusPaused}, Dst: StatusTerminated},
 		},
 		fsm.Callbacks{
@@ -212,6 +215,12 @@ func (w *WorkerImpl) initAgentStateMachine() {
 				if callback, ok := w.callbacks[OnResume]; ok {
 					callback(*w.ID, w.stateMachine.Current())
 				}
+			},
+			"after_sleep": func(_ context.Context, e *fsm.Event) {
+				if callback, ok := w.callbacks[OnSleep]; ok {
+					callback(*w.ID, w.stateMachine.Current())
+				}
+				w.cleanUp()
 			},
 			"after_terminate": func(_ context.Context, e *fsm.Event) {
 				if callback, ok := w.callbacks[OnTerminate]; ok {

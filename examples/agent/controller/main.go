@@ -42,6 +42,23 @@ func main() {
 		}
 	}()
 
+	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
+	provider := providers.NewOpenAIChatProvider(client)
+	callbacks := worker.WorkerCallbacks{
+		worker.OnPause: func(agentID string, status string) {
+			slog.Info("Pausing agent", "agent_id", agentID, "status", status)
+		},
+		worker.OnResume: func(agentID string, status string) {
+			slog.Info("Resuming agent", "agent_id", agentID, "status", status)
+		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("Agent sleeping", "agent_id", agentID, "status", status)
+		},
+		worker.OnTerminate: func(agentID string, status string) {
+			slog.Info("Agent terminating", "agent_id", agentID, "status", status)
+		},
+	}
+
 	controllerConfig := control_plane.AgentControllerConfig{
 		AgentLifeTime: 3 * time.Second,
 	}
@@ -62,30 +79,25 @@ func main() {
 		"Find me a KPOP song with exciting beats.",
 	}
 
-	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
-	provider := providers.NewOpenAIChatProvider(client)
-	callbacks := worker.WorkerCallbacks{
-		worker.OnPause: func(agentID string, status string) {
-			slog.Info("Pausing agent", "agent_id", agentID, "status", status)
-		},
-		worker.OnResume: func(agentID string, status string) {
-			slog.Info("Resuming agent", "agent_id", agentID, "status", status)
-		},
-		worker.OnTerminate: func(agentID string, status string) {
-			slog.Info("Agent terminating", "agent_id", agentID, "status", status)
-		},
-	}
 	for _, task := range tasks {
 		consumer := roles.NewConsumer(task, storage, provider)
-		consumer.StartTask(ctx, callbacks)
+		go func() {
+			resp, err := consumer.StartTask(ctx, callbacks)
+			if err != nil {
+				slog.Error("Error kicking off task", "error", err)
+				panic(err)
+			}
+			slog.Info("Task response", "response", resp)
+		}()
 		agentID, err := controller.RegisterAgent(ctx, consumer)
 		if err != nil {
-			slog.Error("Error kicking off task", "error", err)
+			slog.Error("Error registering agent", "error", err)
 			panic(err)
 		}
-		slog.Info("Kicked off task", "agent_id", agentID)
+		slog.Info("Registered agent", "agent_id", agentID)
 	}
 
+	slog.Info("Waiting for a while before stopping agents")
 	time.Sleep(5 * time.Second)
 
 	slog.Info("Stopping agents")

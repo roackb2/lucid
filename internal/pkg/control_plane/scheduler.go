@@ -84,7 +84,7 @@ func (s *SchedulerImpl) Start(ctx context.Context) error {
 func (s *SchedulerImpl) searchAgents(ctx context.Context) error {
 	params := dbaccess.SearchAgentByAsleepDurationAndStatusParams{
 		Duration:  utils.ConvertToPgInterval(AgentSleepDuration),
-		Statuses:  []string{worker.StatusRunning},
+		Statuses:  []string{worker.StatusAsleep},
 		MaxAgents: BatchProcessAgentNum,
 	}
 	agents, err := dbaccess.Querier.SearchAgentByAsleepDurationAndStatus(ctx, params)

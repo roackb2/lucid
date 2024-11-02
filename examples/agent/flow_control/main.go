@@ -55,6 +55,13 @@ func main() {
 				panic("Consumer state is not running")
 			}
 		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("Agent sleeping", "agent_id", agentID, "status", status)
+			if status != worker.StatusAsleep {
+				slog.Error("Consumer state is not asleep", "state", status)
+				panic("Consumer state is not asleep")
+			}
+		},
 		worker.OnTerminate: func(agentID string, status string) {
 			slog.Info("Status:", "agentID", agentID, "status", status)
 			if status != worker.StatusTerminated {

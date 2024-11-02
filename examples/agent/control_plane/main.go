@@ -70,6 +70,9 @@ func main() {
 		worker.OnResume: func(agentID string, status string) {
 			slog.Info("Resuming agent", "agent_id", agentID, "status", status)
 		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("Agent sleeping", "agent_id", agentID, "status", status)
+		},
 		worker.OnTerminate: func(agentID string, status string) {
 			slog.Info("Agent terminating", "agent_id", agentID, "status", status)
 		},
@@ -78,9 +81,22 @@ func main() {
 	onAgentFound := func(agentID string, agent dbaccess.AgentState) {
 		slog.Info("Scheduler: Agent found", "agentID", agent.AgentID)
 		consumer := roles.NewConsumer("", storage, provider)
-		consumer.ResumeTask(ctx, agent.AgentID, nil, callbacks)
-		controller.RegisterAgent(ctx, consumer)
+		go func() {
+			resp, err := consumer.ResumeTask(ctx, agent.AgentID, nil, callbacks)
+			if err != nil {
+				slog.Error("Error resuming task", "error", err)
+				panic(err)
+			}
+			slog.Info("Task response", "response", resp)
+		}()
+		agentID, err := controller.RegisterAgent(ctx, consumer)
+		if err != nil {
+			slog.Error("Error registering agent", "error", err)
+			panic(err)
+		}
+		slog.Info("Registered agent", "agent_id", agentID)
 	}
+
 	scheduler := control_plane.NewScheduler(ctx, onAgentFound)
 	go func() {
 		defer wg.Done()
@@ -98,7 +114,14 @@ func main() {
 
 	for _, task := range tasks {
 		consumer := roles.NewConsumer(task, storage, provider)
-		consumer.StartTask(ctx, callbacks)
+		go func() {
+			resp, err := consumer.StartTask(ctx, callbacks)
+			if err != nil {
+				slog.Error("Error kicking off task", "error", err)
+				panic(err)
+			}
+			slog.Info("Task response", "response", resp)
+		}()
 		agentID, err := controller.RegisterAgent(ctx, consumer)
 		if err != nil {
 			slog.Error("Error kicking off task", "error", err)

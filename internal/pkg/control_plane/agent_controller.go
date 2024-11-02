@@ -51,6 +51,9 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		worker.OnResume: func(agentID string, status string) {
 			slog.Info("AgentController onResume", "agentID", agentID, "status", status)
 		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("AgentController onSleep", "agentID", agentID, "status", status)
+		},
 		worker.OnTerminate: func(agentID string, status string) {
 			slog.Info("AgentController onTerminate", "agentID", agentID, "status", status)
 		},
@@ -140,8 +143,8 @@ func (c *AgentControllerImpl) scanAgents(ctx context.Context) (bool, error) {
 					return false, err
 				}
 			}
-		} else if status == worker.StatusTerminated {
-			slog.Info("AgentController agent is terminated, removing tracking", "agent_id", tracking.AgentID)
+		} else if status == worker.StatusAsleep || status == worker.StatusTerminated {
+			slog.Info("AgentController agent is asleep or terminated, removing tracking", "agent_id", tracking.AgentID)
 			c.tracker.RemoveTracking(tracking.AgentID)
 		}
 	}
@@ -150,7 +153,7 @@ func (c *AgentControllerImpl) scanAgents(ctx context.Context) (bool, error) {
 
 func (c *AgentControllerImpl) putAgentToSleep(ctx context.Context, tracking AgentTracking) error {
 	slog.Info("AgentController putting agent to sleep", "agent_id", tracking.AgentID)
-	err := tracking.Agent.SendCommand(ctx, worker.CmdTerminate)
+	err := tracking.Agent.SendCommand(ctx, worker.CmdSleep)
 	if err != nil {
 		slog.Error("AgentController error sending command", "agent_id", tracking.AgentID, "error", err)
 	}
@@ -159,7 +162,7 @@ func (c *AgentControllerImpl) putAgentToSleep(ctx context.Context, tracking Agen
 		AgentID: tracking.AgentID,
 		Agent:   tracking.Agent,
 		// IMPORTANT: Do not call GetStatus() here. This would cause a deadlock cuz SendCommand is changing the status as well.
-		Status:    worker.StatusTerminated,
+		Status:    worker.StatusAsleep,
 		CreatedAt: tracking.CreatedAt,
 	})
 	slog.Info("AgentController updated tracking", "agent_id", tracking.AgentID)

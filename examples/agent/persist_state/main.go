@@ -47,6 +47,9 @@ func main() {
 		worker.OnResume: func(agentID string, status string) {
 			slog.Info("Command callback", "agentID", agentID, "status", status)
 		},
+		worker.OnSleep: func(agentID string, status string) {
+			slog.Info("Command callback", "agentID", agentID, "status", status)
+		},
 		worker.OnTerminate: func(agentID string, status string) {
 			slog.Info("Command callback", "agentID", agentID, "status", status)
 		},
