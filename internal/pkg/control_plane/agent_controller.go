@@ -8,6 +8,7 @@ import (
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
+	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
@@ -135,9 +136,9 @@ func (c *AgentController) terminateAgents() {
 func newAgent(task string, role string, storage storage.Storage, provider providers.ChatProvider) (agents.Agent, error) {
 	switch role {
 	case worker.RolePublisher:
-		return agents.NewPublisher(task, storage, provider), nil
+		return roles.NewPublisher(task, storage, provider), nil
 	case worker.RoleConsumer:
-		return agents.NewConsumer(task, storage, provider), nil
+		return roles.NewConsumer(task, storage, provider), nil
 	default:
 		return nil, fmt.Errorf("invalid agent role: %s", role)
 	}

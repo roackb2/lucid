@@ -13,6 +13,7 @@ import (
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
+	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
@@ -50,9 +51,9 @@ func main() {
 		// "Jazz Music for Studying",
 		// "Jazz Music for Working",
 	}
-	publishers := []agents.Publisher{}
+	publishers := []roles.Publisher{}
 	for _, song := range songs {
-		publishers = append(publishers, *agents.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage, provider))
+		publishers = append(publishers, *roles.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage, provider))
 	}
 
 	queries := []string{
@@ -60,9 +61,9 @@ func main() {
 		// "I'm looking for some Jazz music to study to.",
 		// "I need some Jazz music to relax to.",
 	}
-	consumers := []agents.Consumer{}
+	consumers := []roles.Consumer{}
 	for _, query := range queries {
-		consumers = append(consumers, *agents.NewConsumer(query, storage, provider))
+		consumers = append(consumers, *roles.NewConsumer(query, storage, provider))
 	}
 
 	var wg sync.WaitGroup

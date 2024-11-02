@@ -9,8 +9,8 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
-	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
+	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
@@ -38,7 +38,7 @@ func main() {
 	provider := providers.NewOpenAIChatProvider(client)
 
 	// Create a consumer with task that should not finish
-	consumer := agents.NewConsumer("Is there any rock song? Keep searching until you find it.", storage, provider)
+	consumer := roles.NewConsumer("Is there any rock song? Keep searching until you find it.", storage, provider)
 
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {

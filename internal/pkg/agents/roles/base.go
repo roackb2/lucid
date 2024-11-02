@@ -1,10 +1,11 @@
-package agents
+package roles
 
 import (
 	"context"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
@@ -37,14 +38,18 @@ func (b *BaseAgent) GetID() string {
 func (b *BaseAgent) StartTask(
 	ctx context.Context,
 	callbacks worker.WorkerCallbacks,
-) (*AgentResponse, error) {
+) (*agents.AgentResponse, error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
 	response, err := b.worker.Chat(ctx, b.task, callbacks)
 	if err != nil {
 		return nil, err
 	}
 	slog.Info("Agent: Task finished", "role", b.role, "response", response)
-	return &AgentResponse{b.id, b.role, response}, nil
+	return &agents.AgentResponse{
+		Id:      b.id,
+		Role:    b.role,
+		Message: response,
+	}, nil
 }
 
 func (b *BaseAgent) ResumeTask(
@@ -52,7 +57,7 @@ func (b *BaseAgent) ResumeTask(
 	agentID string,
 	newPrompt *string,
 	callbacks worker.WorkerCallbacks,
-) (*AgentResponse, error) {
+) (*agents.AgentResponse, error) {
 	slog.Info("Agent: Resuming task", "agentID", agentID, "role", b.role)
 	// Restore the agent state
 	err := b.restoreState(agentID)
@@ -64,7 +69,11 @@ func (b *BaseAgent) ResumeTask(
 	if err != nil {
 		return nil, err
 	}
-	return &AgentResponse{b.id, b.role, response}, nil
+	return &agents.AgentResponse{
+		Id:      b.id,
+		Role:    b.role,
+		Message: response,
+	}, nil
 }
 
 func (b *BaseAgent) SendCommand(command string) {

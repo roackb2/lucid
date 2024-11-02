@@ -1,4 +1,4 @@
-package agents
+package roles
 
 import (
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
