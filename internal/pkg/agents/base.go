@@ -34,10 +34,6 @@ func (b *BaseAgent) GetID() string {
 	return b.id
 }
 
-func (b *BaseAgent) GetStatus() string {
-	return b.worker.GetStatus()
-}
-
 func (b *BaseAgent) StartTask(
 	ctx context.Context,
 	callbacks worker.WorkerCallbacks,

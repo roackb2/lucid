@@ -115,9 +115,11 @@ func (c *AgentController) putAgentToSleep(tracking AgentTracking) {
 	tracking.Agent.SendCommand(worker.CmdSleep)
 	slog.Info("AgentController agent terminated", "agent_id", tracking.AgentID)
 	c.tracker.UpdateTracking(tracking.AgentID, AgentTracking{
-		AgentID:   tracking.AgentID,
-		Agent:     tracking.Agent,
-		Status:    worker.StatusAsleep, // Assume agent status is updated to prevent race condition
+		AgentID: tracking.AgentID,
+		Agent:   tracking.Agent,
+		// Assume agent status is updated to prevent deadlock
+		// We only need eventually consistency so it's ok to be wrong about the status here.
+		Status:    worker.StatusAsleep,
 		CreatedAt: tracking.CreatedAt,
 	})
 	slog.Info("AgentController updated tracking", "agent_id", tracking.AgentID)

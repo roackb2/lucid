@@ -46,5 +46,4 @@ type Worker interface {
 	Deserialize(state []byte) error
 	PersistState() error
 	RestoreState(agentID string) error
-	GetStatus() string
 }

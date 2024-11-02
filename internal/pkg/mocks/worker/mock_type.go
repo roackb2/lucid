@@ -70,20 +70,6 @@ func (mr *MockWorkerMockRecorder) Deserialize(state any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Deserialize", reflect.TypeOf((*MockWorker)(nil).Deserialize), state)
 }
 
-// GetStatus mocks base method.
-func (m *MockWorker) GetStatus() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStatus")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetStatus indicates an expected call of GetStatus.
-func (mr *MockWorkerMockRecorder) GetStatus() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatus", reflect.TypeOf((*MockWorker)(nil).GetStatus))
-}
-
 // PersistState mocks base method.
 func (m *MockWorker) PersistState() error {
 	m.ctrl.T.Helper()

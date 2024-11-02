@@ -125,8 +125,8 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 					slog.Error("Error processing event", "error", err)
 				}
 			default:
-				slog.Info("Worker: current state", "agentID", *w.ID, "role", w.Role, "state", w.GetStatus())
-				switch w.GetStatus() {
+				slog.Info("Worker: current state", "agentID", *w.ID, "role", w.Role, "state", w.getStatus())
+				switch w.getStatus() {
 				case StatusRunning:
 					if response := w.getAgentResponse(); response != "" {
 						return response, nil
@@ -260,7 +260,7 @@ func (w *WorkerImpl) appendMessage(msg providers.ChatMessage) {
 	w.Messages = append(w.Messages, msg)
 }
 
-func (w *WorkerImpl) GetStatus() string {
+func (w *WorkerImpl) getStatus() string {
 	slog.Info("Worker: Getting status", "agentID", *w.ID, "role", w.Role)
 	w.stateMachineMux.Lock()
 	defer w.stateMachineMux.Unlock()
@@ -281,7 +281,7 @@ func (w *WorkerImpl) PersistState() error {
 		return err
 	}
 	now := time.Now()
-	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), nil, &now)
+	err = w.storage.SaveAgentState(*w.ID, state, w.getStatus(), nil, &now)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
 		return err
@@ -303,7 +303,7 @@ func (w *WorkerImpl) RestoreState(agentID string) error {
 	}
 	now := time.Now()
 	// Awakening agent and update its status accordingly
-	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), &now, nil)
+	err = w.storage.SaveAgentState(*w.ID, state, w.getStatus(), &now, nil)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
 		return err

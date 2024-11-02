@@ -17,6 +17,5 @@ type Agent interface {
 	StartTask(ctx context.Context, callbacks worker.WorkerCallbacks) (*AgentResponse, error)
 	PersistState() error
 	ResumeTask(ctx context.Context, agentID string, newPrompt *string, callbacks worker.WorkerCallbacks) (*AgentResponse, error)
-	GetStatus() string
 	SendCommand(command string)
 }
