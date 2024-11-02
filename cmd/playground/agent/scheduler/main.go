@@ -25,7 +25,8 @@ func main() {
 		panic(err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	controlCh := make(chan string)
 	reportCh := make(chan string)

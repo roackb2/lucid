@@ -23,7 +23,9 @@ func main() {
 		panic(err)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	storage, err := storage.NewRelationalStorage()
 	if err != nil {
 		panic(err)
@@ -48,15 +50,15 @@ func main() {
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
 	go func() {
+		defer close(controlCh)
+		defer close(reportCh)
+
 		err := controller.Start(ctx, controlCh)
 		if err != nil {
 			slog.Error("Error starting controller", "error", err)
 		}
 		slog.Info("Controller done")
 		reportCh <- "done"
-
-		close(controlCh)
-		close(reportCh)
 	}()
 
 	tasks := []string{
@@ -79,18 +81,7 @@ func main() {
 
 	slog.Info("Stopping agents")
 	controlCh <- "stop"
-	// slog.Info("Waiting for agents to terminate")
-	// for _, agentID := range agentIDs {
-	// 	status, err := controller.GetAgentStatus(agentID)
-	// 	if err != nil {
-	// 		slog.Error("Error getting agent status", "error", err)
-	// 		panic(err)
-	// 	}
-	// 	if status != foundation.StatusTerminated {
-	// 		slog.Error("Agent status is not terminated", "agent_id", agentID, "status", status)
-	// 		panic("Agent status is not terminated")
-	// 	}
-	// }
+
 	slog.Info("Waiting for agent controller to stop")
 	msg := <-reportCh
 	slog.Info("Agent controller stopped", "message", msg)
