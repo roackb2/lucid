@@ -2,6 +2,7 @@ package control_plane
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -15,41 +16,63 @@ const (
 )
 
 type Scheduler struct {
+	controlCh chan string
 }
 
 func NewScheduler(ctx context.Context) *Scheduler {
-	return &Scheduler{}
+	return &Scheduler{
+		controlCh: make(chan string),
+	}
 }
 
-func (s *Scheduler) Start(ctx context.Context, controlCh chan string, reportCh chan string, errCh chan error) {
+func (s *Scheduler) SendCommand(ctx context.Context, cmd string) error {
+	if s.controlCh == nil {
+		slog.Error("Scheduler: Control channel not initialized")
+		return nil
+	}
+	select {
+	case s.controlCh <- cmd:
+		slog.Info("Scheduler: Sent command", "command", cmd)
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("context canceled, cannot send command")
+	case <-time.After(1 * time.Second):
+		return fmt.Errorf("sending command timed out")
+	}
+}
+
+func (s *Scheduler) Start(ctx context.Context) error {
 	slog.Info("Scheduler started")
 	ticker := time.NewTicker(ScanInterval)
-	go func(ticker *time.Ticker) {
-		defer ticker.Stop()
+	defer ticker.Stop()
 
-		for {
-			select {
-			case <-ticker.C:
-				slog.Info("Scheduler searching for agents")
-				// TODO: Kick off as goroutine
-				err := s.searchAgents(ctx)
-				if err != nil {
-					slog.Error("Scheduler failed to search agents", "error", err)
-					errCh <- err
-				}
-			case cmd := <-controlCh:
-				slog.Info("Scheduler received command", "command", cmd)
-				if cmd == "stop" {
-					slog.Info("Scheduler stopping")
-					reportCh <- "stop"
-					return
-				}
-			case <-ctx.Done():
-				slog.Info("Scheduler context done")
-				return
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Info("Scheduler context done")
+			return ctx.Err()
+		case cmd, ok := <-s.controlCh:
+			if !ok {
+				slog.Error("Scheduler control channel closed")
+				return fmt.Errorf("control channel closed")
+			}
+			slog.Info("Scheduler received command", "command", cmd)
+			switch cmd {
+			case "stop":
+				slog.Info("Scheduler stopping")
+				return nil
+			default:
+				slog.Warn("Scheduler received unknown command", "command", cmd)
+			}
+		case <-ticker.C:
+			slog.Info("Scheduler searching for agents")
+			err := s.searchAgents(ctx)
+			if err != nil {
+				slog.Error("Scheduler failed to search agents", "error", err)
+				return err
 			}
 		}
-	}(ticker)
+	}
 }
 
 func (s *Scheduler) searchAgents(ctx context.Context) error {

@@ -62,13 +62,18 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 }
 
 func (c *AgentController) SendCommand(ctx context.Context, command string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case c.controlCh <- command:
+	if c.controlCh == nil {
+		slog.Error("AgentController: Control channel not initialized")
 		return nil
+	}
+	select {
+	case c.controlCh <- command:
+		slog.Info("AgentController: Sent command", "command", command)
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("context canceled, cannot send command")
 	case <-time.After(1 * time.Second):
-		return fmt.Errorf("command timeout")
+		return fmt.Errorf("sending command timed out")
 	}
 }
 
@@ -118,6 +123,7 @@ func (c *AgentController) scanAgents(ctx context.Context) error {
 				return err
 			}
 		}
+		// TODO: Delete tracking if agent is asleep
 	}
 	return nil
 }
@@ -134,7 +140,7 @@ func (c *AgentController) putAgentToSleep(ctx context.Context, tracking AgentTra
 		Agent:   tracking.Agent,
 		// Assume agent status is updated to prevent deadlock
 		// We only need eventually consistency so it's ok to be wrong about the status here.
-		Status:    worker.StatusAsleep,
+		Status:    tracking.Agent.GetStatus(),
 		CreatedAt: tracking.CreatedAt,
 	})
 	slog.Info("AgentController updated tracking", "agent_id", tracking.AgentID)
