@@ -82,7 +82,7 @@ func (suite *AgentControllerTestSuite) TestStart() {
 		{
 			AgentID:   "test-agent-id",
 			Agent:     suite.mockAgent,
-			Status:    "running",
+			Status:    "asleep",
 			CreatedAt: time.Now().Add(-6 * time.Minute),
 		},
 	})
@@ -91,7 +91,7 @@ func (suite *AgentControllerTestSuite) TestStart() {
 
 	suite.mockAgentTracker.EXPECT().UpdateTracking("test-agent-id", gomock.Any()).AnyTimes().Do(func(agentID string, tracking control_plane.AgentTracking) {
 		suite.Equal("test-agent-id", tracking.AgentID)
-		suite.Equal("asleep", tracking.Status)
+		suite.Equal("running", tracking.Status)
 	})
 
 	doneCh := make(chan struct{})

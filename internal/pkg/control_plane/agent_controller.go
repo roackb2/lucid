@@ -12,13 +12,17 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
+const (
+	AgentControllerControlChSize = 10
+)
+
 type AgentControllerConfig struct {
 	ScanInterval  time.Duration
 	AgentLifeTime time.Duration
 	MaxRespChSize int
 }
 
-type AgentController struct {
+type AgentControllerImpl struct {
 	cfg AgentControllerConfig
 
 	storage   storage.Storage
@@ -29,7 +33,7 @@ type AgentController struct {
 	callbacks worker.WorkerCallbacks
 }
 
-func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus NotificationBus, tracker AgentTracker) *AgentController {
+func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus NotificationBus, tracker AgentTracker) *AgentControllerImpl {
 	scanInterval := utils.GetOrDefault(cfg.ScanInterval, 1*time.Second)
 	agentLifeTime := utils.GetOrDefault(cfg.AgentLifeTime, 5*time.Minute)
 	maxRespChSize := utils.GetOrDefault(cfg.MaxRespChSize, 65536)
@@ -50,18 +54,18 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 			slog.Info("AgentController onSleep", "agentID", agentID, "status", status)
 		},
 	}
-	controller := &AgentController{
+	controller := &AgentControllerImpl{
 		cfg:       mergedCfg,
 		storage:   storage,
 		bus:       bus,
 		tracker:   tracker,
-		controlCh: make(chan string),
+		controlCh: make(chan string, AgentControllerControlChSize),
 		callbacks: callbacks,
 	}
 	return controller
 }
 
-func (c *AgentController) SendCommand(ctx context.Context, command string) error {
+func (c *AgentControllerImpl) SendCommand(ctx context.Context, command string) error {
 	if c.controlCh == nil {
 		slog.Error("AgentController: Control channel not initialized")
 		return nil
@@ -77,7 +81,7 @@ func (c *AgentController) SendCommand(ctx context.Context, command string) error
 	}
 }
 
-func (c *AgentController) Start(ctx context.Context) error {
+func (c *AgentControllerImpl) Start(ctx context.Context) error {
 	slog.Info("AgentController started")
 	ticker := time.NewTicker(c.cfg.ScanInterval)
 	defer ticker.Stop()
@@ -111,7 +115,7 @@ func (c *AgentController) Start(ctx context.Context) error {
 	}
 }
 
-func (c *AgentController) scanAgents(ctx context.Context) error {
+func (c *AgentControllerImpl) scanAgents(ctx context.Context) error {
 	for _, tracking := range c.tracker.GetAllTrackings() {
 		agentAwakeDuration := time.Since(tracking.CreatedAt)
 		slog.Info("AgentController scanning agent", "agent_id", tracking.AgentID, "created_at", tracking.CreatedAt, "agent_awake_duration", agentAwakeDuration.String())
@@ -128,8 +132,9 @@ func (c *AgentController) scanAgents(ctx context.Context) error {
 	return nil
 }
 
-func (c *AgentController) putAgentToSleep(ctx context.Context, tracking AgentTracking) error {
+func (c *AgentControllerImpl) putAgentToSleep(ctx context.Context, tracking AgentTracking) error {
 	slog.Info("AgentController putting agent to sleep", "agent_id", tracking.AgentID)
+	// TODO: Handle sending command timeout issue
 	err := tracking.Agent.SendCommand(ctx, worker.CmdSleep)
 	if err != nil {
 		slog.Error("AgentController error sending command", "agent_id", tracking.AgentID, "error", err)
@@ -138,16 +143,16 @@ func (c *AgentController) putAgentToSleep(ctx context.Context, tracking AgentTra
 	c.tracker.UpdateTracking(tracking.AgentID, AgentTracking{
 		AgentID: tracking.AgentID,
 		Agent:   tracking.Agent,
-		// Assume agent status is updated to prevent deadlock
-		// We only need eventually consistency so it's ok to be wrong about the status here.
-		Status:    tracking.Agent.GetStatus(),
+		// Assume agent status running cuz shutting down would take a while
+		// IMPORTANT: Do not call GetStatus() here. This would cause a deadlock cuz SendCommand is changing the status as well.
+		Status:    worker.StatusRunning,
 		CreatedAt: tracking.CreatedAt,
 	})
 	slog.Info("AgentController updated tracking", "agent_id", tracking.AgentID)
 	return nil
 }
 
-func (c *AgentController) RegisterAgent(ctx context.Context, agent agents.Agent) (string, error) {
+func (c *AgentControllerImpl) RegisterAgent(ctx context.Context, agent agents.Agent) (string, error) {
 	slog.Info("AgentController registering agent", "agent_id", agent.GetID())
 	c.tracker.AddTracking(agent.GetID(), AgentTracking{
 		AgentID:   agent.GetID(),
@@ -159,7 +164,7 @@ func (c *AgentController) RegisterAgent(ctx context.Context, agent agents.Agent)
 	return agent.GetID(), nil
 }
 
-func (c *AgentController) GetAgentStatus(agentID string) (string, error) {
+func (c *AgentControllerImpl) GetAgentStatus(agentID string) (string, error) {
 	tracking, ok := c.tracker.GetTracking(agentID)
 	if !ok {
 		return "", fmt.Errorf("agent not found")

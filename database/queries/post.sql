@@ -1,3 +1,3 @@
 -- name: CreatePost :exec
 INSERT INTO posts (user_id, content)
-VALUES ($1, $2);
+VALUES (@user_id, @content);

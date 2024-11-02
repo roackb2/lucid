@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	SleepInterval = 500 * time.Millisecond
-	ControlChSize = 10
+	SleepInterval       = 500 * time.Millisecond
+	WorkerControlChSize = 10
 )
 
 type WorkerImpl struct {
@@ -43,7 +43,7 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 		chatProvider: chatProvider,
 		storage:      storage,
 		stateMachine: nil, // Should init when start or resume task
-		controlCh:    make(chan string, ControlChSize),
+		controlCh:    make(chan string, WorkerControlChSize),
 		persistTools: persistTool,
 		flowTools:    flowTool,
 		messageMux:   sync.RWMutex{},

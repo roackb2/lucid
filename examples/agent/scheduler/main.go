@@ -30,7 +30,11 @@ func main() {
 
 	doneCh := make(chan struct{})
 
-	scheduler := control_plane.NewScheduler(ctx)
+	onAgentFound := func(agentID string, agent dbaccess.AgentState) {
+		slog.Info("Scheduler: Agent found", "agentID", agent.AgentID)
+	}
+
+	scheduler := control_plane.NewScheduler(ctx, onAgentFound)
 	go func() {
 		err := scheduler.Start(ctx)
 		if err != nil {

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -14,7 +13,6 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
-	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -44,25 +42,28 @@ func main() {
 		}
 	}()
 
-	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
-	provider := providers.NewOpenAIChatProvider(client)
-
 	controllerConfig := control_plane.AgentControllerConfig{
 		AgentLifeTime: 3 * time.Second,
 	}
 	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
 
-	wg := sync.WaitGroup{}
-	wg.Add(2)
+	doneCh := make(chan struct{})
 	go func() {
-		defer wg.Done()
 		err := controller.Start(ctx)
 		if err != nil {
 			slog.Error("Error starting controller", "error", err)
 		}
 		slog.Info("Controller done")
+		doneCh <- struct{}{}
 	}()
 
+	tasks := []string{
+		"Is there any rock song with the word 'love' in the title?",
+		"Find me a KPOP song with exciting beats.",
+	}
+
+	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
+	provider := providers.NewOpenAIChatProvider(client)
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {
 			slog.Info("Pausing agent", "agent_id", agentID, "status", status)
@@ -74,28 +75,6 @@ func main() {
 			slog.Info("Agent sleeping", "agent_id", agentID, "status", status)
 		},
 	}
-
-	onAgentFound := func(agentID string, agent dbaccess.AgentState) {
-		slog.Info("Scheduler: Agent found", "agentID", agent.AgentID)
-		consumer := roles.NewConsumer("", storage, provider)
-		consumer.ResumeTask(ctx, agent.AgentID, nil, callbacks)
-		controller.RegisterAgent(ctx, consumer)
-	}
-	scheduler := control_plane.NewScheduler(ctx, onAgentFound)
-	go func() {
-		defer wg.Done()
-		err := scheduler.Start(ctx)
-		if err != nil {
-			slog.Error("Scheduler failed", "error", err)
-			panic(err)
-		}
-	}()
-
-	tasks := []string{
-		"Is there any rock song with the word 'love' in the title?",
-		"Find me a KPOP song with exciting beats.",
-	}
-
 	for _, task := range tasks {
 		consumer := roles.NewConsumer(task, storage, provider)
 		consumer.StartTask(ctx, callbacks)
@@ -115,13 +94,7 @@ func main() {
 		slog.Error("Error stopping agents", "error", err)
 	}
 
-	err = scheduler.SendCommand(ctx, "stop")
-	if err != nil {
-		slog.Error("Error stopping scheduler", "error", err)
-	}
-
 	slog.Info("Waiting for agent controller to stop")
-
-	wg.Wait()
+	<-doneCh
 	slog.Info("Agent controller stopped")
 }

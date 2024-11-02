@@ -1,13 +1,13 @@
 -- name: CreateUser :exec
 INSERT INTO users (username, email, password_hash)
-VALUES ($1, $2, $3);
+VALUES (@username, @email, @password_hash);
 
 -- name: GetUserByEmail :one
-SELECT * FROM users WHERE email = $1;
+SELECT * FROM users WHERE email = @email;
 
 -- name: GetUserByID :one
-SELECT * FROM users WHERE id = $1;
+SELECT * FROM users WHERE id = @id;
 
 -- name: UpdateUser :exec
-UPDATE users SET username = $2, email = $3, password_hash = $4 WHERE id = $1;
+UPDATE users SET username = @username, email = @email, password_hash = @password_hash WHERE id = @id;
 

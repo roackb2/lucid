@@ -12,3 +12,7 @@ func ConvertToPgTimestamp(t *time.Time) pgtype.Timestamp {
 	}
 	return pgtype.Timestamp{Time: *t, Valid: true}
 }
+
+func ConvertToPgInterval(d time.Duration) pgtype.Interval {
+	return pgtype.Interval{Microseconds: d.Microseconds(), Valid: true}
+}

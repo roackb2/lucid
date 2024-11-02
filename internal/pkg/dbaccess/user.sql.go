@@ -62,22 +62,22 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 }
 
 const updateUser = `-- name: UpdateUser :exec
-UPDATE users SET username = $2, email = $3, password_hash = $4 WHERE id = $1
+UPDATE users SET username = $1, email = $2, password_hash = $3 WHERE id = $4
 `
 
 type UpdateUserParams struct {
-	ID           int32
 	Username     string
 	Email        string
 	PasswordHash string
+	ID           int32
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
 	_, err := q.db.Exec(ctx, updateUser,
-		arg.ID,
 		arg.Username,
 		arg.Email,
 		arg.PasswordHash,
+		arg.ID,
 	)
 	return err
 }

@@ -35,7 +35,9 @@ func (q *Queries) CreateAgentState(ctx context.Context, arg CreateAgentStatePara
 }
 
 const getAgentState = `-- name: GetAgentState :one
-SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at FROM agent_states WHERE agent_id = $1
+SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
+FROM agent_states
+WHERE agent_id = $1
 `
 
 func (q *Queries) GetAgentState(ctx context.Context, agentID string) (AgentState, error) {
@@ -55,11 +57,20 @@ func (q *Queries) GetAgentState(ctx context.Context, agentID string) (AgentState
 }
 
 const searchAgentByAsleepDuration = `-- name: SearchAgentByAsleepDuration :many
-SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at FROM agent_states WHERE asleep_at < $1
+SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
+FROM agent_states
+WHERE asleep_at + $1::interval < now()
+ORDER BY asleep_at ASC
+LIMIT $2
 `
 
-func (q *Queries) SearchAgentByAsleepDuration(ctx context.Context, asleepAt pgtype.Timestamp) ([]AgentState, error) {
-	rows, err := q.db.Query(ctx, searchAgentByAsleepDuration, asleepAt)
+type SearchAgentByAsleepDurationParams struct {
+	Duration  pgtype.Interval
+	MaxAgents int32
+}
+
+func (q *Queries) SearchAgentByAsleepDuration(ctx context.Context, arg SearchAgentByAsleepDurationParams) ([]AgentState, error) {
+	rows, err := q.db.Query(ctx, searchAgentByAsleepDuration, arg.Duration, arg.MaxAgents)
 	if err != nil {
 		return nil, err
 	}
@@ -88,11 +99,20 @@ func (q *Queries) SearchAgentByAsleepDuration(ctx context.Context, asleepAt pgty
 }
 
 const searchAgentByAwakeDuration = `-- name: SearchAgentByAwakeDuration :many
-SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at FROM agent_states WHERE awakened_at < $1
+SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
+FROM agent_states
+WHERE awakened_at + $1::interval < now()
+ORDER BY awakened_at ASC
+LIMIT $2
 `
 
-func (q *Queries) SearchAgentByAwakeDuration(ctx context.Context, awakenedAt pgtype.Timestamp) ([]AgentState, error) {
-	rows, err := q.db.Query(ctx, searchAgentByAwakeDuration, awakenedAt)
+type SearchAgentByAwakeDurationParams struct {
+	Duration  pgtype.Interval
+	MaxAgents int32
+}
+
+func (q *Queries) SearchAgentByAwakeDuration(ctx context.Context, arg SearchAgentByAwakeDurationParams) ([]AgentState, error) {
+	rows, err := q.db.Query(ctx, searchAgentByAwakeDuration, arg.Duration, arg.MaxAgents)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +141,9 @@ func (q *Queries) SearchAgentByAwakeDuration(ctx context.Context, awakenedAt pgt
 }
 
 const searchAgentByStatus = `-- name: SearchAgentByStatus :many
-SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at FROM agent_states WHERE status = $1
+SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
+FROM agent_states
+WHERE status = $1
 `
 
 func (q *Queries) SearchAgentByStatus(ctx context.Context, status string) ([]AgentState, error) {
@@ -154,24 +176,26 @@ func (q *Queries) SearchAgentByStatus(ctx context.Context, status string) ([]Age
 }
 
 const updateAgentState = `-- name: UpdateAgentState :exec
-UPDATE agent_states SET status = $2, state = $3, awakened_at = $4, asleep_at = $5 WHERE agent_id = $1
+UPDATE agent_states
+SET status = $1, state = $2, awakened_at = $3, asleep_at = $4
+WHERE agent_id = $5
 `
 
 type UpdateAgentStateParams struct {
-	AgentID    string
 	Status     string
 	State      []byte
 	AwakenedAt pgtype.Timestamp
 	AsleepAt   pgtype.Timestamp
+	AgentID    string
 }
 
 func (q *Queries) UpdateAgentState(ctx context.Context, arg UpdateAgentStateParams) error {
 	_, err := q.db.Exec(ctx, updateAgentState,
-		arg.AgentID,
 		arg.Status,
 		arg.State,
 		arg.AwakenedAt,
 		arg.AsleepAt,
+		arg.AgentID,
 	)
 	return err
 }

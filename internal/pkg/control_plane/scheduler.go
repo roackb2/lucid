@@ -6,26 +6,31 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
+	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
 const (
-	ScanInterval       = 1 * time.Second
-	AgentSleepDuration = 10 * time.Second
+	SchedulerControlChSize = 10
+	ScanInterval           = 1 * time.Second
+	AgentSleepDuration     = 10 * time.Second
+	BatchProcessAgentNum   = 10
 )
 
-type Scheduler struct {
-	controlCh chan string
+type SchedulerImpl struct {
+	controlCh    chan string
+	agentCtrl    *AgentController
+	onAgentFound OnAgentFoundCallback
 }
 
-func NewScheduler(ctx context.Context) *Scheduler {
-	return &Scheduler{
-		controlCh: make(chan string),
+func NewScheduler(ctx context.Context, onAgentFound OnAgentFoundCallback) *SchedulerImpl {
+	return &SchedulerImpl{
+		controlCh:    make(chan string, SchedulerControlChSize),
+		onAgentFound: onAgentFound,
 	}
 }
 
-func (s *Scheduler) SendCommand(ctx context.Context, cmd string) error {
+func (s *SchedulerImpl) SendCommand(ctx context.Context, cmd string) error {
 	if s.controlCh == nil {
 		slog.Error("Scheduler: Control channel not initialized")
 		return nil
@@ -41,7 +46,7 @@ func (s *Scheduler) SendCommand(ctx context.Context, cmd string) error {
 	}
 }
 
-func (s *Scheduler) Start(ctx context.Context) error {
+func (s *SchedulerImpl) Start(ctx context.Context) error {
 	slog.Info("Scheduler started")
 	ticker := time.NewTicker(ScanInterval)
 	defer ticker.Stop()
@@ -75,9 +80,11 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	}
 }
 
-func (s *Scheduler) searchAgents(ctx context.Context) error {
-	// TODO: Change status to asleep
-	agents, err := dbaccess.Querier.SearchAgentByStatus(ctx, worker.StatusAsleep)
+func (s *SchedulerImpl) searchAgents(ctx context.Context) error {
+	agents, err := dbaccess.Querier.SearchAgentByAsleepDuration(ctx, dbaccess.SearchAgentByAsleepDurationParams{
+		Duration:  utils.ConvertToPgInterval(AgentSleepDuration),
+		MaxAgents: BatchProcessAgentNum,
+	})
 	if err != nil {
 		slog.Error("Scheduler failed to search agents", "error", err)
 		return err
@@ -85,14 +92,8 @@ func (s *Scheduler) searchAgents(ctx context.Context) error {
 
 	slog.Info("Scheduler found agents", "num_agents", len(agents))
 	for _, agent := range agents {
-		if time.Now().After(agent.AsleepAt.Time.Add(AgentSleepDuration)) {
-			// dbaccess.Querier.UpdateAgentState(ctx, dbaccess.UpdateAgentStateParams{
-			// 	AgentID: agent.AgentID,
-			// 	Status:  worker.StatusRunning,
-			// })
-			slog.Info("Scheduler handling asleep agent, waking up", "agent_id", agent.AgentID)
-			// TODO: Register to agent controller
-		}
+		slog.Info("Scheduler handling asleep agent, waking up", "agent_id", agent.AgentID)
+		s.onAgentFound(agent.AgentID, agent)
 	}
 
 	return nil
