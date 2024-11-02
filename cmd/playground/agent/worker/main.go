@@ -34,9 +34,7 @@ func main() {
 
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
-
-	// Create a consumer with task that should not finish
-	consumer := roles.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider)
+	publisher := roles.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider)
 
 	doneCh := make(chan struct{}, 1)
 	callbacks := worker.WorkerCallbacks{
@@ -51,8 +49,8 @@ func main() {
 		},
 	}
 	go func() {
-		defer consumer.Close()
-		resp, err := consumer.StartTask(ctx, callbacks)
+		defer publisher.Close()
+		resp, err := publisher.StartTask(ctx, callbacks)
 		if err != nil {
 			slog.Error("Error starting task:", "error", err)
 		}

@@ -80,7 +80,11 @@ func (c *AgentController) Start(ctx context.Context, controlCh chan string) erro
 		case <-ticker.C:
 			slog.Info("AgentController ticker")
 			select {
-			case cmd := <-controlCh:
+			case cmd, ok := <-controlCh:
+				if !ok {
+					slog.Error("AgentController control channel closed")
+					return fmt.Errorf("control channel closed")
+				}
 				slog.Info("AgentController received command", "command", cmd)
 				switch cmd {
 				case "stop":

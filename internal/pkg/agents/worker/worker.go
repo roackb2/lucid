@@ -17,6 +17,7 @@ import (
 
 const (
 	SleepInterval = 1 * time.Second
+	ControlChSize = 10
 )
 
 type WorkerImpl struct {
@@ -44,7 +45,7 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 		chatProvider: chatProvider,
 		storage:      storage,
 		stateMachine: nil, // Should init when start or resume task
-		controlCh:    make(chan string, 10),
+		controlCh:    make(chan string, ControlChSize),
 
 		stateMachineMux: sync.Mutex{},
 		messageMux:      sync.Mutex{},
@@ -62,6 +63,7 @@ func (w *WorkerImpl) SetControlCh(ch chan string) {
 }
 
 func (w *WorkerImpl) Close() {
+	slog.Info("Worker: Closing control channel", "agentID", *w.ID, "role", w.Role)
 	close(w.controlCh)
 }
 
@@ -124,7 +126,11 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 		case <-ticker.C:
 			slog.Info("Worker: ticker")
 			select {
-			case cmd := <-w.controlCh:
+			case cmd, ok := <-w.controlCh:
+				if !ok {
+					slog.Error("Worker: control channel closed")
+					return "", fmt.Errorf("control channel closed")
+				}
 				slog.Info("Worker: received command", "command", cmd)
 				w.stateMachineMux.Lock()
 				err := w.stateMachine.Event(context.Background(), cmd)
