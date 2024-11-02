@@ -1,7 +1,7 @@
 milvus-url = milvus-standalone.orb.local:19530
 
 # Recursively find all Go files in cmd and its subfolders
-GO_FILES := $(shell find cmd -name '*.go')
+GO_FILES := $(shell find cmd examples -name '*.go')
 
 # Extract unique directory names from GO_FILES
 CMD_DIRS := $(sort $(dir $(GO_FILES)))
