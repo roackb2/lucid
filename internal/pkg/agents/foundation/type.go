@@ -21,6 +21,13 @@ const (
 	StatusTerminated = "terminated"
 )
 
+// Worker is the fundamental component of an agent.
+// It is responsible for the agent's behavior and state management.
+// Worker's main job includes:
+// - Run LLM in a loop until the agent has found some useful information or has been terminated
+// - Handle flow control commands from the control plane
+// - Manage the agent's internal state, including the chat history and the current task
+// - Persist agent state when terminated, and restore state when resumed
 type Worker interface {
 	Chat(
 		ctx context.Context, prompt string,

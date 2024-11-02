@@ -76,6 +76,10 @@ func (w *WorkerImpl) Chat(
 		Content: &prompt,
 		Role:    "user",
 	}}
+	// Save initial state
+	if err := w.PersistState(); err != nil {
+		slog.Error("Worker: Failed to persist state", "error", err)
+	}
 	return w.getAgentResponseWithFlowControl(ctx)
 }
 
@@ -95,6 +99,10 @@ func (w *WorkerImpl) ResumeChat(
 			Content: newPrompt,
 			Role:    "user",
 		})
+	}
+	// Save initial state after resume
+	if err := w.PersistState(); err != nil {
+		slog.Error("Worker: Failed to persist state", "error", err)
 	}
 	return w.getAgentResponseWithFlowControl(ctx)
 }
