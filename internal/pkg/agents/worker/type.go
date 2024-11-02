@@ -34,8 +34,8 @@ const (
 	CmdPause = "pause"
 	// CmdResume instructs the Worker to resume execution.
 	CmdResume = "resume"
-	// CmdSleep instructs the Worker to sleep.
-	CmdSleep = "sleep"
+	// CmdTerminate instructs the Worker to persist its state and terminate.
+	CmdTerminate = "terminate"
 )
 
 // Status values representing the Worker's current state.
@@ -44,8 +44,8 @@ const (
 	StatusRunning = "running"
 	// StatusPaused indicates the Worker is currently paused.
 	StatusPaused = "paused"
-	// StatusAsleep indicates the Worker is currently asleep.
-	StatusAsleep = "asleep"
+	// StatusTerminated indicates the Worker has terminated.
+	StatusTerminated = "terminated"
 )
 
 // WorkerEventKey represents keys for Worker event callbacks.
@@ -57,8 +57,8 @@ const (
 	OnPause WorkerEventKey = "onPause"
 	// OnResume is the event key for the resume callback.
 	OnResume WorkerEventKey = "onResume"
-	// OnSleep is the event key for the sleep callback.
-	OnSleep WorkerEventKey = "onSleep"
+	// OnTerminate is the event key for the terminate callback.
+	OnTerminate WorkerEventKey = "onTerminate"
 )
 
 // WorkerCallbacks maps WorkerEventKeys to their corresponding CommandCallbacks.
@@ -123,7 +123,7 @@ type Worker interface {
 	// - An error if the command could not be sent.
 	//
 	// Note:
-	// Ensure that the Worker is running before sending commands.
+	// SendCommand is idempotent, it will have no effect if the Worker is not running.
 	SendCommand(ctx context.Context, command string) error
 
 	// GetStatus returns the current status of the Worker.

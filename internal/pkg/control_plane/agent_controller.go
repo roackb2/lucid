@@ -29,6 +29,7 @@ type AgentControllerImpl struct {
 	tracker   AgentTracker
 	bus       NotificationBus
 	controlCh chan string
+	terminate bool
 
 	callbacks worker.WorkerCallbacks
 }
@@ -50,8 +51,8 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		worker.OnResume: func(agentID string, status string) {
 			slog.Info("AgentController onResume", "agentID", agentID, "status", status)
 		},
-		worker.OnSleep: func(agentID string, status string) {
-			slog.Info("AgentController onSleep", "agentID", agentID, "status", status)
+		worker.OnTerminate: func(agentID string, status string) {
+			slog.Info("AgentController onTerminate", "agentID", agentID, "status", status)
 		},
 	}
 	controller := &AgentControllerImpl{
@@ -60,6 +61,7 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		bus:       bus,
 		tracker:   tracker,
 		controlCh: make(chan string, AgentControllerControlChSize),
+		terminate: false,
 		callbacks: callbacks,
 	}
 	return controller
@@ -76,7 +78,7 @@ func (c *AgentControllerImpl) SendCommand(ctx context.Context, command string) e
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("context canceled, cannot send command")
-	case <-time.After(1 * time.Second):
+	case <-time.After(3 * time.Second):
 		return fmt.Errorf("sending command timed out")
 	}
 }
@@ -100,73 +102,67 @@ func (c *AgentControllerImpl) Start(ctx context.Context) error {
 			switch cmd {
 			case "stop":
 				slog.Info("AgentController stopping")
-				err := c.terminateAllAgents(ctx)
-				if err != nil {
-					slog.Error("AgentController error terminating all agents", "error", err)
-				}
-				// TODO: Controller should stop only when all agents are asleep
-				return nil
+				c.terminate = true
 			default:
 				slog.Warn("AgentController received unknown command", "command", cmd)
 				return fmt.Errorf("unknown command: %s", cmd)
 			}
 		case <-ticker.C:
 			slog.Info("AgentController scanning agents")
-			err := c.scanAgents(ctx)
+			allAgentsAsleep, err := c.scanAgents(ctx)
 			if err != nil {
 				slog.Error("AgentController error scanning agents", "error", err)
+			}
+			if allAgentsAsleep && c.terminate {
+				slog.Info("AgentController all agents are asleep, stopping")
+				return nil
 			}
 		}
 	}
 }
 
-func (c *AgentControllerImpl) scanAgents(ctx context.Context) error {
-	for _, tracking := range c.tracker.GetAllTrackings() {
-		agentAwakeDuration := time.Since(tracking.CreatedAt)
-		slog.Info("AgentController scanning agent", "agent_id", tracking.AgentID, "created_at", tracking.CreatedAt, "agent_awake_duration", agentAwakeDuration.String())
-		if agentAwakeDuration > c.cfg.AgentLifeTime {
-			slog.Info("AgentController agent lifetime exceeded", "agent_id", tracking.AgentID, "created_at", tracking.CreatedAt, "agent_awake_duration", agentAwakeDuration.String())
-			err := c.putAgentToSleep(ctx, tracking)
-			if err != nil {
-				slog.Error("AgentController error putting agent to sleep", "agent_id", tracking.AgentID, "error", err)
-				return err
+func (c *AgentControllerImpl) scanAgents(ctx context.Context) (bool, error) {
+	allAgentsAsleep := true
+	trackings := c.tracker.GetAllTrackings()
+	slog.Info("AgentController scanning agents", "num_agents", len(trackings))
+	for _, tracking := range trackings {
+		status := tracking.Agent.GetStatus()
+		slog.Info("AgentController handling agent", "agent_id", tracking.AgentID, "created_at", tracking.CreatedAt, "status", status)
+		if status == worker.StatusRunning {
+			allAgentsAsleep = false
+			agentAwakeDuration := time.Since(tracking.CreatedAt)
+			// If we're terminating or agent lifetime exceeded, put agent to sleep
+			if c.terminate || agentAwakeDuration > c.cfg.AgentLifeTime {
+				slog.Info("AgentController agent lifetime exceeded", "agent_id", tracking.AgentID, "created_at", tracking.CreatedAt, "agent_awake_duration", agentAwakeDuration.String())
+				err := c.putAgentToSleep(ctx, tracking)
+				if err != nil {
+					slog.Error("AgentController error putting agent to sleep", "agent_id", tracking.AgentID, "error", err)
+					return false, err
+				}
 			}
-		} else if tracking.Agent.GetStatus() == worker.StatusAsleep {
-			slog.Info("AgentController agent is asleep, removing tracking", "agent_id", tracking.AgentID)
+		} else if status == worker.StatusTerminated {
+			slog.Info("AgentController agent is terminated, removing tracking", "agent_id", tracking.AgentID)
 			c.tracker.RemoveTracking(tracking.AgentID)
 		}
 	}
-	return nil
+	return allAgentsAsleep, nil
 }
 
 func (c *AgentControllerImpl) putAgentToSleep(ctx context.Context, tracking AgentTracking) error {
 	slog.Info("AgentController putting agent to sleep", "agent_id", tracking.AgentID)
-	// TODO: Handle sending command timeout issue
-	err := tracking.Agent.SendCommand(ctx, worker.CmdSleep)
+	err := tracking.Agent.SendCommand(ctx, worker.CmdTerminate)
 	if err != nil {
 		slog.Error("AgentController error sending command", "agent_id", tracking.AgentID, "error", err)
 	}
-	slog.Info("AgentController agent terminated", "agent_id", tracking.AgentID)
+	slog.Info("AgentController updating tracking", "agent_id", tracking.AgentID)
 	c.tracker.UpdateTracking(tracking.AgentID, AgentTracking{
 		AgentID: tracking.AgentID,
 		Agent:   tracking.Agent,
-		// Assume agent status running cuz shutting down would take a while
 		// IMPORTANT: Do not call GetStatus() here. This would cause a deadlock cuz SendCommand is changing the status as well.
-		Status:    worker.StatusRunning,
+		Status:    worker.StatusTerminated,
 		CreatedAt: tracking.CreatedAt,
 	})
 	slog.Info("AgentController updated tracking", "agent_id", tracking.AgentID)
-	return nil
-}
-
-func (c *AgentControllerImpl) terminateAllAgents(ctx context.Context) error {
-	for _, tracking := range c.tracker.GetAllTrackings() {
-		err := c.putAgentToSleep(ctx, tracking)
-		if err != nil {
-			slog.Error("AgentController error terminating agent", "agent_id", tracking.AgentID, "error", err)
-			return err
-		}
-	}
 	return nil
 }
 

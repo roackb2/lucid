@@ -70,8 +70,8 @@ func main() {
 		worker.OnResume: func(agentID string, status string) {
 			slog.Info("Resuming agent", "agent_id", agentID, "status", status)
 		},
-		worker.OnSleep: func(agentID string, status string) {
-			slog.Info("Agent sleeping", "agent_id", agentID, "status", status)
+		worker.OnTerminate: func(agentID string, status string) {
+			slog.Info("Agent terminating", "agent_id", agentID, "status", status)
 		},
 	}
 

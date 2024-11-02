@@ -8,6 +8,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
 	mock_agents "github.com/roackb2/lucid/test/_mocks/agents"
 	mock_control_plane "github.com/roackb2/lucid/test/_mocks/control_plane"
@@ -78,21 +79,37 @@ func (suite *AgentControllerTestSuite) TestStart() {
 	suite.mockAgent.EXPECT().GetID().Return("test-agent-id").AnyTimes()
 	agentController := control_plane.NewAgentController(suite.config, suite.mockStorage, suite.mockNotificationBus, suite.mockAgentTracker)
 
-	suite.mockAgentTracker.EXPECT().GetAllTrackings().AnyTimes().Return([]control_plane.AgentTracking{
+	// First run, agent is running
+	suite.mockAgent.EXPECT().GetStatus().Return(worker.StatusRunning)
+	suite.mockAgentTracker.EXPECT().GetAllTrackings().Return([]control_plane.AgentTracking{
 		{
 			AgentID:   "test-agent-id",
 			Agent:     suite.mockAgent,
-			Status:    "asleep",
+			Status:    worker.StatusRunning,
 			CreatedAt: time.Now().Add(-6 * time.Minute),
 		},
 	})
 
-	suite.mockAgent.EXPECT().SendCommand(gomock.Any(), gomock.Any()).AnyTimes().Return(nil)
-
-	suite.mockAgentTracker.EXPECT().UpdateTracking("test-agent-id", gomock.Any()).AnyTimes().Do(func(agentID string, tracking control_plane.AgentTracking) {
+	suite.mockAgent.EXPECT().SendCommand(gomock.Any(), worker.CmdTerminate).Return(nil)
+	suite.mockAgentTracker.EXPECT().UpdateTracking("test-agent-id", gomock.Any()).Do(func(agentID string, tracking control_plane.AgentTracking) {
 		suite.Equal("test-agent-id", tracking.AgentID)
-		suite.Equal("running", tracking.Status)
+		suite.Equal(worker.StatusTerminated, tracking.Status)
 	})
+
+	// Second run, agent is terminated
+	suite.mockAgentTracker.EXPECT().GetAllTrackings().Return([]control_plane.AgentTracking{
+		{
+			AgentID:   "test-agent-id",
+			Agent:     suite.mockAgent,
+			Status:    worker.StatusTerminated,
+			CreatedAt: time.Now().Add(-6 * time.Minute),
+		},
+	})
+	suite.mockAgent.EXPECT().GetStatus().Return(worker.StatusTerminated)
+	suite.mockAgentTracker.EXPECT().RemoveTracking("test-agent-id")
+
+	// For following, no tracking is returned
+	suite.mockAgentTracker.EXPECT().GetAllTrackings().Return([]control_plane.AgentTracking{})
 
 	doneCh := make(chan struct{})
 	go func() {
