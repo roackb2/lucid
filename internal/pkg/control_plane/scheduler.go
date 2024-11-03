@@ -102,6 +102,10 @@ func (s *SchedulerImpl) searchAgents(ctx context.Context) error {
 	slog.Info("Scheduler found agents", "num_agents", len(agents))
 	for _, agent := range agents {
 		slog.Info("Scheduler handling asleep agent, waking up", "agent_id", agent.AgentID)
+		if s.onAgentFound == nil {
+			slog.Warn("Scheduler: No callback set, skipping agent", "agent_id", agent.AgentID)
+			continue
+		}
 		s.onAgentFound(agent.AgentID, agent)
 	}
 

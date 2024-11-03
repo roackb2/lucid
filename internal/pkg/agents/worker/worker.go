@@ -30,8 +30,8 @@ type WorkerImpl struct {
 	persistTools *tools.PersistTool     `json:"-"`
 	flowTools    *tools.FlowTool        `json:"-"`
 
-	ID       *string                 `json:"id,required"`
-	Role     string                  `json:"role,required"`
+	ID       *string                 `json:"id"`
+	Role     string                  `json:"role"`
 	Messages []providers.ChatMessage `json:"messages"`
 }
 
@@ -77,6 +77,10 @@ func (w *WorkerImpl) GetStatus() string {
 		return StatusTerminated
 	}
 	return w.stateMachine.Current()
+}
+
+func (w *WorkerImpl) GetRole() string {
+	return w.Role
 }
 
 func (w *WorkerImpl) Close() {
@@ -199,10 +203,13 @@ func (w *WorkerImpl) initAgentStateMachine() {
 		fsm.Events{
 			{Name: CmdPause, Src: []string{StatusRunning}, Dst: StatusPaused},
 			{Name: CmdResume, Src: []string{StatusPaused}, Dst: StatusRunning},
-			{Name: CmdSleep, Src: []string{StatusRunning, StatusPaused}, Dst: StatusAsleep},
+			{Name: CmdSleep, Src: []string{StatusRunning, StatusPaused, StatusAsleep}, Dst: StatusAsleep},
 			{Name: CmdTerminate, Src: []string{StatusRunning, StatusPaused}, Dst: StatusTerminated},
 		},
 		fsm.Callbacks{
+			"before_event": func(_ context.Context, e *fsm.Event) {
+				slog.Info("Before event", "from", e.Src, "to", e.Dst)
+			},
 			"enter_state": func(_ context.Context, e *fsm.Event) {
 				slog.Info("Transitioned to state", "from", e.Src, "to", e.Dst)
 			},
@@ -315,7 +322,8 @@ func (w *WorkerImpl) PersistState() error {
 		return err
 	}
 	now := time.Now()
-	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), nil, &now)
+	slog.Info("Worker: storage", "storage", w.storage)
+	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), w.Role, &now, nil)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
 		return err
@@ -338,7 +346,7 @@ func (w *WorkerImpl) RestoreState(agentID string) error {
 
 	// Awakening agent and update its status accordingly
 	now := time.Now()
-	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), &now, nil)
+	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), w.Role, &now, nil)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
 		return err

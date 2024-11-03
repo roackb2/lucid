@@ -57,13 +57,13 @@ func (m *RelationalStorage) SearchPosts(query string) ([]string, error) {
 	return content, nil
 }
 
-func (m *RelationalStorage) SaveAgentState(agentID string, state []byte, status string, awakenedAt *time.Time, asleepAt *time.Time) error {
-	slog.Info("RelationalStorage: Saving agent state", "agentID", agentID, "status", status, "awakenedAt", awakenedAt, "asleepAt", asleepAt)
+func (m *RelationalStorage) SaveAgentState(agentID string, state []byte, status string, role string, awakenedAt *time.Time, asleepAt *time.Time) error {
+	slog.Info("RelationalStorage: Saving agent state", "agentID", agentID, "status", status, "role", role, "awakenedAt", awakenedAt, "asleepAt", asleepAt)
 	_, err := dbaccess.Querier.GetAgentState(context.Background(), agentID)
 	if err != nil {
 		if strings.Contains(err.Error(), "no rows in result set") {
 			slog.Info("RelationalStorage: No existing agent state found, creating new state", "agentID", agentID)
-			err = m.createAgentState(agentID, state, status, awakenedAt, asleepAt)
+			err = m.createAgentState(agentID, state, status, role, awakenedAt, asleepAt)
 			if err != nil {
 				slog.Error("RelationalStorage: Failed to create agent state", "error", err)
 				return err
@@ -73,7 +73,7 @@ func (m *RelationalStorage) SaveAgentState(agentID string, state []byte, status 
 			return err
 		}
 	}
-	err = m.updateAgentState(agentID, state, status, awakenedAt, asleepAt)
+	err = m.updateAgentState(agentID, state, status, role, awakenedAt, asleepAt)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to update agent state", "error", err)
 		return err
@@ -82,12 +82,13 @@ func (m *RelationalStorage) SaveAgentState(agentID string, state []byte, status 
 	return nil
 }
 
-func (m *RelationalStorage) createAgentState(agentID string, state []byte, status string, awakenedAt *time.Time, asleepAt *time.Time) error {
+func (m *RelationalStorage) createAgentState(agentID string, state []byte, status string, role string, awakenedAt *time.Time, asleepAt *time.Time) error {
 	slog.Info("RelationalStorage: Creating agent state", "agentID", agentID, "status", status, "awakenedAt", awakenedAt, "asleepAt", asleepAt)
 	params := dbaccess.CreateAgentStateParams{
 		AgentID:    agentID,
 		State:      state,
 		Status:     status,
+		Role:       role,
 		AwakenedAt: utils.ConvertToPgTimestamp(awakenedAt),
 		AsleepAt:   utils.ConvertToPgTimestamp(asleepAt),
 	}
@@ -100,13 +101,14 @@ func (m *RelationalStorage) createAgentState(agentID string, state []byte, statu
 	return nil
 }
 
-func (m *RelationalStorage) updateAgentState(agentID string, state []byte, status string, awakenedAt *time.Time, asleepAt *time.Time) error {
+func (m *RelationalStorage) updateAgentState(agentID string, state []byte, status string, role string, awakenedAt *time.Time, asleepAt *time.Time) error {
 	slog.Info("RelationalStorage: Updating agent state", "agentID", agentID, "status", status, "awakenedAt", awakenedAt, "asleepAt", asleepAt)
 
 	params := dbaccess.UpdateAgentStateParams{
 		AgentID:    agentID,
 		State:      state,
 		Status:     status,
+		Role:       role,
 		AwakenedAt: utils.ConvertToPgTimestamp(awakenedAt),
 		AsleepAt:   utils.ConvertToPgTimestamp(asleepAt),
 	}

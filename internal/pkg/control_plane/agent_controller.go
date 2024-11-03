@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/roackb2/lucid/internal/pkg/agents"
+	"github.com/roackb2/lucid/internal/pkg/agents/agent"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
@@ -169,7 +169,7 @@ func (c *AgentControllerImpl) putAgentToSleep(ctx context.Context, tracking Agen
 	return nil
 }
 
-func (c *AgentControllerImpl) RegisterAgent(ctx context.Context, agent agents.Agent) (string, error) {
+func (c *AgentControllerImpl) RegisterAgent(ctx context.Context, agent agent.Agent) (string, error) {
 	slog.Info("AgentController registering agent", "agent_id", agent.GetID())
 	c.tracker.AddTracking(agent.GetID(), AgentTracking{
 		AgentID:   agent.GetID(),

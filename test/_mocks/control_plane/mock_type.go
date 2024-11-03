@@ -13,7 +13,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	agents "github.com/roackb2/lucid/internal/pkg/agents"
+	agent "github.com/roackb2/lucid/internal/pkg/agents/agent"
+	providers "github.com/roackb2/lucid/internal/pkg/agents/providers"
+	storage "github.com/roackb2/lucid/internal/pkg/agents/storage"
 	control_plane "github.com/roackb2/lucid/internal/pkg/control_plane"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -43,10 +45,10 @@ func (m *MockNotificationBus) EXPECT() *MockNotificationBusMockRecorder {
 }
 
 // ReadResponse mocks base method.
-func (m *MockNotificationBus) ReadResponse() *agents.AgentResponse {
+func (m *MockNotificationBus) ReadResponse() *agent.AgentResponse {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadResponse")
-	ret0, _ := ret[0].(*agents.AgentResponse)
+	ret0, _ := ret[0].(*agent.AgentResponse)
 	return ret0
 }
 
@@ -57,7 +59,7 @@ func (mr *MockNotificationBusMockRecorder) ReadResponse() *gomock.Call {
 }
 
 // WriteResponse mocks base method.
-func (m *MockNotificationBus) WriteResponse(resp *agents.AgentResponse) error {
+func (m *MockNotificationBus) WriteResponse(resp *agent.AgentResponse) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WriteResponse", resp)
 	ret0, _ := ret[0].(error)
@@ -199,7 +201,7 @@ func (mr *MockAgentControllerMockRecorder) GetAgentStatus(agentID any) *gomock.C
 }
 
 // RegisterAgent mocks base method.
-func (m *MockAgentController) RegisterAgent(ctx context.Context, agent agents.Agent) (string, error) {
+func (m *MockAgentController) RegisterAgent(ctx context.Context, agent agent.Agent) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RegisterAgent", ctx, agent)
 	ret0, _ := ret[0].(string)
@@ -265,18 +267,6 @@ func (m *MockScheduler) EXPECT() *MockSchedulerMockRecorder {
 	return m.recorder
 }
 
-// OnAgentFound mocks base method.
-func (m *MockScheduler) OnAgentFound(callback control_plane.OnAgentFoundCallback) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "OnAgentFound", callback)
-}
-
-// OnAgentFound indicates an expected call of OnAgentFound.
-func (mr *MockSchedulerMockRecorder) OnAgentFound(callback any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnAgentFound", reflect.TypeOf((*MockScheduler)(nil).OnAgentFound), callback)
-}
-
 // SendCommand mocks base method.
 func (m *MockScheduler) SendCommand(ctx context.Context, command string) error {
 	m.ctrl.T.Helper()
@@ -291,6 +281,18 @@ func (mr *MockSchedulerMockRecorder) SendCommand(ctx, command any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCommand", reflect.TypeOf((*MockScheduler)(nil).SendCommand), ctx, command)
 }
 
+// SetCallback mocks base method.
+func (m *MockScheduler) SetCallback(callback control_plane.OnAgentFoundCallback) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetCallback", callback)
+}
+
+// SetCallback indicates an expected call of SetCallback.
+func (mr *MockSchedulerMockRecorder) SetCallback(callback any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCallback", reflect.TypeOf((*MockScheduler)(nil).SetCallback), callback)
+}
+
 // Start mocks base method.
 func (m *MockScheduler) Start(ctx context.Context) error {
 	m.ctrl.T.Helper()
@@ -303,4 +305,122 @@ func (m *MockScheduler) Start(ctx context.Context) error {
 func (mr *MockSchedulerMockRecorder) Start(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockScheduler)(nil).Start), ctx)
+}
+
+// MockAgentFactory is a mock of AgentFactory interface.
+type MockAgentFactory struct {
+	ctrl     *gomock.Controller
+	recorder *MockAgentFactoryMockRecorder
+	isgomock struct{}
+}
+
+// MockAgentFactoryMockRecorder is the mock recorder for MockAgentFactory.
+type MockAgentFactoryMockRecorder struct {
+	mock *MockAgentFactory
+}
+
+// NewMockAgentFactory creates a new mock instance.
+func NewMockAgentFactory(ctrl *gomock.Controller) *MockAgentFactory {
+	mock := &MockAgentFactory{ctrl: ctrl}
+	mock.recorder = &MockAgentFactoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAgentFactory) EXPECT() *MockAgentFactoryMockRecorder {
+	return m.recorder
+}
+
+// NewConsumer mocks base method.
+func (m *MockAgentFactory) NewConsumer(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewConsumer", storage, task, chatProvider)
+	ret0, _ := ret[0].(agent.Agent)
+	return ret0
+}
+
+// NewConsumer indicates an expected call of NewConsumer.
+func (mr *MockAgentFactoryMockRecorder) NewConsumer(storage, task, chatProvider any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewConsumer", reflect.TypeOf((*MockAgentFactory)(nil).NewConsumer), storage, task, chatProvider)
+}
+
+// NewPublisher mocks base method.
+func (m *MockAgentFactory) NewPublisher(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewPublisher", storage, task, chatProvider)
+	ret0, _ := ret[0].(agent.Agent)
+	return ret0
+}
+
+// NewPublisher indicates an expected call of NewPublisher.
+func (mr *MockAgentFactoryMockRecorder) NewPublisher(storage, task, chatProvider any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewPublisher", reflect.TypeOf((*MockAgentFactory)(nil).NewPublisher), storage, task, chatProvider)
+}
+
+// MockControlPlane is a mock of ControlPlane interface.
+type MockControlPlane struct {
+	ctrl     *gomock.Controller
+	recorder *MockControlPlaneMockRecorder
+	isgomock struct{}
+}
+
+// MockControlPlaneMockRecorder is the mock recorder for MockControlPlane.
+type MockControlPlaneMockRecorder struct {
+	mock *MockControlPlane
+}
+
+// NewMockControlPlane creates a new mock instance.
+func NewMockControlPlane(ctrl *gomock.Controller) *MockControlPlane {
+	mock := &MockControlPlane{ctrl: ctrl}
+	mock.recorder = &MockControlPlaneMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockControlPlane) EXPECT() *MockControlPlaneMockRecorder {
+	return m.recorder
+}
+
+// KickoffTask mocks base method.
+func (m *MockControlPlane) KickoffTask(ctx context.Context, task, role string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "KickoffTask", ctx, task, role)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// KickoffTask indicates an expected call of KickoffTask.
+func (mr *MockControlPlaneMockRecorder) KickoffTask(ctx, task, role any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "KickoffTask", reflect.TypeOf((*MockControlPlane)(nil).KickoffTask), ctx, task, role)
+}
+
+// SendCommand mocks base method.
+func (m *MockControlPlane) SendCommand(ctx context.Context, command, payload string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendCommand", ctx, command, payload)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendCommand indicates an expected call of SendCommand.
+func (mr *MockControlPlaneMockRecorder) SendCommand(ctx, command, payload any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCommand", reflect.TypeOf((*MockControlPlane)(nil).SendCommand), ctx, command, payload)
+}
+
+// Start mocks base method.
+func (m *MockControlPlane) Start(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Start", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Start indicates an expected call of Start.
+func (mr *MockControlPlaneMockRecorder) Start(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockControlPlane)(nil).Start), ctx)
 }

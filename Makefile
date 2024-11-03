@@ -49,10 +49,10 @@ generate-db-models:
 
 generate-mocks:
 	mockgen -source internal/pkg/agents/storage/type.go -destination test/_mocks/storage/mock_type.go
-	mockgen -source internal/pkg/control_plane/type.go -destination test/_mocks/control_plane/mock_type.go
 	mockgen -source internal/pkg/agents/worker/type.go -destination test/_mocks/worker/mock_type.go
 	mockgen -source internal/pkg/agents/providers/type.go -destination test/_mocks/providers/mock_type.go
-	mockgen -source internal/pkg/agents/type.go -destination test/_mocks/agents/mock_type.go
+	mockgen -source internal/pkg/agents/agent/type.go -destination test/_mocks/agent/mock_type.go
+	mockgen -source internal/pkg/control_plane/type.go -destination test/_mocks/control_plane/mock_type.go
 
 # Run migrations up
 migrate-up: build

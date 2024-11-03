@@ -1,9 +1,9 @@
 package control_plane
 
-import "github.com/roackb2/lucid/internal/pkg/agents"
+import "github.com/roackb2/lucid/internal/pkg/agents/agent"
 
 type ChannelBus struct {
-	respCh chan *agents.AgentResponse
+	respCh chan *agent.AgentResponse
 }
 
 func NewChannelBus(size int) *ChannelBus {
@@ -11,15 +11,15 @@ func NewChannelBus(size int) *ChannelBus {
 		size = 65536
 	}
 	return &ChannelBus{
-		respCh: make(chan *agents.AgentResponse, size),
+		respCh: make(chan *agent.AgentResponse, size),
 	}
 }
 
-func (b *ChannelBus) WriteResponse(resp *agents.AgentResponse) error {
+func (b *ChannelBus) WriteResponse(resp *agent.AgentResponse) error {
 	b.respCh <- resp
 	return nil
 }
 
-func (b *ChannelBus) ReadResponse() *agents.AgentResponse {
+func (b *ChannelBus) ReadResponse() *agent.AgentResponse {
 	return <-b.respCh
 }

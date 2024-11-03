@@ -9,8 +9,8 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
+	"github.com/roackb2/lucid/internal/pkg/agents/agent"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
-	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
@@ -38,7 +38,7 @@ func main() {
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
 
-	publisher := roles.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage, provider)
+	publisher := agent.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage, provider)
 
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {
@@ -84,7 +84,7 @@ func main() {
 	}
 
 	// Restore the state
-	restoredPublisher := roles.NewPublisher("", storage, provider)
+	restoredPublisher := agent.NewPublisher("", storage, provider)
 	newPrompt := "What is the length of the title of the song that you just published?"
 	res, err = restoredPublisher.ResumeTask(ctx, publisher.GetID(), &newPrompt, callbacks)
 	if err != nil {

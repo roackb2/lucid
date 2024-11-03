@@ -74,11 +74,11 @@ func (s *WorkerTestSuite) TestChat() {
 		Return(s.mockReportResponse, nil)
 
 	s.mockStorage.EXPECT().
-		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	s.mockStorage.EXPECT().
-		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
 		AnyTimes()
 
@@ -99,7 +99,7 @@ func (s *WorkerTestSuite) TestChat() {
 func (s *WorkerTestSuite) TestPersistAndRestoreState() {
 	// Mock SaveAgentState
 	s.mockStorage.EXPECT().
-		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	err := s.worker.PersistState()
@@ -113,7 +113,7 @@ func (s *WorkerTestSuite) TestPersistAndRestoreState() {
 
 	// Mock SaveAgentState for restore
 	s.mockStorage.EXPECT().
-		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil)
 
 	err = s.worker.RestoreState(s.id)

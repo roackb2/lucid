@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/roackb2/lucid/internal/pkg/agents"
+	"github.com/roackb2/lucid/internal/pkg/agents/agent"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
@@ -12,13 +12,13 @@ import (
 
 // Bus should guarantee thread safety
 type NotificationBus interface {
-	WriteResponse(resp *agents.AgentResponse) error
-	ReadResponse() *agents.AgentResponse
+	WriteResponse(resp *agent.AgentResponse) error
+	ReadResponse() *agent.AgentResponse
 }
 
 type AgentTracking struct {
 	AgentID   string
-	Agent     agents.Agent
+	Agent     agent.Agent
 	Status    string
 	CreatedAt time.Time
 }
@@ -35,7 +35,7 @@ type AgentTracker interface {
 type AgentController interface {
 	Start(ctx context.Context) error
 	SendCommand(ctx context.Context, command string) error
-	RegisterAgent(ctx context.Context, agent agents.Agent) (string, error)
+	RegisterAgent(ctx context.Context, agent agent.Agent) (string, error)
 	GetAgentStatus(agentID string) (string, error)
 }
 
@@ -48,8 +48,8 @@ type Scheduler interface {
 }
 
 type AgentFactory interface {
-	NewPublisher(storage storage.Storage, task string, chatProvider providers.ChatProvider) agents.Agent
-	NewConsumer(storage storage.Storage, task string, chatProvider providers.ChatProvider) agents.Agent
+	NewPublisher(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent
+	NewConsumer(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent
 }
 
 type OnAgentFinalResponseCallback func(agentID string, response string)

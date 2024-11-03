@@ -42,6 +42,7 @@ CREATE TABLE public.agent_states (
     id integer NOT NULL,
     agent_id character varying(255) NOT NULL,
     status character varying(255) NOT NULL,
+    role character varying(255) NOT NULL,
     state jsonb NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,

@@ -1,11 +1,10 @@
-package roles
+package agent
 
 import (
 	"context"
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/roackb2/lucid/internal/pkg/agents"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
@@ -35,21 +34,29 @@ func (b *BaseAgent) GetID() string {
 	return b.id
 }
 
-func (b *BaseAgent) StartTask(ctx context.Context, callbacks worker.WorkerCallbacks) (*agents.AgentResponse, error) {
+func (b *BaseAgent) GetStatus() string {
+	return b.worker.GetStatus()
+}
+
+func (b *BaseAgent) GetRole() string {
+	return b.role
+}
+
+func (b *BaseAgent) StartTask(ctx context.Context, callbacks worker.WorkerCallbacks) (*AgentResponse, error) {
 	slog.Info("Agent: Starting task", "role", b.role, "task", b.task)
 	response, err := b.worker.Chat(ctx, b.task, callbacks)
 	if err != nil {
 		return nil, err
 	}
 	slog.Info("Agent: Task finished", "role", b.role, "response", response)
-	return &agents.AgentResponse{
+	return &AgentResponse{
 		Id:      b.id,
 		Role:    b.role,
 		Message: response,
 	}, nil
 }
 
-func (b *BaseAgent) ResumeTask(ctx context.Context, agentID string, newPrompt *string, callbacks worker.WorkerCallbacks) (*agents.AgentResponse, error) {
+func (b *BaseAgent) ResumeTask(ctx context.Context, agentID string, newPrompt *string, callbacks worker.WorkerCallbacks) (*AgentResponse, error) {
 	slog.Info("Agent: Resuming task", "agentID", agentID, "role", b.role)
 	// Restore the agent state
 	err := b.restoreState(agentID)
@@ -61,7 +68,7 @@ func (b *BaseAgent) ResumeTask(ctx context.Context, agentID string, newPrompt *s
 	if err != nil {
 		return nil, err
 	}
-	return &agents.AgentResponse{
+	return &AgentResponse{
 		Id:      b.id,
 		Role:    b.role,
 		Message: response,
@@ -91,10 +98,6 @@ func (b *BaseAgent) restoreState(agentID string) error {
 		return err
 	}
 	return nil
-}
-
-func (b *BaseAgent) GetStatus() string {
-	return b.worker.GetStatus()
 }
 
 func (b *BaseAgent) Close() {

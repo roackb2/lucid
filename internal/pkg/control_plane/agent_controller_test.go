@@ -5,12 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/roackb2/lucid/internal/pkg/agents"
-	"github.com/roackb2/lucid/internal/pkg/agents/providers"
-	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
-	mock_agents "github.com/roackb2/lucid/test/_mocks/agents"
+	mock_agent "github.com/roackb2/lucid/test/_mocks/agent"
 	mock_control_plane "github.com/roackb2/lucid/test/_mocks/control_plane"
 	mock_providers "github.com/roackb2/lucid/test/_mocks/providers"
 	mock_storage "github.com/roackb2/lucid/test/_mocks/storage"
@@ -29,10 +26,9 @@ type AgentControllerTestSuite struct {
 	mockCtrl            *gomock.Controller
 	mockStorage         *mock_storage.MockStorage
 	mockChatProvider    *mock_providers.MockChatProvider
-	mockAgent           *mock_agents.MockAgent
+	mockAgent           *mock_agent.MockAgent
 	mockAgentTracker    *mock_control_plane.MockAgentTracker
 	mockNotificationBus *mock_control_plane.MockNotificationBus
-	originalNewAgent    func(task string, role string, storage storage.Storage, provider providers.ChatProvider) (agents.Agent, error)
 	doneCh              chan struct{}
 }
 
@@ -46,7 +42,7 @@ func (suite *AgentControllerTestSuite) SetupTest() {
 	suite.mockCtrl = gomock.NewController(suite.T())
 	suite.mockStorage = mock_storage.NewMockStorage(suite.mockCtrl)
 	suite.mockChatProvider = mock_providers.NewMockChatProvider(suite.mockCtrl)
-	suite.mockAgent = mock_agents.NewMockAgent(suite.mockCtrl)
+	suite.mockAgent = mock_agent.NewMockAgent(suite.mockCtrl)
 	suite.mockAgentTracker = mock_control_plane.NewMockAgentTracker(suite.mockCtrl)
 	suite.mockNotificationBus = mock_control_plane.NewMockNotificationBus(suite.mockCtrl)
 	suite.doneCh = make(chan struct{})

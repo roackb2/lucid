@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/roackb2/lucid/internal/pkg/agents"
+	"github.com/roackb2/lucid/internal/pkg/agents/agent"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
@@ -27,11 +27,12 @@ type ControlPlaneImpl struct {
 	chatProvider    providers.ChatProvider
 	controller      AgentController
 	scheduler       Scheduler
-	controlCh       chan string
-	newAgentCh      chan agents.Agent
 	callbacks       ControlPlaneCallbacks
 	workerCallbacks worker.WorkerCallbacks
-	stopCmdSent     bool // We should only handle the stop command once
+
+	controlCh   chan string
+	newAgentCh  chan agent.Agent
+	stopCmdSent bool // We should only handle the stop command once
 }
 
 func NewControlPlane(
@@ -45,14 +46,16 @@ func NewControlPlane(
 ) *ControlPlaneImpl {
 	return &ControlPlaneImpl{
 		agentFactory:    agentFactory,
+		storage:         storage,
 		chatProvider:    chatProvider,
 		controller:      controller,
 		scheduler:       scheduler,
-		controlCh:       make(chan string, ControlChannelSize),
-		newAgentCh:      make(chan agents.Agent, NewAgentChannelSize),
 		callbacks:       callbacks,
 		workerCallbacks: workerCallbacks,
-		stopCmdSent:     false,
+
+		controlCh:   make(chan string, ControlChannelSize),
+		newAgentCh:  make(chan agent.Agent, NewAgentChannelSize),
+		stopCmdSent: false,
 	}
 }
 
@@ -62,9 +65,7 @@ func (c *ControlPlaneImpl) Start(ctx context.Context) error {
 	// The resumeAgent function will register the agent with the controller
 	onAgentFound := func(agentID string, agentState dbaccess.AgentState) {
 		slog.Info("ControlPlane: Received new agent", "agent", agentID)
-		// TODO: Add role filed to agent_state table and get it from there
-		role := "publisher"
-		err := c.resumeAgent(ctx, agentID, role, nil)
+		err := c.resumeAgent(ctx, agentState.AgentID, agentState.Role, nil)
 		if err != nil {
 			slog.Error("ControlPlane: Failed to resume agent", "error", err)
 		}
@@ -137,8 +138,8 @@ func (c *ControlPlaneImpl) SendCommand(ctx context.Context, command string) erro
 }
 
 // newAgent creates a new agent and registers it with the controller
-func (c *ControlPlaneImpl) newAgent(ctx context.Context, task string, role string) (agents.Agent, error) {
-	var agent agents.Agent
+func (c *ControlPlaneImpl) newAgent(ctx context.Context, task string, role string) (agent.Agent, error) {
+	var agent agent.Agent
 	switch role {
 	case "publisher":
 		agent = c.agentFactory.NewPublisher(c.storage, task, c.chatProvider)
@@ -155,7 +156,7 @@ func (c *ControlPlaneImpl) newAgent(ctx context.Context, task string, role strin
 }
 
 // startAgent starts the agent in a new goroutine and handles the final response
-func (c *ControlPlaneImpl) startAgent(ctx context.Context, agent agents.Agent) error {
+func (c *ControlPlaneImpl) startAgent(ctx context.Context, agent agent.Agent) error {
 	slog.Info("ControlPlane: Starting agent", "agent", agent.GetID())
 	go func() {
 		resp, err := agent.StartTask(ctx, c.workerCallbacks)

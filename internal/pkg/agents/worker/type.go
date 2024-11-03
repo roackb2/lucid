@@ -138,6 +138,12 @@ type Worker interface {
 	// - The current status of the Worker.
 	GetStatus() string
 
+	// GetRole returns the role of the Worker.
+	//
+	// Returns:
+	// - The role of the Worker.
+	GetRole() string
+
 	// Serialize serializes the Worker's state to a byte slice.
 	//
 	// Returns:

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -14,23 +13,33 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
-	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
+type RealAgentFactory struct{}
+
+func (f *RealAgentFactory) NewPublisher(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
+	return agent.NewPublisher(task, storage, chatProvider)
+}
+
+func (f *RealAgentFactory) NewConsumer(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
+	return agent.NewConsumer(task, storage, chatProvider)
+}
+
 func main() {
 	defer utils.RecoverPanic()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	if err := config.LoadConfig("dev"); err != nil {
 		slog.Error("Error loading configuration:", "error", err)
 		panic(err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	storage, err := storage.NewRelationalStorage()
 	if err != nil {
+		slog.Error("Error creating storage", "error", err)
 		panic(err)
 	}
 
@@ -38,7 +47,6 @@ func main() {
 	bus := control_plane.NewChannelBus(65536)
 	go func() {
 		for {
-			// Bus should guarantee thread safety, so we can read from another goroutine
 			resp := bus.ReadResponse()
 			slog.Info("Received response", "response", resp)
 		}
@@ -51,19 +59,14 @@ func main() {
 		AgentLifeTime: 3 * time.Second,
 	}
 	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
-
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		err := controller.Start(ctx)
-		if err != nil {
-			slog.Error("Error starting controller", "error", err)
-		}
-		slog.Info("Controller done")
-	}()
-
-	callbacks := worker.WorkerCallbacks{
+	scheduler := control_plane.NewScheduler(ctx, nil)
+	agentFactory := &RealAgentFactory{}
+	callbacks := control_plane.ControlPlaneCallbacks{
+		control_plane.ControlPlaneEventAgentFinalResponse: func(agentID string, response string) {
+			slog.Info("Agent final response", "agent_id", agentID, "response", response)
+		},
+	}
+	workerCallbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {
 			slog.Info("Pausing agent", "agent_id", agentID, "status", status)
 		},
@@ -77,34 +80,17 @@ func main() {
 			slog.Info("Agent terminating", "agent_id", agentID, "status", status)
 		},
 	}
+	controlPlane := control_plane.NewControlPlane(agentFactory, storage, provider, controller, scheduler, callbacks, workerCallbacks)
 
-	onAgentFound := func(agentID string, agentState dbaccess.AgentState) {
-		slog.Info("Scheduler: Agent found", "agentID", agentState.AgentID)
-		consumer := agent.NewConsumer("", storage, provider)
-		go func() {
-			resp, err := consumer.ResumeTask(ctx, agentState.AgentID, nil, callbacks)
-			if err != nil {
-				slog.Error("Error resuming task", "error", err)
-				panic(err)
-			}
-			slog.Info("Task response", "response", resp)
-		}()
-		agentID, err := controller.RegisterAgent(ctx, consumer)
-		if err != nil {
-			slog.Error("Error registering agent", "error", err)
-			panic(err)
-		}
-		slog.Info("Registered agent", "agent_id", agentID)
-	}
+	doneCh := make(chan struct{})
 
-	scheduler := control_plane.NewScheduler(ctx, onAgentFound)
 	go func() {
-		defer wg.Done()
-		err := scheduler.Start(ctx)
+		err := controlPlane.Start(ctx)
 		if err != nil {
-			slog.Error("Scheduler failed", "error", err)
+			slog.Error("Error starting control plane", "error", err)
 			panic(err)
 		}
+		doneCh <- struct{}{}
 	}()
 
 	tasks := []string{
@@ -113,41 +99,19 @@ func main() {
 	}
 
 	for _, task := range tasks {
-		consumer := agent.NewConsumer(task, storage, provider)
-		go func() {
-			resp, err := consumer.StartTask(ctx, callbacks)
-			if err != nil {
-				slog.Error("Error kicking off task", "error", err)
-				panic(err)
-			}
-			slog.Info("Task response", "response", resp)
-		}()
-		agentID, err := controller.RegisterAgent(ctx, consumer)
+		err := controlPlane.KickoffTask(ctx, task, "consumer")
 		if err != nil {
 			slog.Error("Error kicking off task", "error", err)
 			panic(err)
 		}
-		slog.Info("Kicked off task", "agent_id", agentID)
 	}
 
 	time.Sleep(5 * time.Second)
 
-	// Stop scheduler first to prevent registering new agents
-	err = scheduler.SendCommand(ctx, "stop")
-	if err != nil {
-		slog.Error("Error stopping scheduler", "error", err)
-	}
+	slog.Info("Stopping control plane")
+	controlPlane.SendCommand(ctx, "stop")
 
-	time.Sleep(2 * time.Second)
-
-	slog.Info("Stopping agents")
-	err = controller.SendCommand(ctx, "stop")
-	if err != nil {
-		slog.Error("Error stopping agents", "error", err)
-	}
-
-	slog.Info("Waiting for agent controller to stop")
-
-	wg.Wait()
-	slog.Info("Agent controller stopped")
+	slog.Info("Waiting for control plane to stop")
+	<-doneCh
+	slog.Info("Control plane stopped")
 }

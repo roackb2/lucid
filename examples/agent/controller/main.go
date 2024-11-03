@@ -8,8 +8,8 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
+	"github.com/roackb2/lucid/internal/pkg/agents/agent"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
-	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
@@ -80,7 +80,7 @@ func main() {
 	}
 
 	for _, task := range tasks {
-		consumer := roles.NewConsumer(task, storage, provider)
+		consumer := agent.NewConsumer(task, storage, provider)
 		go func() {
 			resp, err := consumer.StartTask(ctx, callbacks)
 			if err != nil {

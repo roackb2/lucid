@@ -12,13 +12,15 @@ import (
 )
 
 const createAgentState = `-- name: CreateAgentState :exec
-INSERT INTO agent_states (agent_id, state, status, awakened_at, asleep_at) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO agent_states (agent_id, state, status, role, awakened_at, asleep_at)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateAgentStateParams struct {
 	AgentID    string
 	State      []byte
 	Status     string
+	Role       string
 	AwakenedAt pgtype.Timestamp
 	AsleepAt   pgtype.Timestamp
 }
@@ -28,6 +30,7 @@ func (q *Queries) CreateAgentState(ctx context.Context, arg CreateAgentStatePara
 		arg.AgentID,
 		arg.State,
 		arg.Status,
+		arg.Role,
 		arg.AwakenedAt,
 		arg.AsleepAt,
 	)
@@ -35,7 +38,7 @@ func (q *Queries) CreateAgentState(ctx context.Context, arg CreateAgentStatePara
 }
 
 const getAgentState = `-- name: GetAgentState :one
-SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
+SELECT id, agent_id, status, role, state, created_at, updated_at, awakened_at, asleep_at
 FROM agent_states
 WHERE agent_id = $1
 `
@@ -47,6 +50,7 @@ func (q *Queries) GetAgentState(ctx context.Context, agentID string) (AgentState
 		&i.ID,
 		&i.AgentID,
 		&i.Status,
+		&i.Role,
 		&i.State,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -57,7 +61,7 @@ func (q *Queries) GetAgentState(ctx context.Context, agentID string) (AgentState
 }
 
 const searchAgentByAsleepDurationAndStatus = `-- name: SearchAgentByAsleepDurationAndStatus :many
-SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
+SELECT id, agent_id, status, role, state, created_at, updated_at, awakened_at, asleep_at
 FROM agent_states
 WHERE asleep_at + $1::interval < now()
   AND status = ANY($2::varchar[])
@@ -84,6 +88,7 @@ func (q *Queries) SearchAgentByAsleepDurationAndStatus(ctx context.Context, arg 
 			&i.ID,
 			&i.AgentID,
 			&i.Status,
+			&i.Role,
 			&i.State,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -101,7 +106,7 @@ func (q *Queries) SearchAgentByAsleepDurationAndStatus(ctx context.Context, arg 
 }
 
 const searchAgentByAwakeDurationAndStatus = `-- name: SearchAgentByAwakeDurationAndStatus :many
-SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
+SELECT id, agent_id, status, role, state, created_at, updated_at, awakened_at, asleep_at
 FROM agent_states
 WHERE awakened_at + $1::interval < now()
   AND status = ANY($2::varchar[])
@@ -128,6 +133,7 @@ func (q *Queries) SearchAgentByAwakeDurationAndStatus(ctx context.Context, arg S
 			&i.ID,
 			&i.AgentID,
 			&i.Status,
+			&i.Role,
 			&i.State,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -145,7 +151,7 @@ func (q *Queries) SearchAgentByAwakeDurationAndStatus(ctx context.Context, arg S
 }
 
 const searchAgentByStatus = `-- name: SearchAgentByStatus :many
-SELECT id, agent_id, status, state, created_at, updated_at, awakened_at, asleep_at
+SELECT id, agent_id, status, role, state, created_at, updated_at, awakened_at, asleep_at
 FROM agent_states
 WHERE status = $1
 `
@@ -163,6 +169,7 @@ func (q *Queries) SearchAgentByStatus(ctx context.Context, status string) ([]Age
 			&i.ID,
 			&i.AgentID,
 			&i.Status,
+			&i.Role,
 			&i.State,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -181,13 +188,14 @@ func (q *Queries) SearchAgentByStatus(ctx context.Context, status string) ([]Age
 
 const updateAgentState = `-- name: UpdateAgentState :exec
 UPDATE agent_states
-SET status = $1, state = $2, awakened_at = $3, asleep_at = $4
-WHERE agent_id = $5
+SET state = $1, status = $2, role = $3, awakened_at = $4, asleep_at = $5
+WHERE agent_id = $6
 `
 
 type UpdateAgentStateParams struct {
-	Status     string
 	State      []byte
+	Status     string
+	Role       string
 	AwakenedAt pgtype.Timestamp
 	AsleepAt   pgtype.Timestamp
 	AgentID    string
@@ -195,8 +203,9 @@ type UpdateAgentStateParams struct {
 
 func (q *Queries) UpdateAgentState(ctx context.Context, arg UpdateAgentStateParams) error {
 	_, err := q.db.Exec(ctx, updateAgentState,
-		arg.Status,
 		arg.State,
+		arg.Status,
+		arg.Role,
 		arg.AwakenedAt,
 		arg.AsleepAt,
 		arg.AgentID,

@@ -7,8 +7,8 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
+	"github.com/roackb2/lucid/internal/pkg/agents/agent"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
-	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
@@ -34,7 +34,7 @@ func main() {
 
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
-	publisher := roles.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider)
+	publisher := agent.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider)
 
 	doneCh := make(chan struct{}, 1)
 	callbacks := worker.WorkerCallbacks{

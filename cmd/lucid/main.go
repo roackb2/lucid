@@ -11,9 +11,8 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/roackb2/lucid/config"
-	"github.com/roackb2/lucid/internal/pkg/agents"
+	"github.com/roackb2/lucid/internal/pkg/agents/agent"
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
-	"github.com/roackb2/lucid/internal/pkg/agents/roles"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/utils"
@@ -51,9 +50,9 @@ func main() {
 		// "Jazz Music for Studying",
 		// "Jazz Music for Working",
 	}
-	publishers := []roles.Publisher{}
+	publishers := []agent.Publisher{}
 	for _, song := range songs {
-		publishers = append(publishers, *roles.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage, provider))
+		publishers = append(publishers, *agent.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage, provider))
 	}
 
 	queries := []string{
@@ -61,13 +60,13 @@ func main() {
 		// "I'm looking for some Jazz music to study to.",
 		// "I need some Jazz music to relax to.",
 	}
-	consumers := []roles.Consumer{}
+	consumers := []agent.Consumer{}
 	for _, query := range queries {
-		consumers = append(consumers, *roles.NewConsumer(query, storage, provider))
+		consumers = append(consumers, *agent.NewConsumer(query, storage, provider))
 	}
 
 	var wg sync.WaitGroup
-	resCh := make(chan *agents.AgentResponse, len(publishers)+len(consumers))
+	resCh := make(chan *agent.AgentResponse, len(publishers)+len(consumers))
 	errCh := make(chan error, 1)
 
 	numWorkers := len(publishers) + len(consumers)
