@@ -47,6 +47,12 @@ func main() {
 	}
 	r.GET("/healthz", controllers.Healthz)
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+
+	// Home page
+	r.StaticFile("/", "./client/dist/index.html")
+	r.StaticFile("/favicon.ico", "./client/dist/favicon.ico")
+	r.Static("/assets", "./client/dist/assets")
+
 	log.Println("Server is running on port", config.Config.Server.Port)
 	r.Run(fmt.Sprintf(":%s", config.Config.Server.Port))
 }

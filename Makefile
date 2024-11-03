@@ -62,7 +62,8 @@ migrate-up: build
 migrate-down: build
 	./bin/migrate -down -dump
 
-run-server: generate-db-models swagger build
+run-server:
+	go build -o bin/server cmd/server/main.go
 	./bin/server
 
 start-milvus:
