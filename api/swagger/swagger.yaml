@@ -1,4 +1,14 @@
 definitions:
+  controllers.StartAgentRequest:
+    properties:
+      role:
+        type: string
+      task:
+        type: string
+    required:
+    - role
+    - task
+    type: object
   controllers.UserRequest:
     properties:
       email:
@@ -22,23 +32,42 @@ info:
   title: Lucid API
   version: "1.0"
 paths:
-  /api/v1/example/helloworld:
-    get:
+  /api/v1/agents/create:
+    post:
       consumes:
       - application/json
-      description: Hello World
+      description: Starts a new agent with role and task
+      parameters:
+      - description: Agent details
+        in: body
+        name: agent
+        required: true
+        schema:
+          $ref: '#/definitions/controllers.StartAgentRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Agent created successfully
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Hello World
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Start a new agent
       tags:
-      - helloworld
+      - agents
   /api/v1/users:
     post:
       consumes:

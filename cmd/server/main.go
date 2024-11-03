@@ -9,7 +9,6 @@ import (
 	docs "github.com/roackb2/lucid/api/swagger"
 	"github.com/roackb2/lucid/config"
 	"github.com/roackb2/lucid/internal/app/controllers"
-	"github.com/roackb2/lucid/internal/app/controllers/example"
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -34,15 +33,18 @@ func main() {
 		panic(err)
 	}
 
+	agentRouterController := controllers.NewAgentRouterController()
+
 	v1 := r.Group("/api/v1")
 	{
-		eg := v1.Group("/example")
-		{
-			eg.GET("/helloworld", example.HelloWorld)
-		}
 		users := v1.Group("/users")
 		{
 			users.POST("/", controllers.CreateMockUser)
+		}
+
+		agents := v1.Group("/agents/")
+		{
+			agents.POST("/create", agentRouterController.StartAgent)
 		}
 	}
 	r.GET("/healthz", controllers.Healthz)

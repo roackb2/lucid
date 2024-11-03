@@ -12,9 +12,9 @@
     },
     "host": "localhost:8080",
     "paths": {
-        "/api/v1/example/helloworld": {
-            "get": {
-                "description": "Hello World",
+        "/api/v1/agents/create": {
+            "post": {
+                "description": "Starts a new agent with role and task",
                 "consumes": [
                     "application/json"
                 ],
@@ -22,12 +22,41 @@
                     "application/json"
                 ],
                 "tags": [
-                    "helloworld"
+                    "agents"
                 ],
-                "summary": "Hello World",
+                "summary": "Start a new agent",
+                "parameters": [
+                    {
+                        "description": "Agent details",
+                        "name": "agent",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controllers.StartAgentRequest"
+                        }
+                    }
+                ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Agent created successfully",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -118,6 +147,21 @@
         }
     },
     "definitions": {
+        "controllers.StartAgentRequest": {
+            "type": "object",
+            "required": [
+                "role",
+                "task"
+            ],
+            "properties": {
+                "role": {
+                    "type": "string"
+                },
+                "task": {
+                    "type": "string"
+                }
+            }
+        },
         "controllers.UserRequest": {
             "type": "object",
             "required": [

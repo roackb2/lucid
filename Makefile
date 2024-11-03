@@ -64,6 +64,7 @@ migrate-down: build
 
 run-server:
 	go build -o bin/server cmd/server/main.go
+	@make swagger
 	./bin/server
 
 start-milvus:
