@@ -1,10 +1,12 @@
 package controllers
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/roackb2/lucid/internal/pkg/control_plane"
 )
 
 type StartAgentRequest struct {
@@ -13,10 +15,15 @@ type StartAgentRequest struct {
 }
 
 type AgentRouterController struct {
+	ctx          context.Context
+	controlPlane control_plane.ControlPlane
 }
 
-func NewAgentRouterController() *AgentRouterController {
-	return &AgentRouterController{}
+func NewAgentRouterController(ctx context.Context, controlPlane control_plane.ControlPlane) *AgentRouterController {
+	return &AgentRouterController{
+		ctx:          ctx,
+		controlPlane: controlPlane,
+	}
 }
 
 // StartAgent godoc
@@ -34,6 +41,12 @@ func (ac *AgentRouterController) StartAgent(c *gin.Context) {
 	var agent StartAgentRequest
 	if err := c.ShouldBindJSON(&agent); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := ac.controlPlane.KickoffTask(ac.ctx, agent.Task, agent.Role)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

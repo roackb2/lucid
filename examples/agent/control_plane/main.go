@@ -16,16 +16,6 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
-type RealAgentFactory struct{}
-
-func (f *RealAgentFactory) NewPublisher(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
-	return agent.NewPublisher(task, storage, chatProvider)
-}
-
-func (f *RealAgentFactory) NewConsumer(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
-	return agent.NewConsumer(task, storage, chatProvider)
-}
-
 func main() {
 	defer utils.RecoverPanic()
 
@@ -60,7 +50,7 @@ func main() {
 	}
 	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
 	scheduler := control_plane.NewScheduler(ctx, nil)
-	agentFactory := &RealAgentFactory{}
+	agentFactory := &agent.RealAgentFactory{}
 	callbacks := control_plane.ControlPlaneCallbacks{
 		control_plane.ControlPlaneEventAgentFinalResponse: func(agentID string, response string) {
 			slog.Info("Agent final response", "agent_id", agentID, "response", response)

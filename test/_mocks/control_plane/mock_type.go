@@ -331,32 +331,32 @@ func (m *MockAgentFactory) EXPECT() *MockAgentFactoryMockRecorder {
 	return m.recorder
 }
 
-// NewConsumer mocks base method.
-func (m *MockAgentFactory) NewConsumer(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
+// NewConsumerAgent mocks base method.
+func (m *MockAgentFactory) NewConsumerAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewConsumer", storage, task, chatProvider)
+	ret := m.ctrl.Call(m, "NewConsumerAgent", storage, task, chatProvider)
 	ret0, _ := ret[0].(agent.Agent)
 	return ret0
 }
 
-// NewConsumer indicates an expected call of NewConsumer.
-func (mr *MockAgentFactoryMockRecorder) NewConsumer(storage, task, chatProvider any) *gomock.Call {
+// NewConsumerAgent indicates an expected call of NewConsumerAgent.
+func (mr *MockAgentFactoryMockRecorder) NewConsumerAgent(storage, task, chatProvider any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewConsumer", reflect.TypeOf((*MockAgentFactory)(nil).NewConsumer), storage, task, chatProvider)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewConsumerAgent", reflect.TypeOf((*MockAgentFactory)(nil).NewConsumerAgent), storage, task, chatProvider)
 }
 
-// NewPublisher mocks base method.
-func (m *MockAgentFactory) NewPublisher(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
+// NewPublisherAgent mocks base method.
+func (m *MockAgentFactory) NewPublisherAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewPublisher", storage, task, chatProvider)
+	ret := m.ctrl.Call(m, "NewPublisherAgent", storage, task, chatProvider)
 	ret0, _ := ret[0].(agent.Agent)
 	return ret0
 }
 
-// NewPublisher indicates an expected call of NewPublisher.
-func (mr *MockAgentFactoryMockRecorder) NewPublisher(storage, task, chatProvider any) *gomock.Call {
+// NewPublisherAgent indicates an expected call of NewPublisherAgent.
+func (mr *MockAgentFactoryMockRecorder) NewPublisherAgent(storage, task, chatProvider any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewPublisher", reflect.TypeOf((*MockAgentFactory)(nil).NewPublisher), storage, task, chatProvider)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewPublisherAgent", reflect.TypeOf((*MockAgentFactory)(nil).NewPublisherAgent), storage, task, chatProvider)
 }
 
 // MockControlPlane is a mock of ControlPlane interface.
@@ -398,17 +398,17 @@ func (mr *MockControlPlaneMockRecorder) KickoffTask(ctx, task, role any) *gomock
 }
 
 // SendCommand mocks base method.
-func (m *MockControlPlane) SendCommand(ctx context.Context, command, payload string) error {
+func (m *MockControlPlane) SendCommand(ctx context.Context, command string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendCommand", ctx, command, payload)
+	ret := m.ctrl.Call(m, "SendCommand", ctx, command)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendCommand indicates an expected call of SendCommand.
-func (mr *MockControlPlaneMockRecorder) SendCommand(ctx, command, payload any) *gomock.Call {
+func (mr *MockControlPlaneMockRecorder) SendCommand(ctx, command any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCommand", reflect.TypeOf((*MockControlPlane)(nil).SendCommand), ctx, command, payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCommand", reflect.TypeOf((*MockControlPlane)(nil).SendCommand), ctx, command)
 }
 
 // Start mocks base method.

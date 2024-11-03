@@ -48,8 +48,8 @@ type Scheduler interface {
 }
 
 type AgentFactory interface {
-	NewPublisher(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent
-	NewConsumer(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent
+	NewPublisherAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent
+	NewConsumerAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent
 }
 
 type OnAgentFinalResponseCallback func(agentID string, response string)
@@ -65,5 +65,5 @@ type ControlPlaneCallbacks map[ControlPlaneEventKey]OnAgentFinalResponseCallback
 type ControlPlane interface {
 	Start(ctx context.Context) error
 	KickoffTask(ctx context.Context, task string, role string) error
-	SendCommand(ctx context.Context, command string, payload string) error
+	SendCommand(ctx context.Context, command string) error
 }

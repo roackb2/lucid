@@ -142,10 +142,13 @@ func (c *ControlPlaneImpl) newAgent(ctx context.Context, task string, role strin
 	var agent agent.Agent
 	switch role {
 	case "publisher":
-		agent = c.agentFactory.NewPublisher(c.storage, task, c.chatProvider)
+		agent = c.agentFactory.NewPublisherAgent(c.storage, task, c.chatProvider)
 	case "consumer":
-		agent = c.agentFactory.NewConsumer(c.storage, task, c.chatProvider)
+		agent = c.agentFactory.NewConsumerAgent(c.storage, task, c.chatProvider)
+	default:
+		return nil, fmt.Errorf("ControlPlane: Invalid role: %s", role)
 	}
+	slog.Info("ControlPlane: Creating new agent", "agent", agent)
 	agentID, err := c.controller.RegisterAgent(ctx, agent)
 	if err != nil {
 		slog.Error("ControlPlane: Failed to register agent", "error", err)
