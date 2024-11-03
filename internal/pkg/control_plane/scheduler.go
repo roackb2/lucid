@@ -20,7 +20,6 @@ const (
 
 type SchedulerImpl struct {
 	controlCh    chan string
-	agentCtrl    *AgentController
 	onAgentFound OnAgentFoundCallback
 }
 
@@ -29,6 +28,13 @@ func NewScheduler(ctx context.Context, onAgentFound OnAgentFoundCallback) *Sched
 		controlCh:    make(chan string, SchedulerControlChSize),
 		onAgentFound: onAgentFound,
 	}
+}
+
+func (s *SchedulerImpl) SetCallback(callback OnAgentFoundCallback) {
+	if s.onAgentFound != nil {
+		slog.Warn("Scheduler: Overriding existing callback")
+	}
+	s.onAgentFound = callback
 }
 
 func (s *SchedulerImpl) SendCommand(ctx context.Context, cmd string) error {

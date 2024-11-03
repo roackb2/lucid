@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/roackb2/lucid/internal/pkg/agents"
+	"github.com/roackb2/lucid/internal/pkg/agents/providers"
+	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 )
 
@@ -42,5 +44,26 @@ type OnAgentFoundCallback func(agentID string, agent dbaccess.AgentState)
 type Scheduler interface {
 	Start(ctx context.Context) error
 	SendCommand(ctx context.Context, command string) error
-	OnAgentFound(callback OnAgentFoundCallback)
+	SetCallback(callback OnAgentFoundCallback)
+}
+
+type AgentFactory interface {
+	NewPublisher(storage storage.Storage, task string, chatProvider providers.ChatProvider) agents.Agent
+	NewConsumer(storage storage.Storage, task string, chatProvider providers.ChatProvider) agents.Agent
+}
+
+type OnAgentFinalResponseCallback func(agentID string, response string)
+
+type ControlPlaneEventKey string
+
+const (
+	ControlPlaneEventAgentFinalResponse ControlPlaneEventKey = "agent_final_response"
+)
+
+type ControlPlaneCallbacks map[ControlPlaneEventKey]OnAgentFinalResponseCallback
+
+type ControlPlane interface {
+	Start(ctx context.Context) error
+	KickoffTask(ctx context.Context, task string, role string) error
+	SendCommand(ctx context.Context, command string, payload string) error
 }
