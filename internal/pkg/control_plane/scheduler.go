@@ -15,6 +15,7 @@ const (
 	SchedulerControlChSize = 10
 	ScanInterval           = 1 * time.Second
 	AgentSleepDuration     = 10 * time.Second
+	AgentAwakeDuration     = 5 * time.Minute
 	BatchProcessAgentNum   = 10
 )
 
@@ -88,20 +89,34 @@ func (s *SchedulerImpl) Start(ctx context.Context) error {
 }
 
 func (s *SchedulerImpl) searchAgents(ctx context.Context) error {
-	params := dbaccess.SearchAgentByAsleepDurationAndStatusParams{
+	asleepParams := dbaccess.SearchAgentByAsleepDurationAndStatusParams{
 		Duration:  utils.ConvertToPgInterval(AgentSleepDuration),
 		Statuses:  []string{worker.StatusAsleep},
 		MaxAgents: BatchProcessAgentNum,
 	}
-	agents, err := dbaccess.Querier.SearchAgentByAsleepDurationAndStatus(ctx, params)
+	asleepAgents, err := dbaccess.Querier.SearchAgentByAsleepDurationAndStatus(ctx, asleepParams)
 	if err != nil {
 		slog.Error("Scheduler failed to search agents", "error", err)
 		return err
 	}
+	slog.Info("Scheduler found asleep agents", "num_agents", len(asleepAgents))
 
-	slog.Info("Scheduler found agents", "num_agents", len(agents))
-	for _, agent := range agents {
-		slog.Info("Scheduler handling asleep agent, waking up", "agent_id", agent.AgentID)
+	// Search for agents that is running but has been awake for a while,
+	// probably means they're orphans with no controller
+	awakenParams := dbaccess.SearchAgentByAwakeDurationAndStatusParams{
+		Duration:  utils.ConvertToPgInterval(AgentAwakeDuration),
+		Statuses:  []string{worker.StatusRunning},
+		MaxAgents: BatchProcessAgentNum,
+	}
+	awakenedAgents, err := dbaccess.Querier.SearchAgentByAwakeDurationAndStatus(ctx, awakenParams)
+	if err != nil {
+		slog.Error("Scheduler failed to search agents", "error", err)
+		return err
+	}
+	slog.Info("Scheduler found awakened agents", "num_agents", len(awakenedAgents))
+
+	for _, agent := range append(asleepAgents, awakenedAgents...) {
+		slog.Info("Scheduler handling agent", "agent_id", agent.AgentID)
 		if s.onAgentFound == nil {
 			slog.Warn("Scheduler: No callback set, skipping agent", "agent_id", agent.AgentID)
 			continue
