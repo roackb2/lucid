@@ -321,9 +321,8 @@ func (w *WorkerImpl) PersistState() error {
 		slog.Error("Worker: Failed to serialize", "error", err)
 		return err
 	}
-	now := time.Now()
-	slog.Info("Worker: storage", "storage", w.storage)
-	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), w.Role, &now, nil)
+	awakenedAt, asleepAt := w.getStateTimestamps()
+	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), w.Role, awakenedAt, asleepAt)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
 		return err
@@ -345,13 +344,25 @@ func (w *WorkerImpl) RestoreState(agentID string) error {
 	}
 
 	// Awakening agent and update its status accordingly
-	now := time.Now()
-	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), w.Role, &now, nil)
+	awakenedAt, asleepAt := w.getStateTimestamps()
+	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), w.Role, awakenedAt, asleepAt)
 	if err != nil {
 		slog.Error("Worker: Failed to save state", "error", err)
 		return err
 	}
 	return nil
+}
+
+func (w *WorkerImpl) getStateTimestamps() (awakenedAt *time.Time, asleepAt *time.Time) {
+	status := w.GetStatus()
+	if status == StatusRunning {
+		now := time.Now()
+		awakenedAt = &now
+	} else if status == StatusAsleep {
+		now := time.Now()
+		asleepAt = &now
+	}
+	return
 }
 
 func (w *WorkerImpl) Serialize() ([]byte, error) {
