@@ -1,0 +1,3 @@
+[submodule "kafka-stack-docker-compose"]
+	path = kafka-stack-docker-compose
+	url = git@github.com:conduktor/kafka-stack-docker-compose.git

@@ -75,3 +75,9 @@ stop-milvus:
 
 run-milvus-gui:
 	docker run --rm -p 8000:3000 -e MILVUS_URL=${milvus-url} zilliz/attu:v2.4
+
+start-kafka:
+	cd kafka-stack-docker-compose && docker compose -f zk-single-kafka-single.yml up -d
+
+stop-kafka:
+	cd kafka-stack-docker-compose && docker compose -f zk-single-kafka-single.yml down

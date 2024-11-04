@@ -27,6 +27,9 @@ type Configuration struct {
 		Address   string `mapstructure:"address"`
 		Dimension int    `mapstructure:"dimension"`
 	} `mapstructure:"milvus"`
+	Kafka struct {
+		Address string `mapstructure:"address"`
+	} `mapstructure:"kafka"`
 }
 
 func LoadConfig(name string) error {

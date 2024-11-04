@@ -16,3 +16,6 @@ database:
 milvus:
   address: localhost:19530
   dimension: 1536
+
+kafka:
+  address: localhost:9092
