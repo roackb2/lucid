@@ -30,11 +30,14 @@ type AgentControllerImpl struct {
 	bus       NotificationBus
 	controlCh chan string
 	terminate bool
-
-	callbacks worker.WorkerCallbacks
 }
 
-func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus NotificationBus, tracker AgentTracker) *AgentControllerImpl {
+func NewAgentController(
+	cfg AgentControllerConfig,
+	storage storage.Storage,
+	bus NotificationBus,
+	tracker AgentTracker,
+) *AgentControllerImpl {
 	scanInterval := utils.GetOrDefault(cfg.ScanInterval, 1*time.Second)
 	agentLifeTime := utils.GetOrDefault(cfg.AgentLifeTime, 5*time.Minute)
 	maxRespChSize := utils.GetOrDefault(cfg.MaxRespChSize, 65536)
@@ -43,21 +46,6 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		AgentLifeTime: agentLifeTime,
 		MaxRespChSize: maxRespChSize,
 	}
-	// TODO: Report status to the caller
-	callbacks := worker.WorkerCallbacks{
-		worker.OnPause: func(agentID string, status string) {
-			slog.Info("AgentController onPause", "agentID", agentID, "status", status)
-		},
-		worker.OnResume: func(agentID string, status string) {
-			slog.Info("AgentController onResume", "agentID", agentID, "status", status)
-		},
-		worker.OnSleep: func(agentID string, status string) {
-			slog.Info("AgentController onSleep", "agentID", agentID, "status", status)
-		},
-		worker.OnTerminate: func(agentID string, status string) {
-			slog.Info("AgentController onTerminate", "agentID", agentID, "status", status)
-		},
-	}
 	controller := &AgentControllerImpl{
 		cfg:       mergedCfg,
 		storage:   storage,
@@ -65,7 +53,6 @@ func NewAgentController(cfg AgentControllerConfig, storage storage.Storage, bus 
 		tracker:   tracker,
 		controlCh: make(chan string, AgentControllerControlChSize),
 		terminate: false,
-		callbacks: callbacks,
 	}
 	return controller
 }
