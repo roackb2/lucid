@@ -17,6 +17,7 @@ import (
 	providers "github.com/roackb2/lucid/internal/pkg/agents/providers"
 	storage "github.com/roackb2/lucid/internal/pkg/agents/storage"
 	control_plane "github.com/roackb2/lucid/internal/pkg/control_plane"
+	pubsub "github.com/roackb2/lucid/internal/pkg/pubsub"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -280,31 +281,31 @@ func (m *MockAgentFactory) EXPECT() *MockAgentFactoryMockRecorder {
 }
 
 // NewConsumerAgent mocks base method.
-func (m *MockAgentFactory) NewConsumerAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
+func (m *MockAgentFactory) NewConsumerAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) agent.Agent {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewConsumerAgent", storage, task, chatProvider)
+	ret := m.ctrl.Call(m, "NewConsumerAgent", storage, task, chatProvider, pubSub)
 	ret0, _ := ret[0].(agent.Agent)
 	return ret0
 }
 
 // NewConsumerAgent indicates an expected call of NewConsumerAgent.
-func (mr *MockAgentFactoryMockRecorder) NewConsumerAgent(storage, task, chatProvider any) *gomock.Call {
+func (mr *MockAgentFactoryMockRecorder) NewConsumerAgent(storage, task, chatProvider, pubSub any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewConsumerAgent", reflect.TypeOf((*MockAgentFactory)(nil).NewConsumerAgent), storage, task, chatProvider)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewConsumerAgent", reflect.TypeOf((*MockAgentFactory)(nil).NewConsumerAgent), storage, task, chatProvider, pubSub)
 }
 
 // NewPublisherAgent mocks base method.
-func (m *MockAgentFactory) NewPublisherAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent {
+func (m *MockAgentFactory) NewPublisherAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) agent.Agent {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewPublisherAgent", storage, task, chatProvider)
+	ret := m.ctrl.Call(m, "NewPublisherAgent", storage, task, chatProvider, pubSub)
 	ret0, _ := ret[0].(agent.Agent)
 	return ret0
 }
 
 // NewPublisherAgent indicates an expected call of NewPublisherAgent.
-func (mr *MockAgentFactoryMockRecorder) NewPublisherAgent(storage, task, chatProvider any) *gomock.Call {
+func (mr *MockAgentFactoryMockRecorder) NewPublisherAgent(storage, task, chatProvider, pubSub any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewPublisherAgent", reflect.TypeOf((*MockAgentFactory)(nil).NewPublisherAgent), storage, task, chatProvider)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewPublisherAgent", reflect.TypeOf((*MockAgentFactory)(nil).NewPublisherAgent), storage, task, chatProvider, pubSub)
 }
 
 // MockControlPlane is a mock of ControlPlane interface.

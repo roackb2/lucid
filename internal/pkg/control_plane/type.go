@@ -8,6 +8,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 )
 
 type AgentTracking struct {
@@ -42,8 +43,8 @@ type Scheduler interface {
 }
 
 type AgentFactory interface {
-	NewPublisherAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent
-	NewConsumerAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider) agent.Agent
+	NewPublisherAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) agent.Agent
+	NewConsumerAgent(storage storage.Storage, task string, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) agent.Agent
 }
 
 type OnAgentFinalResponseCallback func(agentID string, response string)

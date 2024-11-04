@@ -19,7 +19,7 @@ import (
 //
 // The context can be used to manage cancellation and deadlines for the
 // callback execution.
-type OnMessageCallback func(ctx context.Context, message string) error
+type OnMessageCallback func(message string) error
 
 // PubSub defines the interface for a publish-subscribe messaging system.
 //
@@ -42,7 +42,6 @@ type PubSub interface {
 	// Subscribe registers a callback function to receive messages from the specified topic.
 	//
 	// Parameters:
-	// - ctx: The context for controlling cancellation and deadlines.
 	// - topic: The topic to subscribe to.
 	// - callback: The function to be called when a message is received.
 	//
@@ -50,7 +49,7 @@ type PubSub interface {
 	// - error: An error if the subscription fails; otherwise, nil.
 	//
 	// The subscription will remain active until the context is canceled.
-	Subscribe(ctx context.Context, topic string, callback OnMessageCallback) error
+	Subscribe(topic string, callback OnMessageCallback) error
 
 	// Unsubscribe removes the subscription from the specified topic.
 	//

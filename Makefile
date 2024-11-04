@@ -53,6 +53,7 @@ generate-mocks:
 	mockgen -source internal/pkg/agents/providers/type.go -destination test/_mocks/providers/mock_type.go
 	mockgen -source internal/pkg/agents/agent/type.go -destination test/_mocks/agent/mock_type.go
 	mockgen -source internal/pkg/control_plane/type.go -destination test/_mocks/control_plane/mock_type.go
+	mockgen -source internal/pkg/pubsub/type.go -destination test/_mocks/pubsub/mock_type.go
 
 # Run migrations up
 migrate-up: build

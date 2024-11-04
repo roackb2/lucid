@@ -21,7 +21,7 @@ func TestKafkaPubSub_Integration(t *testing.T) {
 	receivedMessages := make(chan string)
 	errCh := make(chan error)
 	go func() {
-		err := pubsub.Subscribe(topic, func(ctx context.Context, msg string) error {
+		err := pubsub.Subscribe(topic, func(msg string) error {
 			receivedMessages <- msg
 			return nil
 		})

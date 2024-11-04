@@ -13,6 +13,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -35,6 +36,19 @@ func main() {
 	tracker := control_plane.NewMemoryAgentTracker()
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
+	pubSub := pubsub.NewKafkaPubSub()
+	defer pubSub.Close()
+
+	go func() {
+		err := pubSub.Subscribe("agent_response", func(message string) error {
+			slog.Info("Received PubSub response", "message", message)
+			return nil
+		})
+		if err != nil {
+			slog.Error("Error subscribing to agent_response", "error", err)
+		}
+	}()
+
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {
 			slog.Info("Pausing agent", "agent_id", agentID, "status", status)
@@ -71,7 +85,7 @@ func main() {
 	}
 
 	for _, task := range tasks {
-		consumer := agent.NewConsumer(task, storage, provider)
+		consumer := agent.NewConsumer(task, storage, provider, pubSub)
 		go func() {
 			resp, err := consumer.StartTask(ctx, callbacks)
 			if err != nil {

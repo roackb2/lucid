@@ -12,6 +12,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 )
 
 const (
@@ -27,6 +28,7 @@ type ControlPlaneImpl struct {
 	chatProvider    providers.ChatProvider
 	controller      AgentController
 	scheduler       Scheduler
+	pubSub          pubsub.PubSub
 	callbacks       ControlPlaneCallbacks
 	workerCallbacks worker.WorkerCallbacks
 
@@ -41,6 +43,7 @@ func NewControlPlane(
 	chatProvider providers.ChatProvider,
 	controller AgentController,
 	scheduler Scheduler,
+	pubSub pubsub.PubSub,
 	callbacks ControlPlaneCallbacks,
 	workerCallbacks worker.WorkerCallbacks,
 ) *ControlPlaneImpl {
@@ -50,6 +53,7 @@ func NewControlPlane(
 		chatProvider:    chatProvider,
 		controller:      controller,
 		scheduler:       scheduler,
+		pubSub:          pubSub,
 		callbacks:       callbacks,
 		workerCallbacks: workerCallbacks,
 
@@ -142,9 +146,9 @@ func (c *ControlPlaneImpl) newAgent(ctx context.Context, task string, role strin
 	var agent agent.Agent
 	switch role {
 	case "publisher":
-		agent = c.agentFactory.NewPublisherAgent(c.storage, task, c.chatProvider)
+		agent = c.agentFactory.NewPublisherAgent(c.storage, task, c.chatProvider, c.pubSub)
 	case "consumer":
-		agent = c.agentFactory.NewConsumerAgent(c.storage, task, c.chatProvider)
+		agent = c.agentFactory.NewConsumerAgent(c.storage, task, c.chatProvider, c.pubSub)
 	default:
 		return nil, fmt.Errorf("ControlPlane: Invalid role: %s", role)
 	}

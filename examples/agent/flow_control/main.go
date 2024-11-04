@@ -13,6 +13,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -36,9 +37,21 @@ func main() {
 
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
+	pubSub := pubsub.NewKafkaPubSub()
+	defer pubSub.Close()
+
+	go func() {
+		err := pubSub.Subscribe("agent_response", func(message string) error {
+			slog.Info("Received PubSub response", "message", message)
+			return nil
+		})
+		if err != nil {
+			slog.Error("Error subscribing to agent_response", "error", err)
+		}
+	}()
 
 	// Create a consumer with task that should not finish
-	consumer := agent.NewConsumer("Is there any rock song? Keep searching until you find it.", storage, provider)
+	consumer := agent.NewConsumer("Is there any rock song? Keep searching until you find it.", storage, provider, pubSub)
 
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {

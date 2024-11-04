@@ -11,6 +11,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -34,7 +35,20 @@ func main() {
 
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
-	publisher := agent.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider)
+	pubSub := pubsub.NewKafkaPubSub()
+	defer pubSub.Close()
+
+	go func() {
+		err := pubSub.Subscribe("agent_response", func(message string) error {
+			slog.Info("Received PubSub response", "message", message)
+			return nil
+		})
+		if err != nil {
+			slog.Error("Error subscribing to agent_response", "error", err)
+		}
+	}()
+
+	publisher := agent.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider, pubSub)
 
 	doneCh := make(chan struct{}, 1)
 	callbacks := worker.WorkerCallbacks{

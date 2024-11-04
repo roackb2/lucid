@@ -15,6 +15,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -41,6 +42,18 @@ func main() {
 
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
+	pubSub := pubsub.NewKafkaPubSub()
+	defer pubSub.Close()
+
+	go func() {
+		err := pubSub.Subscribe("agent_response", func(message string) error {
+			slog.Info("Received PubSub response", "message", message)
+			return nil
+		})
+		if err != nil {
+			slog.Error("Error subscribing to agent_response", "error", err)
+		}
+	}()
 
 	songs := []string{
 		"Jazz in the Rain",
@@ -52,7 +65,7 @@ func main() {
 	}
 	publishers := []agent.Publisher{}
 	for _, song := range songs {
-		publishers = append(publishers, *agent.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage, provider))
+		publishers = append(publishers, *agent.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage, provider, pubSub))
 	}
 
 	queries := []string{
@@ -62,7 +75,7 @@ func main() {
 	}
 	consumers := []agent.Consumer{}
 	for _, query := range queries {
-		consumers = append(consumers, *agent.NewConsumer(query, storage, provider))
+		consumers = append(consumers, *agent.NewConsumer(query, storage, provider, pubSub))
 	}
 
 	var wg sync.WaitGroup

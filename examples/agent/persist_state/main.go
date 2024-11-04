@@ -14,6 +14,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -37,8 +38,19 @@ func main() {
 
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
+	pubSub := pubsub.NewKafkaPubSub()
+	defer pubSub.Close()
 
-	publisher := agent.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage, provider)
+	go func() {
+		err := pubSub.Subscribe("agent_response", func(message string) error {
+			slog.Info("Received PubSub response", "message", message)
+			return nil
+		})
+		if err != nil {
+			slog.Error("Error subscribing to agent_response", "error", err)
+		}
+	}()
+	publisher := agent.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage, provider, pubSub)
 
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {
@@ -84,7 +96,7 @@ func main() {
 	}
 
 	// Restore the state
-	restoredPublisher := agent.NewPublisher("", storage, provider)
+	restoredPublisher := agent.NewPublisher("", storage, provider, pubSub)
 	newPrompt := "What is the length of the title of the song that you just published?"
 	res, err = restoredPublisher.ResumeTask(ctx, publisher.GetID(), &newPrompt, callbacks)
 	if err != nil {

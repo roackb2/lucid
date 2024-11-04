@@ -8,6 +8,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 )
 
 type BaseAgent struct {
@@ -18,13 +19,13 @@ type BaseAgent struct {
 	task    string
 }
 
-func NewBaseAgent(storage storage.Storage, task string, role string, chatProvider providers.ChatProvider) BaseAgent {
+func NewBaseAgent(storage storage.Storage, task string, role string, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) BaseAgent {
 	id := uuid.New().String()
 	return BaseAgent{
 		id:   id,
 		role: role,
 
-		worker:  worker.NewWorker(&id, role, storage, chatProvider),
+		worker:  worker.NewWorker(&id, role, storage, chatProvider, pubSub),
 		storage: storage,
 		task:    task,
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	mock_providers "github.com/roackb2/lucid/test/_mocks/providers"
+	mock_pubsub "github.com/roackb2/lucid/test/_mocks/pubsub"
 	mock_storage "github.com/roackb2/lucid/test/_mocks/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -18,6 +19,7 @@ type WorkerTestSuite struct {
 	ctrl                      *gomock.Controller
 	mockStorage               *mock_storage.MockStorage
 	mockProvider              *mock_providers.MockChatProvider
+	mockPubSub                *mock_pubsub.MockPubSub
 	worker                    *WorkerImpl
 	id                        string
 	role                      string
@@ -29,9 +31,10 @@ func (s *WorkerTestSuite) SetupTest() {
 	s.ctrl = gomock.NewController(s.T())
 	s.mockStorage = mock_storage.NewMockStorage(s.ctrl)
 	s.mockProvider = mock_providers.NewMockChatProvider(s.ctrl)
+	s.mockPubSub = mock_pubsub.NewMockPubSub(s.ctrl)
 	s.id = "test-id"
 	s.role = "test-role"
-	s.worker = NewWorker(&s.id, s.role, s.mockStorage, s.mockProvider)
+	s.worker = NewWorker(&s.id, s.role, s.mockStorage, s.mockProvider, s.mockPubSub)
 
 	s.mockReportResponseContent = "Test response"
 	mockToolCallArgs := map[string]string{
@@ -79,6 +82,11 @@ func (s *WorkerTestSuite) TestChat() {
 
 	s.mockStorage.EXPECT().
 		SaveAgentState(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).
+		AnyTimes()
+
+	s.mockPubSub.EXPECT().
+		Publish(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
 		AnyTimes()
 

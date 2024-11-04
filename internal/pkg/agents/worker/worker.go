@@ -12,12 +12,14 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/tools"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
 const (
 	TickerInterval      = 500 * time.Millisecond
 	WorkerControlChSize = 10
+	PublishTimeout      = 5 * time.Second
 )
 
 type WorkerImpl struct {
@@ -29,13 +31,14 @@ type WorkerImpl struct {
 	messageMux   sync.RWMutex           `json:"-"`
 	persistTools *tools.PersistTool     `json:"-"`
 	flowTools    *tools.FlowTool        `json:"-"`
+	pubSub       pubsub.PubSub          `json:"-"`
 
 	ID       *string                 `json:"id"`
 	Role     string                  `json:"role"`
 	Messages []providers.ChatMessage `json:"messages"`
 }
 
-func NewWorker(id *string, role string, storage storage.Storage, chatProvider providers.ChatProvider) *WorkerImpl {
+func NewWorker(id *string, role string, storage storage.Storage, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) *WorkerImpl {
 	persistTool := tools.NewPersistTool(storage)
 	flowTool := tools.NewFlowTool()
 
@@ -44,9 +47,10 @@ func NewWorker(id *string, role string, storage storage.Storage, chatProvider pr
 		storage:      storage,
 		stateMachine: nil, // Should init when start or resume task
 		controlCh:    make(chan string, WorkerControlChSize),
+		messageMux:   sync.RWMutex{},
 		persistTools: persistTool,
 		flowTools:    flowTool,
-		messageMux:   sync.RWMutex{},
+		pubSub:       pubSub,
 
 		ID:   id,
 		Role: role,
@@ -159,6 +163,9 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 			switch status {
 			case StatusRunning:
 				if response := w.getAgentResponse(); response != "" {
+					if err := w.publishFinalResponse(ctx, response); err != nil {
+						slog.Error("Worker: Failed to publish final response", "error", err)
+					}
 					// We got the final response, persist state and terminate the agent
 					w.stateMachine.SetState(StatusTerminated)
 					w.cleanUp()
@@ -173,6 +180,32 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 			}
 		}
 	}
+}
+
+func (w *WorkerImpl) publishFinalResponse(ctx context.Context, response string) error {
+	slog.Info("Worker: Publishing final response", "agentID", *w.ID, "response", response)
+	payload := WorkerResponseNotification{
+		AgentID:  *w.ID,
+		Response: response,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("Worker: Failed to marshal payload", "error", err)
+		return err
+	}
+	topic := fmt.Sprintf("%s_response", *w.ID)
+	err = w.pubSub.Publish(ctx, topic, string(payloadBytes), PublishTimeout)
+	if err != nil {
+		slog.Error("Worker: Failed to publish response", "error", err)
+		return err
+	}
+	generalTopic := "agent_response"
+	err = w.pubSub.Publish(ctx, generalTopic, string(payloadBytes), PublishTimeout)
+	if err != nil {
+		slog.Error("Worker: Failed to publish response", "error", err)
+		return err
+	}
+	return nil
 }
 
 // SendCommand is idempotent, it will have no effect if the Worker is asleep or terminated.

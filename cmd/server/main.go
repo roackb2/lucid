@@ -18,6 +18,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -54,6 +55,7 @@ func main() {
 	tracker := control_plane.NewMemoryAgentTracker()
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
+	pubSub := pubsub.NewKafkaPubSub()
 
 	controllerConfig := control_plane.AgentControllerConfig{
 		AgentLifeTime: 3 * time.Second,
@@ -80,7 +82,7 @@ func main() {
 			slog.Info("Agent terminating", "agent_id", agentID, "status", status)
 		},
 	}
-	controlPlane := control_plane.NewControlPlane(agentFactory, storage, provider, controller, scheduler, controlPlaneCallbacks, workerCallbacks)
+	controlPlane := control_plane.NewControlPlane(agentFactory, storage, provider, controller, scheduler, pubSub, controlPlaneCallbacks, workerCallbacks)
 
 	go func() {
 		err := controlPlane.Start(ctx)

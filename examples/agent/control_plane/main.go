@@ -13,6 +13,7 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/agents/storage"
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
@@ -36,12 +37,24 @@ func main() {
 	tracker := control_plane.NewMemoryAgentTracker()
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
-
 	controllerConfig := control_plane.AgentControllerConfig{
 		AgentLifeTime: 3 * time.Second,
 	}
 	controller := control_plane.NewAgentController(controllerConfig, storage, tracker)
 	scheduler := control_plane.NewScheduler(ctx, nil)
+	pubSub := pubsub.NewKafkaPubSub()
+	defer pubSub.Close()
+
+	go func() {
+		err := pubSub.Subscribe("agent_response", func(message string) error {
+			slog.Info("Received PubSub response", "message", message)
+			return nil
+		})
+		if err != nil {
+			slog.Error("Error subscribing to agent_response", "error", err)
+		}
+	}()
+
 	agentFactory := &agent.RealAgentFactory{}
 	callbacks := control_plane.ControlPlaneCallbacks{
 		control_plane.ControlPlaneEventAgentFinalResponse: func(agentID string, response string) {
@@ -62,7 +75,7 @@ func main() {
 			slog.Info("Agent terminating", "agent_id", agentID, "status", status)
 		},
 	}
-	controlPlane := control_plane.NewControlPlane(agentFactory, storage, provider, controller, scheduler, callbacks, workerCallbacks)
+	controlPlane := control_plane.NewControlPlane(agentFactory, storage, provider, controller, scheduler, pubSub, callbacks, workerCallbacks)
 
 	doneCh := make(chan struct{})
 
