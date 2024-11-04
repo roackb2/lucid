@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -66,7 +67,7 @@ func (k *KafkaPubSub) Subscribe(topic string, callback OnMessageCallback) error 
 		for {
 			m, err := r.ReadMessage(ctx)
 			if err != nil {
-				if err == context.Canceled {
+				if errors.Is(err, context.Canceled) {
 					slog.Info("KafkaPubSub: subscription to topic canceled", "topic", topic)
 					return
 				}
