@@ -34,21 +34,13 @@ func main() {
 	}
 
 	tracker := control_plane.NewMemoryAgentTracker()
-	bus := control_plane.NewChannelBus(65536)
-	go func() {
-		for {
-			resp := bus.ReadResponse()
-			slog.Info("Received response", "response", resp)
-		}
-	}()
-
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
 
 	controllerConfig := control_plane.AgentControllerConfig{
 		AgentLifeTime: 3 * time.Second,
 	}
-	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
+	controller := control_plane.NewAgentController(controllerConfig, storage, tracker)
 	scheduler := control_plane.NewScheduler(ctx, nil)
 	agentFactory := &agent.RealAgentFactory{}
 	callbacks := control_plane.ControlPlaneCallbacks{

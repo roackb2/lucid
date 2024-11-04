@@ -15,13 +15,16 @@ func main() {
 	kafkaPubSub := pubsub.NewKafkaPubSub()
 	defer kafkaPubSub.Close()
 
-	messageCallback := func(ctx context.Context, message string) error {
-		slog.Info("KafkaPubSub: received message", "message", message)
-		return nil
-	}
-	if err := kafkaPubSub.Subscribe("example-topic", messageCallback); err != nil {
-		slog.Error("KafkaPubSub: failed to subscribe", "error", err)
-	}
+	go func() {
+		messageCallback := func(ctx context.Context, message string) error {
+			slog.Info("KafkaPubSub: received message", "message", message)
+			return nil
+		}
+		err := kafkaPubSub.Subscribe("example-topic", messageCallback)
+		if err != nil {
+			slog.Error("KafkaPubSub: failed to subscribe", "error", err)
+		}
+	}()
 
 	slog.Info("KafkaPubSub: publishing message")
 	kafkaPubSub.Publish(ctx, "example-topic", "hello", 3*time.Second)

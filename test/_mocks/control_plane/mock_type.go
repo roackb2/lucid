@@ -20,58 +20,6 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockNotificationBus is a mock of NotificationBus interface.
-type MockNotificationBus struct {
-	ctrl     *gomock.Controller
-	recorder *MockNotificationBusMockRecorder
-	isgomock struct{}
-}
-
-// MockNotificationBusMockRecorder is the mock recorder for MockNotificationBus.
-type MockNotificationBusMockRecorder struct {
-	mock *MockNotificationBus
-}
-
-// NewMockNotificationBus creates a new mock instance.
-func NewMockNotificationBus(ctrl *gomock.Controller) *MockNotificationBus {
-	mock := &MockNotificationBus{ctrl: ctrl}
-	mock.recorder = &MockNotificationBusMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockNotificationBus) EXPECT() *MockNotificationBusMockRecorder {
-	return m.recorder
-}
-
-// ReadResponse mocks base method.
-func (m *MockNotificationBus) ReadResponse() *agent.AgentResponse {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadResponse")
-	ret0, _ := ret[0].(*agent.AgentResponse)
-	return ret0
-}
-
-// ReadResponse indicates an expected call of ReadResponse.
-func (mr *MockNotificationBusMockRecorder) ReadResponse() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadResponse", reflect.TypeOf((*MockNotificationBus)(nil).ReadResponse))
-}
-
-// WriteResponse mocks base method.
-func (m *MockNotificationBus) WriteResponse(resp *agent.AgentResponse) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WriteResponse", resp)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// WriteResponse indicates an expected call of WriteResponse.
-func (mr *MockNotificationBusMockRecorder) WriteResponse(resp any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteResponse", reflect.TypeOf((*MockNotificationBus)(nil).WriteResponse), resp)
-}
-
 // MockAgentTracker is a mock of AgentTracker interface.
 type MockAgentTracker struct {
 	ctrl     *gomock.Controller

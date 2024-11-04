@@ -52,24 +52,16 @@ func main() {
 	}
 
 	tracker := control_plane.NewMemoryAgentTracker()
-	bus := control_plane.NewChannelBus(65536)
-	go func() {
-		for {
-			resp := bus.ReadResponse()
-			slog.Info("Received response", "response", resp)
-		}
-	}()
-
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
 
 	controllerConfig := control_plane.AgentControllerConfig{
 		AgentLifeTime: 3 * time.Second,
 	}
-	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
+	controller := control_plane.NewAgentController(controllerConfig, storage, tracker)
 	scheduler := control_plane.NewScheduler(ctx, nil)
 	agentFactory := &agent.RealAgentFactory{}
-	callbacks := control_plane.ControlPlaneCallbacks{
+	controlPlaneCallbacks := control_plane.ControlPlaneCallbacks{
 		control_plane.ControlPlaneEventAgentFinalResponse: func(agentID string, response string) {
 			slog.Info("Agent final response", "agent_id", agentID, "response", response)
 		},
@@ -88,7 +80,7 @@ func main() {
 			slog.Info("Agent terminating", "agent_id", agentID, "status", status)
 		},
 	}
-	controlPlane := control_plane.NewControlPlane(agentFactory, storage, provider, controller, scheduler, callbacks, workerCallbacks)
+	controlPlane := control_plane.NewControlPlane(agentFactory, storage, provider, controller, scheduler, controlPlaneCallbacks, workerCallbacks)
 
 	go func() {
 		err := controlPlane.Start(ctx)

@@ -22,14 +22,13 @@ const (
 
 type AgentControllerTestSuite struct {
 	suite.Suite
-	config              control_plane.AgentControllerConfig
-	mockCtrl            *gomock.Controller
-	mockStorage         *mock_storage.MockStorage
-	mockChatProvider    *mock_providers.MockChatProvider
-	mockAgent           *mock_agent.MockAgent
-	mockAgentTracker    *mock_control_plane.MockAgentTracker
-	mockNotificationBus *mock_control_plane.MockNotificationBus
-	doneCh              chan struct{}
+	config           control_plane.AgentControllerConfig
+	mockCtrl         *gomock.Controller
+	mockStorage      *mock_storage.MockStorage
+	mockChatProvider *mock_providers.MockChatProvider
+	mockAgent        *mock_agent.MockAgent
+	mockAgentTracker *mock_control_plane.MockAgentTracker
+	doneCh           chan struct{}
 }
 
 func (suite *AgentControllerTestSuite) SetupTest() {
@@ -44,7 +43,6 @@ func (suite *AgentControllerTestSuite) SetupTest() {
 	suite.mockChatProvider = mock_providers.NewMockChatProvider(suite.mockCtrl)
 	suite.mockAgent = mock_agent.NewMockAgent(suite.mockCtrl)
 	suite.mockAgentTracker = mock_control_plane.NewMockAgentTracker(suite.mockCtrl)
-	suite.mockNotificationBus = mock_control_plane.NewMockNotificationBus(suite.mockCtrl)
 	suite.doneCh = make(chan struct{})
 }
 
@@ -59,7 +57,7 @@ func TestAgentController(t *testing.T) {
 
 func (suite *AgentControllerTestSuite) TestRegisterAgent() {
 	suite.mockAgent.EXPECT().GetID().Return("test-agent-id").AnyTimes()
-	agentController := control_plane.NewAgentController(suite.config, suite.mockStorage, suite.mockNotificationBus, suite.mockAgentTracker)
+	agentController := control_plane.NewAgentController(suite.config, suite.mockStorage, suite.mockAgentTracker)
 
 	suite.mockAgentTracker.EXPECT().AddTracking("test-agent-id", gomock.Any()).Do(func(agentID string, tracking control_plane.AgentTracking) {
 		suite.Equal("test-agent-id", tracking.AgentID)
@@ -73,7 +71,7 @@ func (suite *AgentControllerTestSuite) TestRegisterAgent() {
 
 func (suite *AgentControllerTestSuite) TestStart() {
 	suite.mockAgent.EXPECT().GetID().Return("test-agent-id").AnyTimes()
-	agentController := control_plane.NewAgentController(suite.config, suite.mockStorage, suite.mockNotificationBus, suite.mockAgentTracker)
+	agentController := control_plane.NewAgentController(suite.config, suite.mockStorage, suite.mockAgentTracker)
 
 	// First run, agent is running
 	suite.mockAgent.EXPECT().GetStatus().Return(worker.StatusRunning)

@@ -33,15 +33,6 @@ func main() {
 	}
 
 	tracker := control_plane.NewMemoryAgentTracker()
-	bus := control_plane.NewChannelBus(65536)
-	go func() {
-		for {
-			// Bus should guarantee thread safety, so we can read from another goroutine
-			resp := bus.ReadResponse()
-			slog.Info("Received response", "response", resp)
-		}
-	}()
-
 	client := openai.NewClient(option.WithAPIKey(config.Config.OpenAI.APIKey))
 	provider := providers.NewOpenAIChatProvider(client)
 	callbacks := worker.WorkerCallbacks{
@@ -62,7 +53,7 @@ func main() {
 	controllerConfig := control_plane.AgentControllerConfig{
 		AgentLifeTime: 3 * time.Second,
 	}
-	controller := control_plane.NewAgentController(controllerConfig, storage, bus, tracker)
+	controller := control_plane.NewAgentController(controllerConfig, storage, tracker)
 
 	doneCh := make(chan struct{})
 	go func() {

@@ -10,12 +10,6 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 )
 
-// Bus should guarantee thread safety
-type NotificationBus interface {
-	WriteResponse(resp *agent.AgentResponse) error
-	ReadResponse() *agent.AgentResponse
-}
-
 type AgentTracking struct {
 	AgentID   string
 	Agent     agent.Agent

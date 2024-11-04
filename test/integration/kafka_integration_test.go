@@ -19,17 +19,18 @@ func TestKafkaPubSub_Integration(t *testing.T) {
 
 	// Start a subscriber
 	receivedMessages := make(chan string)
-	err := pubsub.Subscribe(topic, func(ctx context.Context, msg string) error {
-		receivedMessages <- msg
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("Subscribe returned error: %v", err)
-	}
+	errCh := make(chan error)
+	go func() {
+		err := pubsub.Subscribe(topic, func(ctx context.Context, msg string) error {
+			receivedMessages <- msg
+			return nil
+		})
+		errCh <- err
+	}()
 	defer pubsub.Unsubscribe(topic)
 
 	// Publish a message
-	err = pubsub.Publish(ctx, topic, message, 5*time.Second)
+	err := pubsub.Publish(ctx, topic, message, 5*time.Second)
 	if err != nil {
 		t.Fatalf("Publish returned error: %v", err)
 	}
@@ -40,6 +41,8 @@ func TestKafkaPubSub_Integration(t *testing.T) {
 		if msg != message {
 			t.Fatalf("Expected message %q, got %q", message, msg)
 		}
+	case err := <-errCh:
+		t.Fatalf("Subscribe returned error: %v", err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("Did not receive message in time")
 	}

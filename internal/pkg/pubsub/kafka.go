@@ -55,33 +55,29 @@ func (k *KafkaPubSub) Subscribe(topic string, callback OnMessageCallback) error 
 	k.subscriptions[topic] = cancel
 	k.subscriptionsMutex.Unlock()
 
-	go func() {
-		r := kafka.NewReader(kafka.ReaderConfig{
-			Brokers:  []string{config.Config.Kafka.Address},
-			Topic:    topic,
-			MaxBytes: DefaultReaderMaxBytes,
-		})
-		r.SetOffset(kafka.LastOffset)
-		defer r.Close()
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:  []string{config.Config.Kafka.Address},
+		Topic:    topic,
+		MaxBytes: DefaultReaderMaxBytes,
+	})
+	r.SetOffset(kafka.LastOffset)
+	defer r.Close()
 
-		for {
-			m, err := r.ReadMessage(ctx)
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					slog.Info("KafkaPubSub: subscription to topic canceled", "topic", topic)
-					return
-				}
-				slog.Error("KafkaPubSub: failed to read message", "error", err)
-				return
+	for {
+		m, err := r.ReadMessage(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				slog.Info("KafkaPubSub: subscription to topic canceled", "topic", topic)
+				return nil
 			}
-			if err := callback(ctx, string(m.Value)); err != nil {
-				slog.Error("KafkaPubSub: callback error", "error", err)
-				return
-			}
+			slog.Error("KafkaPubSub: failed to read message", "error", err)
+			return err
 		}
-	}()
-
-	return nil
+		if err := callback(ctx, string(m.Value)); err != nil {
+			slog.Error("KafkaPubSub: callback error", "error", err)
+			return err
+		}
+	}
 }
 
 func (k *KafkaPubSub) Unsubscribe(topic string) {

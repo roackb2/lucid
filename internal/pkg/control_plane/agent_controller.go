@@ -27,7 +27,6 @@ type AgentControllerImpl struct {
 
 	storage   storage.Storage
 	tracker   AgentTracker
-	bus       NotificationBus
 	controlCh chan string
 	terminate bool
 }
@@ -35,7 +34,6 @@ type AgentControllerImpl struct {
 func NewAgentController(
 	cfg AgentControllerConfig,
 	storage storage.Storage,
-	bus NotificationBus,
 	tracker AgentTracker,
 ) *AgentControllerImpl {
 	scanInterval := utils.GetOrDefault(cfg.ScanInterval, 1*time.Second)
@@ -49,7 +47,6 @@ func NewAgentController(
 	controller := &AgentControllerImpl{
 		cfg:       mergedCfg,
 		storage:   storage,
-		bus:       bus,
 		tracker:   tracker,
 		controlCh: make(chan string, AgentControllerControlChSize),
 		terminate: false,
