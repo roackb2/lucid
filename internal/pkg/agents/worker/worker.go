@@ -100,6 +100,9 @@ func (w *WorkerImpl) initChat(messages []providers.ChatMessage, callbacks Worker
 	w.callbacks = callbacks
 	w.initAgentStateMachine()
 	w.atomicAppendMessages(messages)
+	if err := w.startMessageListener(); err != nil {
+		slog.Error("Worker: Failed to start message listener", "error", err)
+	}
 }
 
 func (w *WorkerImpl) Chat(

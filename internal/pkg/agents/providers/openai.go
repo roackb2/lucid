@@ -139,13 +139,17 @@ func (p *OpenAIChatProvider) convertFromChatMessages(messages []ChatMessage) []o
 }
 
 func (p *OpenAIChatProvider) convertFromChatMessage(msg ChatMessage) openai.ChatCompletionMessageParamUnion {
+	var content = ""
+	if msg.Content != nil {
+		content = *msg.Content
+	}
 	switch msg.Role {
 	case "system":
-		return openai.SystemMessage(*msg.Content)
+		return openai.SystemMessage(content)
 	case "user":
-		return openai.UserMessage(*msg.Content)
+		return openai.UserMessage(content)
 	case "assistant":
-		assistantMsg := openai.AssistantMessage(*msg.Content)
+		assistantMsg := openai.AssistantMessage(content)
 		if msg.ToolCall != nil {
 			assistantMsg.ToolCalls = openai.F([]openai.ChatCompletionMessageToolCallParam{
 				{

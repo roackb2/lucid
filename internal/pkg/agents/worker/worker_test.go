@@ -72,6 +72,7 @@ func (s *WorkerTestSuite) TestNewWorker() {
 
 func (s *WorkerTestSuite) TestChat() {
 	// Mock expectations
+	// TODO: Add more expectations for each method
 	s.mockProvider.EXPECT().
 		Chat(gomock.Any()).
 		Return(s.mockReportResponse, nil)
@@ -87,6 +88,11 @@ func (s *WorkerTestSuite) TestChat() {
 
 	s.mockPubSub.EXPECT().
 		Publish(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).
+		AnyTimes()
+
+	s.mockPubSub.EXPECT().
+		Subscribe(gomock.Any(), gomock.Any()).
 		Return(nil).
 		AnyTimes()
 
