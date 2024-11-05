@@ -49,6 +49,7 @@ type PubSub interface {
 	// - error: An error if the subscription fails; otherwise, nil.
 	//
 	// The subscription will remain active until the context is canceled.
+	// Note: each call to Subscribe runs a new goroutine.
 	Subscribe(topic string, callback OnMessageCallback) error
 
 	// Unsubscribe removes the subscription from the specified topic.

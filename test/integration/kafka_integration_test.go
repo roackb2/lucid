@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/roackb2/lucid/internal/pkg/pubsub"
+	"github.com/stretchr/testify/require"
 )
 
 func TestKafkaPubSub_Integration(t *testing.T) {
@@ -19,31 +20,22 @@ func TestKafkaPubSub_Integration(t *testing.T) {
 
 	// Start a subscriber
 	receivedMessages := make(chan string)
-	errCh := make(chan error)
-	go func() {
-		err := pubsub.Subscribe(topic, func(msg string) error {
-			receivedMessages <- msg
-			return nil
-		})
-		errCh <- err
-	}()
+	err := pubsub.Subscribe(topic, func(msg string) error {
+		receivedMessages <- msg
+		return nil
+	})
+	require.NoError(t, err)
 	defer pubsub.Unsubscribe(topic)
 
 	// Publish a message
-	err := pubsub.Publish(ctx, topic, message, 5*time.Second)
-	if err != nil {
-		t.Fatalf("Publish returned error: %v", err)
-	}
+	err = pubsub.Publish(ctx, topic, message, 5*time.Second)
+	require.NoError(t, err)
 
 	// Wait for the message to be received
 	select {
 	case msg := <-receivedMessages:
-		if msg != message {
-			t.Fatalf("Expected message %q, got %q", message, msg)
-		}
-	case err := <-errCh:
-		t.Fatalf("Subscribe returned error: %v", err)
+		require.Equal(t, message, msg)
 	case <-time.After(5 * time.Second):
-		t.Fatal("Did not receive message in time")
+		require.Fail(t, "Did not receive message in time")
 	}
 }

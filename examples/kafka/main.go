@@ -19,21 +19,19 @@ func main() {
 
 	topic := fmt.Sprintf("%s_response", uuid.New().String())
 
-	go func() {
-		messageCallback := func(message string) error {
-			slog.Info("KafkaPubSub: received message", "message", message)
-			return nil
-		}
-		err := kafkaPubSub.Subscribe(topic, messageCallback)
-		if err != nil {
-			slog.Error("KafkaPubSub: failed to subscribe", "error", err)
-		}
-	}()
+	messageCallback := func(message string) error {
+		slog.Info("KafkaPubSub: received message", "message", message)
+		return nil
+	}
+	err := kafkaPubSub.Subscribe(topic, messageCallback)
+	if err != nil {
+		slog.Error("KafkaPubSub: failed to subscribe", "error", err)
+	}
 
 	publishTimeout := 10 * time.Second
 
 	slog.Info("KafkaPubSub: publishing message")
-	err := kafkaPubSub.Publish(ctx, topic, "hello", publishTimeout)
+	err = kafkaPubSub.Publish(ctx, topic, "hello", publishTimeout)
 	if err != nil {
 		slog.Error("KafkaPubSub: failed to publish", "error", err)
 	}

@@ -1,7 +1,11 @@
 milvus-url = milvus-standalone.orb.local:19530
 
+# ================================
+# Build
+# ================================
+
 # Recursively find all Go files in cmd and its subfolders
-GO_FILES := $(shell find cmd examples -name '*.go')
+GO_FILES := $(shell find cmd -name '*.go')
 
 # Extract unique directory names from GO_FILES
 CMD_DIRS := $(sort $(dir $(GO_FILES)))
@@ -14,15 +18,35 @@ build:
 		go build -o bin/$$app_name ./$$dir; \
 	done
 
-# Generate run targets for each executables
-define generate_run_target
-$(1): generate-db-models swagger build
-	./bin/$(1) $(ARGS)
+# ================================
+# Examples
+# ================================
+
+# Recursively find all Go files in the examples folder
+EXAMPLE_GO_FILES := $(shell find examples -name '*.go')
+
+# Extract unique directory names from EXAMPLE_GO_FILES
+EXAMPLE_DIRS := $(patsubst examples/%,%,$(patsubst %/,%,$(sort $(dir $(EXAMPLE_GO_FILES)))))
+
+# Generate run targets for each executable in the examples folder
+define generate_example_target
+example_$(subst /,_,$(1)):
+	@echo "Building and running example $(1)..."
+	@go build -o bin/$(subst /,_,$(1)) ./examples/$(1)
+	@./bin/$(subst /,_,$(1))
 endef
 
-# Find all executables in the bin folder and create run targets
-EXECUTABLES := $(notdir $(wildcard bin/*))
-$(foreach exec,$(EXECUTABLES),$(eval $(call generate_run_target,$(exec))))
+# Create targets for each directory in EXAMPLE_DIRS
+$(foreach dir,$(EXAMPLE_DIRS),$(eval $(call generate_example_target,$(dir))))
+
+# Debug target to list all available example targets
+list-examples:
+	@echo "Available example targets:"
+	@for dir in $(EXAMPLE_DIRS); do \
+		echo "  make example_$${dir//\//_}"; \
+	done
+
+.PHONY: list-examples $(foreach dir,$(EXAMPLE_DIRS),example_$(subst /,_,$(dir)))
 
 test:
 	go test ./... -v

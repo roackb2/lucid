@@ -89,23 +89,25 @@ func (k *KafkaPubSub) Subscribe(topic string, callback OnMessageCallback) error 
 		MaxBytes: DefaultReaderMaxBytes,
 	})
 	r.SetOffset(kafka.LastOffset)
-	defer r.Close()
 
-	for {
-		m, err := r.ReadMessage(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				slog.Info("KafkaPubSub: subscription to topic canceled", "topic", topic)
-				return nil
+	go func() {
+		defer r.Close()
+		for {
+			m, err := r.ReadMessage(ctx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					slog.Info("KafkaPubSub: subscription to topic canceled", "topic", topic)
+					return
+				}
+				slog.Error("KafkaPubSub: failed to read message", "error", err)
+				return
 			}
-			slog.Error("KafkaPubSub: failed to read message", "error", err)
-			return err
+			if err := callback(string(m.Value)); err != nil {
+				slog.Error("KafkaPubSub: callback error", "error", err)
+			}
 		}
-		if err := callback(string(m.Value)); err != nil {
-			slog.Error("KafkaPubSub: callback error", "error", err)
-			return err
-		}
-	}
+	}()
+	return nil
 }
 
 func (k *KafkaPubSub) Unsubscribe(topic string) {

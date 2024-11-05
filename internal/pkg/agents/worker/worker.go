@@ -76,6 +76,12 @@ func (w *WorkerImpl) atomicAppendMessage(msg providers.ChatMessage) {
 	w.Messages = append(w.Messages, msg)
 }
 
+func (w *WorkerImpl) atomicAppendMessages(msgs []providers.ChatMessage) {
+	w.messageMux.Lock()
+	defer w.messageMux.Unlock()
+	w.Messages = append(w.Messages, msgs...)
+}
+
 func (w *WorkerImpl) GetStatus() string {
 	if w.stateMachine == nil {
 		return StatusTerminated
@@ -91,21 +97,28 @@ func (w *WorkerImpl) Close() {
 	slog.Info("Worker: Closing control channel", "agentID", *w.ID, "role", w.Role)
 }
 
+func (w *WorkerImpl) initChat(messages []providers.ChatMessage, callbacks WorkerCallbacks) {
+	w.callbacks = callbacks
+	w.initAgentStateMachine()
+	w.atomicAppendMessages(messages)
+}
+
 func (w *WorkerImpl) Chat(
 	ctx context.Context,
 	prompt string,
 	callbacks WorkerCallbacks,
 ) (string, error) {
-	w.callbacks = callbacks
-	w.initAgentStateMachine()
-	w.atomicAppendMessage(providers.ChatMessage{
-		Content: &SystemPrompt,
-		Role:    "system",
-	})
-	w.atomicAppendMessage(providers.ChatMessage{
-		Content: &prompt,
-		Role:    "user",
-	})
+	messages := []providers.ChatMessage{
+		{
+			Content: &SystemPrompt,
+			Role:    "system",
+		},
+		{
+			Content: &prompt,
+			Role:    "user",
+		},
+	}
+	w.initChat(messages, callbacks)
 	// Save initial state
 	if err := w.PersistState(); err != nil {
 		slog.Error("Worker: Failed to persist state", "error", err)
@@ -118,14 +131,13 @@ func (w *WorkerImpl) ResumeChat(
 	newPrompt *string,
 	callbacks WorkerCallbacks,
 ) (string, error) {
-	w.callbacks = callbacks
-	w.initAgentStateMachine()
-	if newPrompt != nil {
-		w.atomicAppendMessage(providers.ChatMessage{
+	messages := []providers.ChatMessage{
+		{
 			Content: newPrompt,
 			Role:    "user",
-		})
+		},
 	}
+	w.initChat(messages, callbacks)
 	// Save initial state after resume
 	if err := w.PersistState(); err != nil {
 		slog.Error("Worker: Failed to persist state", "error", err)
@@ -345,79 +357,6 @@ func (w *WorkerImpl) handleSingleToolCall(
 	})
 
 	return toolCallResult
-}
-
-func (w *WorkerImpl) PersistState() error {
-	slog.Info("Worker: Persisting state", "agentID", *w.ID, "role", w.Role)
-	state, err := w.Serialize()
-	if err != nil {
-		slog.Error("Worker: Failed to serialize", "error", err)
-		return err
-	}
-	awakenedAt, asleepAt := w.getStateTimestamps()
-	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), w.Role, awakenedAt, asleepAt)
-	if err != nil {
-		slog.Error("Worker: Failed to save state", "error", err)
-		return err
-	}
-	return nil
-}
-
-func (w *WorkerImpl) RestoreState(agentID string) error {
-	slog.Info("Worker: Restoring state", "agentID", agentID)
-	state, err := w.storage.GetAgentState(agentID)
-	if err != nil {
-		slog.Error("Worker: Failed to get agent state", "agentID", agentID, "error", err)
-		return err
-	}
-	err = w.Deserialize(state)
-	if err != nil {
-		slog.Error("Worker: Failed to deserialize state", "agentID", agentID, "error", err)
-		return err
-	}
-
-	// Awakening agent and update its status accordingly
-	awakenedAt, asleepAt := w.getStateTimestamps()
-	err = w.storage.SaveAgentState(*w.ID, state, w.GetStatus(), w.Role, awakenedAt, asleepAt)
-	if err != nil {
-		slog.Error("Worker: Failed to save state", "error", err)
-		return err
-	}
-	return nil
-}
-
-func (w *WorkerImpl) getStateTimestamps() (awakenedAt *time.Time, asleepAt *time.Time) {
-	status := w.GetStatus()
-	if status == StatusRunning {
-		now := time.Now()
-		awakenedAt = &now
-	} else if status == StatusAsleep {
-		now := time.Now()
-		asleepAt = &now
-	}
-	return
-}
-
-func (w *WorkerImpl) Serialize() ([]byte, error) {
-	data, err := json.Marshal(w)
-	if err != nil {
-		slog.Error("Worker: Failed to serialize", "error", err)
-		return nil, err
-	}
-	return data, nil
-}
-
-func (w *WorkerImpl) Deserialize(data []byte) error {
-	content := string(data)
-	slog.Info("Deserializing Worker", "content", content)
-
-	err := json.Unmarshal(data, &w)
-	if err != nil {
-		slog.Error("Worker: Failed to deserialize", "error", err)
-		return err
-	}
-
-	return nil
 }
 
 func (w *WorkerImpl) debugStruct(title string, v any) {
