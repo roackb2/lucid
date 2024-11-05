@@ -41,7 +41,7 @@ func main() {
 	defer pubSub.Close()
 
 	go func() {
-		err := pubSub.Subscribe("agent_response", func(message string) error {
+		err := pubSub.Subscribe(worker.GetAgentResponseGeneralTopic(), func(message string) error {
 			slog.Info("Received PubSub response", "message", message)
 			return nil
 		})

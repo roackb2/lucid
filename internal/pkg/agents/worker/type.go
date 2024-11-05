@@ -67,11 +67,6 @@ const (
 	OnTerminate WorkerEventKey = "onTerminate"
 )
 
-type WorkerResponseNotification struct {
-	AgentID  string `json:"agent_id"`
-	Response string `json:"response"`
-}
-
 // WorkerCallbacks maps WorkerEventKeys to their corresponding CommandCallbacks.
 // It allows clients to specify functions to be called on specific events.
 type WorkerCallbacks map[WorkerEventKey]CommandCallback

@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -192,32 +191,6 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 			}
 		}
 	}
-}
-
-func (w *WorkerImpl) publishFinalResponse(ctx context.Context, response string) error {
-	slog.Info("Worker: Publishing final response", "agentID", *w.ID, "response", response)
-	payload := WorkerResponseNotification{
-		AgentID:  *w.ID,
-		Response: response,
-	}
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		slog.Error("Worker: Failed to marshal payload", "error", err)
-		return err
-	}
-	topic := fmt.Sprintf("%s_response", *w.ID)
-	err = w.pubSub.Publish(ctx, topic, string(payloadBytes), PublishTimeout)
-	if err != nil {
-		slog.Error("Worker: Failed to publish response", "error", err)
-		return err
-	}
-	generalTopic := "agent_response"
-	err = w.pubSub.Publish(ctx, generalTopic, string(payloadBytes), PublishTimeout)
-	if err != nil {
-		slog.Error("Worker: Failed to publish response", "error", err)
-		return err
-	}
-	return nil
 }
 
 // SendCommand is idempotent, it will have no effect if the Worker is asleep or terminated.

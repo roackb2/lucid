@@ -38,8 +38,9 @@ func main() {
 	pubSub := pubsub.NewKafkaPubSub()
 	defer pubSub.Close()
 
+	publisher := agent.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider, pubSub)
 	go func() {
-		err := pubSub.Subscribe("agent_response", func(message string) error {
+		err := pubSub.Subscribe(worker.GetAgentResponseTopic(publisher.GetID()), func(message string) error {
 			slog.Info("Received PubSub response", "message", message)
 			return nil
 		})
@@ -47,8 +48,6 @@ func main() {
 			slog.Error("Error subscribing to agent_response", "error", err)
 		}
 	}()
-
-	publisher := agent.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider, pubSub)
 
 	doneCh := make(chan struct{}, 1)
 	callbacks := worker.WorkerCallbacks{
