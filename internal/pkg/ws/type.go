@@ -6,6 +6,7 @@ const (
 	WsEventTypePing          WsEventType = "ping"
 	WsEventTypePong          WsEventType = "pong"
 	WsEventTypeAgentResponse WsEventType = "agent_response"
+	WsEventTypeAgentProgress WsEventType = "agent_progress"
 )
 
 type WsMessage struct {

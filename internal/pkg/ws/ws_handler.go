@@ -80,8 +80,34 @@ func (w *WsHandlerImpl) handlePing(msg WsMessage) error {
 }
 
 func (w *WsHandlerImpl) subscribeToEvents() error {
-	err := w.pubsub.Subscribe(worker.GetAgentResponseGeneralTopic(), w.handleAgentResponse)
+	err := w.pubsub.Subscribe(worker.GetAgentProgressTopic(), w.handleAgentProgress)
 	if err != nil {
+		slog.Error("Failed to subscribe to agent progress topic", "error", err)
+		return err
+	}
+	err = w.pubsub.Subscribe(worker.GetAgentResponseGeneralTopic(), w.handleAgentResponse)
+	if err != nil {
+		slog.Error("Failed to subscribe to agent response topic", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (w *WsHandlerImpl) handleAgentProgress(message string) error {
+	slog.Info("Received agent progress", "message", message)
+	notification := worker.WorkerProgressNotification{}
+	err := json.Unmarshal([]byte(message), &notification)
+	if err != nil {
+		slog.Error("Failed to unmarshal agent progress notification", "error", err)
+		return err
+	}
+	// TODO: Filter messages with client specified agent id
+	err = w.conn.WriteJSON(WsMessage{
+		Event: WsEventTypeAgentProgress,
+		Data:  notification.Progress,
+	})
+	if err != nil {
+		slog.Error("Failed to write agent progress message", "error", err)
 		return err
 	}
 	return nil
@@ -95,9 +121,13 @@ func (w *WsHandlerImpl) handleAgentResponse(message string) error {
 		return err
 	}
 	// TODO: Filter messages with client specified agent id
-	w.conn.WriteJSON(WsMessage{
+	err = w.conn.WriteJSON(WsMessage{
 		Event: WsEventTypeAgentResponse,
 		Data:  notification.Response,
 	})
+	if err != nil {
+		slog.Error("Failed to write agent response message", "error", err)
+		return err
+	}
 	return nil
 }

@@ -301,6 +301,12 @@ func (w *WorkerImpl) handleToolCalls(
 		funcName := toolCall.FunctionName
 		slog.Info("Agent tool call", "role", w.Role, "tool_call", funcName)
 
+		// Publish progress
+		progress := fmt.Sprintf("Calling tool: %s", funcName)
+		if err := w.publishProgress(context.Background(), progress); err != nil {
+			slog.Error("Worker: Failed to publish progress", "error", err)
+		}
+
 		toolCallResult := w.handleSingleToolCall(toolCall)
 		slog.Info("Agent tool message", "role", w.Role, "message", toolCallResult)
 

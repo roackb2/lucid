@@ -13,6 +13,11 @@ type WorkerResponseNotification struct {
 	Response string `json:"response"`
 }
 
+type WorkerProgressNotification struct {
+	AgentID  string `json:"agent_id"`
+	Progress string `json:"progress"`
+}
+
 type WorkerMessage struct {
 	FromAgentID string      `json:"from_agent_id"`
 	ToAgentID   string      `json:"to_agent_id"`
@@ -24,14 +29,22 @@ func GetAgentResponseTopic(agentID string) string {
 	return fmt.Sprintf("%s_response", agentID)
 }
 
+// GetAgentResponseGeneralTopic returns the general topic for agent responses
 func GetAgentResponseGeneralTopic() string {
 	return "agent_response"
 }
 
+// GetAgentProgressTopic returns the topic for agent progress
+func GetAgentProgressTopic() string {
+	return "agent_progress"
+}
+
+// GetAgentMessageTopic returns the topic for agent messages between agents
 func GetAgentMessageTopic() string {
 	return "agent_message"
 }
 
+// publishFinalResponse publishes the final response to the agent and the general topic
 func (w *WorkerImpl) publishFinalResponse(ctx context.Context, response string) error {
 	slog.Info("Worker: Publishing final response", "agentID", *w.ID, "response", response)
 	payload := WorkerResponseNotification{
@@ -56,6 +69,20 @@ func (w *WorkerImpl) publishFinalResponse(ctx context.Context, response string) 
 		return err
 	}
 	return nil
+}
+
+func (w *WorkerImpl) publishProgress(ctx context.Context, progress string) error {
+	slog.Info("Worker: Publishing progress", "agentID", *w.ID, "progress", progress)
+	payload := WorkerProgressNotification{
+		AgentID:  *w.ID,
+		Progress: progress,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("Worker: Failed to marshal payload", "error", err)
+		return err
+	}
+	return w.pubSub.Publish(ctx, GetAgentProgressTopic(), string(payloadBytes), PublishTimeout)
 }
 
 func (w *WorkerImpl) sendMessage(toAgentID string, messageType string, payload interface{}) error {
