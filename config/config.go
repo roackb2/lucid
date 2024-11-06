@@ -16,6 +16,9 @@ type Configuration struct {
 	Server struct {
 		Port string `mapstructure:"port"`
 	} `mapstructure:"server"`
+	Websocket struct {
+		Port string `mapstructure:"port"`
+	} `mapstructure:"websocket"`
 	Database struct {
 		Host     string `mapstructure:"host"`
 		Port     string `mapstructure:"port"`

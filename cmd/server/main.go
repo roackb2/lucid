@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"time"
 
@@ -35,7 +34,7 @@ import (
 
 // @securityDefinitions.basic  None
 func main() {
-	r := gin.Default()
+	server := gin.Default()
 	docs.SwaggerInfo.BasePath = "/api/v1"
 
 	if err := config.LoadConfig("dev"); err != nil {
@@ -94,7 +93,7 @@ func main() {
 	}()
 
 	agentRouterController := controllers.NewAgentRouterController(ctx, controlPlane)
-	v1 := r.Group("/api/v1")
+	v1 := server.Group("/api/v1")
 	{
 		users := v1.Group("/users")
 		{
@@ -106,14 +105,50 @@ func main() {
 			agents.POST("/create", agentRouterController.StartAgent)
 		}
 	}
-	r.GET("/healthz", controllers.Healthz)
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+	server.GET("/healthz", controllers.Healthz)
+	server.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 
 	// Home page
-	r.StaticFile("/", "./client/dist/index.html")
-	r.StaticFile("/favicon.ico", "./client/dist/favicon.ico")
-	r.Static("/assets", "./client/dist/assets")
+	server.StaticFile("/", "./client/dist/index.html")
+	server.StaticFile("/favicon.ico", "./client/dist/favicon.ico")
+	server.Static("/assets", "./client/dist/assets")
 
-	log.Println("Server is running on port", config.Config.Server.Port)
-	r.Run(fmt.Sprintf(":%s", config.Config.Server.Port))
+	stopChan := make(chan struct{})
+
+	go func() {
+		port := config.Config.Server.Port
+		slog.Info("Server is running on port", "port", port)
+		err := server.Run(fmt.Sprintf(":%s", port))
+		if err != nil {
+			slog.Error("Error running server", "error", err)
+			panic(err)
+		}
+	}()
+
+	wsServer := gin.Default()
+
+	websocketController := controllers.NewWebsocketController()
+	wsGroup := wsServer.Group("/")
+	{
+		wsGroup.GET("/", websocketController.SocketHandler)
+	}
+
+	go func() {
+		port := config.Config.Websocket.Port
+		slog.Info("Websocket server is running on port", "port", port)
+		err := wsServer.Run(fmt.Sprintf(":%s", port))
+		if err != nil {
+			slog.Error("Error running websocket server", "error", err)
+			panic(err)
+		}
+	}()
+
+	select {
+	case <-stopChan:
+		slog.Info("Stopping server")
+		return
+	case <-ctx.Done():
+		slog.Info("Stopping server")
+		return
+	}
 }
