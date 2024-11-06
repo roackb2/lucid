@@ -145,7 +145,7 @@ func main() {
 	// Initialize websocket server
 	wsServer := gin.Default()
 
-	websocketController := controllers.NewWebsocketController(ctx)
+	websocketController := controllers.NewWebsocketController(ctx, pubSub)
 	wsGroup := wsServer.Group("/")
 	{
 		wsGroup.GET("/", websocketController.SocketHandler)

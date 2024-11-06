@@ -3,8 +3,9 @@ package ws
 type WsEventType string
 
 const (
-	WsEventTypePing WsEventType = "ping"
-	WsEventTypePong WsEventType = "pong"
+	WsEventTypePing          WsEventType = "ping"
+	WsEventTypePong          WsEventType = "pong"
+	WsEventTypeAgentResponse WsEventType = "agent_response"
 )
 
 type WsMessage struct {

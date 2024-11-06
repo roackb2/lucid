@@ -2,23 +2,34 @@ package ws
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
+
+	"github.com/roackb2/lucid/internal/pkg/agents/worker"
+	"github.com/roackb2/lucid/internal/pkg/pubsub"
 )
 
 type WsHandlerImpl struct {
-	conn WsConnection
+	conn   WsConnection
+	pubsub pubsub.PubSub
 }
 
-func NewWsHandler(conn WsConnection) *WsHandlerImpl {
-	return &WsHandlerImpl{conn: conn}
+func NewWsHandler(conn WsConnection, pubsub pubsub.PubSub) *WsHandlerImpl {
+	return &WsHandlerImpl{conn: conn, pubsub: pubsub}
 }
 
 func (h *WsHandlerImpl) HandleConnection(ctx context.Context) error {
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	err := h.subscribeToEvents()
+	if err != nil {
+		slog.Error("subscribeToEvents:", "error", err)
+		return err
+	}
 
 	for {
 		select {
@@ -65,5 +76,28 @@ func (w *WsHandlerImpl) handlePing(msg WsMessage) error {
 	}
 
 	w.conn.WriteJSON(respMsg)
+	return nil
+}
+
+func (w *WsHandlerImpl) subscribeToEvents() error {
+	err := w.pubsub.Subscribe(worker.GetAgentResponseGeneralTopic(), w.handleAgentResponse)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *WsHandlerImpl) handleAgentResponse(message string) error {
+	slog.Info("Received agent response", "message", message)
+	notification := worker.WorkerResponseNotification{}
+	err := json.Unmarshal([]byte(message), &notification)
+	if err != nil {
+		return err
+	}
+	// TODO: Filter messages with client specified agent id
+	w.conn.WriteJSON(WsMessage{
+		Event: WsEventTypeAgentResponse,
+		Data:  notification.Response,
+	})
 	return nil
 }
