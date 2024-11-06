@@ -49,9 +49,12 @@ list-examples:
 .PHONY: list-examples $(foreach dir,$(EXAMPLE_DIRS),example_$(subst /,_,$(dir)))
 
 test:
-	go test ./... -v
+	go test ./internal/... -v
 
-.PHONY: test
+test-integration:
+	go test ./test/integration/... -v
+
+.PHONY: test test-integration
 
 # Clean up build artifacts
 clean:
@@ -91,6 +94,11 @@ run-server:
 	go build -o bin/server cmd/server/main.go
 	@make swagger
 	./bin/server
+
+run-server-without-control-plane:
+	go build -o bin/server cmd/server/main.go
+	@make swagger
+	./bin/server --with-control-plane=false
 
 start-milvus:
 	cd milvus && ./standalone_embed.sh start

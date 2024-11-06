@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"time"
@@ -34,9 +35,19 @@ import (
 
 // @securityDefinitions.basic  None
 func main() {
-	server := gin.Default()
-	docs.SwaggerInfo.BasePath = "/api/v1"
+	// Command line flags
+	var withControlPlane bool
 
+	flag.BoolVar(&withControlPlane, "with-control-plane", true, "Whether to start the control plane")
+	help := flag.Bool("help", false, "Help")
+	flag.Parse()
+
+	if *help {
+		flag.Usage()
+		return
+	}
+
+	// Load configuration
 	if err := config.LoadConfig("dev"); err != nil {
 		slog.Error("Error loading configuration:", "error", err)
 		panic(err)
@@ -45,6 +56,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Initialize control plane components
 	storage, err := storage.NewRelationalStorage()
 	if err != nil {
 		slog.Error("Error creating storage", "error", err)
@@ -83,15 +95,20 @@ func main() {
 	}
 	controlPlane := control_plane.NewControlPlane(agentFactory, storage, provider, controller, scheduler, pubSub, controlPlaneCallbacks, workerCallbacks)
 
-	go func() {
-		err := controlPlane.Start(ctx)
-		if err != nil {
-			slog.Error("Error starting control plane", "error", err)
-			panic(err)
-		}
-		slog.Info("Control plane started")
-	}()
+	if withControlPlane {
+		go func() {
+			err := controlPlane.Start(ctx)
+			if err != nil {
+				slog.Error("Error starting control plane", "error", err)
+				panic(err)
+			}
+			slog.Info("Control plane started")
+		}()
+	}
 
+	// Initialize HTTP server
+	server := gin.Default()
+	docs.SwaggerInfo.BasePath = "/api/v1"
 	agentRouterController := controllers.NewAgentRouterController(ctx, controlPlane)
 	v1 := server.Group("/api/v1")
 	{
@@ -125,9 +142,10 @@ func main() {
 		}
 	}()
 
+	// Initialize websocket server
 	wsServer := gin.Default()
 
-	websocketController := controllers.NewWebsocketController()
+	websocketController := controllers.NewWebsocketController(ctx)
 	wsGroup := wsServer.Group("/")
 	{
 		wsGroup.GET("/", websocketController.SocketHandler)
@@ -143,6 +161,7 @@ func main() {
 		}
 	}()
 
+	// Wait for stop signal
 	select {
 	case <-stopChan:
 		slog.Info("Stopping server")

@@ -119,35 +119,6 @@ paths:
       summary: Health check endpoint
       tags:
       - healthz
-  /ws/v1/:
-    get:
-      consumes:
-      - application/json
-      description: Echo message
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Agent created successfully
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "400":
-          description: Bad request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Echo message
-      tags:
-      - websocket
 securityDefinitions:
   None:
     type: basic
