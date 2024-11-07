@@ -59,31 +59,3 @@ func getDbPool() (*pgxpool.Pool, error) {
 
 	return pool, nil
 }
-
-func SearchPosts(query string) ([]Post, error) {
-	slog.Info("Searching posts", "query", query)
-	var posts []Post
-	conn, err := dbPool.Acquire(context.Background())
-	if err != nil {
-		slog.Error("Failed to acquire connection", "error", err)
-		return nil, err
-	}
-	defer conn.Release()
-	rows, err := conn.Query(context.Background(), "SELECT * FROM posts WHERE SIMILARITY(content, $1::text) > 0.3", query)
-	if err != nil {
-		slog.Error("Failed to query posts", "error", err)
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var post Post
-		err := rows.Scan(&post.ID, &post.UserID, &post.Content, &post.CreatedAt, &post.UpdatedAt)
-		if err != nil {
-			slog.Error("Failed to scan post", "error", err)
-			return nil, err
-		}
-		posts = append(posts, post)
-	}
-	slog.Info("Found posts", "numPosts", len(posts))
-	return posts, nil
-}

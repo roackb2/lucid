@@ -43,7 +43,7 @@ func (m *RelationalStorage) SavePost(content string) error {
 func (m *RelationalStorage) SearchPosts(query string) ([]string, error) {
 	slog.Info("RelationalStorage: Searching for posts", "query", query)
 
-	results, err := dbaccess.SearchPosts(query)
+	results, err := dbaccess.Querier.SearchPosts(context.Background(), query)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to search posts", "error", err)
 		return nil, err
