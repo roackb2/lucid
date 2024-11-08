@@ -1,14 +1,16 @@
 import * as React from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { redirect } from '@tanstack/react-router'
+
+const isAdmin = true
 
 export const Route = createFileRoute('/')({
-  component: HomeComponent,
+  loader: () => {
+    if (isAdmin) {
+      redirect({
+        to: '/dashboard',
+        throw: true,
+      })
+    }
+  },
 })
-
-function HomeComponent() {
-  return (
-    <div className="p-2">
-      <h3>Welcome Home!</h3>
-    </div>
-  )
-}
