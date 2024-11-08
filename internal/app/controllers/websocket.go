@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -21,7 +22,11 @@ type WebsocketController struct {
 }
 
 func NewWebsocketController(ctx context.Context, pubsub pubsub.PubSub) *WebsocketController {
-	return &WebsocketController{ctx: ctx, upgrader: websocket.Upgrader{}, pubsub: pubsub}
+	return &WebsocketController{ctx: ctx, upgrader: websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}, pubsub: pubsub}
 }
 
 func (ac *WebsocketController) SocketHandler(c *gin.Context) {

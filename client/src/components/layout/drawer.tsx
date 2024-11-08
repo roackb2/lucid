@@ -7,7 +7,7 @@ export default function Drawer({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <AppSidebar />
       <main>
-        <div className="flex p-4 items-center justify-between">
+        <div className="flex p-4 items-center justify-start gap-4">
           <SidebarTrigger />
           <DashboardBreadcrumb />
         </div>
