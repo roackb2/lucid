@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -108,6 +109,7 @@ func main() {
 
 	// Initialize HTTP server
 	server := gin.Default()
+	server.Use(corsMiddleware())
 	docs.SwaggerInfo.BasePath = "/api/v1"
 	agentRouterController := controllers.NewAgentRouterController(ctx, controlPlane)
 	v1 := server.Group("/api/v1")
@@ -144,7 +146,7 @@ func main() {
 
 	// Initialize websocket server
 	wsServer := gin.Default()
-
+	wsServer.Use(corsMiddleware())
 	websocketController := controllers.NewWebsocketController(ctx, pubSub)
 	wsGroup := wsServer.Group("/")
 	{
@@ -170,4 +172,15 @@ func main() {
 		slog.Info("Stopping server")
 		return
 	}
+}
+
+func corsMiddleware() gin.HandlerFunc {
+	return cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"*"},
+		AllowHeaders:     []string{"*"},
+		ExposeHeaders:    []string{"*"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	})
 }
