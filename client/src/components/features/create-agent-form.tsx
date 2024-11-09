@@ -10,12 +10,17 @@ import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { toast } from "sonner"
 import { useEffect } from "react"
+
+export interface CreateAgentFormProps {
+  onSuccess: (agentId: string) => void
+}
+
 const schema = z.object({
   role: z.enum(['publisher', 'consumer']),
-  task: z.string(),
+  task: z.string().min(1),
 })
 
-export default function CreateAgentForm() {
+export default function CreateAgentForm({ onSuccess }: CreateAgentFormProps) {
   const { mutate: createAgent, isPending, isError, error, data } = useCreateAgent()
 
   const form = useForm<z.infer<typeof schema>>({
@@ -42,6 +47,7 @@ export default function CreateAgentForm() {
       toast.error(error.message)
     } else if (data) {
       toast.success(data.message)
+      onSuccess(data.agent_id ?? '')
     }
   }, [isError, error, data])
 

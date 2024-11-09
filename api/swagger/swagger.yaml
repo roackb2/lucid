@@ -9,6 +9,13 @@ definitions:
     - role
     - task
     type: object
+  controllers.StartAgentResponse:
+    properties:
+      agent_id:
+        type: string
+      message:
+        type: string
+    type: object
   controllers.UserRequest:
     properties:
       email:
@@ -113,9 +120,7 @@ paths:
         "201":
           description: Agent created successfully
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/controllers.StartAgentResponse'
         "400":
           description: Bad request
           schema:

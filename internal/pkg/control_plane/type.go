@@ -59,6 +59,6 @@ type ControlPlaneCallbacks map[ControlPlaneEventKey]OnAgentFinalResponseCallback
 
 type ControlPlane interface {
 	Start(ctx context.Context) error
-	KickoffTask(ctx context.Context, task string, role string) error
+	KickoffTask(ctx context.Context, task string, role string) (string, error)
 	SendCommand(ctx context.Context, command string) error
 }

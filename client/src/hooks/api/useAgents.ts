@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
-import { apiUrl, postRequest, serverUrl } from "../common";
+import { postRequest } from "../common";
+import { definitions } from "@/types/apiTypes";
 
 export type CreateAgentProps = {
   role: string
@@ -7,5 +8,5 @@ export type CreateAgentProps = {
 }
 
 export const useCreateAgent = () => useMutation({
-  mutationFn: (arg: CreateAgentProps) => postRequest('agents/create', arg),
+  mutationFn: (arg: CreateAgentProps) => postRequest<definitions['controllers.StartAgentResponse']>('agents/create', arg),
 })

@@ -1,34 +1,32 @@
 
 import { definitions } from '@/types/apiTypes'
+import { AgentNotificationTypes } from '@/types/layout'
 import { useEffect, useState } from 'react'
 
 interface AgentStatusCardProps {
-  notification: definitions['ws.WsMessage']
+  agentId: string
+  messages: AgentNotificationTypes[]
 }
 
 
-export default function AgentStatusCard({ notification }: AgentStatusCardProps) {
-  const [agentId, setAgentId] = useState<string | undefined>(undefined)
-  const [message, setMessage] = useState<string | undefined>(undefined)
+export default function AgentStatusCard({ agentId, messages }: AgentStatusCardProps) {
+  const lastMessage = messages[messages.length - 1]
 
-  useEffect(() => {
-    console.log(notification)
-    switch (notification.event) {
-      case 'agent_progress':
-        setAgentId(notification.data?.progress?.agent_id)
-        setMessage(notification.data?.progress?.progress)
-        break
-      case 'agent_response':
-        setAgentId(notification.data?.response?.agent_id)
-        setMessage(notification.data?.response?.response)
-        break
+  const messageContent = (() => {
+    if (!lastMessage) {
+      return ''
     }
-  }, [notification])
+    if ('progress' in lastMessage) {
+      return lastMessage.progress
+    } else if ('response' in lastMessage) {
+      return lastMessage.response
+    }
+  })()
 
   return (
     <div className="flex flex-col gap-2 rounded-md border p-2 max-w-[500px]">
       <p className="text-sm font-medium text-gray-500">{agentId}</p>
-      {message && <p className="text-sm">{message}</p>}
+      {messageContent && <p className="text-sm">{messageContent}</p>}
     </div>
   )
 }

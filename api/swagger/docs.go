@@ -47,10 +47,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Agent created successfully",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/controllers.StartAgentResponse"
                         }
                     },
                     "400": {
@@ -194,6 +191,17 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "task": {
+                    "type": "string"
+                }
+            }
+        },
+        "controllers.StartAgentResponse": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string"
+                },
+                "message": {
                     "type": "string"
                 }
             }

@@ -207,18 +207,18 @@ func (c *ControlPlaneImpl) resumeAgent(ctx context.Context, agentID string, role
 	return nil
 }
 
-func (c *ControlPlaneImpl) KickoffTask(ctx context.Context, task string, role string) error {
+func (c *ControlPlaneImpl) KickoffTask(ctx context.Context, task string, role string) (string, error) {
 	slog.Info("ControlPlane: Kickoff task", "task", task, "role", role)
 	agent, err := c.newAgent(ctx, task, role)
 	if err != nil {
 		slog.Error("ControlPlane: Failed to start new agent", "error", err)
-		return err
+		return "", err
 	}
 	err = c.startAgent(ctx, agent)
 	if err != nil {
 		slog.Error("ControlPlane: Failed to start new agent", "error", err)
-		return err
+		return "", err
 	}
 	slog.Info("ControlPlane: Started new agent", "agent", agent.GetID())
-	return nil
+	return agent.GetID(), nil
 }

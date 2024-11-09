@@ -16,7 +16,7 @@ export interface paths {
       responses: {
         /** Agent created successfully */
         201: {
-          schema: { [key: string]: string };
+          schema: definitions["controllers.StartAgentResponse"];
         };
         /** Bad request */
         400: {
@@ -90,6 +90,10 @@ export interface definitions {
   "controllers.StartAgentRequest": {
     role: string;
     task: string;
+  };
+  "controllers.StartAgentResponse": {
+    agent_id?: string;
+    message?: string;
   };
   "controllers.UserRequest": {
     email: string;
