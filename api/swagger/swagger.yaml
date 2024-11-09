@@ -22,6 +22,77 @@ definitions:
     - password
     - username
     type: object
+  worker.WorkerMessage:
+    description: Message structure for inter-agent communication
+    properties:
+      from_agent_id:
+        description: The ID of the sending agent
+        type: string
+      message_type:
+        description: The type of message being sent
+        type: string
+      payload:
+        description: The message payload
+        type: object
+      to_agent_id:
+        description: The ID of the receiving agent
+        type: string
+    type: object
+  worker.WorkerProgressNotification:
+    description: Progress notification containing the agent ID and progress message
+    properties:
+      agent_id:
+        description: The ID of the agent reporting progress
+        type: string
+      progress:
+        description: The progress message content
+        type: string
+    type: object
+  worker.WorkerResponseNotification:
+    description: Response notification containing the agent ID and response message
+    properties:
+      agent_id:
+        description: |-
+          The ID of the agent sending the response
+          @Description Unique identifier of the agent
+        type: string
+      response:
+        description: |-
+          The response message content
+          @Description Response message from the agent
+        type: string
+    type: object
+  ws.WebSocketDataTypes:
+    description: All websocket response data types
+    properties:
+      message:
+        $ref: '#/definitions/worker.WorkerMessage'
+      pong:
+        type: string
+      progress:
+        $ref: '#/definitions/worker.WorkerProgressNotification'
+      response:
+        $ref: '#/definitions/worker.WorkerResponseNotification'
+    type: object
+  ws.WsEventType:
+    enum:
+    - ping
+    - pong
+    - agent_response
+    - agent_progress
+    type: string
+    x-enum-varnames:
+    - WsEventTypePing
+    - WsEventTypePong
+    - WsEventTypeAgentResponse
+    - WsEventTypeAgentProgress
+  ws.WsMessage:
+    properties:
+      data:
+        $ref: '#/definitions/ws.WebSocketDataTypes'
+      event:
+        $ref: '#/definitions/ws.WsEventType'
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -119,6 +190,25 @@ paths:
       summary: Health check endpoint
       tags:
       - healthz
+  /ws:
+    get:
+      description: Handles websocket connections and delegates to the ws package
+      responses:
+        "200":
+          description: Websocket connection established
+          schema:
+            items:
+              $ref: '#/definitions/ws.WsMessage'
+            type: array
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Handle websocket connections
+      tags:
+      - websocket
 securityDefinitions:
   None:
     type: basic

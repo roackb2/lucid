@@ -4,12 +4,26 @@
  */
 
 export interface paths {
-  "/api/v1/example/helloworld": {
-    /** Hello World */
-    get: {
+  "/api/v1/agents/create": {
+    /** Starts a new agent with role and task */
+    post: {
+      parameters: {
+        body: {
+          /** Agent details */
+          agent: definitions["controllers.StartAgentRequest"];
+        };
+      };
       responses: {
-        /** OK */
-        200: {
+        /** Agent created successfully */
+        201: {
+          schema: { [key: string]: string };
+        };
+        /** Bad request */
+        400: {
+          schema: { [key: string]: string };
+        };
+        /** Internal server error */
+        500: {
           schema: { [key: string]: string };
         };
       };
@@ -51,13 +65,76 @@ export interface paths {
       };
     };
   };
+  "/ws": {
+    /** Handles websocket connections and delegates to the ws package */
+    get: {
+      responses: {
+        /** Websocket connection established */
+        200: {
+          schema: definitions["ws.WsMessage"][];
+        };
+        /** Internal server error */
+        500: {
+          schema: { [key: string]: string };
+        };
+      };
+    };
+  };
 }
 
 export interface definitions {
+  "controllers.StartAgentRequest": {
+    role: string;
+    task: string;
+  };
   "controllers.UserRequest": {
     email: string;
     password: string;
     username: string;
+  };
+  /** @description Message structure for inter-agent communication */
+  "worker.WorkerMessage": {
+    /** @description The ID of the sending agent */
+    from_agent_id?: string;
+    /** @description The type of message being sent */
+    message_type?: string;
+    /** @description The message payload */
+    payload?: { [key: string]: unknown };
+    /** @description The ID of the receiving agent */
+    to_agent_id?: string;
+  };
+  /** @description Progress notification containing the agent ID and progress message */
+  "worker.WorkerProgressNotification": {
+    /** @description The ID of the agent reporting progress */
+    agent_id?: string;
+    /** @description The progress message content */
+    progress?: string;
+  };
+  /** @description Response notification containing the agent ID and response message */
+  "worker.WorkerResponseNotification": {
+    /**
+     * @description The ID of the agent sending the response
+     * @Description Unique identifier of the agent
+     */
+    agent_id?: string;
+    /**
+     * @description The response message content
+     * @Description Response message from the agent
+     */
+    response?: string;
+  };
+  /** @description All websocket response data types */
+  "ws.WebSocketDataTypes": {
+    message?: definitions["worker.WorkerMessage"];
+    pong?: string;
+    progress?: definitions["worker.WorkerProgressNotification"];
+    response?: definitions["worker.WorkerResponseNotification"];
+  };
+  /** @enum {string} */
+  "ws.WsEventType": "ping" | "pong" | "agent_response" | "agent_progress";
+  "ws.WsMessage": {
+    data?: definitions["ws.WebSocketDataTypes"];
+    event?: definitions["ws.WsEventType"];
   };
 }
 

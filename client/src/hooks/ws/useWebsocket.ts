@@ -1,15 +1,11 @@
 import { useEffect, useState } from "react";
 import useWebSocket, { ReadyState } from "react-use-websocket";
 import { wsUrl } from "../api/common";
-
-interface WsMessage {
-  event: string;
-  data: any;
-}
+import { definitions } from "@/types/apiTypes";
 
 export default function useWebsocket() {
-  const [connectionStatus, setConnectionStatus] = useState<string>('Uninstantiated');
-  const [messageHistory, setMessageHistory] = useState<WsMessage[]>([]);
+  const [readyStateText, setReadyStateText] = useState<string>('Uninstantiated');
+  const [messageHistory, setMessageHistory] = useState<definitions['ws.WsMessage'][]>([]);
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(wsUrl, {
     onOpen: () => console.log('opened'),
@@ -19,13 +15,13 @@ export default function useWebsocket() {
 
   useEffect(() => {
     if (lastMessage !== null) {
-      const parsedMessage = JSON.parse(lastMessage.data) as WsMessage;
+      const parsedMessage = JSON.parse(lastMessage.data) as definitions['ws.WsMessage'];
       setMessageHistory((prev) => prev.concat(parsedMessage));
     }
   }, [lastMessage]);
 
   useEffect(() => {
-    setConnectionStatus({
+    setReadyStateText({
       [ReadyState.CONNECTING]: 'Connecting',
       [ReadyState.OPEN]: 'Open',
       [ReadyState.CLOSING]: 'Closing',
@@ -36,7 +32,8 @@ export default function useWebsocket() {
 
   return {
     messageHistory,
-    connectionStatus,
+    readyStateText,
+    readyState,
     sendMessage,
   }
 }

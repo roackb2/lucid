@@ -1,5 +1,7 @@
 package ws
 
+import "github.com/roackb2/lucid/internal/pkg/agents/worker"
+
 type WsEventType string
 
 const (
@@ -9,9 +11,20 @@ const (
 	WsEventTypeAgentProgress WsEventType = "agent_progress"
 )
 
+// NOTE: This is a temporary solution to provide all worker notification types to the swagger doc.
+// We need to find a better way to handle this in the future.
+// @Description All websocket response data types
+type WebSocketDataTypes struct {
+	Response *worker.WorkerResponseNotification `json:"response,omitempty"`
+	Progress *worker.WorkerProgressNotification `json:"progress,omitempty"`
+	Message  *worker.WorkerMessage              `json:"message,omitempty"`
+	Pong     string                             `json:"pong,omitempty"`
+}
+
+// @Description: A message sent over the websocket connection.
 type WsMessage struct {
-	Event WsEventType `json:"event"`
-	Data  any         `json:"data"`
+	Event WsEventType        `json:"event"`
+	Data  WebSocketDataTypes `json:"data"`
 }
 
 type WsConnection interface {

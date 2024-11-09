@@ -72,7 +72,9 @@ func (w *WsHandlerImpl) handlePing(msg WsMessage) error {
 
 	respMsg := WsMessage{
 		Event: WsEventTypePong,
-		Data:  fmt.Sprintf("pong: %s", msg.Data),
+		Data: WebSocketDataTypes{
+			Pong: fmt.Sprintf("pong: %s", msg.Data.Pong),
+		},
 	}
 
 	w.conn.WriteJSON(respMsg)
@@ -104,7 +106,9 @@ func (w *WsHandlerImpl) handleAgentProgress(message string) error {
 	// TODO: Filter messages with client specified agent id
 	err = w.conn.WriteJSON(WsMessage{
 		Event: WsEventTypeAgentProgress,
-		Data:  notification.Progress,
+		Data: WebSocketDataTypes{
+			Progress: &notification,
+		},
 	})
 	if err != nil {
 		slog.Error("Failed to write agent progress message", "error", err)
@@ -123,7 +127,9 @@ func (w *WsHandlerImpl) handleAgentResponse(message string) error {
 	// TODO: Filter messages with client specified agent id
 	err = w.conn.WriteJSON(WsMessage{
 		Event: WsEventTypeAgentResponse,
-		Data:  notification.Response,
+		Data: WebSocketDataTypes{
+			Response: &notification,
+		},
 	})
 	if err != nil {
 		slog.Error("Failed to write agent response message", "error", err)

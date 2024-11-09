@@ -27,16 +27,16 @@ func NewAgentRouterController(ctx context.Context, controlPlane control_plane.Co
 }
 
 // StartAgent godoc
-// @Summary Start a new agent
-// @Description Starts a new agent with role and task
-// @Tags agents
-// @Accept json
-// @Produce json
-// @Param agent body StartAgentRequest true "Agent details"
-// @Success 201 {object} map[string]string "Agent created successfully"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
-// @Router /api/v1/agents/create [post]
+//	@Summary		Start a new agent
+//	@Description	Starts a new agent with role and task
+//	@Tags			agents
+//	@Accept			json
+//	@Produce		json
+//	@Param			agent	body		StartAgentRequest	true	"Agent details"
+//	@Success		201		{object}	map[string]string	"Agent created successfully"
+//	@Failure		400		{object}	map[string]string	"Bad request"
+//	@Failure		500		{object}	map[string]string	"Internal server error"
+//	@Router			/api/v1/agents/create [post]
 func (ac *AgentRouterController) StartAgent(c *gin.Context) {
 	var agent StartAgentRequest
 	if err := c.ShouldBindJSON(&agent); err != nil {

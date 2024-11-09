@@ -37,7 +37,7 @@ export default function CreateAgentForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 min-w-[300px]">
         <FormField
           control={form.control}
           name="role"

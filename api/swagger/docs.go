@@ -151,6 +151,35 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/ws": {
+            "get": {
+                "description": "Handles websocket connections and delegates to the ws package",
+                "tags": [
+                    "websocket"
+                ],
+                "summary": "Handle websocket connections",
+                "responses": {
+                    "200": {
+                        "description": "Websocket connection established",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/ws.WsMessage"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -185,6 +214,100 @@ const docTemplate = `{
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "worker.WorkerMessage": {
+            "description": "Message structure for inter-agent communication",
+            "type": "object",
+            "properties": {
+                "from_agent_id": {
+                    "description": "The ID of the sending agent",
+                    "type": "string"
+                },
+                "message_type": {
+                    "description": "The type of message being sent",
+                    "type": "string"
+                },
+                "payload": {
+                    "description": "The message payload",
+                    "type": "object"
+                },
+                "to_agent_id": {
+                    "description": "The ID of the receiving agent",
+                    "type": "string"
+                }
+            }
+        },
+        "worker.WorkerProgressNotification": {
+            "description": "Progress notification containing the agent ID and progress message",
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "description": "The ID of the agent reporting progress",
+                    "type": "string"
+                },
+                "progress": {
+                    "description": "The progress message content",
+                    "type": "string"
+                }
+            }
+        },
+        "worker.WorkerResponseNotification": {
+            "description": "Response notification containing the agent ID and response message",
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "description": "The ID of the agent sending the response\n@Description Unique identifier of the agent",
+                    "type": "string"
+                },
+                "response": {
+                    "description": "The response message content\n@Description Response message from the agent",
+                    "type": "string"
+                }
+            }
+        },
+        "ws.WebSocketDataTypes": {
+            "description": "All websocket response data types",
+            "type": "object",
+            "properties": {
+                "message": {
+                    "$ref": "#/definitions/worker.WorkerMessage"
+                },
+                "pong": {
+                    "type": "string"
+                },
+                "progress": {
+                    "$ref": "#/definitions/worker.WorkerProgressNotification"
+                },
+                "response": {
+                    "$ref": "#/definitions/worker.WorkerResponseNotification"
+                }
+            }
+        },
+        "ws.WsEventType": {
+            "type": "string",
+            "enum": [
+                "ping",
+                "pong",
+                "agent_response",
+                "agent_progress"
+            ],
+            "x-enum-varnames": [
+                "WsEventTypePing",
+                "WsEventTypePong",
+                "WsEventTypeAgentResponse",
+                "WsEventTypeAgentProgress"
+            ]
+        },
+        "ws.WsMessage": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/ws.WebSocketDataTypes"
+                },
+                "event": {
+                    "$ref": "#/definitions/ws.WsEventType"
                 }
             }
         }

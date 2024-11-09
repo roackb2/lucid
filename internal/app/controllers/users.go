@@ -16,16 +16,16 @@ type UserRequest struct {
 }
 
 // CreateMockUser godoc
-// @Summary Create a new user
-// @Description Creates a new user with the provided details
-// @Tags users
-// @Accept json
-// @Produce json
-// @Param user body UserRequest true "User details"
-// @Success 201 {object} map[string]string "User created successfully"
-// @Failure 400 {object} map[string]string "Bad request"
-// @Failure 500 {object} map[string]string "Internal server error"
-// @Router /api/v1/users [post]
+//	@Summary		Create a new user
+//	@Description	Creates a new user with the provided details
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Param			user	body		UserRequest			true	"User details"
+//	@Success		201		{object}	map[string]string	"User created successfully"
+//	@Failure		400		{object}	map[string]string	"Bad request"
+//	@Failure		500		{object}	map[string]string	"Internal server error"
+//	@Router			/api/v1/users [post]
 func CreateMockUser(c *gin.Context) {
 	var user UserRequest
 	if err := c.ShouldBindJSON(&user); err != nil {

@@ -1,3 +1,6 @@
+// Package worker contains the worker agent implementation and related notifications.
+//
+// swagger:meta
 package worker
 
 import (
@@ -8,21 +11,37 @@ import (
 	"time"
 )
 
+// WorkerResponseNotification represents a response notification from a worker agent.
+// @Description Response notification containing the agent ID and response message
 type WorkerResponseNotification struct {
-	AgentID  string `json:"agent_id"`
-	Response string `json:"response"`
+	// The ID of the agent sending the response
+	// @Description Unique identifier of the agent
+	AgentID string `json:"agent_id" swaggertype:"string"`
+	// The response message content
+	// @Description Response message from the agent
+	Response string `json:"response" swaggertype:"string"`
 }
 
+// WorkerProgressNotification represents a progress update from a worker agent.
+// @Description Progress notification containing the agent ID and progress message
 type WorkerProgressNotification struct {
-	AgentID  string `json:"agent_id"`
-	Progress string `json:"progress"`
+	// The ID of the agent reporting progress
+	AgentID string `json:"agent_id" swaggertype:"string"`
+	// The progress message content
+	Progress string `json:"progress" swaggertype:"string"`
 }
 
+// WorkerMessage represents a message between worker agents.
+// @Description Message structure for inter-agent communication
 type WorkerMessage struct {
-	FromAgentID string      `json:"from_agent_id"`
-	ToAgentID   string      `json:"to_agent_id"`
-	MessageType string      `json:"message_type"`
-	Payload     interface{} `json:"payload"`
+	// The ID of the sending agent
+	FromAgentID string `json:"from_agent_id" swaggertype:"string"`
+	// The ID of the receiving agent
+	ToAgentID string `json:"to_agent_id" swaggertype:"string"`
+	// The type of message being sent
+	MessageType string `json:"message_type" swaggertype:"string"`
+	// The message payload
+	Payload interface{} `json:"payload" swaggertype:"object"`
 }
 
 func GetAgentResponseTopic(agentID string) string {

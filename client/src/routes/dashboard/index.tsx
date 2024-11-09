@@ -1,10 +1,9 @@
+import AgentStatusCard from '@/components/features/aget-status-card'
 import CreateAgentForm from '@/components/features/create-agent-form'
+import StatusIndicator from '@/components/features/status-indicator'
 import Drawer from '@/components/layout/drawer'
-import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { useCreateAgent } from '@/hooks/api/useAgents'
 import useWebsocket from '@/hooks/ws/useWebsocket'
+import { definitions } from '@/types/apiTypes'
 import { createFileRoute } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/dashboard/')({
@@ -12,19 +11,17 @@ export const Route = createFileRoute('/dashboard/')({
 })
 
 function Dashboard() {
-  const { connectionStatus, messageHistory } = useWebsocket()
+  const { readyState, messageHistory } = useWebsocket()
+
   return (
     <Drawer>
       <div className="p-4">
         <CreateAgentForm />
-        <div>Connection status: {connectionStatus}</div>
+        <div className="flex flex-row items-center gap-2">Connection status: <StatusIndicator status={readyState} /></div>
         <div className="flex flex-col gap-2">
           <span>Message history</span>
           {messageHistory.map((message, index) => (
-            <div key={index} className="flex flex-col border border-gray-200 p-2 rounded-md">
-              <div>Event: {message.event}</div>
-              <div>Data: {JSON.stringify(message.data)}</div>
-            </div>
+            <AgentStatusCard key={index} notification={message} />
           ))}
         </div>
       </div>

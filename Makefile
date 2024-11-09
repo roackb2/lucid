@@ -60,13 +60,16 @@ test-integration:
 clean:
 	rm -f bin/*
 
+swag-files := ./cmd/server,./internal/app/controllers,./internal/pkg/agents/worker,./internal/pkg/ws
+
 # Build Swagger documentation
 swagger:
 	@echo "Current directory: $$(pwd)"
 	@echo "Generating Swagger documentation..."
 	@which swag > /dev/null || (echo "swag not found. Installing..." && go install github.com/swaggo/swag/cmd/swag@latest)
 	@echo "Running swag init..."
-	@swag init -g main.go -d ./cmd/server,./internal/app/controllers -o api/swagger
+	@swag fmt -g main.go -d $(swag-files)
+	@swag init -g main.go -d $(swag-files) -o api/swagger
 
 .PHONY: build clean swagger $(addprefix run-,$(EXECUTABLES))
 

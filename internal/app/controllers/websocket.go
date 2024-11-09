@@ -29,6 +29,16 @@ func NewWebsocketController(ctx context.Context, pubsub pubsub.PubSub) *Websocke
 	}, pubsub: pubsub}
 }
 
+// Note: Swagger doc here is for including all worker notifications types.
+
+// SocketHandler godoc
+//
+//	@Summary		Handle websocket connections
+//	@Description	Handles websocket connections and delegates to the ws package
+//	@Tags			websocket
+//	@Success		200	{array}		ws.WsMessage	"Websocket connection established"
+//	@Failure		500	{object}	map[string]string		"Internal server error"
+//	@Router			/ws [get]
 func (ac *WebsocketController) SocketHandler(c *gin.Context) {
 	slog.Info("Websocket connection established")
 	conn, err := ac.upgrader.Upgrade(c.Writer, c.Request, nil)

@@ -24,17 +24,17 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// @title Lucid API
-// @version 1.0
-// @description This is the API for the Lucid project.
+//	@title			Lucid API
+//	@version		1.0
+//	@description	This is the API for the Lucid project.
 
-// @contact.name Jay / Fienna Liang
-// @contact.url https://github.com/roackb2
-// @contact.email roackb2@gmail.com
+//	@contact.name	Jay / Fienna Liang
+//	@contact.url	https://github.com/roackb2
+//	@contact.email	roackb2@gmail.com
 
-// @host      localhost:8080
+//	@host	localhost:8080
 
-// @securityDefinitions.basic  None
+//	@securityDefinitions.basic	None
 func main() {
 	// Command line flags
 	var withControlPlane bool
