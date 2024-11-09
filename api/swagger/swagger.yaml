@@ -22,22 +22,6 @@ definitions:
     - password
     - username
     type: object
-  worker.WorkerMessage:
-    description: Message structure for inter-agent communication
-    properties:
-      from_agent_id:
-        description: The ID of the sending agent
-        type: string
-      message_type:
-        description: The type of message being sent
-        type: string
-      payload:
-        description: The message payload
-        type: object
-      to_agent_id:
-        description: The ID of the receiving agent
-        type: string
-    type: object
   worker.WorkerProgressNotification:
     description: Progress notification containing the agent ID and progress message
     properties:
@@ -65,14 +49,17 @@ definitions:
   ws.WebSocketDataTypes:
     description: All websocket response data types
     properties:
-      message:
-        $ref: '#/definitions/worker.WorkerMessage'
       pong:
+        description: '@Description: A pong message that just echo back.'
         type: string
       progress:
-        $ref: '#/definitions/worker.WorkerProgressNotification'
+        allOf:
+        - $ref: '#/definitions/worker.WorkerProgressNotification'
+        description: '@Description: A worker progress notification.'
       response:
-        $ref: '#/definitions/worker.WorkerResponseNotification'
+        allOf:
+        - $ref: '#/definitions/worker.WorkerResponseNotification'
+        description: '@Description: A worker response notification.'
     type: object
   ws.WsEventType:
     enum:
@@ -89,11 +76,16 @@ definitions:
   ws.WsMessage:
     properties:
       data:
-        $ref: '#/definitions/ws.WebSocketDataTypes'
+        allOf:
+        - $ref: '#/definitions/ws.WebSocketDataTypes'
+        description: '@Description: The data of the message. Each field is optional,
+          depending on the event type.'
       event:
-        $ref: '#/definitions/ws.WsEventType'
+        allOf:
+        - $ref: '#/definitions/ws.WsEventType'
+        description: '@Description: The event type of the message.'
     type: object
-host: localhost:8080
+host: localhost:8081
 info:
   contact:
     email: roackb2@gmail.com
@@ -192,10 +184,13 @@ paths:
       - healthz
   /ws:
     get:
-      description: Handles websocket connections and delegates to the ws package
+      description: |-
+        Handles websocket connections and delegates to the ws package.
+        The WebSocket connection is served at 8082 port.
+        The response type lists all possible worker notifications.
       responses:
         "200":
-          description: Websocket connection established
+          description: The response type lists all possible worker notifications.
           schema:
             items:
               $ref: '#/definitions/ws.WsMessage'

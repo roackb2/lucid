@@ -7,6 +7,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
 import './global.css'
 import './index.css'
+import { Toaster } from 'sonner'
 
 // Set up a Router instance
 const router = createRouter({
@@ -28,6 +29,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      <Toaster />
     </QueryClientProvider>
   )
 }

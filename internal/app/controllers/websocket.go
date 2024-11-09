@@ -34,10 +34,12 @@ func NewWebsocketController(ctx context.Context, pubsub pubsub.PubSub) *Websocke
 // SocketHandler godoc
 //
 //	@Summary		Handle websocket connections
-//	@Description	Handles websocket connections and delegates to the ws package
+//	@Description	Handles websocket connections and delegates to the ws package.
+//	@Description	The WebSocket connection is served at 8082 port.
+//	@Description	The response type lists all possible worker notifications.
 //	@Tags			websocket
-//	@Success		200	{array}		ws.WsMessage	"Websocket connection established"
-//	@Failure		500	{object}	map[string]string		"Internal server error"
+//	@Success		200	{array}		ws.WsMessage		"The response type lists all possible worker notifications."
+//	@Failure		500	{object}	map[string]string	"Internal server error"
 //	@Router			/ws [get]
 func (ac *WebsocketController) SocketHandler(c *gin.Context) {
 	slog.Info("Websocket connection established")

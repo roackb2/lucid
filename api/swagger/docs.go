@@ -154,14 +154,14 @@ const docTemplate = `{
         },
         "/ws": {
             "get": {
-                "description": "Handles websocket connections and delegates to the ws package",
+                "description": "Handles websocket connections and delegates to the ws package.\nThe WebSocket connection is served at 8082 port.\nThe response type lists all possible worker notifications.",
                 "tags": [
                     "websocket"
                 ],
                 "summary": "Handle websocket connections",
                 "responses": {
                     "200": {
-                        "description": "Websocket connection established",
+                        "description": "The response type lists all possible worker notifications.",
                         "schema": {
                             "type": "array",
                             "items": {
@@ -217,28 +217,6 @@ const docTemplate = `{
                 }
             }
         },
-        "worker.WorkerMessage": {
-            "description": "Message structure for inter-agent communication",
-            "type": "object",
-            "properties": {
-                "from_agent_id": {
-                    "description": "The ID of the sending agent",
-                    "type": "string"
-                },
-                "message_type": {
-                    "description": "The type of message being sent",
-                    "type": "string"
-                },
-                "payload": {
-                    "description": "The message payload",
-                    "type": "object"
-                },
-                "to_agent_id": {
-                    "description": "The ID of the receiving agent",
-                    "type": "string"
-                }
-            }
-        },
         "worker.WorkerProgressNotification": {
             "description": "Progress notification containing the agent ID and progress message",
             "type": "object",
@@ -271,17 +249,25 @@ const docTemplate = `{
             "description": "All websocket response data types",
             "type": "object",
             "properties": {
-                "message": {
-                    "$ref": "#/definitions/worker.WorkerMessage"
-                },
                 "pong": {
+                    "description": "@Description: A pong message that just echo back.",
                     "type": "string"
                 },
                 "progress": {
-                    "$ref": "#/definitions/worker.WorkerProgressNotification"
+                    "description": "@Description: A worker progress notification.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/worker.WorkerProgressNotification"
+                        }
+                    ]
                 },
                 "response": {
-                    "$ref": "#/definitions/worker.WorkerResponseNotification"
+                    "description": "@Description: A worker response notification.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/worker.WorkerResponseNotification"
+                        }
+                    ]
                 }
             }
         },
@@ -304,10 +290,20 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "data": {
-                    "$ref": "#/definitions/ws.WebSocketDataTypes"
+                    "description": "@Description: The data of the message. Each field is optional, depending on the event type.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/ws.WebSocketDataTypes"
+                        }
+                    ]
                 },
                 "event": {
-                    "$ref": "#/definitions/ws.WsEventType"
+                    "description": "@Description: The event type of the message.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/ws.WsEventType"
+                        }
+                    ]
                 }
             }
         }
@@ -322,7 +318,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8080",
+	Host:             "localhost:8081",
 	BasePath:         "",
 	Schemes:          []string{},
 	Title:            "Lucid API",

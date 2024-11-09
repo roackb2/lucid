@@ -4,7 +4,7 @@ openai:
   api_key: "sk-proj-1234567890"
 
 server:
-  port: 8080
+  port: 8081
 
 websocket:
   port: 8082

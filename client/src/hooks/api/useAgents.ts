@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { apiUrl, postRequest, serverUrl } from "./common";
+import { apiUrl, postRequest, serverUrl } from "../common";
 
 export type CreateAgentProps = {
   role: string

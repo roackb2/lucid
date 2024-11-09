@@ -66,10 +66,14 @@ export interface paths {
     };
   };
   "/ws": {
-    /** Handles websocket connections and delegates to the ws package */
+    /**
+     * Handles websocket connections and delegates to the ws package.
+     * The WebSocket connection is served at 8082 port.
+     * The response type lists all possible worker notifications.
+     */
     get: {
       responses: {
-        /** Websocket connection established */
+        /** The response type lists all possible worker notifications. */
         200: {
           schema: definitions["ws.WsMessage"][];
         };
@@ -91,17 +95,6 @@ export interface definitions {
     email: string;
     password: string;
     username: string;
-  };
-  /** @description Message structure for inter-agent communication */
-  "worker.WorkerMessage": {
-    /** @description The ID of the sending agent */
-    from_agent_id?: string;
-    /** @description The type of message being sent */
-    message_type?: string;
-    /** @description The message payload */
-    payload?: { [key: string]: unknown };
-    /** @description The ID of the receiving agent */
-    to_agent_id?: string;
   };
   /** @description Progress notification containing the agent ID and progress message */
   "worker.WorkerProgressNotification": {
@@ -125,15 +118,19 @@ export interface definitions {
   };
   /** @description All websocket response data types */
   "ws.WebSocketDataTypes": {
-    message?: definitions["worker.WorkerMessage"];
+    /** @description @Description: A pong message that just echo back. */
     pong?: string;
+    /** @description @Description: A worker progress notification. */
     progress?: definitions["worker.WorkerProgressNotification"];
+    /** @description @Description: A worker response notification. */
     response?: definitions["worker.WorkerResponseNotification"];
   };
   /** @enum {string} */
   "ws.WsEventType": "ping" | "pong" | "agent_response" | "agent_progress";
   "ws.WsMessage": {
+    /** @description @Description: The data of the message. Each field is optional, depending on the event type. */
     data?: definitions["ws.WebSocketDataTypes"];
+    /** @description @Description: The event type of the message. */
     event?: definitions["ws.WsEventType"];
   };
 }

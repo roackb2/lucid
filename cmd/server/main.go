@@ -32,9 +32,9 @@ import (
 //	@contact.url	https://github.com/roackb2
 //	@contact.email	roackb2@gmail.com
 
-//	@host	localhost:8080
+//	@host	localhost:8081
 
-//	@securityDefinitions.basic	None
+// @securityDefinitions.basic	None
 func main() {
 	// Command line flags
 	var withControlPlane bool
@@ -150,7 +150,7 @@ func main() {
 	websocketController := controllers.NewWebsocketController(ctx, pubSub)
 	wsGroup := wsServer.Group("/")
 	{
-		wsGroup.GET("/", websocketController.SocketHandler)
+		wsGroup.GET("/ws", websocketController.SocketHandler)
 	}
 
 	go func() {

@@ -8,6 +8,8 @@ import { Select, SelectValue, SelectTrigger, SelectItem, SelectContent } from ".
 import { useCreateAgent } from "@/hooks/api/useAgents"
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
+import { toast } from "sonner"
+import { useEffect } from "react"
 const schema = z.object({
   role: z.enum(['publisher', 'consumer']),
   task: z.string(),
@@ -34,6 +36,14 @@ export default function CreateAgentForm() {
       task: data.task,
     })
   }
+
+  useEffect(() => {
+    if (isError) {
+      toast.error(error.message)
+    } else if (data) {
+      toast.success(data.message)
+    }
+  }, [isError, error, data])
 
   return (
     <Form {...form}>
@@ -75,9 +85,6 @@ export default function CreateAgentForm() {
           )}
         />
         <Button variant="outline" type="submit" disabled={isPending}>Create Agent</Button>
-        {isPending && <div>Creating agent...</div>}
-        {isError && <div>{error.message}</div>}
-        {data && <div>Agent created: {JSON.stringify(data)}</div>}
       </form>
     </Form>
   )
