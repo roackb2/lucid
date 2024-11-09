@@ -7,13 +7,13 @@ import { AgentNotificationTypes } from '@/types/layout'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 
-export const Route = createFileRoute('/dashboard/')({
-  component: Dashboard,
+export const Route = createFileRoute('/dashboard/experiments/single-agent/')({
+  component: SingleAgent,
 })
 
 const agentEvents = ['agent_progress', 'agent_response']
 
-function Dashboard() {
+function SingleAgent() {
   const { readyState, messageHistory } = useWebsocket()
   const [agentIds, setAgentIds] = useState<string[]>([])
 
@@ -37,23 +37,35 @@ function Dashboard() {
   }, [messageHistory])
 
   const agentMessagesByAgentId = useMemo(() => {
-    return agentMessageData.reduce((acc, message) => {
-      acc[message.agent_id ?? ''] = [...(acc[message.agent_id ?? ''] ?? []), message]
-      return acc
-    }, {} as Record<string, AgentNotificationTypes[]>)
+    return agentMessageData.reduce(
+      (acc, message) => {
+        acc[message.agent_id ?? ''] = [
+          ...(acc[message.agent_id ?? ''] ?? []),
+          message,
+        ]
+        return acc
+      },
+      {} as Record<string, AgentNotificationTypes[]>,
+    )
   }, [agentMessageData])
 
   return (
-    <Drawer>
-      <div className="flex flex-col gap-4 p-4">
-        <CreateAgentForm onSuccess={onAgentCreated} />
-        <div className="flex flex-row items-center gap-2">Connection status: <StatusIndicator status={readyState} /></div>
-        <div className="flex flex-col gap-4">
-          {Object.entries(agentMessagesByAgentId).map(([agentId, messages], index) => (
-            <AgentStatusCard key={index} agentId={agentId} messages={messages} />
-          ))}
-        </div>
+    <div className="flex flex-col gap-4 p-4">
+      <CreateAgentForm onSuccess={onAgentCreated} />
+      <div className="flex flex-row items-center gap-2">
+        Connection status: <StatusIndicator status={readyState} />
       </div>
-    </Drawer>
+      <div className="flex flex-col gap-4">
+        {Object.entries(agentMessagesByAgentId).map(
+          ([agentId, messages], index) => (
+            <AgentStatusCard
+              key={index}
+              agentId={agentId}
+              messages={messages}
+            />
+          ),
+        )}
+      </div>
+    </div>
   )
 }

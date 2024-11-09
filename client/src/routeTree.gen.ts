@@ -11,20 +11,33 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
+import { Route as DashboardRouteImport } from './routes/dashboard/route'
 import { Route as IndexImport } from './routes/index'
-import { Route as DashboardIndexImport } from './routes/dashboard/index'
+import { Route as DashboardHomeIndexImport } from './routes/dashboard/home/index'
+import { Route as DashboardExperimentsSingleAgentIndexImport } from './routes/dashboard/experiments/single-agent/index'
 
 // Create/Update Routes
+
+const DashboardRouteRoute = DashboardRouteImport.update({
+  path: '/dashboard',
+  getParentRoute: () => rootRoute,
+} as any)
 
 const IndexRoute = IndexImport.update({
   path: '/',
   getParentRoute: () => rootRoute,
 } as any)
 
-const DashboardIndexRoute = DashboardIndexImport.update({
-  path: '/dashboard/',
-  getParentRoute: () => rootRoute,
+const DashboardHomeIndexRoute = DashboardHomeIndexImport.update({
+  path: '/home/',
+  getParentRoute: () => DashboardRouteRoute,
 } as any)
+
+const DashboardExperimentsSingleAgentIndexRoute =
+  DashboardExperimentsSingleAgentIndexImport.update({
+    path: '/experiments/single-agent/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
 
 // Populate the FileRoutesByPath interface
 
@@ -37,51 +50,99 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexImport
       parentRoute: typeof rootRoute
     }
-    '/dashboard/': {
-      id: '/dashboard/'
+    '/dashboard': {
+      id: '/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardIndexImport
+      preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRoute
+    }
+    '/dashboard/home/': {
+      id: '/dashboard/home/'
+      path: '/home'
+      fullPath: '/dashboard/home'
+      preLoaderRoute: typeof DashboardHomeIndexImport
+      parentRoute: typeof DashboardRouteImport
+    }
+    '/dashboard/experiments/single-agent/': {
+      id: '/dashboard/experiments/single-agent/'
+      path: '/experiments/single-agent'
+      fullPath: '/dashboard/experiments/single-agent'
+      preLoaderRoute: typeof DashboardExperimentsSingleAgentIndexImport
+      parentRoute: typeof DashboardRouteImport
     }
   }
 }
 
 // Create and export the route tree
 
+interface DashboardRouteRouteChildren {
+  DashboardHomeIndexRoute: typeof DashboardHomeIndexRoute
+  DashboardExperimentsSingleAgentIndexRoute: typeof DashboardExperimentsSingleAgentIndexRoute
+}
+
+const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
+  DashboardHomeIndexRoute: DashboardHomeIndexRoute,
+  DashboardExperimentsSingleAgentIndexRoute:
+    DashboardExperimentsSingleAgentIndexRoute,
+}
+
+const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(
+  DashboardRouteRouteChildren,
+)
+
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardIndexRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/home': typeof DashboardHomeIndexRoute
+  '/dashboard/experiments/single-agent': typeof DashboardExperimentsSingleAgentIndexRoute
 }
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardIndexRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/home': typeof DashboardHomeIndexRoute
+  '/dashboard/experiments/single-agent': typeof DashboardExperimentsSingleAgentIndexRoute
 }
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
   '/': typeof IndexRoute
-  '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/home/': typeof DashboardHomeIndexRoute
+  '/dashboard/experiments/single-agent/': typeof DashboardExperimentsSingleAgentIndexRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/dashboard/home'
+    | '/dashboard/experiments/single-agent'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard'
-  id: '__root__' | '/' | '/dashboard/'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/dashboard/home'
+    | '/dashboard/experiments/single-agent'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/dashboard/home/'
+    | '/dashboard/experiments/single-agent/'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DashboardIndexRoute: typeof DashboardIndexRoute
+  DashboardRouteRoute: typeof DashboardRouteRouteWithChildren
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DashboardIndexRoute: DashboardIndexRoute,
+  DashboardRouteRoute: DashboardRouteRouteWithChildren,
 }
 
 export const routeTree = rootRoute
@@ -97,14 +158,26 @@ export const routeTree = rootRoute
       "filePath": "__root.tsx",
       "children": [
         "/",
-        "/dashboard/"
+        "/dashboard"
       ]
     },
     "/": {
       "filePath": "index.tsx"
     },
-    "/dashboard/": {
-      "filePath": "dashboard/index.tsx"
+    "/dashboard": {
+      "filePath": "dashboard/route.tsx",
+      "children": [
+        "/dashboard/home/",
+        "/dashboard/experiments/single-agent/"
+      ]
+    },
+    "/dashboard/home/": {
+      "filePath": "dashboard/home/index.tsx",
+      "parent": "/dashboard"
+    },
+    "/dashboard/experiments/single-agent/": {
+      "filePath": "dashboard/experiments/single-agent/index.tsx",
+      "parent": "/dashboard"
     }
   }
 }

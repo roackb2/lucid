@@ -94,11 +94,12 @@ func main() {
 	}
 
 	for _, task := range tasks {
-		err := controlPlane.KickoffTask(ctx, task, "consumer")
+		agentID, err := controlPlane.KickoffTask(ctx, task, "consumer")
 		if err != nil {
 			slog.Error("Error kicking off task", "error", err)
 			panic(err)
 		}
+		slog.Info("Kicked off task", "agent_id", agentID)
 	}
 
 	time.Sleep(5 * time.Second)

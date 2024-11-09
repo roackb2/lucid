@@ -6,16 +6,33 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
+import { useRouterState } from '@tanstack/react-router'
+import { capitalize } from "lodash-es"
 
 export default function DashboardBreadcrumb() {
+  const router = useRouterState();
+
+  const paths = router.location.pathname.split('/').slice(1)
+
+  const capitalizePath = (path: string) => {
+    return capitalize(path.replace(/-/g, ' '))
+  }
+
   return (
     <Breadcrumb>
       <BreadcrumbList>
-        <BreadcrumbSeparator />
-        <BreadcrumbItem>
-          <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-        </BreadcrumbItem>
-        <BreadcrumbSeparator />
+        {paths.map((path, index) => (
+          <div key={path} className="flex flex-row items-center gap-2">
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              {index === paths.length - 1 ? (
+                <BreadcrumbLink href={`/${paths.slice(0, index + 1).join('/')}`}>{capitalizePath(path)}</BreadcrumbLink>
+              ) : (
+                <BreadcrumbPage>{capitalizePath(path)}</BreadcrumbPage>
+              )}
+            </BreadcrumbItem>
+          </div>
+        ))}
       </BreadcrumbList>
     </Breadcrumb>
   )

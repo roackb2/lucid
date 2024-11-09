@@ -9,7 +9,6 @@ export const Route = createFileRoute('/')({
     if (isAdmin) {
       redirect({
         to: '/dashboard',
-        throw: true,
       })
     }
   },
