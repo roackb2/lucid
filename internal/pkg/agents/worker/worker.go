@@ -103,6 +103,9 @@ func (w *WorkerImpl) initChat(messages []providers.ChatMessage, callbacks Worker
 	if err := w.startMessageListener(); err != nil {
 		slog.Error("Worker: Failed to start message listener", "error", err)
 	}
+	if err := w.publishStatus(context.Background(), w.stateMachine.Current()); err != nil {
+		slog.Error("Worker: Failed to publish initial status", "error", err)
+	}
 }
 
 func (w *WorkerImpl) Chat(
