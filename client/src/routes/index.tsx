@@ -7,6 +7,7 @@ const isAdmin = true
 export const Route = createFileRoute('/')({
   loader: () => {
     if (isAdmin) {
+      console.log('redirecting to /dashboard')
       redirect({
         to: '/dashboard',
       })

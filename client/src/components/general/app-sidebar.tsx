@@ -1,5 +1,5 @@
 import { Calendar, Home, Inbox, Search, Settings, FlaskConical } from "lucide-react"
-
+import { Link } from "@tanstack/react-router"
 import {
   Sidebar,
   SidebarContent,
@@ -85,10 +85,10 @@ export function AppSidebar() {
                             {item.subItems.map((subItem) => (
                               <SidebarMenuSubItem key={subItem.title}>
                                 <SidebarMenuButton asChild>
-                                  <a href={`${baseUrl}${item.url}${subItem.url}`}>
+                                  <Link to={`${baseUrl}${item.url}${subItem.url}`}>
                                     <subItem.icon />
                                     <span>{subItem.title}</span>
-                                  </a>
+                                  </Link>
                                 </SidebarMenuButton>
                               </SidebarMenuSubItem>
                             ))}
@@ -101,10 +101,10 @@ export function AppSidebar() {
                   return (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild>
-                        <a href={`${baseUrl}/${item.url}`}>
+                        <Link to={`${baseUrl}${item.url}`}>
                           <item.icon />
                           <span>{item.title}</span>
-                        </a>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )
