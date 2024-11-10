@@ -118,6 +118,7 @@ func (w *WorkerImpl) publishProgress(ctx context.Context, progress string) error
 }
 
 func (w *WorkerImpl) publishStatus(ctx context.Context, status string) error {
+	slog.Info("Worker: Publishing status", "agentID", *w.ID, "status", status)
 	payload := WorkerStatusNotification{
 		AgentID: *w.ID,
 		Status:  status,

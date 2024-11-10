@@ -11,6 +11,9 @@ interface AgentStatusCardProps {
 
 export default function AgentStatusCard({ agentId, messages }: AgentStatusCardProps) {
   const lastMessage = messages[messages.length - 1]
+  const lastStatusMessage: definitions['worker.WorkerStatusNotification'] | undefined = messages.find(
+    (message) => 'status' in message,
+  )
 
   const messageContent = (() => {
     if (!lastMessage) {
@@ -25,7 +28,9 @@ export default function AgentStatusCard({ agentId, messages }: AgentStatusCardPr
 
   return (
     <div className="flex flex-col gap-2 rounded-md border p-2 max-w-[500px]">
-      <p className="text-sm font-medium text-gray-500">{agentId}</p>
+      <p className="text-sm font-medium text-gray-500">
+        {agentId} ({lastStatusMessage?.status})
+      </p>
       {messageContent && <p className="text-sm">{messageContent}</p>}
     </div>
   )

@@ -1,4 +1,4 @@
-import AgentStatusCard from '@/components/features/aget-status-card'
+import AgentStatusCard from '@/components/features/agent-status-card'
 import CreateAgentForm from '@/components/features/create-agent-form'
 import StatusIndicator from '@/components/features/status-indicator'
 import Drawer from '@/components/layout/drawer'
@@ -11,7 +11,7 @@ export const Route = createFileRoute('/dashboard/experiments/single-agent/')({
   component: SingleAgent,
 })
 
-const agentEvents = ['agent_progress', 'agent_response']
+const agentEvents = ['agent_progress', 'agent_response', 'agent_status']
 
 function SingleAgent() {
   const { readyState, readyStateText, messageHistory } = useWebsocket()
@@ -32,6 +32,8 @@ function SingleAgent() {
             return message.data?.progress
           case 'agent_response':
             return message.data?.response
+          case 'agent_status':
+            return message.data?.status
         }
       }) as AgentNotificationTypes[]
   }, [messageHistory])

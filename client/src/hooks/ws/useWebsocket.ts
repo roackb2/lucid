@@ -15,6 +15,7 @@ export default function useWebsocket() {
 
   useEffect(() => {
     if (lastJsonMessage !== null) {
+      console.log('lastJsonMessage', lastJsonMessage)
       setMessageHistory((prev) => prev.concat(lastJsonMessage));
     }
   }, [lastJsonMessage]);
