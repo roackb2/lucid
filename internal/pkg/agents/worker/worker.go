@@ -233,6 +233,9 @@ func (w *WorkerImpl) initAgentStateMachine() {
 			},
 			"enter_state": func(_ context.Context, e *fsm.Event) {
 				slog.Info("Transitioned to state", "from", e.Src, "to", e.Dst)
+				if err := w.publishStatus(context.Background(), e.Dst); err != nil {
+					slog.Error("Worker: Failed to publish status", "error", err)
+				}
 			},
 			"after_pause": func(_ context.Context, e *fsm.Event) {
 				if callback, ok := w.callbacks[OnPause]; ok {

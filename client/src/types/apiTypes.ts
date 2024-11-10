@@ -120,6 +120,13 @@ export interface definitions {
      */
     response?: string;
   };
+  /** @description Status notification containing the agent ID and status message */
+  "worker.WorkerStatusNotification": {
+    /** @description The ID of the agent reporting the status */
+    agent_id?: string;
+    /** @description The status message content */
+    status?: string;
+  };
   /** @description All websocket response data types */
   "ws.WebSocketDataTypes": {
     /** @description @Description: A pong message that just echo back. */
@@ -128,9 +135,16 @@ export interface definitions {
     progress?: definitions["worker.WorkerProgressNotification"];
     /** @description @Description: A worker response notification. */
     response?: definitions["worker.WorkerResponseNotification"];
+    /** @description @Description: A worker status notification. */
+    status?: definitions["worker.WorkerStatusNotification"];
   };
   /** @enum {string} */
-  "ws.WsEventType": "ping" | "pong" | "agent_response" | "agent_progress";
+  "ws.WsEventType":
+    | "ping"
+    | "pong"
+    | "agent_response"
+    | "agent_progress"
+    | "agent_status";
   "ws.WsMessage": {
     /** @description @Description: The data of the message. Each field is optional, depending on the event type. */
     data?: definitions["ws.WebSocketDataTypes"];

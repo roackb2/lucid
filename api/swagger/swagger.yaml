@@ -53,6 +53,16 @@ definitions:
           @Description Response message from the agent
         type: string
     type: object
+  worker.WorkerStatusNotification:
+    description: Status notification containing the agent ID and status message
+    properties:
+      agent_id:
+        description: The ID of the agent reporting the status
+        type: string
+      status:
+        description: The status message content
+        type: string
+    type: object
   ws.WebSocketDataTypes:
     description: All websocket response data types
     properties:
@@ -67,6 +77,10 @@ definitions:
         allOf:
         - $ref: '#/definitions/worker.WorkerResponseNotification'
         description: '@Description: A worker response notification.'
+      status:
+        allOf:
+        - $ref: '#/definitions/worker.WorkerStatusNotification'
+        description: '@Description: A worker status notification.'
     type: object
   ws.WsEventType:
     enum:
@@ -74,12 +88,14 @@ definitions:
     - pong
     - agent_response
     - agent_progress
+    - agent_status
     type: string
     x-enum-varnames:
     - WsEventTypePing
     - WsEventTypePong
     - WsEventTypeAgentResponse
     - WsEventTypeAgentProgress
+    - WsEventTypeAgentStatus
   ws.WsMessage:
     properties:
       data:

@@ -333,11 +333,12 @@ func (m *MockControlPlane) EXPECT() *MockControlPlaneMockRecorder {
 }
 
 // KickoffTask mocks base method.
-func (m *MockControlPlane) KickoffTask(ctx context.Context, task, role string) error {
+func (m *MockControlPlane) KickoffTask(ctx context.Context, task, role string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "KickoffTask", ctx, task, role)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // KickoffTask indicates an expected call of KickoffTask.

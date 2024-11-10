@@ -82,15 +82,17 @@ func (w *WsHandlerImpl) handlePing(msg WsMessage) error {
 }
 
 func (w *WsHandlerImpl) subscribeToEvents() error {
-	err := w.pubsub.Subscribe(worker.GetAgentProgressTopic(), w.handleAgentProgress)
-	if err != nil {
-		slog.Error("Failed to subscribe to agent progress topic", "error", err)
-		return err
+	topicHandlers := map[string]func(string) error{
+		worker.GetAgentProgressTopic():        w.handleAgentProgress,
+		worker.GetAgentResponseGeneralTopic(): w.handleAgentResponse,
+		worker.GetAgentStatusTopic():          w.handleAgentStatus,
 	}
-	err = w.pubsub.Subscribe(worker.GetAgentResponseGeneralTopic(), w.handleAgentResponse)
-	if err != nil {
-		slog.Error("Failed to subscribe to agent response topic", "error", err)
-		return err
+	for topic, handler := range topicHandlers {
+		err := w.pubsub.Subscribe(topic, handler)
+		if err != nil {
+			slog.Error("Failed to subscribe to topic", "topic", topic, "error", err)
+			return err
+		}
 	}
 	return nil
 }
@@ -133,6 +135,26 @@ func (w *WsHandlerImpl) handleAgentResponse(message string) error {
 	})
 	if err != nil {
 		slog.Error("Failed to write agent response message", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (w *WsHandlerImpl) handleAgentStatus(message string) error {
+	slog.Info("Received agent status", "message", message)
+	notification := worker.WorkerStatusNotification{}
+	err := json.Unmarshal([]byte(message), &notification)
+	if err != nil {
+		return err
+	}
+	err = w.conn.WriteJSON(WsMessage{
+		Event: WsEventTypeAgentStatus,
+		Data: WebSocketDataTypes{
+			Status: &notification,
+		},
+	})
+	if err != nil {
+		slog.Error("Failed to write agent status message", "error", err)
 		return err
 	}
 	return nil

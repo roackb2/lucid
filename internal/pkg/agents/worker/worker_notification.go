@@ -31,6 +31,15 @@ type WorkerProgressNotification struct {
 	Progress string `json:"progress" swaggertype:"string"`
 }
 
+// WorkerStatusNotification represents a status update from a worker agent.
+// @Description Status notification containing the agent ID and status message
+type WorkerStatusNotification struct {
+	// The ID of the agent reporting the status
+	AgentID string `json:"agent_id" swaggertype:"string"`
+	// The status message content
+	Status string `json:"status" swaggertype:"string"`
+}
+
 // WorkerMessage represents a message between worker agents.
 // @Description Message structure for inter-agent communication
 type WorkerMessage struct {
@@ -61,6 +70,10 @@ func GetAgentProgressTopic() string {
 // GetAgentMessageTopic returns the topic for agent messages between agents
 func GetAgentMessageTopic() string {
 	return "agent_message"
+}
+
+func GetAgentStatusTopic() string {
+	return "agent_status"
 }
 
 // publishFinalResponse publishes the final response to the agent and the general topic
@@ -102,6 +115,19 @@ func (w *WorkerImpl) publishProgress(ctx context.Context, progress string) error
 		return err
 	}
 	return w.pubSub.Publish(ctx, GetAgentProgressTopic(), string(payloadBytes), PublishTimeout)
+}
+
+func (w *WorkerImpl) publishStatus(ctx context.Context, status string) error {
+	payload := WorkerStatusNotification{
+		AgentID: *w.ID,
+		Status:  status,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("Worker: Failed to marshal payload", "error", err)
+		return err
+	}
+	return w.pubSub.Publish(ctx, GetAgentStatusTopic(), string(payloadBytes), PublishTimeout)
 }
 
 func (w *WorkerImpl) sendMessage(toAgentID string, messageType string, payload interface{}) error {

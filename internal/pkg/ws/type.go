@@ -9,6 +9,7 @@ const (
 	WsEventTypePong          WsEventType = "pong"
 	WsEventTypeAgentResponse WsEventType = "agent_response"
 	WsEventTypeAgentProgress WsEventType = "agent_progress"
+	WsEventTypeAgentStatus   WsEventType = "agent_status"
 )
 
 // NOTE: This is a temporary solution to provide all worker notification types to the swagger doc.
@@ -19,6 +20,8 @@ type WebSocketDataTypes struct {
 	Response *worker.WorkerResponseNotification `json:"response,omitempty"`
 	// @Description: A worker progress notification.
 	Progress *worker.WorkerProgressNotification `json:"progress,omitempty"`
+	// @Description: A worker status notification.
+	Status *worker.WorkerStatusNotification `json:"status,omitempty"`
 	// @Description: A pong message that just echo back.
 	Pong string `json:"pong,omitempty"`
 }

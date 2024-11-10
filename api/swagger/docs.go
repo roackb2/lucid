@@ -253,6 +253,20 @@ const docTemplate = `{
                 }
             }
         },
+        "worker.WorkerStatusNotification": {
+            "description": "Status notification containing the agent ID and status message",
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "description": "The ID of the agent reporting the status",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "The status message content",
+                    "type": "string"
+                }
+            }
+        },
         "ws.WebSocketDataTypes": {
             "description": "All websocket response data types",
             "type": "object",
@@ -276,6 +290,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/worker.WorkerResponseNotification"
                         }
                     ]
+                },
+                "status": {
+                    "description": "@Description: A worker status notification.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/worker.WorkerStatusNotification"
+                        }
+                    ]
                 }
             }
         },
@@ -285,13 +307,15 @@ const docTemplate = `{
                 "ping",
                 "pong",
                 "agent_response",
-                "agent_progress"
+                "agent_progress",
+                "agent_status"
             ],
             "x-enum-varnames": [
                 "WsEventTypePing",
                 "WsEventTypePong",
                 "WsEventTypeAgentResponse",
-                "WsEventTypeAgentProgress"
+                "WsEventTypeAgentProgress",
+                "WsEventTypeAgentStatus"
             ]
         },
         "ws.WsMessage": {
