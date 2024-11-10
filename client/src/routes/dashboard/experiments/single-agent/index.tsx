@@ -24,7 +24,7 @@ function SingleAgent() {
         <StatusIndicator status={readyState} />
       </div>
       <CreateAgentForm />
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-row flex-wrap gap-4">
         {Object.entries(agentMessagesByAgentId).map(
           ([agentId, messages], index) => (
             <AgentStatusCard
