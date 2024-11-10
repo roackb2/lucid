@@ -60,7 +60,8 @@ export default function CreateAgentForm() {
 
   useEffect(() => {
     if (isError) {
-      toast.error(error as string)
+      toast.error(JSON.stringify(error))
+      console.error(error)
     } else if (data) {
       toast.success(data.message)
       onAgentCreated(data.agent_id ?? '')

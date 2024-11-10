@@ -7,6 +7,7 @@ export const wsUrl = isDev ? 'ws://localhost:8082/ws' : 'wss://api.lucid.ai/ws'
 export const getRequest = <T>(path: string) => fetch(apiUrl(path), {
   mode: 'cors',
 }).then((res) => res.json()) as Promise<T>
+
 export const postRequest = <T>(path: string, body: any) => fetch(apiUrl(path), {
   method: 'POST',
   body: JSON.stringify(body),
