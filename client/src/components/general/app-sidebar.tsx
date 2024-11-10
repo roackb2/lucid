@@ -15,12 +15,14 @@ import {
   SidebarMenuItem,
   SidebarMenuSubItem,
   SidebarMenuSub,
+  SidebarHeader,
 } from "@/components/ui/sidebar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible"
 import { useCallback, useState } from "react"
 import { cn } from "@/lib/utils"
 import { AnimatePresence, motion } from "framer-motion"
 const baseUrl = '/dashboard'
+import Logo from '@/assets/logo.jpg'
 
 // Menu items.
 const items = [
@@ -68,11 +70,17 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
+      <SidebarHeader>
+        <div className="flex flex-row items-center gap-2 hover:bg-gray-100 p-2 rounded-md">
+          <img src={Logo} alt="Logo" className="w-10 h-10 rounded-md" />
+          <div className="flex flex-col">
+            <span className="text-lg font-semibold">Lucid</span>
+            <span className="text-sm text-gray-500">Agent collaboration</span>
+          </div>
+        </div>
+      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>
-            <span className="text-lg font-bold">Lucid</span>
-          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => {
@@ -86,7 +94,7 @@ export function AppSidebar() {
                     >
                       <SidebarMenuItem>
                         <CollapsibleTrigger asChild>
-                          <SidebarMenuButton className="flex flex-row items-center justify-between">
+                          <SidebarMenuButton className="flex flex-row items-center justify-between hover:bg-gray-100">
                             <div className="flex flex-row items-center gap-2">
                               <item.icon width={16} height={16} />
                               <span>{item.title}</span>
@@ -112,7 +120,7 @@ export function AppSidebar() {
                             <SidebarMenuSub>
                               {item.subItems.map((subItem) => (
                                 <SidebarMenuSubItem key={subItem.title}>
-                                  <SidebarMenuButton asChild>
+                                  <SidebarMenuButton asChild className="hover:bg-gray-100">
                                     <Link to={`${baseUrl}${item.url}${subItem.url}`}>
                                       <subItem.icon />
                                       <span>{subItem.title}</span>
@@ -129,7 +137,7 @@ export function AppSidebar() {
                 } else {
                   return (
                     <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild>
+                      <SidebarMenuButton asChild className="hover:bg-gray-100">
                         <Link to={`${baseUrl}${item.url}`}>
                           <item.icon width={16} height={16} />
                           <span>{item.title}</span>
