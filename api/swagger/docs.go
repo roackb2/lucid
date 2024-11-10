@@ -236,6 +236,10 @@ const docTemplate = `{
                 "progress": {
                     "description": "The progress message content",
                     "type": "string"
+                },
+                "timestamp": {
+                    "description": "The timestamp of the progress",
+                    "type": "string"
                 }
             }
         },
@@ -250,6 +254,10 @@ const docTemplate = `{
                 "response": {
                     "description": "The response message content\n@Description Response message from the agent",
                     "type": "string"
+                },
+                "timestamp": {
+                    "description": "The timestamp of the response",
+                    "type": "string"
                 }
             }
         },
@@ -263,6 +271,10 @@ const docTemplate = `{
                 },
                 "status": {
                     "description": "The status message content",
+                    "type": "string"
+                },
+                "timestamp": {
+                    "description": "The timestamp of the status",
                     "type": "string"
                 }
             }

@@ -38,6 +38,9 @@ definitions:
       progress:
         description: The progress message content
         type: string
+      timestamp:
+        description: The timestamp of the progress
+        type: string
     type: object
   worker.WorkerResponseNotification:
     description: Response notification containing the agent ID and response message
@@ -52,6 +55,9 @@ definitions:
           The response message content
           @Description Response message from the agent
         type: string
+      timestamp:
+        description: The timestamp of the response
+        type: string
     type: object
   worker.WorkerStatusNotification:
     description: Status notification containing the agent ID and status message
@@ -61,6 +67,9 @@ definitions:
         type: string
       status:
         description: The status message content
+        type: string
+      timestamp:
+        description: The timestamp of the status
         type: string
     type: object
   ws.WebSocketDataTypes:

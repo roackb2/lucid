@@ -20,6 +20,8 @@ type WorkerResponseNotification struct {
 	// The response message content
 	// @Description Response message from the agent
 	Response string `json:"response" swaggertype:"string"`
+	// The timestamp of the response
+	Timestamp time.Time `json:"timestamp" swaggertype:"string"`
 }
 
 // WorkerProgressNotification represents a progress update from a worker agent.
@@ -29,6 +31,8 @@ type WorkerProgressNotification struct {
 	AgentID string `json:"agent_id" swaggertype:"string"`
 	// The progress message content
 	Progress string `json:"progress" swaggertype:"string"`
+	// The timestamp of the progress
+	Timestamp time.Time `json:"timestamp" swaggertype:"string"`
 }
 
 // WorkerStatusNotification represents a status update from a worker agent.
@@ -38,6 +42,8 @@ type WorkerStatusNotification struct {
 	AgentID string `json:"agent_id" swaggertype:"string"`
 	// The status message content
 	Status string `json:"status" swaggertype:"string"`
+	// The timestamp of the status
+	Timestamp time.Time `json:"timestamp" swaggertype:"string"`
 }
 
 // WorkerMessage represents a message between worker agents.
@@ -80,8 +86,9 @@ func GetAgentStatusTopic() string {
 func (w *WorkerImpl) publishFinalResponse(ctx context.Context, response string) error {
 	slog.Info("Worker: Publishing final response", "agentID", *w.ID, "response", response)
 	payload := WorkerResponseNotification{
-		AgentID:  *w.ID,
-		Response: response,
+		AgentID:   *w.ID,
+		Response:  response,
+		Timestamp: time.Now(),
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -106,8 +113,9 @@ func (w *WorkerImpl) publishFinalResponse(ctx context.Context, response string) 
 func (w *WorkerImpl) publishProgress(ctx context.Context, progress string) error {
 	slog.Info("Worker: Publishing progress", "agentID", *w.ID, "progress", progress)
 	payload := WorkerProgressNotification{
-		AgentID:  *w.ID,
-		Progress: progress,
+		AgentID:   *w.ID,
+		Progress:  progress,
+		Timestamp: time.Now(),
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -120,8 +128,9 @@ func (w *WorkerImpl) publishProgress(ctx context.Context, progress string) error
 func (w *WorkerImpl) publishStatus(ctx context.Context, status string) error {
 	slog.Info("Worker: Publishing status", "agentID", *w.ID, "status", status)
 	payload := WorkerStatusNotification{
-		AgentID: *w.ID,
-		Status:  status,
+		AgentID:   *w.ID,
+		Status:    status,
+		Timestamp: time.Now(),
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -131,19 +140,19 @@ func (w *WorkerImpl) publishStatus(ctx context.Context, status string) error {
 	return w.pubSub.Publish(ctx, GetAgentStatusTopic(), string(payloadBytes), PublishTimeout)
 }
 
-func (w *WorkerImpl) sendMessage(toAgentID string, messageType string, payload interface{}) error {
-	message := WorkerMessage{
-		FromAgentID: *w.ID,
-		ToAgentID:   toAgentID,
-		MessageType: messageType,
-		Payload:     payload,
-	}
-	messageBytes, err := json.Marshal(message)
-	if err != nil {
-		return err
-	}
-	return w.pubSub.Publish(context.Background(), GetAgentMessageTopic(), string(messageBytes), 5*time.Second)
-}
+// func (w *WorkerImpl) sendMessage(toAgentID string, messageType string, payload interface{}) error {
+// 	message := WorkerMessage{
+// 		FromAgentID: *w.ID,
+// 		ToAgentID:   toAgentID,
+// 		MessageType: messageType,
+// 		Payload:     payload,
+// 	}
+// 	messageBytes, err := json.Marshal(message)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return w.pubSub.Publish(context.Background(), GetAgentMessageTopic(), string(messageBytes), 5*time.Second)
+// }
 
 func (w *WorkerImpl) startMessageListener() error {
 	callback := func(message string) error {

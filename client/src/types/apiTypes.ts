@@ -106,6 +106,8 @@ export interface definitions {
     agent_id?: string;
     /** @description The progress message content */
     progress?: string;
+    /** @description The timestamp of the progress */
+    timestamp?: string;
   };
   /** @description Response notification containing the agent ID and response message */
   "worker.WorkerResponseNotification": {
@@ -119,6 +121,8 @@ export interface definitions {
      * @Description Response message from the agent
      */
     response?: string;
+    /** @description The timestamp of the response */
+    timestamp?: string;
   };
   /** @description Status notification containing the agent ID and status message */
   "worker.WorkerStatusNotification": {
@@ -126,6 +130,8 @@ export interface definitions {
     agent_id?: string;
     /** @description The status message content */
     status?: string;
+    /** @description The timestamp of the status */
+    timestamp?: string;
   };
   /** @description All websocket response data types */
   "ws.WebSocketDataTypes": {
