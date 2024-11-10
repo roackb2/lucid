@@ -11,10 +11,7 @@ import { Textarea } from "../ui/textarea"
 import { toast } from "sonner"
 import { useEffect } from "react"
 import { atom, useAtom, useAtomValue } from "jotai"
-
-export interface CreateAgentFormProps {
-  onSuccess: (agentId: string) => void
-}
+import { agentIdsAtom } from "@/atoms/websocketAtoms"
 
 const schema = z.object({
   role: z.enum(['publisher', 'consumer']).default('consumer').optional(),
@@ -26,10 +23,17 @@ const formAtom = atom<z.infer<typeof schema>>({
   task: '',
 })
 
-export default function CreateAgentForm({ onSuccess }: CreateAgentFormProps) {
+export default function CreateAgentForm() {
   const [formValues, setFormValues] = useAtom(formAtom)
   const [createAgentMutation] = useAtom(createAgentAtom)
   const { mutate: createAgent, isPending, isError, error, data } = createAgentMutation
+  const [agentIds, setAgentIds] = useAtom(agentIdsAtom)
+
+  const onAgentCreated = (agentId: string) => {
+    if (!agentIds.includes(agentId)) {
+      setAgentIds([...agentIds, agentId])
+    }
+  }
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -59,7 +63,7 @@ export default function CreateAgentForm({ onSuccess }: CreateAgentFormProps) {
       toast.error(error as string)
     } else if (data) {
       toast.success(data.message)
-      onSuccess(data.agent_id ?? '')
+      onAgentCreated(data.agent_id ?? '')
     }
   }, [isError, error, data])
 
@@ -73,7 +77,7 @@ export default function CreateAgentForm({ onSuccess }: CreateAgentFormProps) {
             <FormItem>
               <FormLabel>Role</FormLabel>
               <FormControl>
-                <Select {...field}>
+                <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>

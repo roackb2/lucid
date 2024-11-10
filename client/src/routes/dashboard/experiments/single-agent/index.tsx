@@ -1,55 +1,19 @@
+import { agentMessagesByAgentIdAtom, readyStateAtom, readyStateTextAtom } from '@/atoms/websocketAtoms'
 import AgentStatusCard from '@/components/features/agent-status-card'
 import CreateAgentForm from '@/components/features/create-agent-form'
 import StatusIndicator from '@/components/features/status-indicator'
-import Drawer from '@/components/layout/drawer'
-import useWebsocket from '@/hooks/ws/useWebsocket'
-import { AgentNotificationTypes } from '@/types/layout'
 import { createFileRoute } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useAtomValue } from 'jotai'
 
 export const Route = createFileRoute('/dashboard/experiments/single-agent/')({
   component: SingleAgent,
 })
 
-const agentEvents = ['agent_progress', 'agent_response', 'agent_status']
 
 function SingleAgent() {
-  const { readyState, readyStateText, messageHistory } = useWebsocket()
-  const [agentIds, setAgentIds] = useState<string[]>([])
-
-  const onAgentCreated = (agentId: string) => {
-    if (!agentIds.includes(agentId)) {
-      setAgentIds([...agentIds, agentId])
-    }
-  }
-
-  const agentMessageData = useMemo(() => {
-    return messageHistory
-      .filter((message) => agentEvents.includes(message.event ?? ''))
-      .map((message) => {
-        switch (message.event) {
-          case 'agent_progress':
-            return message.data?.progress
-          case 'agent_response':
-            return message.data?.response
-          case 'agent_status':
-            return message.data?.status
-        }
-      }) as AgentNotificationTypes[]
-  }, [messageHistory])
-
-  const agentMessagesByAgentId = useMemo(() => {
-    return agentMessageData.reduce(
-      (acc, message) => {
-        acc[message.agent_id ?? ''] = [
-          ...(acc[message.agent_id ?? ''] ?? []),
-          message,
-        ]
-        return acc
-      },
-      {} as Record<string, AgentNotificationTypes[]>,
-    )
-  }, [agentMessageData])
+  const readyState = useAtomValue(readyStateAtom)
+  const readyStateText = useAtomValue(readyStateTextAtom)
+  const agentMessagesByAgentId = useAtomValue(agentMessagesByAgentIdAtom)
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -59,7 +23,7 @@ function SingleAgent() {
         </span>
         <StatusIndicator status={readyState} />
       </div>
-      <CreateAgentForm onSuccess={onAgentCreated} />
+      <CreateAgentForm />
       <div className="flex flex-col gap-4">
         {Object.entries(agentMessagesByAgentId).map(
           ([agentId, messages], index) => (
