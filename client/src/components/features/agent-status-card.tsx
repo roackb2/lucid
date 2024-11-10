@@ -14,24 +14,24 @@ export default function AgentStatusCard({ agentId, messages }: AgentStatusCardPr
   const lastStatusMessage: definitions['worker.WorkerStatusNotification'] | undefined = messages.find(
     (message) => 'status' in message,
   )
-
-  const messageContent = (() => {
-    if (!lastMessage) {
-      return ''
-    }
-    if ('progress' in lastMessage) {
-      return lastMessage.progress
-    } else if ('response' in lastMessage) {
-      return lastMessage.response
-    }
-  })()
+  const lastProgressMessage: definitions['worker.WorkerProgressNotification'] | undefined = messages.find(
+    (message) => 'progress' in message,
+  )
+  const lastResponseMessage: definitions['worker.WorkerResponseNotification'] | undefined = messages.find(
+    (message) => 'response' in message,
+  )
 
   return (
     <div className="flex flex-col gap-2 rounded-md border p-2 max-w-[500px]">
       <p className="text-sm font-medium text-gray-500">
         {agentId} ({lastStatusMessage?.status})
       </p>
-      {messageContent && <p className="text-sm">{messageContent}</p>}
+      {lastProgressMessage?.progress && (
+        <p className="text-sm">{lastProgressMessage.progress}</p>
+      )}
+      {lastResponseMessage?.response && (
+        <p className="text-sm">{lastResponseMessage.response}</p>
+      )}
     </div>
   )
 }

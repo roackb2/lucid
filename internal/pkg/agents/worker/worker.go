@@ -184,8 +184,9 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 						slog.Error("Worker: Failed to publish final response", "error", err)
 					}
 					// We got the final response, persist state and terminate the agent
-					w.stateMachine.SetState(StatusTerminated)
-					w.cleanUp()
+					if err := w.stateMachine.Event(ctx, CmdTerminate); err != nil {
+						slog.Error("Worker: Failed to terminate agent", "error", err)
+					}
 					return response, nil
 				}
 			case StatusPaused:
@@ -233,12 +234,12 @@ func (w *WorkerImpl) initAgentStateMachine() {
 		fsm.Callbacks{
 			"before_event": func(_ context.Context, e *fsm.Event) {
 				slog.Info("Before event", "from", e.Src, "to", e.Dst)
-			},
-			"enter_state": func(_ context.Context, e *fsm.Event) {
-				slog.Info("Transitioned to state", "from", e.Src, "to", e.Dst)
 				if err := w.publishStatus(context.Background(), e.Dst); err != nil {
 					slog.Error("Worker: Failed to publish status", "error", err)
 				}
+			},
+			"enter_state": func(_ context.Context, e *fsm.Event) {
+				slog.Info("Transitioned to state", "from", e.Src, "to", e.Dst)
 			},
 			"after_pause": func(_ context.Context, e *fsm.Event) {
 				if callback, ok := w.callbacks[OnPause]; ok {
