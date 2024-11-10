@@ -5,10 +5,10 @@ import { redirect } from '@tanstack/react-router'
 const isAdmin = true
 
 export const Route = createFileRoute('/')({
-  loader: () => {
+  beforeLoad: () => {
     if (isAdmin) {
       console.log('redirecting to /dashboard')
-      redirect({
+      return redirect({
         to: '/dashboard',
       })
     }
