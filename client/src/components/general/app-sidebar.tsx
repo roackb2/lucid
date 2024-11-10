@@ -26,7 +26,6 @@ import Logo from '@/assets/logo.jpg'
 
 // Menu items.
 const items = [
-
   {
     title: 'Home',
     url: '/home',
@@ -58,7 +57,7 @@ const items = [
 ]
 
 export function AppSidebar() {
-  const [openItems, setOpenItems] = useState<string[]>([])
+  const [openItems, setOpenItems] = useState<string[]>(items.filter(item => item.subItems).map(item => item.title))
 
   const handleOpenChange = useCallback((itemTitle: string, open: boolean) => {
     setOpenItems(prev => open ? [...prev, itemTitle] : prev.filter(title => title !== itemTitle))
@@ -88,7 +87,7 @@ export function AppSidebar() {
                   return (
                     <Collapsible
                       key={item.title}
-                      defaultOpen
+                      defaultOpen={isItemOpen(item.title)}
                       className="group/collapsible"
                       onOpenChange={open => handleOpenChange(item.title, open)}
                     >

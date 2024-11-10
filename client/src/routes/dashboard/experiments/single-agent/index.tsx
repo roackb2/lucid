@@ -14,7 +14,7 @@ export const Route = createFileRoute('/dashboard/experiments/single-agent/')({
 const agentEvents = ['agent_progress', 'agent_response']
 
 function SingleAgent() {
-  const { readyState, messageHistory } = useWebsocket()
+  const { readyState, readyStateText, messageHistory } = useWebsocket()
   const [agentIds, setAgentIds] = useState<string[]>([])
 
   const onAgentCreated = (agentId: string) => {
@@ -51,10 +51,13 @@ function SingleAgent() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <CreateAgentForm onSuccess={onAgentCreated} />
-      <div className="flex flex-row items-center gap-2">
-        Connection status: <StatusIndicator status={readyState} />
+      <div className="flex flex-row items-center gap-2 bg-gray-100 p-2 rounded-md">
+        <span className="text-sm text-gray-500">
+          WebSocket: {readyStateText}
+        </span>
+        <StatusIndicator status={readyState} />
       </div>
+      <CreateAgentForm onSuccess={onAgentCreated} />
       <div className="flex flex-col gap-4">
         {Object.entries(agentMessagesByAgentId).map(
           ([agentId, messages], index) => (
