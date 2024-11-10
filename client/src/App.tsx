@@ -8,11 +8,13 @@ import { routeTree } from './routeTree.gen'
 import './global.css'
 import './index.css'
 import { Toaster } from 'sonner'
+import NotFound from './components/general/not-found'
 
 // Set up a Router instance
 const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  defaultNotFoundComponent: NotFound,
 })
 
 // Register things for typesafety
