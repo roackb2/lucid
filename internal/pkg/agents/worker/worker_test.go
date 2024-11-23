@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
-	mock_providers "github.com/roackb2/lucid/test/_mocks/providers"
+	mock_providers "github.com/roackb2/lucid/test/_mocks/agents/providers"
+	mock_storage "github.com/roackb2/lucid/test/_mocks/agents/storage"
 	mock_pubsub "github.com/roackb2/lucid/test/_mocks/pubsub"
-	mock_storage "github.com/roackb2/lucid/test/_mocks/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"

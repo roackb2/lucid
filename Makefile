@@ -78,12 +78,13 @@ generate-db-models:
 	@sqlc generate -f database/sqlc.yml
 
 generate-mocks:
-	mockgen -source internal/pkg/agents/storage/type.go -destination test/_mocks/storage/mock_type.go
-	mockgen -source internal/pkg/agents/worker/type.go -destination test/_mocks/worker/mock_type.go
-	mockgen -source internal/pkg/agents/providers/type.go -destination test/_mocks/providers/mock_type.go
-	mockgen -source internal/pkg/agents/agent/type.go -destination test/_mocks/agent/mock_type.go
-	mockgen -source internal/pkg/control_plane/type.go -destination test/_mocks/control_plane/mock_type.go
-	mockgen -source internal/pkg/pubsub/type.go -destination test/_mocks/pubsub/mock_type.go
+	@find internal/pkg -name "type.go" -type f | while read -r file; do \
+		dest_file=$$(echo "$$file" | sed 's|internal/pkg/|test/_mocks/|' | sed 's|/type.go|/mock_type.go|'); \
+		dest_dir=$$(dirname "$$dest_file"); \
+		mkdir -p "$$dest_dir"; \
+		echo "Generating mock for $$file -> $$dest_file"; \
+		mockgen -source "$$file" -destination "$$dest_file"; \
+	done
 
 # Run migrations up
 migrate-up: build

@@ -28,8 +28,8 @@ type WorkerImpl struct {
 	controlCh    chan string            `json:"-"`
 	callbacks    WorkerCallbacks        `json:"-"`
 	messageMux   sync.RWMutex           `json:"-"`
-	persistTools *tools.PersistTool     `json:"-"`
-	flowTools    *tools.FlowTool        `json:"-"`
+	persistTools tools.PersistTool      `json:"-"`
+	flowTools    tools.FlowTool         `json:"-"`
 	pubSub       pubsub.PubSub          `json:"-"`
 
 	ID       *string                 `json:"id"`

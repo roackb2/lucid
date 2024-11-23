@@ -7,10 +7,10 @@ import (
 
 	"github.com/roackb2/lucid/internal/pkg/agents/worker"
 	"github.com/roackb2/lucid/internal/pkg/control_plane"
-	mock_agent "github.com/roackb2/lucid/test/_mocks/agent"
+	mock_agent "github.com/roackb2/lucid/test/_mocks/agents/agent"
+	mock_providers "github.com/roackb2/lucid/test/_mocks/agents/providers"
+	mock_storage "github.com/roackb2/lucid/test/_mocks/agents/storage"
 	mock_control_plane "github.com/roackb2/lucid/test/_mocks/control_plane"
-	mock_providers "github.com/roackb2/lucid/test/_mocks/providers"
-	mock_storage "github.com/roackb2/lucid/test/_mocks/storage"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 )
