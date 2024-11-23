@@ -63,16 +63,45 @@ func (t *PersistToolImpl) SearchContent(toolCall providers.ToolCall) string {
 	return t.searchContentImpl(toolCall.Args)
 }
 
-func (t *PersistToolImpl) saveAgentProfileImpl(arguments string) string {
-	return "Not implemented"
+func (t *PersistToolImpl) saveAgentProfileImpl(agentID string, arguments string) string {
+	var args map[string]interface{}
+	err := json.Unmarshal([]byte(arguments), &args)
+	if err != nil {
+		slog.Error("Persist tool: SaveAgentProfile", "error", err)
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	profile := args["profile"].(string)
+	err = t.storage.SaveAgentProfile(agentID, []byte(profile))
+	if err != nil {
+		slog.Error("Persist tool: SaveAgentProfile", "error", err)
+		return fmt.Sprintf("Error: %v", err)
+	}
+	return "Agent profile saved successfully"
 }
 
-func (t *PersistToolImpl) SaveAgentProfile(toolCall providers.ToolCall) string {
-	return t.saveAgentProfileImpl(toolCall.Args)
+func (t *PersistToolImpl) SaveAgentProfile(agentID string, toolCall providers.ToolCall) string {
+	return t.saveAgentProfileImpl(agentID, toolCall.Args)
 }
 
 func (t *PersistToolImpl) getAgentProfileImpl(arguments string) string {
-	return "Not implemented"
+	var args map[string]interface{}
+	err := json.Unmarshal([]byte(arguments), &args)
+	if err != nil {
+		slog.Error("Persist tool: GetAgentProfile", "error", err)
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	agentID := args["agent_id"].(string)
+	profile, err := t.storage.GetAgentProfile(agentID)
+	if err != nil {
+		slog.Error("Persist tool: GetAgentProfile", "error", err)
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	res := fmt.Sprintf("Agent ID: %s\nProfile: %s", profile.AgentID, string(profile.Profile))
+	slog.Info("Persist tool: GetAgentProfile", "result", res)
+	return res
 }
 
 func (t *PersistToolImpl) GetAgentProfile(toolCall providers.ToolCall) string {
@@ -80,7 +109,25 @@ func (t *PersistToolImpl) GetAgentProfile(toolCall providers.ToolCall) string {
 }
 
 func (t *PersistToolImpl) searchAgentProfileImpl(arguments string) string {
-	return "Not implemented"
+	var args map[string]interface{}
+	err := json.Unmarshal([]byte(arguments), &args)
+	if err != nil {
+		slog.Error("Persist tool: SearchAgentProfile", "error", err)
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	query := args["query"].(string)
+	profiles, err := t.storage.SearchAgentProfile(query)
+	if err != nil {
+		slog.Error("Persist tool: SearchAgentProfile", "error", err)
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	res := "Results Found (separated by comma):\n"
+	for _, profile := range profiles {
+		res += fmt.Sprintf("Agent ID: %s\nProfile: %s\n", profile.AgentID, string(profile.Profile))
+	}
+	return res
 }
 
 func (t *PersistToolImpl) SearchAgentProfile(toolCall providers.ToolCall) string {

@@ -88,10 +88,6 @@ var (
 				Parameters: openai.F(openai.FunctionParameters{
 					"type": "object",
 					"properties": map[string]interface{}{
-						"agent_id": map[string]string{
-							"type":        "string",
-							"description": "The ID of the agent to save the profile",
-						},
 						"profile": map[string]string{
 							"type":        "string",
 							"description": "The profile of the agent that describes the task given, the purpose of the agent, the context of the task, etc.",

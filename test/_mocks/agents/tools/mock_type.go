@@ -55,17 +55,17 @@ func (mr *MockPersistToolMockRecorder) GetAgentProfile(toolCall any) *gomock.Cal
 }
 
 // SaveAgentProfile mocks base method.
-func (m *MockPersistTool) SaveAgentProfile(toolCall providers.ToolCall) string {
+func (m *MockPersistTool) SaveAgentProfile(agentID string, toolCall providers.ToolCall) string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveAgentProfile", toolCall)
+	ret := m.ctrl.Call(m, "SaveAgentProfile", agentID, toolCall)
 	ret0, _ := ret[0].(string)
 	return ret0
 }
 
 // SaveAgentProfile indicates an expected call of SaveAgentProfile.
-func (mr *MockPersistToolMockRecorder) SaveAgentProfile(toolCall any) *gomock.Call {
+func (mr *MockPersistToolMockRecorder) SaveAgentProfile(agentID, toolCall any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveAgentProfile", reflect.TypeOf((*MockPersistTool)(nil).SaveAgentProfile), toolCall)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveAgentProfile", reflect.TypeOf((*MockPersistTool)(nil).SaveAgentProfile), agentID, toolCall)
 }
 
 // SaveContent mocks base method.

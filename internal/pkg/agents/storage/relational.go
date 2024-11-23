@@ -132,20 +132,85 @@ func (m *RelationalStorage) GetAgentState(agentID string) ([]byte, error) {
 	return state.State, nil
 }
 
-func (m *RelationalStorage) SaveAgentProfile(agentID string, profile []byte) error {
-	slog.Info("RelationalStorage: Saving agent profile", "agentID", agentID)
-	// TODO: Implement
+func (m *RelationalStorage) createAgentProfile(agentID string, profile []byte) error {
+	slog.Info("RelationalStorage: Creating agent profile", "agentID", agentID)
+	params := dbaccess.CreateAgentProfileParams{
+		AgentID: agentID,
+		Profile: string(profile),
+	}
+	err := dbaccess.Querier.CreateAgentProfile(context.Background(), params)
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to create agent profile", "error", err)
+		return err
+	}
 	return nil
 }
 
-func (m *RelationalStorage) GetAgentProfile(agentID string) ([]byte, error) {
-	slog.Info("RelationalStorage: Getting agent profile", "agentID", agentID)
-	// TODO: Implement
-	return nil, nil
+func (m *RelationalStorage) updateAgentProfile(agentID string, profile []byte) error {
+	slog.Info("RelationalStorage: Updating agent profile", "agentID", agentID)
+	params := dbaccess.UpdateAgentProfileParams{
+		AgentID: agentID,
+		Profile: string(profile),
+	}
+	err := dbaccess.Querier.UpdateAgentProfile(context.Background(), params)
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to update agent profile", "error", err)
+		return err
+	}
+	return nil
 }
 
-func (m *RelationalStorage) SearchAgentProfile(query string) ([]byte, error) {
+func (m *RelationalStorage) SaveAgentProfile(agentID string, profile []byte) error {
+	slog.Info("RelationalStorage: Saving agent profile", "agentID", agentID)
+	_, err := m.GetAgentProfile(agentID)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			slog.Info("RelationalStorage: No existing agent profile found, creating new profile", "agentID", agentID)
+			err = m.createAgentProfile(agentID, profile)
+			if err != nil {
+				slog.Error("RelationalStorage: Failed to create agent profile", "error", err)
+				return err
+			}
+		} else {
+			slog.Error("RelationalStorage: Failed to get existing agent profile", "error", err)
+			return err
+		}
+	}
+	err = m.updateAgentProfile(agentID, profile)
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to update agent profile", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (m *RelationalStorage) GetAgentProfile(agentID string) (*AgentProfile, error) {
+	slog.Info("RelationalStorage: Getting agent profile", "agentID", agentID)
+	profile, err := dbaccess.Querier.GetAgentProfile(context.Background(), agentID)
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to get agent profile", "error", err)
+		return nil, err
+	}
+	return &AgentProfile{
+		AgentID: profile.AgentID,
+		Profile: []byte(profile.Profile),
+	}, nil
+}
+
+func (m *RelationalStorage) SearchAgentProfile(query string) ([]AgentProfile, error) {
 	slog.Info("RelationalStorage: Searching agent profile", "query", query)
-	// TODO: Implement
-	return nil, nil
+	results, err := dbaccess.Querier.SearchAgentProfile(context.Background(), query)
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to search agent profile", "error", err)
+		return nil, err
+	}
+	slog.Info("RelationalStorage: Found agent profiles", "results", len(results))
+	profiles := make([]AgentProfile, len(results))
+	for i, profile := range results {
+		profiles[i] = AgentProfile{
+			AgentID: profile.AgentID,
+			Profile: []byte(profile.Profile),
+		}
+	}
+	return profiles, nil
 }

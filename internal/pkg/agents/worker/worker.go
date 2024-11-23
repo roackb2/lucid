@@ -288,8 +288,9 @@ func (w *WorkerImpl) getAgentResponse() string {
 	}
 	if len(agentResponse.ToolCalls) > 0 {
 		msg.ToolCall = &agentResponse.ToolCalls[0]
+	} else {
+		w.atomicAppendMessage(msg)
 	}
-	w.atomicAppendMessage(msg)
 
 	// Handle tool calls
 	finalResponse := w.handleToolCalls(agentResponse.ToolCalls)
@@ -314,8 +315,25 @@ func (w *WorkerImpl) handleToolCalls(
 			slog.Error("Worker: Failed to publish progress", "error", err)
 		}
 
+		// Generate message for each tool call
+		toolCallContent := ""
+		toolCallMsg := providers.ChatMessage{
+			Content:  &toolCallContent,
+			Role:     "assistant",
+			ToolCall: &toolCall,
+		}
+		w.atomicAppendMessage(toolCallMsg)
+
+		// Handle tool call
 		toolCallResult := w.handleSingleToolCall(toolCall)
 		slog.Info("Agent tool message", "role", w.Role, "message", toolCallResult)
+
+		// Generate message for tool call result
+		w.atomicAppendMessage(providers.ChatMessage{
+			Content:  &toolCallResult,
+			Role:     "tool",
+			ToolCall: &toolCall,
+		})
 
 		if funcName == "report" {
 			finalResponse = toolCallResult
@@ -335,17 +353,12 @@ func (w *WorkerImpl) handleSingleToolCall(
 	toolCallFuncMap := map[string]func(toolCall providers.ToolCall) string{
 		"save_content":         w.persistTools.SaveContent,
 		"search_content":       w.persistTools.SearchContent,
-		"save_agent_profile":   w.persistTools.SaveAgentProfile,
+		"save_agent_profile":   func(toolCall providers.ToolCall) string { return w.persistTools.SaveAgentProfile(*w.ID, toolCall) },
 		"search_agent_profile": w.persistTools.SearchAgentProfile,
 		"wait":                 w.flowTools.Wait,
 		"report":               w.flowTools.Report,
 	}
 	toolCallResult = toolCallFuncMap[funcName](toolCall)
-	w.atomicAppendMessage(providers.ChatMessage{
-		Content:  &toolCallResult,
-		Role:     "tool",
-		ToolCall: &toolCall,
-	})
 
 	return toolCallResult
 }

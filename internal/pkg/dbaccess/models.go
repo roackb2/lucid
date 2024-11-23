@@ -8,6 +8,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AgentProfile struct {
+	ID        int32
+	AgentID   string
+	Profile   string
+	CreatedAt pgtype.Timestamp
+	UpdatedAt pgtype.Timestamp
+}
+
 type AgentState struct {
 	ID         int32
 	AgentID    string

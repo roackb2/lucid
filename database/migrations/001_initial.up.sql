@@ -28,5 +28,14 @@ CREATE TABLE agent_states (
 );
 CREATE UNIQUE INDEX agent_states_agent_id_idx ON agent_states (agent_id);
 
+CREATE TABLE agent_profiles (
+    id SERIAL PRIMARY KEY,
+    agent_id VARCHAR(255) NOT NULL,
+    profile TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX agent_profiles_agent_id_idx ON agent_profiles (agent_id);
+
 INSERT INTO users (username, email, password_hash) VALUES ('exp_publisher', 'exp_publisher@example.com', 'password');
 INSERT INTO users (username, email, password_hash) VALUES ('exp_consumer', 'exp_consumer@example.com', 'password');

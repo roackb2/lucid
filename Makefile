@@ -10,12 +10,16 @@ GO_FILES := $(shell find cmd -name '*.go')
 # Extract unique directory names from GO_FILES
 CMD_DIRS := $(sort $(dir $(GO_FILES)))
 
+# Add these variables at the top of the Makefile
+GOBUILD=go build -v
+GOBUILD_FLAGS=-ldflags="-s -w" -buildmode=pie
+
 # Build all executables in the cmd folder and its subfolders
 build:
 	@for dir in $(CMD_DIRS); do \
 		app_name=$$(echo $$dir | sed 's|cmd/||g' | sed 's|/$$||' | tr '/' '_'); \
 		echo "Building $$app_name..."; \
-		go build -o bin/$$app_name ./$$dir; \
+		$(GOBUILD) $(GOBUILD_FLAGS) -o bin/$$app_name ./$$dir; \
 	done
 
 # ================================
@@ -95,12 +99,12 @@ migrate-down: build
 	./bin/migrate -down -dump
 
 run-server:
-	go build -o bin/server cmd/server/main.go
+	$(GOBUILD) $(GOBUILD_FLAGS) -o bin/server cmd/server/main.go
 	@make swagger
 	./bin/server
 
 run-server-without-control-plane:
-	go build -o bin/server cmd/server/main.go
+	$(GOBUILD) $(GOBUILD_FLAGS) -o bin/server cmd/server/main.go
 	@make swagger
 	./bin/server --with-control-plane=false
 

@@ -57,6 +57,7 @@ The profile should reflect your purpose, the task you're working on, the context
 Make sure if other agents are looking for agents with task related to yours, they could find you by searching the storage with some keywords related to your task.
 For example, if you're a publisher, make the profile clear about the content you create and promote, so when other agents looking for similar content, they'll be able to reach out to you.
 And if you're a consumer, be clear about the content your seeking for on behave the user, so that when other agents want to promote relevant content, they'll know you need them.
+Continue on your task until you reach the goal after you've created your profile.
 
 ### Roles
 

@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	storage "github.com/roackb2/lucid/internal/pkg/agents/storage"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -55,10 +56,10 @@ func (mr *MockStorageMockRecorder) Close() *gomock.Call {
 }
 
 // GetAgentProfile mocks base method.
-func (m *MockStorage) GetAgentProfile(agentID string) ([]byte, error) {
+func (m *MockStorage) GetAgentProfile(agentID string) (*storage.AgentProfile, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAgentProfile", agentID)
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].(*storage.AgentProfile)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -127,10 +128,10 @@ func (mr *MockStorageMockRecorder) SavePost(content any) *gomock.Call {
 }
 
 // SearchAgentProfile mocks base method.
-func (m *MockStorage) SearchAgentProfile(query string) ([]byte, error) {
+func (m *MockStorage) SearchAgentProfile(query string) ([]storage.AgentProfile, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SearchAgentProfile", query)
-	ret0, _ := ret[0].([]byte)
+	ret0, _ := ret[0].([]storage.AgentProfile)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
