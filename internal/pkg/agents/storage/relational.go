@@ -131,3 +131,21 @@ func (m *RelationalStorage) GetAgentState(agentID string) ([]byte, error) {
 	slog.Info("RelationalStorage: Got agent state", "agentID", agentID)
 	return state.State, nil
 }
+
+func (m *RelationalStorage) SaveAgentProfile(agentID string, profile []byte) error {
+	slog.Info("RelationalStorage: Saving agent profile", "agentID", agentID)
+	// TODO: Implement
+	return nil
+}
+
+func (m *RelationalStorage) GetAgentProfile(agentID string) ([]byte, error) {
+	slog.Info("RelationalStorage: Getting agent profile", "agentID", agentID)
+	// TODO: Implement
+	return nil, nil
+}
+
+func (m *RelationalStorage) SearchAgentProfile(query string) ([]byte, error) {
+	slog.Info("RelationalStorage: Searching agent profile", "query", query)
+	// TODO: Implement
+	return nil, nil
+}

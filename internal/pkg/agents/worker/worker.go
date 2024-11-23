@@ -333,10 +333,12 @@ func (w *WorkerImpl) handleSingleToolCall(
 	slog.Info("Agent tool call", "role", w.Role, "tool_call", funcName)
 
 	toolCallFuncMap := map[string]func(toolCall providers.ToolCall) string{
-		"save_content":   w.persistTools.SaveContent,
-		"search_content": w.persistTools.SearchContent,
-		"wait":           w.flowTools.Wait,
-		"report":         w.flowTools.Report,
+		"save_content":         w.persistTools.SaveContent,
+		"search_content":       w.persistTools.SearchContent,
+		"save_agent_profile":   w.persistTools.SaveAgentProfile,
+		"search_agent_profile": w.persistTools.SearchAgentProfile,
+		"wait":                 w.flowTools.Wait,
+		"report":               w.flowTools.Report,
 	}
 	toolCallResult = toolCallFuncMap[funcName](toolCall)
 	w.atomicAppendMessage(providers.ChatMessage{

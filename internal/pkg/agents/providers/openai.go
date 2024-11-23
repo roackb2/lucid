@@ -80,6 +80,61 @@ var (
 				}),
 			}),
 		},
+		{
+			Type: openai.F(openai.ChatCompletionToolTypeFunction),
+			Function: openai.F(openai.FunctionDefinitionParam{
+				Name:        openai.String("save_agent_profile"),
+				Description: openai.String("Save the agent profile to the storage"),
+				Parameters: openai.F(openai.FunctionParameters{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"agent_id": map[string]string{
+							"type":        "string",
+							"description": "The ID of the agent to save the profile",
+						},
+						"profile": map[string]string{
+							"type":        "string",
+							"description": "The profile of the agent that describes the task given, the purpose of the agent, the context of the task, etc.",
+						},
+					},
+					"required": []string{"agent_id", "profile"},
+				}),
+			}),
+		},
+		{
+			Type: openai.F(openai.ChatCompletionToolTypeFunction),
+			Function: openai.F(openai.FunctionDefinitionParam{
+				Name:        openai.String("get_agent_profile"),
+				Description: openai.String("Get the agent profile from the storage."),
+				Parameters: openai.F(openai.FunctionParameters{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"agent_id": map[string]string{
+							"type":        "string",
+							"description": "The ID of the agent to get the profile",
+						},
+					},
+					"required": []string{"agent_id"},
+				}),
+			}),
+		},
+		{
+			Type: openai.F(openai.ChatCompletionToolTypeFunction),
+			Function: openai.F(openai.FunctionDefinitionParam{
+				Name:        openai.String("search_agent_profile"),
+				Description: openai.String("Search the agent profile in the storage."),
+				Parameters: openai.F(openai.FunctionParameters{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"query": map[string]string{
+							"type":        "string",
+							"description": "The query to search the agent profile in the storage, currently only supports PostgreSQL SIMILARITY SEARCH. Keep the query as simple as possible, best to be a single word.",
+						},
+					},
+					"required": []string{"query"},
+				}),
+			}),
+		},
 	}
 )
 

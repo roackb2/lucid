@@ -54,6 +54,21 @@ func (mr *MockStorageMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockStorage)(nil).Close))
 }
 
+// GetAgentProfile mocks base method.
+func (m *MockStorage) GetAgentProfile(agentID string) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAgentProfile", agentID)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAgentProfile indicates an expected call of GetAgentProfile.
+func (mr *MockStorageMockRecorder) GetAgentProfile(agentID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAgentProfile", reflect.TypeOf((*MockStorage)(nil).GetAgentProfile), agentID)
+}
+
 // GetAgentState mocks base method.
 func (m *MockStorage) GetAgentState(agentID string) ([]byte, error) {
 	m.ctrl.T.Helper()
@@ -67,6 +82,20 @@ func (m *MockStorage) GetAgentState(agentID string) ([]byte, error) {
 func (mr *MockStorageMockRecorder) GetAgentState(agentID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAgentState", reflect.TypeOf((*MockStorage)(nil).GetAgentState), agentID)
+}
+
+// SaveAgentProfile mocks base method.
+func (m *MockStorage) SaveAgentProfile(agentID string, profile []byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveAgentProfile", agentID, profile)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SaveAgentProfile indicates an expected call of SaveAgentProfile.
+func (mr *MockStorageMockRecorder) SaveAgentProfile(agentID, profile any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveAgentProfile", reflect.TypeOf((*MockStorage)(nil).SaveAgentProfile), agentID, profile)
 }
 
 // SaveAgentState mocks base method.
@@ -95,6 +124,21 @@ func (m *MockStorage) SavePost(content string) error {
 func (mr *MockStorageMockRecorder) SavePost(content any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SavePost", reflect.TypeOf((*MockStorage)(nil).SavePost), content)
+}
+
+// SearchAgentProfile mocks base method.
+func (m *MockStorage) SearchAgentProfile(query string) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchAgentProfile", query)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchAgentProfile indicates an expected call of SearchAgentProfile.
+func (mr *MockStorageMockRecorder) SearchAgentProfile(query any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchAgentProfile", reflect.TypeOf((*MockStorage)(nil).SearchAgentProfile), query)
 }
 
 // SearchPosts mocks base method.

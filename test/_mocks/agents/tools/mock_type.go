@@ -40,6 +40,34 @@ func (m *MockPersistTool) EXPECT() *MockPersistToolMockRecorder {
 	return m.recorder
 }
 
+// GetAgentProfile mocks base method.
+func (m *MockPersistTool) GetAgentProfile(toolCall providers.ToolCall) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAgentProfile", toolCall)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetAgentProfile indicates an expected call of GetAgentProfile.
+func (mr *MockPersistToolMockRecorder) GetAgentProfile(toolCall any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAgentProfile", reflect.TypeOf((*MockPersistTool)(nil).GetAgentProfile), toolCall)
+}
+
+// SaveAgentProfile mocks base method.
+func (m *MockPersistTool) SaveAgentProfile(toolCall providers.ToolCall) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveAgentProfile", toolCall)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// SaveAgentProfile indicates an expected call of SaveAgentProfile.
+func (mr *MockPersistToolMockRecorder) SaveAgentProfile(toolCall any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveAgentProfile", reflect.TypeOf((*MockPersistTool)(nil).SaveAgentProfile), toolCall)
+}
+
 // SaveContent mocks base method.
 func (m *MockPersistTool) SaveContent(toolCall providers.ToolCall) string {
 	m.ctrl.T.Helper()
@@ -52,6 +80,20 @@ func (m *MockPersistTool) SaveContent(toolCall providers.ToolCall) string {
 func (mr *MockPersistToolMockRecorder) SaveContent(toolCall any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveContent", reflect.TypeOf((*MockPersistTool)(nil).SaveContent), toolCall)
+}
+
+// SearchAgentProfile mocks base method.
+func (m *MockPersistTool) SearchAgentProfile(toolCall providers.ToolCall) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchAgentProfile", toolCall)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// SearchAgentProfile indicates an expected call of SearchAgentProfile.
+func (mr *MockPersistToolMockRecorder) SearchAgentProfile(toolCall any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchAgentProfile", reflect.TypeOf((*MockPersistTool)(nil).SearchAgentProfile), toolCall)
 }
 
 // SearchContent mocks base method.

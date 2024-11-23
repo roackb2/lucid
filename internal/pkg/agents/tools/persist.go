@@ -62,3 +62,27 @@ func (t *PersistToolImpl) searchContentImpl(arguments string) string {
 func (t *PersistToolImpl) SearchContent(toolCall providers.ToolCall) string {
 	return t.searchContentImpl(toolCall.Args)
 }
+
+func (t *PersistToolImpl) saveAgentProfileImpl(arguments string) string {
+	return "Not implemented"
+}
+
+func (t *PersistToolImpl) SaveAgentProfile(toolCall providers.ToolCall) string {
+	return t.saveAgentProfileImpl(toolCall.Args)
+}
+
+func (t *PersistToolImpl) getAgentProfileImpl(arguments string) string {
+	return "Not implemented"
+}
+
+func (t *PersistToolImpl) GetAgentProfile(toolCall providers.ToolCall) string {
+	return t.getAgentProfileImpl(toolCall.Args)
+}
+
+func (t *PersistToolImpl) searchAgentProfileImpl(arguments string) string {
+	return "Not implemented"
+}
+
+func (t *PersistToolImpl) SearchAgentProfile(toolCall providers.ToolCall) string {
+	return t.searchAgentProfileImpl(toolCall.Args)
+}

@@ -9,5 +9,8 @@ type Storage interface {
 	SearchPosts(query string) ([]string, error)
 	SaveAgentState(agentID string, state []byte, status string, role string, awakenedAt *time.Time, asleepAt *time.Time) error
 	GetAgentState(agentID string) ([]byte, error)
+	SaveAgentProfile(agentID string, profile []byte) error
+	GetAgentProfile(agentID string) ([]byte, error)
+	SearchAgentProfile(query string) ([]byte, error)
 	Close() error
 }
