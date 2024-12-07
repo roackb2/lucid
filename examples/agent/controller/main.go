@@ -49,6 +49,11 @@ func main() {
 		}
 	}()
 
+	workerCfg := worker.WorkerConfig{
+		TickerInterval:      config.Config.Worker.TickerInterval,
+		WorkerControlChSize: config.Config.Worker.WorkerControlChSize,
+		PublishTimeout:      config.Config.Worker.PublishTimeout,
+	}
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {
 			slog.Info("Pausing agent", "agent_id", agentID, "status", status)
@@ -85,7 +90,7 @@ func main() {
 	}
 
 	for _, task := range tasks {
-		consumer := agent.NewConsumer(task, storage, provider, pubSub)
+		consumer := agent.NewConsumer(workerCfg, task, storage, provider, pubSub)
 		go func() {
 			resp, err := consumer.StartTask(ctx, callbacks)
 			if err != nil {

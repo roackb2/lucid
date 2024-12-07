@@ -41,6 +41,12 @@ func main() {
 	pubSub := pubsub.NewKafkaPubSub()
 	defer pubSub.Close()
 
+	workerCfg := worker.WorkerConfig{
+		TickerInterval:      config.Config.Worker.TickerInterval,
+		WorkerControlChSize: config.Config.Worker.WorkerControlChSize,
+		PublishTimeout:      config.Config.Worker.PublishTimeout,
+	}
+
 	go func() {
 		err := pubSub.Subscribe(worker.GetAgentResponseGeneralTopic(), func(message string) error {
 			slog.Info("Received PubSub response", "message", message)
@@ -50,7 +56,7 @@ func main() {
 			slog.Error("Error subscribing to agent_response", "error", err)
 		}
 	}()
-	publisher := agent.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage, provider, pubSub)
+	publisher := agent.NewPublisher(workerCfg, fmt.Sprintf("I have a new song called '%s'. Please publish it.", "Jazz in the Rain"), storage, provider, pubSub)
 
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {
@@ -96,7 +102,7 @@ func main() {
 	}
 
 	// Restore the state
-	restoredPublisher := agent.NewPublisher("", storage, provider, pubSub)
+	restoredPublisher := agent.NewPublisher(workerCfg, "", storage, provider, pubSub)
 	newPrompt := "What is the length of the title of the song that you just published?"
 	res, err = restoredPublisher.ResumeTask(ctx, publisher.GetID(), &newPrompt, callbacks)
 	if err != nil {

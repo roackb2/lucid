@@ -50,8 +50,13 @@ func main() {
 		}
 	}()
 
+	workerCfg := worker.WorkerConfig{
+		TickerInterval:      config.Config.Worker.TickerInterval,
+		WorkerControlChSize: config.Config.Worker.WorkerControlChSize,
+		PublishTimeout:      config.Config.Worker.PublishTimeout,
+	}
 	// Create a consumer with task that should not finish
-	consumer := agent.NewConsumer("Is there any rock song? Keep searching until you find it.", storage, provider, pubSub)
+	consumer := agent.NewConsumer(workerCfg, "Is there any rock song? Keep searching until you find it.", storage, provider, pubSub)
 
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {

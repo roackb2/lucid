@@ -23,6 +23,7 @@ const (
 )
 
 type ControlPlaneImpl struct {
+	workerCfg       worker.WorkerConfig
 	agentFactory    AgentFactory
 	storage         storage.Storage
 	chatProvider    providers.ChatProvider
@@ -38,6 +39,7 @@ type ControlPlaneImpl struct {
 }
 
 func NewControlPlane(
+	workerCfg worker.WorkerConfig,
 	agentFactory AgentFactory,
 	storage storage.Storage,
 	chatProvider providers.ChatProvider,
@@ -48,6 +50,7 @@ func NewControlPlane(
 	workerCallbacks worker.WorkerCallbacks,
 ) *ControlPlaneImpl {
 	return &ControlPlaneImpl{
+		workerCfg:       workerCfg,
 		agentFactory:    agentFactory,
 		storage:         storage,
 		chatProvider:    chatProvider,
@@ -146,9 +149,9 @@ func (c *ControlPlaneImpl) newAgent(ctx context.Context, task string, role strin
 	var agent agent.Agent
 	switch role {
 	case "publisher":
-		agent = c.agentFactory.NewPublisherAgent(c.storage, task, c.chatProvider, c.pubSub)
+		agent = c.agentFactory.NewPublisherAgent(c.workerCfg, c.storage, task, c.chatProvider, c.pubSub)
 	case "consumer":
-		agent = c.agentFactory.NewConsumerAgent(c.storage, task, c.chatProvider, c.pubSub)
+		agent = c.agentFactory.NewConsumerAgent(c.workerCfg, c.storage, task, c.chatProvider, c.pubSub)
 	default:
 		return nil, fmt.Errorf("ControlPlane: Invalid role: %s", role)
 	}

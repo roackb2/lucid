@@ -38,7 +38,13 @@ func main() {
 	pubSub := pubsub.NewKafkaPubSub()
 	defer pubSub.Close()
 
-	publisher := agent.NewPublisher("I have a song called 'Rock and Roll', please publish it.", storage, provider, pubSub)
+	workerCfg := worker.WorkerConfig{
+		TickerInterval:      config.Config.Worker.TickerInterval,
+		WorkerControlChSize: config.Config.Worker.WorkerControlChSize,
+		PublishTimeout:      config.Config.Worker.PublishTimeout,
+	}
+
+	publisher := agent.NewPublisher(workerCfg, "I have a song called 'Rock and Roll', please publish it.", storage, provider, pubSub)
 	go func() {
 		err := pubSub.Subscribe(worker.GetAgentResponseTopic(publisher.GetID()), func(message string) error {
 			slog.Info("Received PubSub response", "message", message)

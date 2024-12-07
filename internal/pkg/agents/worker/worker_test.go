@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/roackb2/lucid/internal/pkg/agents/providers"
 	mock_providers "github.com/roackb2/lucid/test/_mocks/agents/providers"
@@ -25,6 +26,7 @@ type WorkerTestSuite struct {
 	role                      string
 	mockReportResponseContent string
 	mockReportResponse        providers.ChatResponse
+	cfg                       WorkerConfig
 }
 
 func (s *WorkerTestSuite) SetupTest() {
@@ -34,7 +36,12 @@ func (s *WorkerTestSuite) SetupTest() {
 	s.mockPubSub = mock_pubsub.NewMockPubSub(s.ctrl)
 	s.id = "test-id"
 	s.role = "test-role"
-	s.worker = NewWorker(&s.id, s.role, s.mockStorage, s.mockProvider, s.mockPubSub)
+	s.cfg = WorkerConfig{
+		TickerInterval:      500 * time.Millisecond,
+		WorkerControlChSize: 10,
+		PublishTimeout:      5 * time.Second,
+	}
+	s.worker = NewWorker(s.cfg, &s.id, s.role, s.mockStorage, s.mockProvider, s.mockPubSub)
 
 	s.mockReportResponseContent = "Test response"
 	mockToolCallArgs := map[string]string{

@@ -19,13 +19,13 @@ type BaseAgent struct {
 	task    string
 }
 
-func NewBaseAgent(storage storage.Storage, task string, role string, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) BaseAgent {
+func NewBaseAgent(cfg worker.WorkerConfig, storage storage.Storage, task string, role string, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) BaseAgent {
 	id := uuid.New().String()
 	return BaseAgent{
 		id:   id,
 		role: role,
 
-		worker:  worker.NewWorker(&id, role, storage, chatProvider, pubSub),
+		worker:  worker.NewWorker(cfg, &id, role, storage, chatProvider, pubSub),
 		storage: storage,
 		task:    task,
 	}

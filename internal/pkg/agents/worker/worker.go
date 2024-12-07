@@ -15,13 +15,14 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
-const (
-	TickerInterval      = 500 * time.Millisecond
-	WorkerControlChSize = 10
-	PublishTimeout      = 5 * time.Second
-)
+type WorkerConfig struct {
+	TickerInterval      time.Duration
+	WorkerControlChSize int
+	PublishTimeout      time.Duration
+}
 
 type WorkerImpl struct {
+	cfg          WorkerConfig
 	chatProvider providers.ChatProvider `json:"-"`
 	storage      storage.Storage        `json:"-"`
 	stateMachine *fsm.FSM               `json:"-"` // FSM already implements mutex
@@ -37,15 +38,16 @@ type WorkerImpl struct {
 	Messages []providers.ChatMessage `json:"messages"`
 }
 
-func NewWorker(id *string, role string, storage storage.Storage, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) *WorkerImpl {
+func NewWorker(cfg WorkerConfig, id *string, role string, storage storage.Storage, chatProvider providers.ChatProvider, pubSub pubsub.PubSub) *WorkerImpl {
 	persistTool := tools.NewPersistTool(storage)
 	flowTool := tools.NewFlowTool()
 
 	return &WorkerImpl{
+		cfg:          cfg,
 		chatProvider: chatProvider,
 		storage:      storage,
 		stateMachine: nil, // Should init when start or resume task
-		controlCh:    make(chan string, WorkerControlChSize),
+		controlCh:    make(chan string, cfg.WorkerControlChSize),
 		messageMux:   sync.RWMutex{},
 		persistTools: persistTool,
 		flowTools:    flowTool,
@@ -156,7 +158,7 @@ func (w *WorkerImpl) getAgentResponseWithFlowControl(ctx context.Context) (strin
 		return "", fmt.Errorf("control channel not initialized")
 	}
 
-	ticker := time.NewTicker(TickerInterval)
+	ticker := time.NewTicker(w.cfg.TickerInterval)
 	defer ticker.Stop()
 
 	for {
@@ -217,7 +219,7 @@ func (w *WorkerImpl) SendCommand(ctx context.Context, command string) error {
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("context canceled, cannot send command")
-	case <-time.After(3 * TickerInterval): // Make sure we have time to send the command
+	case <-time.After(3 * w.cfg.TickerInterval): // Make sure we have time to send the command
 		return fmt.Errorf("sending command timed out")
 	}
 }

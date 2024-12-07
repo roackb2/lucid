@@ -67,6 +67,11 @@ func main() {
 		slog.Info("Controller done")
 	}()
 
+	workerCfg := worker.WorkerConfig{
+		TickerInterval:      config.Config.Worker.TickerInterval,
+		WorkerControlChSize: config.Config.Worker.WorkerControlChSize,
+		PublishTimeout:      config.Config.Worker.PublishTimeout,
+	}
 	callbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {
 			slog.Info("Pausing agent", "agent_id", agentID, "status", status)
@@ -84,7 +89,7 @@ func main() {
 
 	onAgentFound := func(agentID string, agentState dbaccess.AgentState) {
 		slog.Info("Scheduler: Agent found", "agentID", agentState.AgentID)
-		consumer := agent.NewConsumer("", storage, provider, pubSub)
+		consumer := agent.NewConsumer(workerCfg, "", storage, provider, pubSub)
 		go func() {
 			resp, err := consumer.ResumeTask(ctx, agentState.AgentID, nil, callbacks)
 			if err != nil {
@@ -101,7 +106,13 @@ func main() {
 		slog.Info("Registered agent", "agent_id", agentID)
 	}
 
-	scheduler := control_plane.NewScheduler(ctx, onAgentFound)
+	schedulerConfig := control_plane.SchedulerConfig{
+		ScanInterval:         config.Config.Scheduler.ScanInterval,
+		AgentSleepDuration:   config.Config.Scheduler.AgentSleepDuration,
+		AgentAwakeDuration:   config.Config.Scheduler.AgentAwakeDuration,
+		BatchProcessAgentNum: config.Config.Scheduler.BatchProcessAgentNum,
+	}
+	scheduler := control_plane.NewScheduler(ctx, schedulerConfig, onAgentFound)
 	go func() {
 		defer wg.Done()
 		err := scheduler.Start(ctx)
@@ -117,7 +128,7 @@ func main() {
 	}
 
 	for _, task := range tasks {
-		consumer := agent.NewConsumer(task, storage, provider, pubSub)
+		consumer := agent.NewConsumer(workerCfg, task, storage, provider, pubSub)
 		go func() {
 			resp, err := consumer.StartTask(ctx, callbacks)
 			if err != nil {

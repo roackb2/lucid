@@ -96,13 +96,13 @@ func (w *WorkerImpl) publishFinalResponse(ctx context.Context, response string) 
 		return err
 	}
 	topic := GetAgentResponseTopic(*w.ID)
-	err = w.pubSub.Publish(ctx, topic, string(payloadBytes), PublishTimeout)
+	err = w.pubSub.Publish(ctx, topic, string(payloadBytes), w.cfg.PublishTimeout)
 	if err != nil {
 		slog.Error("Worker: Failed to publish response", "error", err)
 		return err
 	}
 	generalTopic := GetAgentResponseGeneralTopic()
-	err = w.pubSub.Publish(ctx, generalTopic, string(payloadBytes), PublishTimeout)
+	err = w.pubSub.Publish(ctx, generalTopic, string(payloadBytes), w.cfg.PublishTimeout)
 	if err != nil {
 		slog.Error("Worker: Failed to publish response", "error", err)
 		return err
@@ -122,7 +122,7 @@ func (w *WorkerImpl) publishProgress(ctx context.Context, progress string) error
 		slog.Error("Worker: Failed to marshal payload", "error", err)
 		return err
 	}
-	return w.pubSub.Publish(ctx, GetAgentProgressTopic(), string(payloadBytes), PublishTimeout)
+	return w.pubSub.Publish(ctx, GetAgentProgressTopic(), string(payloadBytes), w.cfg.PublishTimeout)
 }
 
 func (w *WorkerImpl) publishStatus(ctx context.Context, status string) error {
@@ -137,7 +137,7 @@ func (w *WorkerImpl) publishStatus(ctx context.Context, status string) error {
 		slog.Error("Worker: Failed to marshal payload", "error", err)
 		return err
 	}
-	return w.pubSub.Publish(ctx, GetAgentStatusTopic(), string(payloadBytes), PublishTimeout)
+	return w.pubSub.Publish(ctx, GetAgentStatusTopic(), string(payloadBytes), w.cfg.PublishTimeout)
 }
 
 // func (w *WorkerImpl) sendMessage(toAgentID string, messageType string, payload interface{}) error {

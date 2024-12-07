@@ -45,6 +45,12 @@ func main() {
 	pubSub := pubsub.NewKafkaPubSub()
 	defer pubSub.Close()
 
+	workerCfg := worker.WorkerConfig{
+		TickerInterval:      config.Config.Worker.TickerInterval,
+		WorkerControlChSize: config.Config.Worker.WorkerControlChSize,
+		PublishTimeout:      config.Config.Worker.PublishTimeout,
+	}
+
 	go func() {
 		err := pubSub.Subscribe(worker.GetAgentResponseGeneralTopic(), func(message string) error {
 			slog.Info("Received PubSub response", "message", message)
@@ -65,7 +71,7 @@ func main() {
 	}
 	publishers := []agent.Publisher{}
 	for _, song := range songs {
-		publishers = append(publishers, *agent.NewPublisher(fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage, provider, pubSub))
+		publishers = append(publishers, *agent.NewPublisher(workerCfg, fmt.Sprintf("I have a new song called '%s'. Please publish it.", song), storage, provider, pubSub))
 	}
 
 	queries := []string{
@@ -75,7 +81,7 @@ func main() {
 	}
 	consumers := []agent.Consumer{}
 	for _, query := range queries {
-		consumers = append(consumers, *agent.NewConsumer(query, storage, provider, pubSub))
+		consumers = append(consumers, *agent.NewConsumer(workerCfg, query, storage, provider, pubSub))
 	}
 
 	var wg sync.WaitGroup

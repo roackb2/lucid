@@ -34,7 +34,13 @@ func main() {
 		slog.Info("Scheduler: Agent found", "agentID", agent.AgentID)
 	}
 
-	scheduler := control_plane.NewScheduler(ctx, onAgentFound)
+	schedulerConfig := control_plane.SchedulerConfig{
+		ScanInterval:         config.Config.Scheduler.ScanInterval,
+		AgentSleepDuration:   config.Config.Scheduler.AgentSleepDuration,
+		AgentAwakeDuration:   config.Config.Scheduler.AgentAwakeDuration,
+		BatchProcessAgentNum: config.Config.Scheduler.BatchProcessAgentNum,
+	}
+	scheduler := control_plane.NewScheduler(ctx, schedulerConfig, onAgentFound)
 	go func() {
 		err := scheduler.Start(ctx)
 		if err != nil {

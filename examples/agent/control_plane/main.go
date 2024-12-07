@@ -41,7 +41,13 @@ func main() {
 		AgentLifeTime: 3 * time.Second,
 	}
 	controller := control_plane.NewAgentController(controllerConfig, storage, tracker)
-	scheduler := control_plane.NewScheduler(ctx, nil)
+	schedulerConfig := control_plane.SchedulerConfig{
+		ScanInterval:         config.Config.Scheduler.ScanInterval,
+		AgentSleepDuration:   config.Config.Scheduler.AgentSleepDuration,
+		AgentAwakeDuration:   config.Config.Scheduler.AgentAwakeDuration,
+		BatchProcessAgentNum: config.Config.Scheduler.BatchProcessAgentNum,
+	}
+	scheduler := control_plane.NewScheduler(ctx, schedulerConfig, nil)
 	pubSub := pubsub.NewKafkaPubSub()
 	defer pubSub.Close()
 
@@ -61,6 +67,11 @@ func main() {
 			slog.Info("Agent final response", "agent_id", agentID, "response", response)
 		},
 	}
+	workerCfg := worker.WorkerConfig{
+		TickerInterval:      config.Config.Worker.TickerInterval,
+		WorkerControlChSize: config.Config.Worker.WorkerControlChSize,
+		PublishTimeout:      config.Config.Worker.PublishTimeout,
+	}
 	workerCallbacks := worker.WorkerCallbacks{
 		worker.OnPause: func(agentID string, status string) {
 			slog.Info("Pausing agent", "agent_id", agentID, "status", status)
@@ -75,7 +86,7 @@ func main() {
 			slog.Info("Agent terminating", "agent_id", agentID, "status", status)
 		},
 	}
-	controlPlane := control_plane.NewControlPlane(agentFactory, storage, provider, controller, scheduler, pubSub, callbacks, workerCallbacks)
+	controlPlane := control_plane.NewControlPlane(workerCfg, agentFactory, storage, provider, controller, scheduler, pubSub, callbacks, workerCallbacks)
 
 	doneCh := make(chan struct{})
 

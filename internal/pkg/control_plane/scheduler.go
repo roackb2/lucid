@@ -11,22 +11,23 @@ import (
 	"github.com/roackb2/lucid/internal/pkg/utils"
 )
 
-const (
-	SchedulerControlChSize = 10
-	ScanInterval           = 1 * time.Second
-	AgentSleepDuration     = 10 * time.Second
-	AgentAwakeDuration     = 5 * time.Minute
-	BatchProcessAgentNum   = 10
-)
+type SchedulerConfig struct {
+	ScanInterval         time.Duration
+	AgentSleepDuration   time.Duration
+	AgentAwakeDuration   time.Duration
+	BatchProcessAgentNum int
+}
 
 type SchedulerImpl struct {
+	cfg          SchedulerConfig
 	controlCh    chan string
 	onAgentFound OnAgentFoundCallback
 }
 
-func NewScheduler(ctx context.Context, onAgentFound OnAgentFoundCallback) *SchedulerImpl {
+func NewScheduler(ctx context.Context, cfg SchedulerConfig, onAgentFound OnAgentFoundCallback) *SchedulerImpl {
 	return &SchedulerImpl{
-		controlCh:    make(chan string, SchedulerControlChSize),
+		cfg:          cfg,
+		controlCh:    make(chan string, cfg.BatchProcessAgentNum),
 		onAgentFound: onAgentFound,
 	}
 }
@@ -56,7 +57,7 @@ func (s *SchedulerImpl) SendCommand(ctx context.Context, cmd string) error {
 
 func (s *SchedulerImpl) Start(ctx context.Context) error {
 	slog.Info("Scheduler started")
-	ticker := time.NewTicker(ScanInterval)
+	ticker := time.NewTicker(s.cfg.ScanInterval)
 	defer ticker.Stop()
 
 	for {
@@ -90,9 +91,9 @@ func (s *SchedulerImpl) Start(ctx context.Context) error {
 
 func (s *SchedulerImpl) searchAgents(ctx context.Context) error {
 	asleepParams := dbaccess.SearchAgentByAsleepDurationAndStatusParams{
-		Duration:  utils.ConvertToPgInterval(AgentSleepDuration),
+		Duration:  utils.ConvertToPgInterval(s.cfg.AgentSleepDuration),
 		Statuses:  []string{worker.StatusAsleep},
-		MaxAgents: BatchProcessAgentNum,
+		MaxAgents: int32(s.cfg.BatchProcessAgentNum),
 	}
 	asleepAgents, err := dbaccess.Querier.SearchAgentByAsleepDurationAndStatus(ctx, asleepParams)
 	if err != nil {
@@ -104,9 +105,9 @@ func (s *SchedulerImpl) searchAgents(ctx context.Context) error {
 	// Search for agents that is running but has been awake for a while,
 	// probably means they're orphans with no controller
 	awakenParams := dbaccess.SearchAgentByAwakeDurationAndStatusParams{
-		Duration:  utils.ConvertToPgInterval(AgentAwakeDuration),
+		Duration:  utils.ConvertToPgInterval(s.cfg.AgentAwakeDuration),
 		Statuses:  []string{worker.StatusRunning},
-		MaxAgents: BatchProcessAgentNum,
+		MaxAgents: int32(s.cfg.BatchProcessAgentNum),
 	}
 	awakenedAgents, err := dbaccess.Querier.SearchAgentByAwakeDurationAndStatus(ctx, awakenParams)
 	if err != nil {

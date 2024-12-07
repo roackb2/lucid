@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -33,6 +34,23 @@ type Configuration struct {
 	Kafka struct {
 		Address string `mapstructure:"address"`
 	} `mapstructure:"kafka"`
+	Worker struct {
+		TickerInterval      time.Duration `mapstructure:"ticker_interval"`
+		WorkerControlChSize int           `mapstructure:"worker_control_ch_size"`
+		PublishTimeout      time.Duration `mapstructure:"publish_timeout"`
+	} `mapstructure:"worker"`
+	AgentController struct {
+		AgentLifeTime time.Duration `mapstructure:"agent_life_time"`
+		ScanInterval  time.Duration `mapstructure:"scan_interval"`
+		MaxRespChSize int           `mapstructure:"max_resp_ch_size"`
+	} `mapstructure:"agent_controller"`
+	Scheduler struct {
+		SchedulerControlChSize int           `mapstructure:"scheduler_control_ch_size"`
+		ScanInterval           time.Duration `mapstructure:"scan_interval"`
+		AgentSleepDuration     time.Duration `mapstructure:"agent_sleep_duration"`
+		AgentAwakeDuration     time.Duration `mapstructure:"agent_awake_duration"`
+		BatchProcessAgentNum   int           `mapstructure:"batch_process_agent_num"`
+	} `mapstructure:"scheduler"`
 }
 
 func LoadConfig(name string) error {
