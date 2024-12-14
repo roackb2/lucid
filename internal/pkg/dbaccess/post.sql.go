@@ -7,49 +7,110 @@ package dbaccess
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pgvector/pgvector-go"
 )
 
 const createPost = `-- name: CreatePost :exec
-INSERT INTO posts (user_id, content)
-VALUES ($1, $2)
+INSERT INTO posts (user_id, content, embedding)
+VALUES ($1, $2::text, $3::vector(1536))
 `
 
 type CreatePostParams struct {
-	UserID  int32
-	Content string
+	UserID    int32
+	Content   string
+	Embedding pgvector.Vector
 }
 
 func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) error {
-	_, err := q.db.Exec(ctx, createPost, arg.UserID, arg.Content)
+	_, err := q.db.Exec(ctx, createPost, arg.UserID, arg.Content, arg.Embedding)
 	return err
 }
 
 const searchPosts = `-- name: SearchPosts :many
-SELECT id, user_id, content, created_at, updated_at
-FROM posts
-WHERE SIMILARITY(content, $1::text) > 0.3
-OR content ILIKE '%' || $1 || '%'
-OR content ILIKE ANY(
-  SELECT '%' || word || '%'
-  FROM UNNEST(STRING_TO_ARRAY($1, ' ')) AS word
+WITH similarity_filter AS (
+  SELECT
+    id,
+    user_id,
+    content,
+    created_at,
+    updated_at,
+    posts.embedding <=> $1::vector(1536) AS distance
+  FROM posts
+  WHERE posts.embedding <=> $1::vector(1536) <= (1 - $2::float)
+),
+keyword_filter AS (
+  SELECT
+    id,
+    user_id,
+    content,
+    created_at,
+    updated_at,
+    GREATEST(
+        CASE WHEN posts.content ILIKE '%' || $3::text || '%' THEN 1.0 ELSE 0.0 END,  -- Exact match gets the highest score
+        similarity(posts.content, $3::text)                                        -- Trigram similarity score
+    ) AS distance
+  FROM posts
+  WHERE posts.content ILIKE '%' || $3::text || '%' OR similarity(posts.content, $3::text) > $4::float
 )
+SELECT DISTINCT
+  id,
+  user_id,
+  content,
+  created_at,
+  updated_at,
+  distance
+FROM similarity_filter
+UNION ALL
+SELECT DISTINCT
+  id,
+  user_id,
+  content,
+  created_at,
+  updated_at,
+  distance
+FROM keyword_filter
+ORDER BY distance ASC NULLS LAST, created_at DESC
 `
 
-func (q *Queries) SearchPosts(ctx context.Context, keyword string) ([]Post, error) {
-	rows, err := q.db.Query(ctx, searchPosts, keyword)
+type SearchPostsParams struct {
+	Embedding        pgvector.Vector
+	Threshold        float64
+	Keyword          string
+	TrigramThreshold float64
+}
+
+type SearchPostsRow struct {
+	ID        int32
+	UserID    int32
+	Content   string
+	CreatedAt pgtype.Timestamp
+	UpdatedAt pgtype.Timestamp
+	Distance  interface{}
+}
+
+func (q *Queries) SearchPosts(ctx context.Context, arg SearchPostsParams) ([]SearchPostsRow, error) {
+	rows, err := q.db.Query(ctx, searchPosts,
+		arg.Embedding,
+		arg.Threshold,
+		arg.Keyword,
+		arg.TrigramThreshold,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Post
+	var items []SearchPostsRow
 	for rows.Next() {
-		var i Post
+		var i SearchPostsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
 			&i.Content,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Distance,
 		); err != nil {
 			return nil, err
 		}

@@ -33,3 +33,13 @@ func ConvertToFloat32(embeddings []openai.Embedding) [][]float32 {
 	}
 	return embeddingsFloat
 }
+
+func ConvertToFloat64(embeddings []openai.Embedding) [][]float64 {
+	embeddingsFloat := make([][]float64, len(embeddings))
+	for i, embedding := range embeddings {
+		for _, f := range embedding.Embedding {
+			embeddingsFloat[i] = append(embeddingsFloat[i], float64(f))
+		}
+	}
+	return embeddingsFloat
+}

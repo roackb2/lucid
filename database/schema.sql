@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 14.13 (Homebrew)
--- Dumped by pg_dump version 14.13 (Homebrew)
+-- Dumped from database version 14.15 (Homebrew)
+-- Dumped by pg_dump version 14.15 (Homebrew)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -30,6 +30,20 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
 
 
+--
+-- Name: vector; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION vector; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION vector IS 'vector data type and ivfflat and hnsw access methods';
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -42,6 +56,7 @@ CREATE TABLE public.agent_profiles (
     id integer NOT NULL,
     agent_id character varying(255) NOT NULL,
     profile text NOT NULL,
+    embedding public.vector(1536) NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
@@ -112,6 +127,7 @@ CREATE TABLE public.posts (
     id integer NOT NULL,
     user_id integer NOT NULL,
     content text NOT NULL,
+    embedding public.vector(1536) NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
@@ -257,10 +273,38 @@ CREATE UNIQUE INDEX agent_profiles_agent_id_idx ON public.agent_profiles USING b
 
 
 --
+-- Name: agent_profiles_embedding_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_profiles_embedding_idx ON public.agent_profiles USING ivfflat (embedding public.vector_cosine_ops) WITH (lists='100');
+
+
+--
+-- Name: agent_profiles_profile_trgm_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_profiles_profile_trgm_idx ON public.agent_profiles USING gin (profile public.gin_trgm_ops);
+
+
+--
 -- Name: agent_states_agent_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX agent_states_agent_id_idx ON public.agent_states USING btree (agent_id);
+
+
+--
+-- Name: posts_content_trgm_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX posts_content_trgm_idx ON public.posts USING gin (content public.gin_trgm_ops);
+
+
+--
+-- Name: posts_embedding_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX posts_embedding_idx ON public.posts USING ivfflat (embedding public.vector_cosine_ops) WITH (lists='100');
 
 
 --

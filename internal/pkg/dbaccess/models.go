@@ -12,6 +12,7 @@ type AgentProfile struct {
 	ID        int32
 	AgentID   string
 	Profile   string
+	Embedding interface{}
 	CreatedAt pgtype.Timestamp
 	UpdatedAt pgtype.Timestamp
 }
@@ -32,6 +33,7 @@ type Post struct {
 	ID        int32
 	UserID    int32
 	Content   string
+	Embedding interface{}
 	CreatedAt pgtype.Timestamp
 	UpdatedAt pgtype.Timestamp
 }

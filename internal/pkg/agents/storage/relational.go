@@ -6,8 +6,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pgvector/pgvector-go"
+	"github.com/roackb2/lucid/internal/pkg/agents/embedding"
 	"github.com/roackb2/lucid/internal/pkg/dbaccess"
 	"github.com/roackb2/lucid/internal/pkg/utils"
+)
+
+const (
+	DefaultThreshold        = 0.7
+	DefaultTrigramThreshold = 0.3
 )
 
 type RelationalStorage struct{}
@@ -27,11 +34,18 @@ func (m *RelationalStorage) Close() error {
 }
 
 func (m *RelationalStorage) SavePost(content string) error {
-	createPostParams := dbaccess.CreatePostParams{
-		UserID:  1,
-		Content: content,
+	embeddings, err := embedding.Embed(content)
+	if err != nil {
+		slog.Error("VectorStorage: Failed to embed content", "error", err)
+		return err
 	}
-	err := dbaccess.Querier.CreatePost(context.Background(), createPostParams)
+	embeddingsFloat := embedding.ConvertToFloat32(embeddings)
+	createPostParams := dbaccess.CreatePostParams{
+		UserID:    1,
+		Content:   content,
+		Embedding: pgvector.NewVector(embeddingsFloat[0]),
+	}
+	err = dbaccess.Querier.CreatePost(context.Background(), createPostParams)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to save post", "error", err)
 		return err
@@ -42,8 +56,19 @@ func (m *RelationalStorage) SavePost(content string) error {
 
 func (m *RelationalStorage) SearchPosts(query string) ([]string, error) {
 	slog.Info("RelationalStorage: Searching for posts", "query", query)
-
-	results, err := dbaccess.Querier.SearchPosts(context.Background(), query)
+	embeddings, err := embedding.Embed(query)
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to embed query", "error", err)
+		return nil, err
+	}
+	embeddingsFloat := embedding.ConvertToFloat32(embeddings)
+	searchParams := dbaccess.SearchPostsParams{
+		Keyword:          query,
+		Embedding:        pgvector.NewVector(embeddingsFloat[0]),
+		Threshold:        DefaultThreshold,
+		TrigramThreshold: DefaultTrigramThreshold,
+	}
+	results, err := dbaccess.Querier.SearchPosts(context.Background(), searchParams)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to search posts", "error", err)
 		return nil, err
@@ -134,11 +159,18 @@ func (m *RelationalStorage) GetAgentState(agentID string) ([]byte, error) {
 
 func (m *RelationalStorage) createAgentProfile(agentID string, profile []byte) error {
 	slog.Info("RelationalStorage: Creating agent profile", "agentID", agentID)
-	params := dbaccess.CreateAgentProfileParams{
-		AgentID: agentID,
-		Profile: string(profile),
+	embeddings, err := embedding.Embed(string(profile))
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to embed profile", "error", err)
+		return err
 	}
-	err := dbaccess.Querier.CreateAgentProfile(context.Background(), params)
+	embeddingsFloat := embedding.ConvertToFloat32(embeddings)
+	params := dbaccess.CreateAgentProfileParams{
+		AgentID:   agentID,
+		Profile:   string(profile),
+		Embedding: pgvector.NewVector(embeddingsFloat[0]),
+	}
+	err = dbaccess.Querier.CreateAgentProfile(context.Background(), params)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to create agent profile", "error", err)
 		return err
@@ -148,11 +180,18 @@ func (m *RelationalStorage) createAgentProfile(agentID string, profile []byte) e
 
 func (m *RelationalStorage) updateAgentProfile(agentID string, profile []byte) error {
 	slog.Info("RelationalStorage: Updating agent profile", "agentID", agentID)
-	params := dbaccess.UpdateAgentProfileParams{
-		AgentID: agentID,
-		Profile: string(profile),
+	embeddings, err := embedding.Embed(string(profile))
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to embed profile", "error", err)
+		return err
 	}
-	err := dbaccess.Querier.UpdateAgentProfile(context.Background(), params)
+	embeddingsFloat := embedding.ConvertToFloat32(embeddings)
+	params := dbaccess.UpdateAgentProfileParams{
+		AgentID:   agentID,
+		Profile:   string(profile),
+		Embedding: pgvector.NewVector(embeddingsFloat[0]),
+	}
+	err = dbaccess.Querier.UpdateAgentProfile(context.Background(), params)
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to update agent profile", "error", err)
 		return err
@@ -199,7 +238,18 @@ func (m *RelationalStorage) GetAgentProfile(agentID string) (*AgentProfile, erro
 
 func (m *RelationalStorage) SearchAgentProfile(query string) ([]AgentProfile, error) {
 	slog.Info("RelationalStorage: Searching agent profile", "query", query)
-	results, err := dbaccess.Querier.SearchAgentProfile(context.Background(), query)
+	embeddings, err := embedding.Embed(query)
+	if err != nil {
+		slog.Error("RelationalStorage: Failed to embed query", "error", err)
+		return nil, err
+	}
+	embeddingsFloat := embedding.ConvertToFloat32(embeddings)
+	results, err := dbaccess.Querier.SearchAgentProfiles(context.Background(), dbaccess.SearchAgentProfilesParams{
+		Keyword:          query,
+		Embedding:        pgvector.NewVector(embeddingsFloat[0]),
+		Threshold:        DefaultThreshold,
+		TrigramThreshold: DefaultTrigramThreshold,
+	})
 	if err != nil {
 		slog.Error("RelationalStorage: Failed to search agent profile", "error", err)
 		return nil, err

@@ -7,25 +7,29 @@ package dbaccess
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/pgvector/pgvector-go"
 )
 
 const createAgentProfile = `-- name: CreateAgentProfile :exec
-INSERT INTO agent_profiles (agent_id, profile)
-VALUES ($1, $2)
+INSERT INTO agent_profiles (agent_id, profile, embedding)
+VALUES ($1, $2::text, $3::vector(1536))
 `
 
 type CreateAgentProfileParams struct {
-	AgentID string
-	Profile string
+	AgentID   string
+	Profile   string
+	Embedding pgvector.Vector
 }
 
 func (q *Queries) CreateAgentProfile(ctx context.Context, arg CreateAgentProfileParams) error {
-	_, err := q.db.Exec(ctx, createAgentProfile, arg.AgentID, arg.Profile)
+	_, err := q.db.Exec(ctx, createAgentProfile, arg.AgentID, arg.Profile, arg.Embedding)
 	return err
 }
 
 const getAgentProfile = `-- name: GetAgentProfile :one
-SELECT id, agent_id, profile, created_at, updated_at
+SELECT id, agent_id, profile, embedding, created_at, updated_at
 FROM agent_profiles
 WHERE agent_id = $1
 `
@@ -37,38 +41,88 @@ func (q *Queries) GetAgentProfile(ctx context.Context, agentID string) (AgentPro
 		&i.ID,
 		&i.AgentID,
 		&i.Profile,
+		&i.Embedding,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const searchAgentProfile = `-- name: SearchAgentProfile :many
-SELECT id, agent_id, profile, created_at, updated_at
-FROM agent_profiles
-WHERE SIMILARITY(profile, $1::text) > 0.3
-OR profile ILIKE '%' || $1 || '%'
-OR profile ILIKE ANY(
-  SELECT '%' || word || '%'
-  FROM UNNEST(STRING_TO_ARRAY($1, ' ')) AS word
+const searchAgentProfiles = `-- name: SearchAgentProfiles :many
+WITH similarity_filter AS (
+    SELECT
+        id, agent_id, profile, embedding, created_at, updated_at,
+        agent_profiles.embedding <=> $1::vector(1536) AS distance
+    FROM agent_profiles
+    WHERE agent_profiles.embedding <=> $1::vector(1536) <= (1 - $2::float)
+),
+keyword_filter AS (
+    SELECT
+        id, agent_id, profile, embedding, created_at, updated_at,
+        GREATEST(
+            CASE WHEN agent_profiles.profile ILIKE '%' || $3::text || '%' THEN 1.0 ELSE 0.0 END,  -- Exact match gets the highest score
+            similarity(agent_profiles.profile, $3::text)                                         -- Trigram similarity score
+        ) AS distance
+    FROM agent_profiles
+    WHERE agent_profiles.profile ILIKE '%' || $3::text || '%' OR similarity(agent_profiles.profile, $3::text) > $4::float
 )
+SELECT DISTINCT
+    id,
+    agent_id,
+    profile,
+    created_at,
+    updated_at,
+    distance
+FROM similarity_filter
+UNION ALL
+SELECT DISTINCT
+    id,
+    agent_id,
+    profile,
+    created_at,
+    updated_at,
+    distance
+FROM keyword_filter
+ORDER BY distance ASC NULLS LAST, created_at DESC
 `
 
-func (q *Queries) SearchAgentProfile(ctx context.Context, keyword string) ([]AgentProfile, error) {
-	rows, err := q.db.Query(ctx, searchAgentProfile, keyword)
+type SearchAgentProfilesParams struct {
+	Embedding        pgvector.Vector
+	Threshold        float64
+	Keyword          string
+	TrigramThreshold float64
+}
+
+type SearchAgentProfilesRow struct {
+	ID        int32
+	AgentID   string
+	Profile   string
+	CreatedAt pgtype.Timestamp
+	UpdatedAt pgtype.Timestamp
+	Distance  interface{}
+}
+
+func (q *Queries) SearchAgentProfiles(ctx context.Context, arg SearchAgentProfilesParams) ([]SearchAgentProfilesRow, error) {
+	rows, err := q.db.Query(ctx, searchAgentProfiles,
+		arg.Embedding,
+		arg.Threshold,
+		arg.Keyword,
+		arg.TrigramThreshold,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AgentProfile
+	var items []SearchAgentProfilesRow
 	for rows.Next() {
-		var i AgentProfile
+		var i SearchAgentProfilesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.AgentID,
 			&i.Profile,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Distance,
 		); err != nil {
 			return nil, err
 		}
@@ -82,16 +136,17 @@ func (q *Queries) SearchAgentProfile(ctx context.Context, keyword string) ([]Age
 
 const updateAgentProfile = `-- name: UpdateAgentProfile :exec
 UPDATE agent_profiles
-SET profile = $1
-WHERE agent_id = $2
+SET profile = $1::text, embedding = $2::vector(1536)
+WHERE agent_id = $3
 `
 
 type UpdateAgentProfileParams struct {
-	Profile string
-	AgentID string
+	Profile   string
+	Embedding pgvector.Vector
+	AgentID   string
 }
 
 func (q *Queries) UpdateAgentProfile(ctx context.Context, arg UpdateAgentProfileParams) error {
-	_, err := q.db.Exec(ctx, updateAgentProfile, arg.Profile, arg.AgentID)
+	_, err := q.db.Exec(ctx, updateAgentProfile, arg.Profile, arg.Embedding, arg.AgentID)
 	return err
 }
