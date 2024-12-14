@@ -55,3 +55,6 @@ data/*
 # Milvus
 milvus/*
 !milvus/standalone_embed.sh
+
+# Local
+local/*
