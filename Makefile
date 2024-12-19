@@ -122,3 +122,12 @@ start-kafka:
 
 stop-kafka:
 	cd kafka-stack-docker-compose && docker compose -f zk-single-kafka-single.yml down
+
+list-agent-states:
+	psql -d lucid -c "select id, agent_id, role, status, awakened_at, asleep_at from agent_states order by created_at desc;"
+
+list-agent-profiles:
+	psql -d lucid -c "select id, agent_id, profile, created_at from agent_profiles order by created_at desc;"
+
+list-posts:
+	psql -d lucid -c "select id, content, created_at from posts order by created_at desc;"
