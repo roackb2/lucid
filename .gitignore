@@ -58,3 +58,9 @@ milvus/*
 
 # Local
 local/*
+
+# Node / TypeScript rewrite
+node_modules/
+apps/*/node_modules/
+apps/*/dist/
+*.tsbuildinfo

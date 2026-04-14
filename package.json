@@ -1,0 +1,18 @@
+{
+  "name": "lucid",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "workspaces": [
+    "client",
+    "apps/*"
+  ],
+  "scripts": {
+    "client:dev": "yarn workspace lucid-client dev",
+    "client:build": "yarn workspace lucid-client build",
+    "server:dev": "yarn workspace lucid-server dev",
+    "server:build": "yarn workspace lucid-server build",
+    "server:start": "yarn workspace lucid-server start",
+    "server:db:generate": "yarn workspace lucid-server db:generate",
+    "server:db:migrate": "yarn workspace lucid-server db:migrate"
+  }
+}
