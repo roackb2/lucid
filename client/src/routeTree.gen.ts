@@ -8,77 +8,111 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-// Import Routes
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardHomeIndexRouteImport } from './routes/dashboard/home/index'
+import { Route as DashboardExperimentsSingleAgentIndexRouteImport } from './routes/dashboard/experiments/single-agent/index'
 
-import { Route as rootRoute } from './routes/__root'
-import { Route as DashboardRouteImport } from './routes/dashboard/route'
-import { Route as IndexImport } from './routes/index'
-import { Route as DashboardHomeIndexImport } from './routes/dashboard/home/index'
-import { Route as DashboardExperimentsSingleAgentIndexImport } from './routes/dashboard/experiments/single-agent/index'
-
-// Create/Update Routes
-
-const DashboardRouteRoute = DashboardRouteImport.update({
+const DashboardRouteRoute = DashboardRouteRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const IndexRoute = IndexImport.update({
+const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const DashboardHomeIndexRoute = DashboardHomeIndexImport.update({
+const DashboardHomeIndexRoute = DashboardHomeIndexRouteImport.update({
   id: '/home/',
   path: '/home/',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
-
 const DashboardExperimentsSingleAgentIndexRoute =
-  DashboardExperimentsSingleAgentIndexImport.update({
+  DashboardExperimentsSingleAgentIndexRouteImport.update({
     id: '/experiments/single-agent/',
     path: '/experiments/single-agent/',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
 
-// Populate the FileRoutesByPath interface
+export interface FileRoutesByFullPath {
+  '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/home/': typeof DashboardHomeIndexRoute
+  '/dashboard/experiments/single-agent/': typeof DashboardExperimentsSingleAgentIndexRoute
+}
+export interface FileRoutesByTo {
+  '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/home': typeof DashboardHomeIndexRoute
+  '/dashboard/experiments/single-agent': typeof DashboardExperimentsSingleAgentIndexRoute
+}
+export interface FileRoutesById {
+  __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/home/': typeof DashboardHomeIndexRoute
+  '/dashboard/experiments/single-agent/': typeof DashboardExperimentsSingleAgentIndexRoute
+}
+export interface FileRouteTypes {
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/dashboard/home/'
+    | '/dashboard/experiments/single-agent/'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/dashboard'
+    | '/dashboard/home'
+    | '/dashboard/experiments/single-agent'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/dashboard/home/'
+    | '/dashboard/experiments/single-agent/'
+  fileRoutesById: FileRoutesById
+}
+export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
+  DashboardRouteRoute: typeof DashboardRouteRouteWithChildren
+}
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexImport
-      parentRoute: typeof rootRoute
-    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRoute
+      preLoaderRoute: typeof DashboardRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/dashboard/home/': {
       id: '/dashboard/home/'
       path: '/home'
-      fullPath: '/dashboard/home'
-      preLoaderRoute: typeof DashboardHomeIndexImport
-      parentRoute: typeof DashboardRouteImport
+      fullPath: '/dashboard/home/'
+      preLoaderRoute: typeof DashboardHomeIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/experiments/single-agent/': {
       id: '/dashboard/experiments/single-agent/'
       path: '/experiments/single-agent'
-      fullPath: '/dashboard/experiments/single-agent'
-      preLoaderRoute: typeof DashboardExperimentsSingleAgentIndexImport
-      parentRoute: typeof DashboardRouteImport
+      fullPath: '/dashboard/experiments/single-agent/'
+      preLoaderRoute: typeof DashboardExperimentsSingleAgentIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
     }
   }
 }
-
-// Create and export the route tree
 
 interface DashboardRouteRouteChildren {
   DashboardHomeIndexRoute: typeof DashboardHomeIndexRoute
@@ -95,92 +129,10 @@ const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(
   DashboardRouteRouteChildren,
 )
 
-export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRouteRouteWithChildren
-  '/dashboard/home': typeof DashboardHomeIndexRoute
-  '/dashboard/experiments/single-agent': typeof DashboardExperimentsSingleAgentIndexRoute
-}
-
-export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRouteRouteWithChildren
-  '/dashboard/home': typeof DashboardHomeIndexRoute
-  '/dashboard/experiments/single-agent': typeof DashboardExperimentsSingleAgentIndexRoute
-}
-
-export interface FileRoutesById {
-  __root__: typeof rootRoute
-  '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRouteRouteWithChildren
-  '/dashboard/home/': typeof DashboardHomeIndexRoute
-  '/dashboard/experiments/single-agent/': typeof DashboardExperimentsSingleAgentIndexRoute
-}
-
-export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/dashboard'
-    | '/dashboard/home'
-    | '/dashboard/experiments/single-agent'
-  fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/dashboard'
-    | '/dashboard/home'
-    | '/dashboard/experiments/single-agent'
-  id:
-    | '__root__'
-    | '/'
-    | '/dashboard'
-    | '/dashboard/home/'
-    | '/dashboard/experiments/single-agent/'
-  fileRoutesById: FileRoutesById
-}
-
-export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  DashboardRouteRoute: typeof DashboardRouteRouteWithChildren
-}
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRouteRoute: DashboardRouteRouteWithChildren,
 }
-
-export const routeTree = rootRoute
+export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-/* ROUTE_MANIFEST_START
-{
-  "routes": {
-    "__root__": {
-      "filePath": "__root.tsx",
-      "children": [
-        "/",
-        "/dashboard"
-      ]
-    },
-    "/": {
-      "filePath": "index.tsx"
-    },
-    "/dashboard": {
-      "filePath": "dashboard/route.tsx",
-      "children": [
-        "/dashboard/home/",
-        "/dashboard/experiments/single-agent/"
-      ]
-    },
-    "/dashboard/home/": {
-      "filePath": "dashboard/home/index.tsx",
-      "parent": "/dashboard"
-    },
-    "/dashboard/experiments/single-agent/": {
-      "filePath": "dashboard/experiments/single-agent/index.tsx",
-      "parent": "/dashboard"
-    }
-  }
-}
-ROUTE_MANIFEST_END */

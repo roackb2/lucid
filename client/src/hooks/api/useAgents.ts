@@ -1,18 +1,55 @@
-import { useMutation } from "@tanstack/react-query";
-import { postRequest } from "../common";
-import { definitions } from "@/types/apiTypes";
-import { atomWithMutation } from "jotai-tanstack-query";
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { trpc } from '@/lib/trpc'
 
 export type CreateAgentProps = {
-  role: string
+  role: 'publisher' | 'consumer'
   task: string
 }
 
+const agentListQueryKey = ['agents', 'list'] as const
+
 const createAgentMutation = {
   mutationKey: ['createAgent'],
-  mutationFn: (arg: CreateAgentProps) => postRequest<definitions['controllers.StartAgentResponse']>('agents/create', arg),
+  mutationFn: (arg: CreateAgentProps) => trpc.agents.create.mutate(arg),
 }
 
-export const useCreateAgent = () => useMutation(createAgentMutation)
+export const useCreateAgent = () => {
+  const queryClient = useQueryClient()
 
-export const createAgentAtom = atomWithMutation(() => createAgentMutation)
+  return useMutation({
+    ...createAgentMutation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: agentListQueryKey })
+    },
+  })
+}
+
+export function useAgentList() {
+  return useQuery({
+    queryKey: agentListQueryKey,
+    queryFn: () => trpc.agents.list.query(),
+    refetchInterval: 5_000,
+  })
+}
+
+export function useAgentMessages(agentId: string) {
+  return useQuery({
+    queryKey: ['agents', agentId, 'messages'],
+    queryFn: () => trpc.agents.messages.query({ agentId }),
+    refetchInterval: 5_000,
+    enabled: Boolean(agentId),
+  })
+}
+
+export function useRunAgentOnce(agentId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationKey: ['agents', agentId, 'runOnce'],
+    mutationFn: () => trpc.agents.runOnce.mutate({ agentId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: agentListQueryKey })
+      queryClient.invalidateQueries({ queryKey: ['agents', agentId, 'messages'] })
+    },
+  })
+}

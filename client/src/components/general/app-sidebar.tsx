@@ -120,7 +120,7 @@ export function AppSidebar() {
                               {item.subItems.map((subItem) => (
                                 <SidebarMenuSubItem key={subItem.title}>
                                   <SidebarMenuButton asChild className="hover:bg-gray-100">
-                                    <Link to={`${baseUrl}${item.url}${subItem.url}`}>
+                                    <Link to={`${baseUrl}${item.url}${subItem.url}` as never}>
                                       <subItem.icon />
                                       <span>{subItem.title}</span>
                                     </Link>
@@ -137,7 +137,7 @@ export function AppSidebar() {
                   return (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild className="hover:bg-gray-100">
-                        <Link to={`${baseUrl}${item.url}`}>
+                        <Link to={`${baseUrl}${item.url}` as never}>
                           <item.icon width={16} height={16} />
                           <span>{item.title}</span>
                         </Link>

@@ -26,7 +26,7 @@ export default function AppBreadcrumb() {
             <BreadcrumbSeparator />
             <BreadcrumbItem>
               {index === paths.length - 1 ? (
-                <Link to={`/${paths.slice(0, index + 1).join('/')}`}>{capitalizePath(path)}</Link>
+                <Link to={`/${paths.slice(0, index + 1).join('/')}` as never}>{capitalizePath(path)}</Link>
               ) : (
                 <BreadcrumbPage>{capitalizePath(path)}</BreadcrumbPage>
               )}

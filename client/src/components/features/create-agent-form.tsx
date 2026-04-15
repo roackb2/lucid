@@ -5,13 +5,12 @@ import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Form, FormDescription, FormControl, FormItem, FormLabel, FormField, FormMessage } from "../ui/form"
 import { Select, SelectValue, SelectTrigger, SelectItem, SelectContent } from "../ui/select"
-import { createAgentAtom, useCreateAgent } from "@/hooks/api/useAgents"
+import { useCreateAgent } from "@/hooks/api/useAgents"
 import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { toast } from "sonner"
 import { useEffect } from "react"
-import { atom, useAtom, useAtomValue } from "jotai"
-import { agentIdsAtom } from "@/atoms/websocketAtoms"
+import { atom, useAtom } from "jotai"
 
 const schema = z.object({
   role: z.enum(['publisher', 'consumer']).default('consumer').optional(),
@@ -25,15 +24,7 @@ const formAtom = atom<z.infer<typeof schema>>({
 
 export default function CreateAgentForm() {
   const [formValues, setFormValues] = useAtom(formAtom)
-  const [createAgentMutation] = useAtom(createAgentAtom)
-  const { mutate: createAgent, isPending, isError, error, data } = createAgentMutation
-  const [agentIds, setAgentIds] = useAtom(agentIdsAtom)
-
-  const onAgentCreated = (agentId: string) => {
-    if (!agentIds.includes(agentId)) {
-      setAgentIds([...agentIds, agentId])
-    }
-  }
+  const { mutate: createAgent, isPending, isError, error, data } = useCreateAgent()
 
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -63,8 +54,7 @@ export default function CreateAgentForm() {
       toast.error(JSON.stringify(error))
       console.error(error)
     } else if (data) {
-      toast.success(data.message)
-      onAgentCreated(data.agent_id ?? '')
+      toast.success((data as { message?: string }).message ?? 'Agent created')
     }
   }, [isError, error, data])
 
