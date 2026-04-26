@@ -24,6 +24,7 @@ bin/*
 # IDE-specific files
 .idea/
 .vscode/
+.heddle/
 
 # OS-specific files
 .DS_Store
