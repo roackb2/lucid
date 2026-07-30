@@ -1,100 +1,59 @@
-import { createHTTPServer } from '@trpc/server/adapters/standalone';
-import { logger } from './logger.js';
-import { createLucidStore } from './store.js';
-import { agentIdInputSchema, createAgentInputSchema } from './types.js';
-import { procedure, router } from './trpc.js';
+import { TRPCError } from '@trpc/server';
+import { z } from 'zod';
+import {
+  DreamTerrariumService,
+  TerrariumBusyError,
+} from './terrarium/service.js';
+import { trpc } from './trpc.js';
 
-const store = createLucidStore();
-
-export const appRouter = router({
-  healthz: procedure.query(() => ({
-    ok: true,
-    service: 'lucid-server',
-    mode: 'ts-rewrite',
-    heartbeatRoot: store.rootDir,
-  })),
-
-  agents: router({
-    create: procedure.input(createAgentInputSchema).mutation(async ({ input }) => {
-      return logProcedure('agents.create', () => store.createAgent(input), { input });
-    }),
-
-    list: procedure.query(async () => {
-      return logProcedure('agents.list', () => store.listAgents());
-    }),
-
-    get: procedure.input(agentIdInputSchema).query(async ({ input }) => {
-      return logProcedure('agents.get', () => store.getAgent(input.agentId), { input });
-    }),
-
-    messages: procedure.input(agentIdInputSchema).query(async ({ input }) => {
-      return logProcedure('agents.messages', () => store.getAgentMessages(input.agentId), { input });
-    }),
-
-    runOnce: procedure.input(agentIdInputSchema).mutation(async ({ input }) => {
-      return logProcedure('agents.runOnce', () => store.runAgentOnce(input.agentId), { input });
-    }),
-  }),
+const advanceInputSchema = z.object({
+  steps: z.number().int().min(1).max(3),
 });
 
-export type AppRouter = typeof appRouter;
+const seedInputSchema = z.object({
+  content: z.string().trim().min(1).max(1_200),
+});
 
-export function createLucidHttpServer(port: number) {
-  return createHTTPServer({
-    middleware(request, response, next) {
-      response.setHeader('Access-Control-Allow-Origin', '*');
-      response.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-      response.setHeader('Access-Control-Allow-Headers', 'content-type');
-
-      if (request.method === 'OPTIONS') {
-        response.writeHead(204);
-        response.end();
-        return;
-      }
-
-      next();
-    },
-    router: appRouter,
-    createContext() {
-      return {};
-    },
-  }).listen(port);
+export function createAppRouter(terrarium: DreamTerrariumService) {
+  return trpc.router({
+    system: trpc.router({
+      health: trpc.procedure.query(() => ({
+        status: 'ok' as const,
+        service: 'lucid-dream-terrarium',
+      })),
+    }),
+    terrarium: trpc.router({
+      snapshot: trpc.procedure.query(() => terrarium.snapshot()),
+      seed: trpc.procedure
+        .input(seedInputSchema)
+        .mutation(({ input }) => terrarium.seed(input.content)),
+      advance: trpc.procedure
+        .input(advanceInputSchema)
+        .mutation(({ input }) => resolveBusyError(
+          () => terrarium.startCycle(input.steps),
+        )),
+      cancel: trpc.procedure.mutation(() => ({
+        cancelled: terrarium.cancelCycle(),
+      })),
+      reset: trpc.procedure.mutation(() => resolveBusyError(
+        () => terrarium.reset(),
+      )),
+    }),
+  });
 }
 
-async function logProcedure<T>(
-  name: string,
-  run: () => Promise<T>,
-  meta: Record<string, unknown> = {},
-): Promise<T> {
-  logger.info(meta, `${name}.started`);
+export type AppRouter = ReturnType<typeof createAppRouter>;
+
+function resolveBusyError<T>(operation: () => T): T {
   try {
-    const result = await run();
-    logger.info({
-      ...meta,
-      result: summarizeResult(result),
-    }, `${name}.finished`);
-    return result;
+    return operation();
   } catch (error) {
-    logger.error({
-      ...meta,
-      error,
-    }, `${name}.failed`);
+    if (error instanceof TerrariumBusyError) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: error.message,
+      });
+    }
     throw error;
   }
-}
-
-function summarizeResult(result: unknown) {
-  if (!result || typeof result !== 'object') {
-    return result;
-  }
-
-  if ('agent_id' in result) {
-    return { agent_id: result.agent_id };
-  }
-
-  if ('agents' in result && Array.isArray(result.agents)) {
-    return { agents: result.agents.length };
-  }
-
-  return result;
 }

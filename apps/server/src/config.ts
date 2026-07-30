@@ -1,56 +1,56 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { config as loadDotEnv } from 'dotenv';
 import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
+import { z } from 'zod';
 
 export const LUCID_REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
-export const DEFAULT_DATABASE_URL = 'postgres://lucid:12345678@localhost:5432/lucid?sslmode=disable';
+export const LUCID_MIGRATIONS_ROOT = fileURLToPath(new URL('../drizzle', import.meta.url));
 
-loadDotEnv();
+loadDotEnv({ path: join(LUCID_REPO_ROOT, '.env'), quiet: true });
 
-export function resolveDatabaseUrl() {
-  return process.env.LUCID_DATABASE_URL ?? process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
-}
+const environmentSchema = z.object({
+  HOST: z.string().trim().min(1).default('127.0.0.1'),
+  PORT: z.coerce.number().int().min(1).max(65_535).default(8081),
+  LOG_LEVEL: z
+    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+    .default('info'),
+  LUCID_WEB_ORIGIN: z.url().default('http://127.0.0.1:3080'),
+  LUCID_STATE_ROOT: z.string().trim().min(1).optional(),
+  LUCID_MODEL: z.string().trim().min(1).default('gpt-5.4-mini'),
+  LUCID_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(7),
+  LUCID_PREFER_API_KEY: z.enum(['true', 'false']).default('false'),
+});
 
-export function resolvePort() {
-  return Number.parseInt(process.env.PORT ?? '8081', 10);
-}
+const environment = environmentSchema.parse(process.env);
 
-export function resolveLogFilePath() {
-  return resolve(LUCID_REPO_ROOT, process.env.LUCID_LOG_FILE ?? 'local/logs/server.log');
-}
+export type LucidConfig = {
+  host: string;
+  port: number;
+  logLevel: string;
+  webOrigin: string;
+  repoRoot: string;
+  stateRoot: string;
+  databasePath: string;
+  heddleStateRoot: string;
+  model: string;
+  maxSteps: number;
+  preferApiKey: boolean;
+};
 
-function loadDotEnv() {
-  const path = resolve(LUCID_REPO_ROOT, '.env');
-  if (!existsSync(path)) {
-    return;
-  }
+export function resolveLucidConfig(): LucidConfig {
+  const stateRoot = resolve(environment.LUCID_STATE_ROOT ?? join(LUCID_REPO_ROOT, 'local', 'terrarium'));
 
-  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue;
-    }
-
-    const separatorIndex = trimmed.indexOf('=');
-    if (separatorIndex === -1) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const value = unquoteEnvValue(trimmed.slice(separatorIndex + 1).trim());
-    if (key && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
-
-function unquoteEnvValue(value: string) {
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    return value.slice(1, -1);
-  }
-
-  return value;
+  return {
+    host: environment.HOST,
+    port: environment.PORT,
+    logLevel: environment.LOG_LEVEL,
+    webOrigin: environment.LUCID_WEB_ORIGIN,
+    repoRoot: LUCID_REPO_ROOT,
+    stateRoot,
+    databasePath: join(stateRoot, 'lucid.sqlite'),
+    heddleStateRoot: join(stateRoot, 'heddle'),
+    model: environment.LUCID_MODEL,
+    maxSteps: environment.LUCID_MAX_STEPS,
+    preferApiKey: environment.LUCID_PREFER_API_KEY === 'true',
+  };
 }

@@ -1,67 +1,32 @@
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
-*.out
-
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
-go.work
-
-# Binary output directory
-/bin/
-bin/*
-
-# IDE-specific files
-.idea/
-.vscode/
-.heddle/
-
-# OS-specific files
+# OS and editors
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
 
-# Log files
-*.log
-
-# Environment variables file
+# Environment
 .env
+!.env.example
 
-# Temporary files
-*.tmp
-
-# Viper config files
-config/*.yaml
-config/*.yml
-config/*.json
-config/*.toml
-config/*.ini
-*.env
-
-# Except for the example config file
-!config/example.yml
-
-# Data
-data/*
-
-# Milvus
-milvus/*
-!milvus/standalone_embed.sh
-
-# Local
-local/*
-
-# Node / TypeScript rewrite
+# Dependencies and build output
 node_modules/
 apps/*/node_modules/
 apps/*/dist/
 *.tsbuildinfo
+
+# Local runtime state
+local/
+.heddle/
+apps/*/.heddle/
+apps/*/local/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+*.tmp
+
+# Retained local artifacts from pre-rewrite Lucid
+/bin/
+/config/
+/data/
+/milvus/

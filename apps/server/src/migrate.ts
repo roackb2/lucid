@@ -1,9 +1,12 @@
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import { db, sql } from './db.js';
+import { LUCID_MIGRATIONS_ROOT, resolveLucidConfig } from './config.js';
+import { LucidDatabaseService } from './database/service.js';
 
-await migrate(db, {
-  migrationsFolder: new URL('../drizzle', import.meta.url).pathname,
-});
+const config = resolveLucidConfig();
+const database = new LucidDatabaseService(config.databasePath);
 
-await sql.end();
-process.stdout.write('Lucid TS migrations applied.\n');
+try {
+  database.migrate(LUCID_MIGRATIONS_ROOT);
+  process.stdout.write(`Lucid database migrated at ${config.databasePath}\n`);
+} finally {
+  database.close();
+}

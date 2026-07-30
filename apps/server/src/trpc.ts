@@ -1,10 +1,10 @@
 import { initTRPC } from '@trpc/server';
 import superjson from 'superjson';
 
-const t = initTRPC.create({
+export type LucidRequestContext = {
+  requestId: string;
+};
+
+export const trpc = initTRPC.context<LucidRequestContext>().create({
   transformer: superjson,
 });
-
-export const createTrpc = () => t;
-export const router = t.router;
-export const procedure = t.procedure;
