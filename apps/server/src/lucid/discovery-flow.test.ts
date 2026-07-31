@@ -8,6 +8,7 @@ import {
   it,
   vi,
 } from 'vitest';
+import { SqliteDiscoveryRepository } from '../database/sqlite-discovery-repository.js';
 import { LucidSqliteDatabase } from '../database/sqlite-database.js';
 import { createLucidLogger } from '../logger.js';
 import { AgentCommunicationToolService } from './agent-communication-tools.js';
@@ -20,7 +21,7 @@ import {
   buildHeddleToolPolicyInstructions,
   buildRepresentativeAgentInstructions,
 } from './agent-prompts.js';
-import { DiscoveryEventRepository } from './discovery-event-repository.js';
+import type { DiscoveryRepository } from './discovery-repository.js';
 import { DiscoveryRunService } from './discovery-run-service.js';
 import type {
   AgentRunner,
@@ -31,21 +32,21 @@ const MIGRATIONS_ROOT = fileURLToPath(new URL('../../drizzle', import.meta.url))
 
 describe('delegated discovery flow', () => {
   let database: LucidSqliteDatabase;
-  let repository: DiscoveryEventRepository;
+  let repository: SqliteDiscoveryRepository;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     database = new LucidSqliteDatabase(':memory:');
     database.migrate(MIGRATIONS_ROOT);
-    repository = new DiscoveryEventRepository(database);
-    repository.initialize();
+    repository = new SqliteDiscoveryRepository(database);
+    await repository.initialize();
   });
 
   afterEach(() => {
     database.close();
   });
 
-  it('creates one real participant without exposing simulated private context', () => {
-    const snapshot = repository.readSnapshot();
+  it('creates one real participant without exposing simulated private context', async () => {
+    const snapshot = await repository.readSnapshot();
 
     expect(snapshot.workspace.currentStep).toBe(0);
     expect(snapshot.user).toMatchObject({
@@ -68,38 +69,40 @@ describe('delegated discovery flow', () => {
     );
   });
 
-  it('delivers a saved interest only to the user agent', () => {
-    const interest = repository.saveInterest(
+  it('delivers a saved interest only to the user agent', async () => {
+    const interest = await repository.saveInterest(
       'Notice product ideas that require agents to represent different people.',
     );
 
     expect(
-      repository
-        .listEventsVisibleToAgent(USER_AGENT_ID, 0)
+      (await repository
+        .listEventsVisibleToAgent(USER_AGENT_ID, 0))
         .map((event) => event.sequence),
     ).toContain(interest.sequence);
     expect(
-      repository
-        .listEventsVisibleToAgent('sample-music-agent', 0)
+      (await repository
+        .listEventsVisibleToAgent('sample-music-agent', 0))
         .map((event) => event.sequence),
     ).not.toContain(interest.sequence);
     expect(
-      repository
-        .listEventsVisibleToAgent('sample-product-agent', 0)
+      (await repository
+        .listEventsVisibleToAgent('sample-product-agent', 0))
         .map((event) => event.sequence),
     ).not.toContain(interest.sequence);
   });
 
-  it('declares host-owned tool effects and the exact Heddle write root', () => {
-    const tools = new AgentCommunicationToolService(
+  it('declares host-owned tool effects and the exact Heddle write root', async () => {
+    const tools = await new AgentCommunicationToolService(
       repository,
-      repository.requireUserAgent(),
-      repository.requireParticipant(LOCAL_USER_ID),
+      await repository.requireUserAgent(),
+      await repository.requireParticipant(LOCAL_USER_ID),
       'requesting',
       'discovery-tool-policy-test',
       1,
     ).definitions();
-    const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
+    const toolsByName = new Map(
+      tools.map((tool) => [tool.name, tool]),
+    );
     const workspaceRoot = '/tmp/lucid-tool-policy-test';
 
     expect(
@@ -124,10 +127,10 @@ describe('delegated discovery flow', () => {
     );
   });
 
-  it('interpolates participant context and visible events into readable prompts', () => {
-    const agent = repository.requireUserAgent();
-    const participant = repository.requireParticipant(LOCAL_USER_ID);
-    const interest = repository.saveInterest(
+  it('interpolates participant context and visible events into readable prompts', async () => {
+    const agent = await repository.requireUserAgent();
+    const participant = await repository.requireParticipant(LOCAL_USER_ID);
+    const interest = await repository.saveInterest(
       'Find a concrete agent-native product experiment.',
     );
 
@@ -143,18 +146,18 @@ Their saved interest and feedback are private.`);
   });
 
   it('runs each participant once and reports a peer-sourced finding', async () => {
-    repository.saveInterest(
+    await repository.saveInterest(
       'Look for agent-native product ideas that are not personal utilities.',
     );
     const agentRunner = new RoutingAgentRunner(repository);
     const service = createService(repository, agentRunner);
 
-    service.startRun();
-    await vi.waitFor(() => {
-      expect(service.snapshot().activeRun).toBeUndefined();
+    await service.startRun();
+    await vi.waitFor(async () => {
+      expect((await service.snapshot()).activeRun).toBeUndefined();
     });
 
-    const snapshot = service.snapshot();
+    const snapshot = await service.snapshot();
     expect(
       agentRunner.observations.map(
         ({ agentId, phase }) => `${agentId}:${phase}`,
@@ -182,15 +185,15 @@ Their saved interest and feedback are private.`);
   });
 
   it('records an explicit no-match finding when peers contribute nothing', async () => {
-    repository.saveInterest('Report only a genuinely specific match.');
+    await repository.saveInterest('Report only a genuinely specific match.');
     const service = createService(repository, new NoMatchAgentRunner());
 
-    service.startRun();
-    await vi.waitFor(() => {
-      expect(service.snapshot().activeRun).toBeUndefined();
+    await service.startRun();
+    await vi.waitFor(async () => {
+      expect((await service.snapshot()).activeRun).toBeUndefined();
     });
 
-    expect(service.snapshot().findings[0]).toMatchObject({
+    expect((await service.snapshot()).findings[0]).toMatchObject({
       noMatch: true,
       sources: [],
       finding: {
@@ -200,16 +203,16 @@ Their saved interest and feedback are private.`);
   });
 
   it('rejects invisible sources without spending the action budget', async () => {
-    const userAgent = repository.requireUserAgent();
-    const user = repository.requireParticipant(LOCAL_USER_ID);
-    const hidden = repository.appendEvent({
+    const userAgent = await repository.requireUserAgent();
+    const user = await repository.requireParticipant(LOCAL_USER_ID);
+    const hidden = await repository.appendEvent({
       kind: 'direct_message',
       actorAgentId: 'sample-music-agent',
       targetAgentId: 'sample-product-agent',
       title: 'Hidden message',
       content: 'The user agent cannot cite this.',
     });
-    const visible = repository.appendEvent({
+    const visible = await repository.appendEvent({
       kind: 'direct_message',
       actorAgentId: 'sample-music-agent',
       targetAgentId: USER_AGENT_ID,
@@ -225,7 +228,7 @@ Their saved interest and feedback are private.`);
       1,
     );
     const requestingDefinitions = new Map(
-      requestingTools.definitions().map((tool) => [tool.name, tool]),
+      (await requestingTools.definitions()).map((tool) => [tool.name, tool]),
     );
 
     const rejected = await requestingDefinitions.get('post_shared_message')!.execute({
@@ -258,8 +261,8 @@ Their saved interest and feedback are private.`);
       'discovery-reporting-test',
       2,
     );
-    const reportFinding = reportingTools
-      .definitions()
+    const reportFinding = (await reportingTools
+      .definitions())
       .find((tool) => tool.name === 'report_finding');
     expect(reportFinding).toBeDefined();
 
@@ -276,43 +279,44 @@ Their saved interest and feedback are private.`);
   });
 
   it('delivers free-text feedback only to the user agent', async () => {
-    repository.saveInterest('Find one relevant match.');
+    await repository.saveInterest('Find one relevant match.');
     const service = createService(
       repository,
       new RoutingAgentRunner(repository),
     );
-    service.startRun();
-    await vi.waitFor(() => {
-      expect(service.snapshot().activeRun).toBeUndefined();
+    await service.startRun();
+    await vi.waitFor(async () => {
+      expect((await service.snapshot()).activeRun).toBeUndefined();
     });
-    const findingSequence = service.snapshot().findings[0]!.finding.sequence;
+    const findingSequence = (await service.snapshot())
+      .findings[0]!.finding.sequence;
 
-    service.submitFeedback(
+    await service.submitFeedback(
       findingSequence,
       'The sources were useful, but next time bring a concrete person or project.',
     );
 
-    const snapshot = service.snapshot();
+    const snapshot = await service.snapshot();
     expect(snapshot.findings[0]!.feedback?.content).toContain(
       'concrete person or project',
     );
     expect(
-      repository
-        .listEventsVisibleToAgent(USER_AGENT_ID, 0)
+      (await repository
+        .listEventsVisibleToAgent(USER_AGENT_ID, 0))
         .some((event) => event.kind === 'feedback_saved'),
     ).toBe(true);
     expect(
-      repository
-        .listEventsVisibleToAgent('sample-music-agent', 0)
+      (await repository
+        .listEventsVisibleToAgent('sample-music-agent', 0))
         .some((event) => event.kind === 'feedback_saved'),
     ).toBe(false);
   });
 
-  it('recovers an interrupted agent step without consuming unread input', () => {
-    repository.saveInterest(
+  it('recovers an interrupted agent step without consuming unread input', async () => {
+    await repository.saveInterest(
       'Keep this private interest unread until a successful agent step.',
     );
-    const step = repository.beginAgentStep(
+    const step = await repository.beginAgentStep(
       USER_AGENT_ID,
       'discovery-recovery',
       'requesting',
@@ -320,36 +324,38 @@ Their saved interest and feedback are private.`);
     expect(
       step.visibleEvents.some((event) => event.kind === 'interest_saved'),
     ).toBe(true);
-    expect(repository.requireUserAgent().status).toBe('running');
+    expect((await repository.requireUserAgent()).status).toBe('running');
 
-    repository.initialize();
+    await repository.initialize();
 
-    expect(repository.requireUserAgent().status).toBe('idle');
+    expect((await repository.requireUserAgent()).status).toBe('idle');
     expect(
-      repository
-        .listEventsVisibleToAgent(USER_AGENT_ID, 0)
+      (await repository
+        .listEventsVisibleToAgent(USER_AGENT_ID, 0))
         .some((event) => event.kind === 'interest_saved'),
     ).toBe(true);
-    expect(repository.readSnapshot().events.at(-1)).toMatchObject({
+    expect((await repository.readSnapshot()).events.at(-1)).toMatchObject({
       kind: 'error',
       title: 'Interrupted agent steps recovered',
     });
   });
 
   it('waits for an interrupted agent execution before shutdown', async () => {
-    repository.saveInterest('Begin a discovery check that will be cancelled.');
+    await repository.saveInterest(
+      'Begin a discovery check that will be cancelled.',
+    );
     const service = createService(
       repository,
       new InterruptibleAgentRunner(),
     );
 
-    service.startRun();
-    await vi.waitFor(() => {
-      expect(service.snapshot().activeRun?.agentId).toBe(USER_AGENT_ID);
+    await service.startRun();
+    await vi.waitFor(async () => {
+      expect((await service.snapshot()).activeRun?.agentId).toBe(USER_AGENT_ID);
     });
     await service.stop();
 
-    const snapshot = service.snapshot();
+    const snapshot = await service.snapshot();
     expect(snapshot.activeRun).toBeUndefined();
     expect(snapshot.agents[0]?.status).toBe('idle');
     expect(snapshot.events.at(-1)).toMatchObject({
@@ -363,7 +369,7 @@ Their saved interest and feedback are private.`);
 });
 
 function createService(
-  repository: DiscoveryEventRepository,
+  repository: DiscoveryRepository,
   agentRunner: AgentRunner,
 ) {
   return new DiscoveryRunService(
@@ -381,7 +387,7 @@ class RoutingAgentRunner implements AgentRunner {
     visibleKinds: string[];
   }> = [];
 
-  constructor(private readonly repository: DiscoveryEventRepository) {}
+  constructor(private readonly repository: DiscoveryRepository) {}
 
   async startAgentStep(input: StartAgentRunInput) {
     this.observations.push({
@@ -399,7 +405,7 @@ class RoutingAgentRunner implements AgentRunner {
       const interest = input.visibleEvents.find(
         (event) => event.kind === 'interest_saved',
       );
-      this.repository.appendEvent({
+      await this.repository.appendEvent({
         stepNumber: input.stepNumber,
         kind: 'shared_message',
         actorAgentId: input.agent.id,
@@ -416,7 +422,7 @@ class RoutingAgentRunner implements AgentRunner {
       const request = input.visibleEvents.find(
         (event) => event.kind === 'shared_message',
       );
-      this.repository.appendEvent({
+      await this.repository.appendEvent({
         stepNumber: input.stepNumber,
         kind: 'direct_message',
         actorAgentId: input.agent.id,
@@ -433,7 +439,7 @@ class RoutingAgentRunner implements AgentRunner {
       const sources = input.visibleEvents.filter(
         (event) => event.kind === 'direct_message',
       );
-      this.repository.appendEvent({
+      await this.repository.appendEvent({
         stepNumber: input.stepNumber,
         kind: 'finding_reported',
         actorAgentId: USER_AGENT_ID,

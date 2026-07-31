@@ -8,12 +8,24 @@ infrastructure, not the delegated-discovery domain.
 | File | Responsibility |
 | --- | --- |
 | `sqlite-database.ts` | Opens and closes SQLite, creates the parent directory, applies durability pragmas, exposes the Drizzle handle, and runs migrations |
+| `sqlite-discovery-repository.ts` | Implements the async `DiscoveryRepository` domain port with SQLite and Drizzle |
 | `schema.ts` | Declares the persisted tables, indexes, and database-level constraints |
 
 `LucidSqliteDatabase` is deliberately not named a service or repository. It
 owns the lifetime and configuration of one SQLite resource. Domain
-repositories own data access and behavior; currently that responsibility
-belongs to `../lucid/discovery-event-repository.ts`.
+repositories own data access and behavior. The storage-independent contract is
+`../lucid/discovery-repository.ts`; `SqliteDiscoveryRepository` is the current
+adapter.
+
+The port is asynchronous even though `better-sqlite3` performs synchronous
+local I/O. A PostgreSQL adapter can therefore use a conventional async driver
+without changing `DiscoveryRunService`, `HeddleAgentRunner`,
+`AgentCommunicationToolService`, or tRPC.
+
+Replacing the adapter is not the same as making Lucid distributed. A remote
+adapter must preserve transaction boundaries, monotonic event sequences, and
+cursor semantics. Process-local active runs, cancellation handles, and
+heartbeat scheduler ownership require a separate hosted execution design.
 
 ## Data ownership
 
@@ -52,4 +64,4 @@ discovery_events actor/target/source     ──> logical delivery and causality
 
 The schema uses foreign keys for workspace and participant ownership.
 Event actor, recipient, and source identifiers remain logical references in
-the append-only ledger and are validated by `DiscoveryEventRepository`.
+the append-only ledger and are validated by the repository adapter.

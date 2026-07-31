@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import dayjs from 'dayjs';
 import type { LucidLogger } from '../logger.js';
-import type { DiscoveryEventRepository } from './discovery-event-repository.js';
+import type { DiscoveryRepository } from './discovery-repository.js';
 import {
   type ActiveDiscoveryRunView,
   type AgentRunner,
@@ -38,17 +38,15 @@ export class DiscoveryRunService {
   private activeRun?: ActiveDiscoveryRun;
 
   constructor(
-    private readonly repository: DiscoveryEventRepository,
+    private readonly repository: DiscoveryRepository,
     private readonly agentRunner: AgentRunner,
     private readonly runtime: { model: string; heddleVersion: string },
     private readonly logger: LucidLogger,
-  ) {
-    this.repository.initialize();
-  }
+  ) {}
 
-  snapshot(): DiscoveryWorkspaceSnapshot {
+  async snapshot(): Promise<DiscoveryWorkspaceSnapshot> {
     return {
-      ...this.repository.readSnapshot(),
+      ...await this.repository.readSnapshot(),
       activeRun: this.activeRun
         ? toActiveDiscoveryRunView(this.activeRun)
         : undefined,
@@ -56,26 +54,28 @@ export class DiscoveryRunService {
     };
   }
 
-  saveInterest(content: string): DiscoveryWorkspaceSnapshot {
+  async saveInterest(content: string): Promise<DiscoveryWorkspaceSnapshot> {
     this.requireIdle(
       'Wait for the active discovery check before changing the saved interest.',
     );
-    this.repository.saveInterest(content);
-    return this.snapshot();
+    await this.repository.saveInterest(content);
+    return await this.snapshot();
   }
 
-  startRun(): ActiveDiscoveryRunView {
+  async startRun(): Promise<ActiveDiscoveryRunView> {
     if (this.activeRun) {
       throw new DiscoveryRunBusyError('A discovery check is already running.');
     }
-    if (!this.repository.findSavedInterest()) {
+    if (!await this.repository.findSavedInterest()) {
       throw new DiscoveryInputError(
         'Save what Lucid should look for before starting a check.',
       );
     }
 
-    const agents = this.repository.listAgents();
-    const userAgent = this.repository.requireUserAgent();
+    const [agents, userAgent] = await Promise.all([
+      this.repository.listAgents(),
+      this.repository.requireUserAgent(),
+    ]);
     const sourceAgents = agents.filter((agent) => agent.id !== userAgent.id);
     if (!sourceAgents.length) {
       throw new DiscoveryInputError(
@@ -121,13 +121,13 @@ export class DiscoveryRunService {
     return toActiveDiscoveryRunView(activeRun);
   }
 
-  submitFeedback(
+  async submitFeedback(
     findingSequence: number,
     content: string,
-  ): DiscoveryWorkspaceSnapshot {
+  ): Promise<DiscoveryWorkspaceSnapshot> {
     this.requireIdle('Wait for the active discovery check before responding.');
     try {
-      this.repository.saveFeedback(findingSequence, content);
+      await this.repository.saveFeedback(findingSequence, content);
     } catch (error) {
       throw new DiscoveryInputError(
         error instanceof Error
@@ -135,7 +135,7 @@ export class DiscoveryRunService {
           : 'Lucid could not save this feedback.',
       );
     }
-    return this.snapshot();
+    return await this.snapshot();
   }
 
   cancelRun(): boolean {
@@ -155,12 +155,12 @@ export class DiscoveryRunService {
     await activeRun.completion;
   }
 
-  resetWorkspace(): DiscoveryWorkspaceSnapshot {
+  async resetWorkspace(): Promise<DiscoveryWorkspaceSnapshot> {
     this.requireIdle(
       'Stop the active discovery check before resetting the workspace.',
     );
-    this.repository.reset();
-    return this.snapshot();
+    await this.repository.reset();
+    return await this.snapshot();
   }
 
   private async executeDiscoveryRun(
@@ -171,7 +171,7 @@ export class DiscoveryRunService {
         return;
       }
 
-      const agentStep = this.repository.beginAgentStep(
+      const agentStep = await this.repository.beginAgentStep(
         step.agentId,
         activeRun.id,
         step.phase,
@@ -222,7 +222,7 @@ export class DiscoveryRunService {
       activeRun.agentExecutionId = agentRun.executionId;
 
       const result = await agentRun.result;
-      this.repository.appendEvent({
+      await this.repository.appendEvent({
         stepNumber: agentStep.stepNumber,
         kind: 'agent_step_completed',
         actorAgentId: agentStep.agent.id,
@@ -238,13 +238,13 @@ export class DiscoveryRunService {
           agentExecutionId: agentRun.executionId,
         },
       });
-      this.repository.completeAgentStep(
+      await this.repository.completeAgentStep(
         agentStep.agent.id,
         agentStep.horizonSequence,
       );
 
       if (agentStep.phase === 'reporting') {
-        this.repository.ensureNoFindingResult(
+        await this.repository.ensureNoFindingResult(
           activeRun.id,
           agentStep.stepNumber,
         );
@@ -252,7 +252,7 @@ export class DiscoveryRunService {
       return true;
     } catch (error) {
       const cancelled = activeRun.controller.signal.aborted;
-      this.repository.appendEvent({
+      await this.repository.appendEvent({
         stepNumber: agentStep.stepNumber,
         kind: 'error',
         actorAgentId: agentStep.agent.id,
@@ -271,11 +271,11 @@ export class DiscoveryRunService {
         },
       });
       if (cancelled) {
-        this.repository.interruptAgentStep(agentStep.agent.id);
+        await this.repository.interruptAgentStep(agentStep.agent.id);
         return false;
       }
 
-      this.repository.failAgentStep(agentStep.agent.id);
+      await this.repository.failAgentStep(agentStep.agent.id);
       throw error;
     }
   }

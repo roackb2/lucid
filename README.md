@@ -63,7 +63,7 @@ the prototype. It does not prove that the message is true or useful.
 | Lucid owns | Heddle owns |
 | --- | --- |
 | Participants and representative agents | Durable conversation per agent |
-| SQLite discovery event history | Model and tool loop |
+| Async discovery repository and storage adapters | Model and tool loop |
 | Visibility and causal-source validation | Turn leases and cancellation |
 | Four-step discovery route | Activity events and traces |
 | Finding and feedback delivery | Provider authentication |
@@ -87,8 +87,9 @@ The implementation uses responsibility-based names:
 | Name | Responsibility |
 | --- | --- |
 | `LucidSqliteDatabase` | Owns the concrete SQLite connection, pragmas, migrations, and shutdown |
+| `DiscoveryRepository` | Async domain persistence contract used by Lucid services |
+| `SqliteDiscoveryRepository` | SQLite/Drizzle implementation of that contract |
 | `DiscoveryRunService` | Coordinates one bounded four-step discovery run |
-| `DiscoveryEventRepository` | Persists participants, agents, events, visibility, and cursors |
 | `HeddleAgentRunner` | Executes one representative-agent step through Heddle |
 | `AgentCommunicationToolService` | Validates and executes scoped communication operations |
 | `DiscoveryWorkspace` | Durable state for the local discovery product |
@@ -97,6 +98,26 @@ The implementation uses responsibility-based names:
 The authoritative backend boundaries are documented in
 [`apps/server/src/database/README.md`](apps/server/src/database/README.md) and
 [`apps/server/src/lucid/README.md`](apps/server/src/lucid/README.md).
+
+## Periodic discovery direction
+
+Heddle heartbeat is the right local execution primitive for scheduled Lucid
+checks, but Lucid remains the host and product scheduler:
+
+- Each representative agent owns one heartbeat task and durable checkpoint.
+- On wake, the agent reads only its visible mailbox events and takes bounded
+  communication actions.
+- Lucid owns participant identity, visibility, finding delivery, and
+  idempotent wake claims.
+- Heddle records task timing, run history, retry/checkpoint state, and owns the
+  local scheduler loop.
+
+This should replace manual-only checks in the next slice. It should not replace
+the representative-agent mailbox or wrap the existing fixed route in a second
+heartbeat lifecycle. Manual start can become a run-now operation over these
+tasks. Heddle's built-in scheduler is single-host and not distributed
+exactly-once; a hosted multi-replica version would need an external durable
+queue/workflow layer.
 
 ## Run locally
 

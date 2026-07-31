@@ -21,6 +21,8 @@ bounded execution, and recovery predictable.
 - `src/migrate.ts` applies checked-in SQLite migrations.
 - `src/database/sqlite-database.ts` owns the concrete SQLite connection,
   pragmas, migrations, and shutdown.
+- `src/database/sqlite-discovery-repository.ts` implements Lucid's async domain
+  repository port with Drizzle and SQLite.
 - `src/router.ts` exposes the `discovery` tRPC namespace:
   - `snapshot`
   - `saveInterest`
@@ -33,8 +35,8 @@ bounded execution, and recovery predictable.
 ## Service boundary
 
 `src/lucid` owns participant, representative-agent, discovery-run, visibility,
-finding, and feedback behavior. Heddle is integrated only through
-`HeddleAgentRunner`.
+finding, feedback behavior, and the storage-independent `DiscoveryRepository`
+port. Heddle is integrated only through `HeddleAgentRunner`.
 
 Transport code must not reproduce:
 

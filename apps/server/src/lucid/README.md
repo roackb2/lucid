@@ -9,7 +9,7 @@ runtime and from tRPC transport.
 | File | Responsibility |
 | --- | --- |
 | `discovery-run-service.ts` | Starts, sequences, cancels, and settles one four-step discovery run |
-| `discovery-event-repository.ts` | Persists and queries workspaces, participants, agents, events, visibility, cursors, findings, and feedback |
+| `discovery-repository.ts` | Defines the async, storage-independent domain persistence port |
 | `heddle-agent-runner.ts` | Adapts one domain agent step to one Heddle conversation turn |
 | `agent-communication-tools.ts` | Exposes bounded read/message/finding/no-action operations and validates their inputs |
 | `agent-prompts.ts` | Builds representative-agent and per-phase instructions |
@@ -73,7 +73,7 @@ allowlist. It also declares host-owned tool effects and gives Heddle the exact
 workspace root required for local write policy. Coding, shell, browser, generic
 memory, and MCP tools remain absent.
 
-`DiscoveryEventRepository` does not read or interpret Heddle files.
+`DiscoveryRepository` does not read or interpret Heddle files.
 `HeddleAgentRunner` does not decide event visibility, source validity, route
 order, or whether a finding was delivered.
 
@@ -100,7 +100,7 @@ real-time socket or peer process. Lucid provides a serialized mailbox over the
 append-only `discovery_events` table:
 
 1. `DiscoveryRunService` chooses the next agent in the bounded route.
-2. `DiscoveryEventRepository.beginAgentStep` reads only events visible to that
+2. `DiscoveryRepository.beginAgentStep` reads only events visible to that
    agent after its durable `lastSeenSequence`.
 3. `HeddleAgentRunner` starts one Heddle turn with those unread events and a
    scoped `AgentCommunicationToolService`.
@@ -117,6 +117,32 @@ append-only `discovery_events` table:
 which visible message caused a later message or finding, but do not certify
 the content as true.
 
+## Scheduling boundary
+
+Periodic discovery should use Heddle heartbeat as a scheduler/execution
+primitive, with Lucid remaining the product host:
+
+- Lucid owns participant identity, mailbox visibility, finding delivery, wake
+  claims, and product-level idempotency.
+- Each representative agent should own one Heddle heartbeat task and checkpoint
+  so it can wake independently, read its mailbox, and take bounded actions.
+- The heartbeat runner should receive participant-specific context and Lucid
+  communication tools; it must not invent its own participants or visibility
+  rules.
+- Manual "start check" can become an operator run-now/sweep over agent tasks
+  instead of a separate fixed-route runtime.
+- Heddle owns local task timing, run records, retry state, checkpoint state, and
+  the start/stop scheduler lifecycle.
+
+Do not wrap the current four-step `DiscoveryRunService` in a heartbeat task as
+if Heddle were only a cron callback. That would retain the process-local route
+while adding a second task/checkpoint lifecycle around it.
+
+The built-in heartbeat scheduler is a single-host local primitive, not a
+distributed exactly-once executor. A future multi-replica deployment still
+needs a host-selected durable queue or workflow engine and idempotent Lucid run
+claims.
+
 ## Recovery boundary
 
 The active Heddle execution and run route are process-local. Completed events,
@@ -124,7 +150,7 @@ agent cursors, findings, and Heddle conversations are durable.
 
 Graceful shutdown stops new HTTP work, aborts and settles the active Heddle
 execution, restores the current agent to `idle`, and then closes SQLite. On an
-unclean restart, `DiscoveryEventRepository.initialize` releases stale
+unclean restart, `DiscoveryRepository.initialize` releases stale
 `running` states without advancing their cursors and records an
 operator-visible recovery event.
 

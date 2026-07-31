@@ -6,7 +6,7 @@ import type {
   ToolResult,
 } from '@roackb2/heddle';
 import { LOCAL_USER_ID } from './default-participants.js';
-import type { DiscoveryEventRepository } from './discovery-event-repository.js';
+import type { DiscoveryRepository } from './discovery-repository.js';
 import type {
   Agent,
   DiscoveryEvent,
@@ -62,7 +62,7 @@ export class AgentCommunicationToolService {
   private mutations = 0;
 
   constructor(
-    private readonly repository: DiscoveryEventRepository,
+    private readonly repository: DiscoveryRepository,
     private readonly agent: Agent,
     private readonly participant: Participant,
     private readonly phase: DiscoveryRunPhase,
@@ -70,7 +70,8 @@ export class AgentCommunicationToolService {
     private readonly stepNumber: number,
   ) {}
 
-  definitions(): ToolDefinition[] {
+  async definitions(): Promise<ToolDefinition[]> {
+    const agents = await this.repository.listAgents();
     const commonTools: ToolDefinition[] = [
       {
         name: 'read_available_messages',
@@ -131,8 +132,7 @@ export class AgentCommunicationToolService {
           properties: {
             target_agent_id: {
               type: 'string',
-              enum: this.repository
-                .listAgents()
+              enum: agents
                 .filter((candidate) => candidate.id !== this.agent.id)
                 .map((candidate) => candidate.id),
             },
@@ -204,20 +204,21 @@ export class AgentCommunicationToolService {
     };
   }
 
-  private readAvailableMessages(input: unknown): ToolResult {
+  private async readAvailableMessages(input: unknown): Promise<ToolResult> {
     const parsed = readMessagesInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
 
-    const events = this.repository.listEventsVisibleToAgent(
-      this.agent.id,
-      parsed.data.after_sequence ?? this.agent.lastSeenSequence,
-      parsed.data.limit,
-    );
-    const agentById = new Map(
-      this.repository.listAgents().map((agent) => [agent.id, agent]),
-    );
+    const [events, agents] = await Promise.all([
+      this.repository.listEventsVisibleToAgent(
+        this.agent.id,
+        parsed.data.after_sequence ?? this.agent.lastSeenSequence,
+        parsed.data.limit,
+      ),
+      this.repository.listAgents(),
+    ]);
+    const agentById = new Map(agents.map((agent) => [agent.id, agent]));
 
     return {
       ok: true,
@@ -227,19 +228,22 @@ export class AgentCommunicationToolService {
     };
   }
 
-  private postSharedMessage(input: unknown): ToolResult {
+  private async postSharedMessage(input: unknown): Promise<ToolResult> {
     const parsed = sharedMessageInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
     const sourceEventIds = uniq(parsed.data.source_event_ids);
-    const validationFailure = this.validateSources(sourceEventIds)
-      ?? this.reserveMutation();
+    const validationFailure = await this.validateSources(sourceEventIds);
     if (validationFailure) {
       return validationFailure;
     }
+    const budgetFailure = this.reserveMutation();
+    if (budgetFailure) {
+      return budgetFailure;
+    }
 
-    return eventResult(this.repository.appendEvent({
+    return eventResult(await this.repository.appendEvent({
       stepNumber: this.stepNumber,
       kind: 'shared_message',
       actorAgentId: this.agent.id,
@@ -255,13 +259,12 @@ export class AgentCommunicationToolService {
     }));
   }
 
-  private sendDirectMessage(input: unknown): ToolResult {
+  private async sendDirectMessage(input: unknown): Promise<ToolResult> {
     const parsed = directMessageInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
-    const target = this.repository
-      .listAgents()
+    const target = (await this.repository.listAgents())
       .find((candidate) => candidate.id === parsed.data.target_agent_id);
     if (!target) {
       return { ok: false, error: 'The requested agent does not exist.' };
@@ -271,13 +274,16 @@ export class AgentCommunicationToolService {
     }
 
     const sourceEventIds = uniq(parsed.data.source_event_ids);
-    const validationFailure = this.validateSources(sourceEventIds)
-      ?? this.reserveMutation();
+    const validationFailure = await this.validateSources(sourceEventIds);
     if (validationFailure) {
       return validationFailure;
     }
+    const budgetFailure = this.reserveMutation();
+    if (budgetFailure) {
+      return budgetFailure;
+    }
 
-    return eventResult(this.repository.appendEvent({
+    return eventResult(await this.repository.appendEvent({
       stepNumber: this.stepNumber,
       kind: 'direct_message',
       actorAgentId: this.agent.id,
@@ -294,14 +300,14 @@ export class AgentCommunicationToolService {
     }));
   }
 
-  private reportFinding(input: unknown): ToolResult {
+  private async reportFinding(input: unknown): Promise<ToolResult> {
     if (!this.canReportFinding()) {
       return {
         ok: false,
         error: 'This agent cannot report a finding during the current phase.',
       };
     }
-    if (this.repository.hasFindingForRun(this.discoveryRunId)) {
+    if (await this.repository.hasFindingForRun(this.discoveryRunId)) {
       return { ok: false, error: 'This discovery run already has a finding.' };
     }
 
@@ -310,11 +316,11 @@ export class AgentCommunicationToolService {
       return invalidInput(parsed.error);
     }
     const sourceEventIds = uniq(parsed.data.source_event_ids);
-    const sourceFailure = this.validateSources(sourceEventIds);
+    const sourceFailure = await this.validateSources(sourceEventIds);
     if (sourceFailure) {
       return sourceFailure;
     }
-    const visibleSources = this.repository.readVisibleEventsBySequence(
+    const visibleSources = await this.repository.readVisibleEventsBySequence(
       this.agent.id,
       sourceEventIds,
     );
@@ -335,7 +341,7 @@ export class AgentCommunicationToolService {
       return budgetFailure;
     }
 
-    return eventResult(this.repository.appendEvent({
+    return eventResult(await this.repository.appendEvent({
       stepNumber: this.stepNumber,
       kind: 'finding_reported',
       actorAgentId: this.agent.id,
@@ -352,7 +358,7 @@ export class AgentCommunicationToolService {
     }));
   }
 
-  private finishWithoutAction(input: unknown): ToolResult {
+  private async finishWithoutAction(input: unknown): Promise<ToolResult> {
     const parsed = noActionInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
@@ -362,7 +368,7 @@ export class AgentCommunicationToolService {
       return budgetFailure;
     }
 
-    return eventResult(this.repository.appendEvent({
+    return eventResult(await this.repository.appendEvent({
       stepNumber: this.stepNumber,
       kind: 'no_action',
       actorAgentId: this.agent.id,
@@ -392,13 +398,15 @@ export class AgentCommunicationToolService {
     return undefined;
   }
 
-  private validateSources(sourceEventIds: number[]): ToolResult | undefined {
+  private async validateSources(
+    sourceEventIds: number[],
+  ): Promise<ToolResult | undefined> {
     if (!sourceEventIds.length) {
       return undefined;
     }
     const visibleSequences = new Set(
-      this.repository
-        .readVisibleEventsBySequence(this.agent.id, sourceEventIds)
+      (await this.repository
+        .readVisibleEventsBySequence(this.agent.id, sourceEventIds))
         .map((event) => event.sequence),
     );
     const unavailable = sourceEventIds.filter(

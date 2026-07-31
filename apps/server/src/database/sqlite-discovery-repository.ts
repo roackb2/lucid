@@ -10,35 +10,37 @@ import {
   ne,
   or,
 } from 'drizzle-orm';
-import type { LucidSqliteDatabase } from '../database/sqlite-database.js';
-import {
-  discoveryEvents,
-  discoveryWorkspaces,
-  participants,
-  representativeAgents,
-} from '../database/schema.js';
 import {
   DEFAULT_AGENTS,
   DEFAULT_PARTICIPANTS,
   LOCAL_USER_ID,
   USER_AGENT_ID,
-} from './default-participants.js';
+} from '../lucid/default-participants.js';
+import type {
+  AppendDiscoveryEventInput,
+  DiscoveryRepository,
+  DiscoveryRepositorySnapshot,
+} from '../lucid/discovery-repository.js';
 import {
   agentStatusSchema,
   discoveryEventKindSchema,
   participantKindSchema,
   type Agent,
   type AgentStepContext,
-  type AgentView,
   type DiscoveryEvent,
-  type DiscoveryEventKind,
-  type DiscoveryEventMetadata,
   type DiscoveryRunPhase,
   type DiscoveryWorkspace,
   type FindingView,
   type Participant,
   type ParticipantView,
-} from './discovery-types.js';
+} from '../lucid/discovery-types.js';
+import {
+  discoveryEvents,
+  discoveryWorkspaces,
+  participants,
+  representativeAgents,
+} from './schema.js';
+import type { LucidSqliteDatabase } from './sqlite-database.js';
 
 const WORKSPACE_ID = 'local-discovery-workspace';
 const SNAPSHOT_EVENT_LIMIT = 220;
@@ -49,36 +51,14 @@ type DiscoveryEventRow = typeof discoveryEvents.$inferSelect;
 type DiscoveryWorkspaceRow = typeof discoveryWorkspaces.$inferSelect;
 type ParticipantRow = typeof participants.$inferSelect;
 
-export type AppendDiscoveryEventInput = {
-  stepNumber?: number;
-  kind: DiscoveryEventKind;
-  actorAgentId?: string;
-  targetAgentId?: string;
-  targetParticipantId?: string;
-  parentSequence?: number;
-  title: string;
-  content: string;
-  metadata?: DiscoveryEventMetadata;
-};
-
-export type DiscoveryRepositorySnapshot = {
-  workspace: DiscoveryWorkspace;
-  user: ParticipantView;
-  agents: AgentView[];
-  interest?: DiscoveryEvent;
-  findings: FindingView[];
-  events: DiscoveryEvent[];
-};
-
 /**
- * Owns the durable facts behind delegated discovery: participants, their
- * representative agents, event visibility, source references, and unread
- * cursors. Content remains ordinary language and is never scored here.
+ * SQLite/Drizzle adapter for Lucid's storage-independent discovery repository.
+ * Content remains ordinary language and is never scored here.
  */
-export class DiscoveryEventRepository {
+export class SqliteDiscoveryRepository implements DiscoveryRepository {
   constructor(private readonly database: LucidSqliteDatabase) {}
 
-  initialize(): void {
+  async initialize(): Promise<void> {
     const workspace = this.findWorkspace();
     if (workspace) {
       this.recoverInterruptedAgentRuns(workspace);
@@ -87,7 +67,7 @@ export class DiscoveryEventRepository {
     this.createWorkspace();
   }
 
-  reset(): void {
+  async reset(): Promise<void> {
     this.database.client.transaction(() => {
       this.database.orm.delete(discoveryWorkspaces).run();
       this.database.client
@@ -97,13 +77,17 @@ export class DiscoveryEventRepository {
     })();
   }
 
-  readSnapshot(): DiscoveryRepositorySnapshot {
+  async readSnapshot(): Promise<DiscoveryRepositorySnapshot> {
     const workspace = this.requireWorkspace();
-    const user = this.requireParticipant(LOCAL_USER_ID);
+    const [user, participantList, agentList] = await Promise.all([
+      this.requireParticipant(LOCAL_USER_ID),
+      this.listParticipants(),
+      this.listAgents(),
+    ]);
     const participantById = new Map(
-      this.listParticipants().map((participant) => [participant.id, participant]),
+      participantList.map((participant) => [participant.id, participant]),
     );
-    const agents = this.listAgents().map((agent) => {
+    const agents = await Promise.all(agentList.map(async (agent) => {
       const participant = participantById.get(agent.participantId);
       if (!participant) {
         throw new Error(
@@ -119,14 +103,14 @@ export class DiscoveryEventRepository {
       return {
         ...view,
         participant: toParticipantView(participant),
-        unreadCount: this.listEventsVisibleToAgent(
+        unreadCount: (await this.listEventsVisibleToAgent(
           agent.id,
           agent.lastSeenSequence,
           10_000,
-        ).length,
+        )).length,
         isUserAgent: agent.id === USER_AGENT_ID,
       };
-    });
+    }));
     const events = this.database.orm
       .select()
       .from(discoveryEvents)
@@ -141,13 +125,13 @@ export class DiscoveryEventRepository {
       workspace,
       user: toParticipantView(user),
       agents,
-      interest: this.findSavedInterest(),
+      interest: await this.findSavedInterest(),
       findings: this.listFindings(),
       events,
     };
   }
 
-  listParticipants(): Participant[] {
+  async listParticipants(): Promise<Participant[]> {
     return this.database.orm
       .select()
       .from(participants)
@@ -157,7 +141,7 @@ export class DiscoveryEventRepository {
       .map(toParticipant);
   }
 
-  listAgents(): Agent[] {
+  async listAgents(): Promise<Agent[]> {
     return this.database.orm
       .select()
       .from(representativeAgents)
@@ -167,7 +151,7 @@ export class DiscoveryEventRepository {
       .map(toAgent);
   }
 
-  requireParticipant(id: string): Participant {
+  async requireParticipant(id: string): Promise<Participant> {
     const row = this.database.orm
       .select()
       .from(participants)
@@ -182,7 +166,7 @@ export class DiscoveryEventRepository {
     return toParticipant(row);
   }
 
-  requireAgent(id: string): Agent {
+  async requireAgent(id: string): Promise<Agent> {
     const row = this.database.orm
       .select()
       .from(representativeAgents)
@@ -197,11 +181,11 @@ export class DiscoveryEventRepository {
     return toAgent(row);
   }
 
-  requireUserAgent(): Agent {
-    return this.requireAgent(USER_AGENT_ID);
+  async requireUserAgent(): Promise<Agent> {
+    return await this.requireAgent(USER_AGENT_ID);
   }
 
-  findSavedInterest(): DiscoveryEvent | undefined {
+  async findSavedInterest(): Promise<DiscoveryEvent | undefined> {
     const row = this.database.orm
       .select()
       .from(discoveryEvents)
@@ -216,8 +200,8 @@ export class DiscoveryEventRepository {
     return row ? toDiscoveryEvent(row) : undefined;
   }
 
-  saveInterest(content: string): DiscoveryEvent {
-    return this.appendEvent({
+  async saveInterest(content: string): Promise<DiscoveryEvent> {
+    return await this.appendEvent({
       kind: 'interest_saved',
       targetAgentId: USER_AGENT_ID,
       targetParticipantId: LOCAL_USER_ID,
@@ -230,7 +214,10 @@ export class DiscoveryEventRepository {
     });
   }
 
-  saveFeedback(findingSequence: number, content: string): DiscoveryEvent {
+  async saveFeedback(
+    findingSequence: number,
+    content: string,
+  ): Promise<DiscoveryEvent> {
     const finding = this.requireUserFinding(findingSequence);
     const existing = this.database.orm
       .select({ sequence: discoveryEvents.sequence })
@@ -245,7 +232,7 @@ export class DiscoveryEventRepository {
       throw new Error('Feedback has already been saved for this finding.');
     }
 
-    return this.appendEvent({
+    return await this.appendEvent({
       kind: 'feedback_saved',
       targetAgentId: USER_AGENT_ID,
       targetParticipantId: LOCAL_USER_ID,
@@ -259,11 +246,11 @@ export class DiscoveryEventRepository {
     });
   }
 
-  listEventsVisibleToAgent(
+  async listEventsVisibleToAgent(
     agentId: string,
     afterSequence: number,
     limit = 40,
-  ): DiscoveryEvent[] {
+  ): Promise<DiscoveryEvent[]> {
     return this.database.orm
       .select()
       .from(discoveryEvents)
@@ -292,10 +279,10 @@ export class DiscoveryEventRepository {
       .map(toDiscoveryEvent);
   }
 
-  readVisibleEventsBySequence(
+  async readVisibleEventsBySequence(
     agentId: string,
     sequences: number[],
-  ): DiscoveryEvent[] {
+  ): Promise<DiscoveryEvent[]> {
     if (!sequences.length) {
       return [];
     }
@@ -324,15 +311,15 @@ export class DiscoveryEventRepository {
       .map(toDiscoveryEvent);
   }
 
-  beginAgentStep(
+  async beginAgentStep(
     agentId: string,
     discoveryRunId: string,
     phase: DiscoveryRunPhase,
-  ): AgentStepContext {
+  ): Promise<AgentStepContext> {
     const workspace = this.requireWorkspace();
-    const selectedAgent = this.requireAgent(agentId);
-    const participant = this.requireParticipant(selectedAgent.participantId);
-    const visibleEvents = this.listEventsVisibleToAgent(
+    const selectedAgent = await this.requireAgent(agentId);
+    const participant = await this.requireParticipant(selectedAgent.participantId);
+    const visibleEvents = await this.listEventsVisibleToAgent(
       selectedAgent.id,
       selectedAgent.lastSeenSequence,
     );
@@ -400,8 +387,11 @@ export class DiscoveryEventRepository {
     };
   }
 
-  completeAgentStep(agentId: string, horizonSequence: number): void {
-    const agent = this.requireAgent(agentId);
+  async completeAgentStep(
+    agentId: string,
+    horizonSequence: number,
+  ): Promise<void> {
+    const agent = await this.requireAgent(agentId);
     this.database.orm
       .update(representativeAgents)
       .set({
@@ -413,7 +403,7 @@ export class DiscoveryEventRepository {
       .run();
   }
 
-  failAgentStep(agentId: string): void {
+  async failAgentStep(agentId: string): Promise<void> {
     this.database.orm
       .update(representativeAgents)
       .set({ status: 'error', updatedAt: dayjs().toISOString() })
@@ -421,7 +411,7 @@ export class DiscoveryEventRepository {
       .run();
   }
 
-  interruptAgentStep(agentId: string): void {
+  async interruptAgentStep(agentId: string): Promise<void> {
     this.database.orm
       .update(representativeAgents)
       .set({ status: 'idle', updatedAt: dayjs().toISOString() })
@@ -429,20 +419,20 @@ export class DiscoveryEventRepository {
       .run();
   }
 
-  hasFindingForRun(discoveryRunId: string): boolean {
+  async hasFindingForRun(discoveryRunId: string): Promise<boolean> {
     return Boolean(this.findFindingForRun(discoveryRunId));
   }
 
-  ensureNoFindingResult(
+  async ensureNoFindingResult(
     discoveryRunId: string,
     stepNumber: number,
-  ): DiscoveryEvent {
+  ): Promise<DiscoveryEvent> {
     const existing = this.findFindingForRun(discoveryRunId);
     if (existing) {
       return existing;
     }
 
-    return this.appendEvent({
+    return await this.appendEvent({
       stepNumber,
       kind: 'finding_reported',
       actorAgentId: USER_AGENT_ID,
@@ -459,7 +449,9 @@ export class DiscoveryEventRepository {
     });
   }
 
-  appendEvent(input: AppendDiscoveryEventInput): DiscoveryEvent {
+  async appendEvent(
+    input: AppendDiscoveryEventInput,
+  ): Promise<DiscoveryEvent> {
     const workspace = this.requireWorkspace();
     const row = this.database.orm
       .insert(discoveryEvents)

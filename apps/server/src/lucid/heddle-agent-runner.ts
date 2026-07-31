@@ -13,7 +13,7 @@ import {
   buildHeddleToolPolicyInstructions,
   buildRepresentativeAgentInstructions,
 } from './agent-prompts.js';
-import type { DiscoveryEventRepository } from './discovery-event-repository.js';
+import type { DiscoveryRepository } from './discovery-repository.js';
 import {
   type AgentRunner,
   type AgentRunResult,
@@ -44,7 +44,7 @@ export class HeddleAgentRunner implements AgentRunner {
   });
 
   constructor(
-    private readonly repository: DiscoveryEventRepository,
+    private readonly repository: DiscoveryRepository,
     private readonly config: LucidConfig,
   ) {}
 
@@ -57,7 +57,7 @@ export class HeddleAgentRunner implements AgentRunner {
       input.discoveryRunId,
       input.stepNumber,
     );
-    const toolDefinitions = tools.definitions();
+    const toolDefinitions = await tools.definitions();
     const extension = defineHostExtension({
       id: `lucid:agent:${input.agent.id}`,
       tools: toolDefinitions,

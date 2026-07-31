@@ -54,9 +54,11 @@ export function createAppRouter(discoveryRuns: DiscoveryRunService) {
 
 export type AppRouter = ReturnType<typeof createAppRouter>;
 
-function resolveDiscoveryError<T>(operation: () => T): T {
+async function resolveDiscoveryError<T>(
+  operation: () => T | Promise<T>,
+): Promise<T> {
   try {
-    return operation();
+    return await operation();
   } catch (error) {
     if (error instanceof DiscoveryRunBusyError) {
       throw new TRPCError({
