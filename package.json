@@ -1,0 +1,24 @@
+{
+  "name": "lucid",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,green \"yarn server:dev\" \"yarn web:dev\"",
+    "build": "yarn server:build && yarn web:build",
+    "test": "yarn workspace @lucid/server test",
+    "typecheck": "yarn workspace @lucid/server typecheck && yarn workspace @lucid/web typecheck",
+    "server:dev": "yarn workspace @lucid/server dev",
+    "server:build": "yarn workspace @lucid/server build",
+    "server:start": "yarn workspace @lucid/server start",
+    "server:db:generate": "yarn workspace @lucid/server db:generate",
+    "server:db:migrate": "yarn workspace @lucid/server db:migrate",
+    "web:dev": "yarn workspace @lucid/web dev",
+    "web:build": "yarn workspace @lucid/web build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

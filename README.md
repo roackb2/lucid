@@ -1,73 +1,181 @@
-# Project Lucid
+# Lucid
 
-## Introduction
+Lucid is a local prototype for delegated discovery between agents that
+represent different people.
 
-Project Lucid is an innovative platform designed to facilitate interactions and information exchange between AI agents. This system allows agents to operate over extended periods, creating a virtual world where AI agents are the primary actors.
+The default experience is practical:
 
-## Development Status
+1. describe an ongoing interest in ordinary language;
+2. start a bounded discovery check;
+3. let the user's representative agent ask available participant agents for
+   specific matches;
+4. receive a finding or an explicit no-match result;
+5. leave private, free-text feedback for the next check.
 
-> **Note: Project Lucid is currently under active development. At this stage, only a small portion of the planned features have been implemented. The project is subject to major changes as development progresses. Please be aware that functionality, APIs, and overall structure may change significantly in future updates.**
+The current participants are one local user and two clearly labelled simulated
+profiles. They exercise matching, privacy, delivery, persistence, and recovery.
+They are not real users, external information sources, or evidence that an
+agent network is economically useful.
 
-## Key Features
+## Current product loop
 
-- **Long-term Agent Interactions**: Agents can maintain state across multiple interactions, allowing for continuous progress towards goals.
-- **Agent Orchestration**: The system manages the awakening and suspension of agents, ensuring efficient use of resources.
-- **Information Exchange**: Enables direct communication between AI agents without human intervention, accelerating information spread.
-- **Content Publishing and Consumption**: Agents can act as publishers or consumers of information within the platform.
+```mermaid
+flowchart LR
+  I["Private saved interest"] --> U1["User agent requests matches"]
+  U1 --> S1["Simulated music source responds"]
+  U1 --> S2["Simulated product source responds"]
+  S1 --> U2["User agent reviews messages"]
+  S2 --> U2
+  U2 --> F["Finding or no-match result"]
+  F --> B["Private user feedback"]
+  B --> U1
+```
 
-## Agent Roles
+One check uses four durable Heddle agent steps:
 
-Agents in Project Lucid, known as "Dreamers," can perform the following tasks:
+1. the user agent receives the private interest and posts a minimal request;
+2. the music participant agent may respond;
+3. the product research participant agent may respond;
+4. the user agent reports one specific finding or finishes without a match.
 
-1. Publish content on the platform
-2. Search for agents seeking specific content and establish connections
-3. Look for agents with desired content and initiate communication
-4. Report progress and results to users
-5. Continue tasks based on user requests
-6. Terminate tasks only when instructed by the user or the system
+Checks are manual in this version. There is no scheduler, open network, search
+engine, payment system, bidding, or external fact retrieval yet.
 
-## Ethical Guidelines
+## Reliability boundaries
 
-Project Lucid emphasizes responsible and ethical information exchange. Agents are programmed to:
+Lucid structures only behavior the platform can enforce:
 
-- Ensure accurate and efficient information transfer
-- Align actions with user goals
-- Refuse requests that conflict with public interest
-- Decline illegal activities
-- Reject tasks that contradict Project Lucid's objectives
-- Resolve conflicts with other agents appropriately
+- participant and representative-agent identity;
+- private, shared, target-agent, user, and operator visibility;
+- event delivery order and durable unread cursors;
+- which peer messages caused a finding;
+- what the user agent shared while looking;
+- a two-action communication budget for each agent step;
+- bounded execution, cancellation, recovery, and persistence.
 
-## Available Tools
+Interest, messages, findings, and feedback remain ordinary text. Lucid does not
+invent confidence levels, reputation scores, evidence packets, or universal
+quality judgments. A source path proves that a message was delivered through
+the prototype. It does not prove that the message is true or useful.
 
-Agents have access to the following tools:
+## Service ownership
 
-- `save_content`: Store content in the platform's storage
-- `search_content`: Query the storage for specific information
-- `wait`: Pause execution for a specified duration
-- `report`: Complete the current task and provide results to the user
+| Lucid owns | Heddle owns |
+| --- | --- |
+| Participants and representative agents | Durable conversation per agent |
+| Async discovery repository and storage adapters | Model and tool loop |
+| Visibility and causal-source validation | Turn leases and cancellation |
+| Four-step discovery route | Activity events and traces |
+| Finding and feedback delivery | Provider authentication |
+| Communication action budget | Conversation persistence |
 
-## How It Works
+Lucid exposes five domain tools to representative agents:
 
-1. Users interact with Dreamer agents by providing prompts or requests.
-2. Agents execute tasks using the available tools, either publishing or consuming content.
-3. Agents continue working towards their goals until completion or interruption.
-4. The system manages agent states, allowing for long-term task persistence.
+- `read_available_messages`
+- `post_shared_message`
+- `send_direct_message`
+- `report_finding` — available only to the user agent during reporting
+- `finish_without_action`
 
-## Benefits
+Heddle's coding, shell, browser, generic memory, and MCP tools are not exposed
+inside a discovery check.
 
-- Accelerated information exchange without human intervention
-- Persistent agent states for complex, long-running tasks
-- Ethical safeguards to ensure responsible AI behavior
-- Flexible content publishing and consumption model
+## Engineering vocabulary
 
-## Getting Started
+The implementation uses responsibility-based names:
 
-(Add instructions for setting up and running Project Lucid, including any dependencies or configuration steps.)
+| Name | Responsibility |
+| --- | --- |
+| `LucidSqliteDatabase` | Owns the concrete SQLite connection, pragmas, migrations, and shutdown |
+| `DiscoveryRepository` | Async domain persistence contract used by Lucid services |
+| `SqliteDiscoveryRepository` | SQLite/Drizzle implementation of that contract |
+| `DiscoveryRunService` | Coordinates one bounded four-step discovery run |
+| `HeddleAgentRunner` | Executes one representative-agent step through Heddle |
+| `AgentCommunicationToolService` | Validates and executes scoped communication operations |
+| `DiscoveryWorkspace` | Durable state for the local discovery product |
+| `FindingView` | User-facing finding plus source messages and feedback |
 
-## Contributing
+The authoritative backend boundaries are documented in
+[`apps/server/src/database/README.md`](apps/server/src/database/README.md) and
+[`apps/server/src/lucid/README.md`](apps/server/src/lucid/README.md).
 
-(Provide guidelines for contributing to the project, if applicable.)
+## Periodic discovery direction
 
-## License
+Heddle heartbeat is the right local execution primitive for scheduled Lucid
+checks, but Lucid remains the host and product scheduler:
 
-(Specify the license under which Project Lucid is distributed.)
+- Each representative agent owns one heartbeat task and durable checkpoint.
+- On wake, the agent reads only its visible mailbox events and takes bounded
+  communication actions.
+- Lucid owns participant identity, visibility, finding delivery, and
+  idempotent wake claims.
+- Heddle records task timing, run history, retry/checkpoint state, and owns the
+  local scheduler loop.
+
+This should replace manual-only checks in the next slice. It should not replace
+the representative-agent mailbox or wrap the existing fixed route in a second
+heartbeat lifecycle. Manual start can become a run-now operation over these
+tasks. Heddle's built-in scheduler is single-host and not distributed
+exactly-once; a hosted multi-replica version would need an external durable
+queue/workflow layer.
+
+## Run locally
+
+Requirements:
+
+- Node.js 22
+- Yarn 1.22
+- either `OPENAI_API_KEY` in `.env` or credentials available to Heddle
+
+```bash
+cp .env.example .env
+yarn install
+yarn dev
+```
+
+Open [http://127.0.0.1:3080](http://127.0.0.1:3080).
+
+Useful checks:
+
+```bash
+yarn typecheck
+yarn test
+yarn build
+yarn server:db:generate
+yarn server:db:migrate
+```
+
+The server listens on `127.0.0.1:8081` by default. Configuration is documented
+in `.env.example`.
+
+## Persistence and recovery
+
+Runtime state defaults to `local/discovery-home/`:
+
+```text
+local/discovery-home/
+├── lucid.sqlite          # workspace, participants, agents, events, findings
+└── heddle/
+    ├── chat-sessions/    # private durable agent conversations
+    └── traces/           # completed Heddle agent steps
+```
+
+If the process stops during an agent step, Lucid restores that agent to `idle`
+on startup without consuming unread input. In-flight model execution is not
+replayed; the user can start another bounded check. Graceful shutdown cancels
+and settles the active Heddle run before SQLite closes.
+
+Resetting the workspace clears active Lucid product data and assigns new
+Heddle conversation IDs. Existing Heddle session and trace files remain on
+disk for inspection.
+
+Older experiments remain available in Git history. The previous Dream
+Terrarium is preserved on `codex/dream-terrarium` at commit `2c367e9`.
+
+## Repository shape
+
+```text
+apps/
+├── server/  # tRPC, SQLite/Drizzle, Lucid domain, Heddle adapter
+└── web/     # practical discovery workspace and technical activity panel
+```

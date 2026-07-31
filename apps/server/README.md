@@ -1,0 +1,57 @@
+# Lucid server
+
+The server is the composition root for Lucid's local delegated-discovery
+prototype.
+
+It owns:
+
+- HTTP/tRPC transport and CORS policy;
+- SQLite lifecycle and checked-in Drizzle migrations;
+- construction of the discovery repository and run coordinator;
+- construction of the Heddle-backed agent runner;
+- graceful shutdown ordering.
+
+The server does not decide whether a message is true or useful. It makes
+participant identity, event visibility, delivery order, source references,
+bounded execution, and recovery predictable.
+
+## Entrypoints
+
+- `src/server.ts` starts the HTTP service and owns shutdown ordering.
+- `src/migrate.ts` applies checked-in SQLite migrations.
+- `src/database/sqlite-database.ts` owns the concrete SQLite connection,
+  pragmas, migrations, and shutdown.
+- `src/database/sqlite-discovery-repository.ts` implements Lucid's async domain
+  repository port with Drizzle and SQLite.
+- `src/router.ts` exposes the `discovery` tRPC namespace:
+  - `snapshot`
+  - `saveInterest`
+  - `startRun`
+  - `submitFeedback`
+  - `cancelRun`
+  - `resetWorkspace`
+- `src/config.ts` validates environment variables and resolves state paths.
+
+## Service boundary
+
+`src/lucid` owns participant, representative-agent, discovery-run, visibility,
+finding, feedback behavior, and the storage-independent `DiscoveryRepository`
+port. Heddle is integrated only through `HeddleAgentRunner`.
+
+Transport code must not reproduce:
+
+- run ordering;
+- visibility rules;
+- source validation;
+- agent communication budgets;
+- Heddle tool selection;
+- recovery policy.
+
+Runtime state defaults to `../../local/discovery-home`. The process must settle
+an active agent step before closing SQLite so cancellation can durably restore
+the agent's status and preserve unread input.
+
+Read [`src/database/README.md`](src/database/README.md) before changing
+persistence infrastructure or schema ownership. Read
+[`src/lucid/README.md`](src/lucid/README.md) before changing domain ownership
+or lifecycle behavior.
