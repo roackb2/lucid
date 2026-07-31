@@ -7,16 +7,20 @@ import {
 } from '@roackb2/heddle';
 import { ConversationRunService } from '@roackb2/heddle/hosted';
 import type { LucidConfig } from '../config.js';
-import { AgentNetworkToolService } from './network-tools.js';
-import { buildAgentSystemContext, buildWakePrompt } from './prompts.js';
-import type { LucidRepository } from './repository.js';
+import { AgentCommunicationToolService } from './agent-communication-tools.js';
 import {
-  type AgentMind,
-  type AgentMindResult,
-  type AgentMindRun,
-  type MindActivity,
-  type StartAgentMindInput,
-} from './types.js';
+  buildDiscoveryStepPrompt,
+  buildHeddleToolPolicyInstructions,
+  buildRepresentativeAgentInstructions,
+} from './agent-prompts.js';
+import type { DiscoveryEventRepository } from './discovery-event-repository.js';
+import {
+  type AgentRunner,
+  type AgentRunResult,
+  type AgentRunHandle,
+  type AgentRunActivity,
+  type StartAgentRunInput,
+} from './discovery-types.js';
 
 type AgentRunAddress = {
   agentId: string;
@@ -24,14 +28,14 @@ type AgentRunAddress = {
 };
 
 /**
- * Owns the Heddle composition boundary for one delegated Lucid agent.
+ * Executes one representative-agent step through Heddle.
  *
- * Lucid supplies principal context, visible network events, journey phase and
- * scoped tools. Heddle owns durable conversation state, model/tool execution,
- * leases, cancellation, activity, trace and the final turn result.
+ * Lucid supplies participant context, visible discovery events, phase and
+ * scoped communication tools. Heddle owns conversation persistence, model/tool
+ * execution, leases, cancellation, activity and traces.
  */
-export class HeddleAgentMind implements AgentMind {
-  private readonly runs = new ConversationRunService<AgentRunAddress>({
+export class HeddleAgentRunner implements AgentRunner {
+  private readonly conversationRuns = new ConversationRunService<AgentRunAddress>({
     addressKey: ({ agentId, sessionId }) => `${agentId}:${sessionId}`,
     replay: {
       maxEventsPerRun: 256,
@@ -40,24 +44,27 @@ export class HeddleAgentMind implements AgentMind {
   });
 
   constructor(
-    private readonly repository: LucidRepository,
+    private readonly repository: DiscoveryEventRepository,
     private readonly config: LucidConfig,
   ) {}
 
-  async start(input: StartAgentMindInput): Promise<AgentMindRun> {
-    const tools = new AgentNetworkToolService(
+  async startAgentStep(input: StartAgentRunInput): Promise<AgentRunHandle> {
+    const tools = new AgentCommunicationToolService(
       this.repository,
       input.agent,
-      input.principal,
+      input.participant,
       input.phase,
-      input.journeyId,
-      input.tick,
+      input.discoveryRunId,
+      input.stepNumber,
     );
     const toolDefinitions = tools.definitions();
     const extension = defineHostExtension({
       id: `lucid:agent:${input.agent.id}`,
       tools: toolDefinitions,
-      systemContext: buildAgentSystemContext(input.agent, input.principal),
+      systemContext: [
+        buildRepresentativeAgentInstructions(input.agent, input.participant),
+        buildHeddleToolPolicyInstructions(this.config.repoRoot),
+      ].join('\n\n'),
     });
     const engine = createConversationEngine({
       workspaceRoot: this.config.repoRoot,
@@ -80,7 +87,7 @@ export class HeddleAgentMind implements AgentMind {
       model: this.config.model,
     })).session;
 
-    const handle = this.runs.startTurn({
+    const handle = this.conversationRuns.startTurn({
       address: {
         agentId: input.agent.id,
         sessionId: session.id,
@@ -88,10 +95,10 @@ export class HeddleAgentMind implements AgentMind {
       engine,
       turn: {
         sessionId: session.id,
-        prompt: buildWakePrompt(
+        prompt: buildDiscoveryStepPrompt(
           input.agent,
           input.phase,
-          input.tick,
+          input.stepNumber,
           input.visibleEvents,
         ),
         maxSteps: this.config.maxSteps,
@@ -116,15 +123,15 @@ export class HeddleAgentMind implements AgentMind {
           },
         },
       },
-      projectResult: (result): AgentMindResult => ({
+      projectResult: (result): AgentRunResult => ({
         outcome: result.outcome,
         summary: result.summary,
         traceFile: result.traceFile,
         toolCount: result.toolResults.length,
       }),
       projectError: () => ({
-        code: 'agent_wake_failed',
-        message: 'The delegated agent could not complete this journey wake.',
+        code: 'agent_step_failed',
+        message: 'The representative agent could not complete this discovery step.',
       }),
     });
 
@@ -137,7 +144,7 @@ export class HeddleAgentMind implements AgentMind {
     }
 
     return {
-      runId: handle.runId,
+      executionId: handle.runId,
       result: handle.result.finally(() => {
         input.signal.removeEventListener('abort', onAbort);
       }),
@@ -146,7 +153,9 @@ export class HeddleAgentMind implements AgentMind {
   }
 }
 
-function projectActivity(activity: ConversationActivity): MindActivity | undefined {
+function projectActivity(
+  activity: ConversationActivity,
+): AgentRunActivity | undefined {
   const timestamp = 'timestamp' in activity ? activity.timestamp : dayjs().toISOString();
 
   switch (activity.type) {
@@ -158,13 +167,7 @@ function projectActivity(activity: ConversationActivity): MindActivity | undefin
       };
     case HeddleEventType.assistantCommentary:
     case HeddleEventType.reasoningSummary:
-      return activity.done && activity.text.trim()
-        ? {
-            type: activity.type,
-            summary: activity.text.trim(),
-            timestamp,
-          }
-        : undefined;
+      return undefined;
     case HeddleEventType.toolCalling:
       return {
         type: activity.type,
@@ -183,8 +186,8 @@ function projectActivity(activity: ConversationActivity): MindActivity | undefin
       return {
         type: activity.type,
         summary: activity.outcome === 'done'
-          ? 'Returning from this wake.'
-          : `Journey wake ended: ${activity.outcome}.`,
+          ? 'Agent step completed.'
+          : `Agent step ended: ${activity.outcome}.`,
         timestamp,
       };
     default:

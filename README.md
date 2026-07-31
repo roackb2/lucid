@@ -1,83 +1,100 @@
 # Lucid
 
-Lucid is a local-first experiment in delegated encounter.
+Lucid is a local prototype for delegated discovery between agents that
+represent different people.
 
-The **First Return** slice gives one real local principal a persistent agent,
-Aster. The principal describes one long-lived interest in ordinary language,
-then Aster carries the smallest useful abstraction of that intent into a
-bounded network containing two clearly labelled synthetic peers. Aster returns
-with one peer-sourced encounter—or explicitly chooses not to interrupt.
+The default experience is practical:
 
-The principal then responds in ordinary language. That correction becomes
-private input for Aster's next journey.
+1. describe an ongoing interest in ordinary language;
+2. start a bounded discovery check;
+3. let the user's representative agent ask available participant agents for
+   specific matches;
+4. receive a finding or an explicit no-match result;
+5. leave private, free-text feedback for the next check.
 
-## The product loop
+The current participants are one local user and two clearly labelled simulated
+profiles. They exercise matching, privacy, delivery, persistence, and recovery.
+They are not real users, external information sources, or evidence that an
+agent network is economically useful.
+
+## Current product loop
 
 ```mermaid
 flowchart LR
-  P["Private human intent"] --> A1["Aster seeks"]
-  A1 --> M["Mira responds"]
-  A1 --> K["Kite responds"]
-  M --> A2["Aster returns"]
-  K --> A2
-  A2 --> R["One return or quiet"]
-  R --> F["Private human feedback"]
-  F --> A1
+  I["Private saved interest"] --> U1["User agent requests matches"]
+  U1 --> S1["Simulated music source responds"]
+  U1 --> S2["Simulated product source responds"]
+  S1 --> U2["User agent reviews messages"]
+  S2 --> U2
+  U2 --> F["Finding or no-match result"]
+  F --> B["Private user feedback"]
+  B --> U1
 ```
 
-One journey is deliberately bounded to four durable Heddle turns:
+One check uses four durable Heddle agent steps:
 
-1. Aster receives the principal's private intent and decides what little
-   context to take outward.
-2. Mira, representing a synthetic music-making principal, may respond.
-3. Kite, representing a synthetic agent-product principal, may respond.
-4. Aster sees the resulting peer messages and either returns one encounter or
-   stays quiet.
+1. the user agent receives the private interest and posts a minimal request;
+2. the music participant agent may respond;
+3. the product research participant agent may respond;
+4. the user agent reports one specific finding or finishes without a match.
 
-Nothing loops forever in the background. The local user starts and may cancel
-each journey.
+Checks are manual in this version. There is no scheduler, open network, search
+engine, payment system, bidding, or external fact retrieval yet.
 
-## What Lucid enforces
+## Reliability boundaries
 
-Lucid strongly structures only facts the platform can make reliable:
+Lucid structures only behavior the platform can enforce:
 
-- which principal an agent represents;
-- which agent may see each event;
-- what was delivered and when;
-- which visible peer events caused a return;
-- what Aster disclosed while seeking;
-- wake lifecycle, cancellation, mutation limits, and durable cursors.
+- participant and representative-agent identity;
+- private, shared, target-agent, user, and operator visibility;
+- event delivery order and durable unread cursors;
+- which peer messages caused a finding;
+- what the user agent shared while looking;
+- a two-action communication budget for each agent step;
+- bounded execution, cancellation, recovery, and persistence.
 
-Intent, peer messages, returns, and feedback remain ordinary language. Lucid
-does not manufacture confidence scores, evidence packets, universal quality
-ratings, reputation, bidding, or a simulated market.
+Interest, messages, findings, and feedback remain ordinary text. Lucid does not
+invent confidence levels, reputation scores, evidence packets, or universal
+quality judgments. A source path proves that a message was delivered through
+the prototype. It does not prove that the message is true or useful.
 
-A causal source path proves that the network delivered an encounter Aster did
-not have beforehand. It does **not** prove that the content is true, useful, or
-evidence of a network effect. Only the principal can judge whether a return
-matters.
-
-## Ownership boundary
+## Service ownership
 
 | Lucid owns | Heddle owns |
 | --- | --- |
-| Principal and agent identity | Durable conversation per agent |
-| SQLite network event ledger | Model and tool loop |
-| Private/shared delivery rules | Turn lease and cancellation |
-| Four-stop journey route | Activity events and trace |
-| Return source validation | Provider authentication |
-| Two-action wake budget | Session persistence |
+| Participants and representative agents | Durable conversation per agent |
+| SQLite discovery event history | Model and tool loop |
+| Visibility and causal-source validation | Turn leases and cancellation |
+| Four-step discovery route | Activity events and traces |
+| Finding and feedback delivery | Provider authentication |
+| Communication action budget | Conversation persistence |
 
-Lucid exposes only these host tools:
+Lucid exposes five domain tools to representative agents:
 
-- `read_network`
-- `post_to_commons`
-- `send_message`
-- `return_to_principal` — only for Aster's final wake
-- `rest`
+- `read_available_messages`
+- `post_shared_message`
+- `send_direct_message`
+- `report_finding` — available only to the user agent during reporting
+- `finish_without_action`
 
-Heddle's coding, shell, browser, memory, and generic MCP tools are not visible
-inside the network.
+Heddle's coding, shell, browser, generic memory, and MCP tools are not exposed
+inside a discovery check.
+
+## Engineering vocabulary
+
+The implementation uses responsibility-based names:
+
+| Name | Responsibility |
+| --- | --- |
+| `DiscoveryRunService` | Coordinates one bounded four-step discovery run |
+| `DiscoveryEventRepository` | Persists participants, agents, events, visibility, and cursors |
+| `HeddleAgentRunner` | Executes one representative-agent step through Heddle |
+| `AgentCommunicationToolService` | Validates and executes scoped communication operations |
+| `DiscoveryWorkspace` | Durable state for the local discovery product |
+| `FindingView` | User-facing finding plus source messages and feedback |
+
+The authoritative backend boundary is documented in
+[`apps/server/src/lucid/README.md`](apps/server/src/lucid/README.md).
 
 ## Run locally
 
@@ -108,38 +125,34 @@ yarn server:db:migrate
 The server listens on `127.0.0.1:8081` by default. Configuration is documented
 in `.env.example`.
 
-## Persistence
+## Persistence and recovery
 
-Runtime state is inspectable and defaults to `local/first-return/`:
+Runtime state defaults to `local/discovery-home/`:
 
 ```text
-local/first-return/
-├── lucid.sqlite          # principals, agents, cursors, events, returns
+local/discovery-home/
+├── lucid.sqlite          # workspace, participants, agents, events, findings
 └── heddle/
     ├── chat-sessions/    # private durable agent conversations
-    └── traces/           # completed Heddle turns
+    └── traces/           # completed Heddle agent steps
 ```
 
-Dream Terrarium state under `local/terrarium/` is not modified by this slice.
+If the process stops during an agent step, Lucid restores that agent to `idle`
+on startup without consuming unread input. In-flight model execution is not
+replayed; the user can start another bounded check. Graceful shutdown cancels
+and settles the active Heddle run before SQLite closes.
 
-If the host stops during a wake, Lucid returns that agent to rest on startup
-without consuming unread input. In-flight model execution does not resume
-automatically; the principal may start a new bounded journey. Graceful shutdown
-cancels and settles the active Heddle run before SQLite closes.
+Resetting the workspace clears active Lucid product data and assigns new
+Heddle conversation IDs. Existing Heddle session and trace files remain on
+disk for inspection.
 
-Starting a new generation clears only the active First Return database and
-assigns new Heddle conversation IDs. Older Heddle session files remain on disk.
+Older experiments remain available in Git history. The previous Dream
+Terrarium is preserved on `codex/dream-terrarium` at commit `2c367e9`.
 
 ## Repository shape
 
 ```text
 apps/
 ├── server/  # tRPC, SQLite/Drizzle, Lucid domain, Heddle adapter
-└── web/     # private home surface and optional network observatory
+└── web/     # practical discovery workspace and technical activity panel
 ```
-
-The authoritative service boundary lives in
-`apps/server/src/lucid/README.md`.
-
-The earlier Dream Terrarium remains preserved in Git history as the
-`codex/dream-terrarium` branch and commit `2c367e9`.

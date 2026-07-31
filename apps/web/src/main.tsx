@@ -28,7 +28,7 @@ createRoot(root).render(
         closeButton
         position="bottom-right"
         richColors
-        theme="dark"
+        theme="light"
       />
     </QueryClientProvider>
   </StrictMode>,

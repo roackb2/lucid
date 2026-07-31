@@ -16,7 +16,7 @@ export const lucidClient = createTRPCClient<AppRouter>({
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 
-export type LucidSnapshot = RouterOutputs['lucid']['snapshot'];
-export type NetworkEvent = LucidSnapshot['events'][number];
-export type AgentView = LucidSnapshot['agents'][number];
-export type ReturnView = LucidSnapshot['returns'][number];
+export type DiscoverySnapshot = RouterOutputs['discovery']['snapshot'];
+export type DiscoveryEvent = DiscoverySnapshot['events'][number];
+export type AgentView = DiscoverySnapshot['agents'][number];
+export type FindingView = DiscoverySnapshot['findings'][number];

@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import { LUCID_MIGRATIONS_ROOT, resolveLucidConfig } from './config.js';
 import { LucidDatabaseService } from './database/service.js';
-import { HeddleAgentMind } from './lucid/heddle-agent-mind.js';
-import { LucidRepository } from './lucid/repository.js';
-import { LucidService } from './lucid/service.js';
+import { DiscoveryEventRepository } from './lucid/discovery-event-repository.js';
+import { DiscoveryRunService } from './lucid/discovery-run-service.js';
+import { HeddleAgentRunner } from './lucid/heddle-agent-runner.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
 
@@ -15,11 +15,11 @@ const database = new LucidDatabaseService(config.databasePath);
 
 database.migrate(LUCID_MIGRATIONS_ROOT);
 
-const repository = new LucidRepository(database);
-const mind = new HeddleAgentMind(repository, config);
-const lucid = new LucidService(
+const repository = new DiscoveryEventRepository(database);
+const agentRunner = new HeddleAgentRunner(repository, config);
+const discoveryRuns = new DiscoveryRunService(
   repository,
-  mind,
+  agentRunner,
   {
     model: config.model,
     heddleVersion: HEDDLE_VERSION,
@@ -28,7 +28,7 @@ const lucid = new LucidService(
 );
 
 const server = createHTTPServer({
-  router: createAppRouter(lucid),
+  router: createAppRouter(discoveryRuns),
   createContext: () => ({
     requestId: randomUUID(),
   }),
@@ -86,7 +86,7 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   const serverClosed = new Promise<Error | undefined>((resolve) => {
     server.close((error) => resolve(error));
   });
-  await lucid.stop();
+  await discoveryRuns.stop();
 
   const closeError = await serverClosed;
   if (closeError) {

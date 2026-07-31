@@ -1,31 +1,41 @@
-import { CloudOff, RefreshCw } from 'lucide-react';
-import { ActiveJourney } from '@/components/lucid/active-journey';
-import { IntentPanel } from '@/components/lucid/intent-panel';
-import { LucidHeader } from '@/components/lucid/lucid-header';
-import { NetworkObservatory } from '@/components/lucid/network-observatory';
-import { ReturnPanel } from '@/components/lucid/return-panel';
+import {
+  Bot,
+  CloudOff,
+  Clock3,
+  RefreshCw,
+  Users,
+} from 'lucide-react';
+import { ActiveDiscoveryRun } from '@/components/lucid/active-discovery-run';
+import { ActivityPanel } from '@/components/lucid/activity-panel';
+import { AppHeader } from '@/components/lucid/app-header';
+import { FindingsFeed } from '@/components/lucid/findings-feed';
+import { InterestComposer } from '@/components/lucid/interest-composer';
 import { Button } from '@/components/ui/button';
-import { useLucid } from '@/hooks/use-lucid';
+import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
+import type { AgentView } from '@/lib/trpc';
 
 export default function App() {
-  const lucid = useLucid();
-  const snapshot = lucid.snapshot.data;
+  const discovery = useDiscoveryWorkspace();
+  const snapshot = discovery.snapshot.data;
 
-  if (lucid.snapshot.isPending) {
-    return <LucidLoading />;
+  if (discovery.snapshot.isPending) {
+    return <WorkspaceLoading />;
   }
 
   if (!snapshot) {
     return (
       <main className="fatal-state">
-        <CloudOff size={32} />
-        <p className="eyebrow">The network is unreachable</p>
-        <h1>Lucid cannot find Aster.</h1>
+        <CloudOff size={30} />
+        <p className="section-label">Service unavailable</p>
+        <h1>Lucid cannot reach the discovery service.</h1>
         <p>
-          Start the local server, then reconnect. Durable agent conversations
-          and completed network events remain on disk.
+          Start the local server and try again. Completed events and Heddle
+          conversations remain on disk.
         </p>
-        <Button onClick={() => lucid.snapshot.refetch()} variant="secondary">
+        <Button
+          onClick={() => discovery.snapshot.refetch()}
+          variant="secondary"
+        >
           <RefreshCw size={15} />
           Try again
         </Button>
@@ -33,150 +43,168 @@ export default function App() {
     );
   }
 
-  const latestReturn = snapshot.returns[0];
-  const activeJourney = snapshot.activeJourney;
-  const homeAgent = snapshot.agents.find((agent) => agent.isHomeAgent);
+  const activeRun = snapshot.activeRun;
+  const sourceAgents = snapshot.agents.filter((agent) => !agent.isUserAgent);
+  const latestFindingAt = snapshot.findings[0]?.finding.createdAt;
 
   return (
-    <div className="app-shell">
-      <div className="ambient-orb ambient-orb--one" aria-hidden="true" />
-      <div className="ambient-orb ambient-orb--two" aria-hidden="true" />
-      <LucidHeader snapshot={snapshot} />
+    <div className="workspace-shell">
+      <AppHeader snapshot={snapshot} />
 
-      <main>
-        <section className="first-return-intro">
+      <main className="workspace">
+        <section className="workspace-intro">
           <div>
-            <p className="eyebrow">First Return · local network experiment</p>
-            <h2>
-              Leave one thought.
-              <span> See what comes back.</span>
-            </h2>
+            <p className="section-label">Personal discovery workspace</p>
+            <h1>Tell Lucid what matters. Get back specific matches.</h1>
             <p>
-              Tell one persistent agent what you care about. It will carry only
-              enough of that intent into a bounded network, meet two clearly
-              synthetic peers, and return with one causal encounter—or choose
-              not to interrupt you.
+              Save an ongoing interest, let your agent compare it with
+              participant context, and use each result to make the next check
+              more relevant.
             </p>
           </div>
-          <JourneyPulse
-            active={Boolean(activeJourney)}
-            peerCount={snapshot.agents.length - 1}
-            returnCount={snapshot.returns.length}
-          />
-        </section>
-
-        {activeJourney ? (
-          <ActiveJourney
-            journey={activeJourney}
-            isCancelling={lucid.cancel.isPending}
-            onCancel={() => lucid.cancel.mutate()}
-          />
-        ) : null}
-
-        <section className="home-section" aria-labelledby="home-title">
-          <div className="section-heading home-heading">
+          <dl className="workspace-stats">
             <div>
-              <p className="eyebrow">Private relationship</p>
-              <h2 id="home-title">{homeAgent?.name ?? 'Aster'} represents you</h2>
+              <dt>Findings</dt>
+              <dd>{snapshot.findings.length}</dd>
             </div>
-            <p>
-              Value is yours to judge. Lucid records delivery and provenance,
-              not universal confidence.
-            </p>
-          </div>
-
-          <div className="home-grid">
-            <IntentPanel
-              agentName={homeAgent?.name ?? 'Aster'}
-              intent={snapshot.intent}
-              isActive={Boolean(activeJourney)}
-              isSaving={lucid.setIntent.isPending}
-              isStarting={lucid.startJourney.isPending}
-              onSetIntent={(content) => lucid.setIntent.mutate(content)}
-              onStartJourney={() => lucid.startJourney.mutate()}
-            />
-            <ReturnPanel
-              agents={snapshot.agents}
-              isSubmitting={lucid.feedback.isPending}
-              key={latestReturn?.event.sequence ?? 'empty'}
-              onFeedback={(returnSequence, content) => (
-                lucid.feedback.mutate({ returnSequence, content })
-              )}
-              value={latestReturn}
-            />
-          </div>
+            <div>
+              <dt>Sources</dt>
+              <dd>{sourceAgents.length}</dd>
+            </div>
+            <div>
+              <dt>Mode</dt>
+              <dd>Manual</dd>
+            </div>
+          </dl>
         </section>
 
-        <aside className="epistemic-boundary">
-          <span aria-hidden="true">◎</span>
-          <div>
-            <p className="eyebrow">What this run can establish</p>
-            <p>
-              If Aster cites a peer event it could not see beforehand, the
-              network caused a new delivery path. Only your response can tell
-              us whether that encounter mattered. Neither result proves a
-              network effect.
-            </p>
-          </div>
-        </aside>
+        <div className="workspace-layout">
+          <div className="workspace-main">
+            <InterestComposer
+              interest={snapshot.interest}
+              isRunActive={Boolean(activeRun)}
+              isSaving={discovery.saveInterest.isPending}
+              isStarting={discovery.startRun.isPending}
+              lastCheckedAt={latestFindingAt}
+              onSaveInterest={(content) => (
+                discovery.saveInterest.mutateAsync(content)
+              )}
+              onStartRun={() => discovery.startRun.mutate()}
+            />
 
-        <NetworkObservatory
-          activeAgentId={activeJourney?.agentId}
+            {activeRun ? (
+              <ActiveDiscoveryRun
+                isCancelling={discovery.cancelRun.isPending}
+                onCancel={() => discovery.cancelRun.mutate()}
+                run={activeRun}
+              />
+            ) : null}
+
+            <FindingsFeed
+              agents={snapshot.agents}
+              findings={snapshot.findings}
+              isRunActive={Boolean(activeRun)}
+              isSubmittingFeedback={discovery.submitFeedback.isPending}
+              onFeedback={(findingSequence, content) => (
+                discovery.submitFeedback.mutateAsync({
+                  findingSequence,
+                  content,
+                })
+              )}
+            />
+          </div>
+
+          <aside className="workspace-sidebar">
+            <HowItWorks />
+            <SourceSummary agents={sourceAgents} />
+          </aside>
+        </div>
+
+        <ActivityPanel
+          activeAgentId={activeRun?.agentId}
           agents={snapshot.agents}
           events={snapshot.events}
-          isActive={Boolean(activeJourney)}
-          isResetting={lucid.reset.isPending}
-          onReset={() => lucid.reset.mutate()}
+          isResetting={discovery.resetWorkspace.isPending}
+          isRunActive={Boolean(activeRun)}
+          onReset={() => discovery.resetWorkspace.mutate()}
         />
       </main>
 
-      <footer className="app-footer">
-        <span>Lucid / Heddle {snapshot.runtime.heddleVersion}</span>
-        <span>One real principal · two synthetic peers · inspectable paths</span>
+      <footer className="workspace-footer">
+        <span>Lucid · Heddle {snapshot.runtime.heddleVersion}</span>
+        <span>Local prototype · manual checks · inspectable delivery</span>
       </footer>
     </div>
   );
 }
 
-type JourneyPulseProps = {
-  active: boolean;
-  peerCount: number;
-  returnCount: number;
-};
-
-function JourneyPulse({ active, peerCount, returnCount }: JourneyPulseProps) {
+function HowItWorks() {
   return (
-    <div className={`journey-pulse ${active ? 'journey-pulse--active' : ''}`}>
-      <div className="journey-pulse__rings" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-        <i>✦</i>
-      </div>
-      <dl>
-        <div>
-          <dt>Synthetic peers</dt>
-          <dd>{peerCount}</dd>
-        </div>
-        <div>
-          <dt>Returns</dt>
-          <dd>{String(returnCount).padStart(2, '0')}</dd>
-        </div>
-      </dl>
-    </div>
+    <section className="sidebar-card">
+      <header>
+        <Clock3 size={17} />
+        <h2>How checks work</h2>
+      </header>
+      <ol className="how-it-works">
+        <li>
+          <span>1</span>
+          <p><strong>You save an interest.</strong> The full text stays private to your agent.</p>
+        </li>
+        <li>
+          <span>2</span>
+          <p><strong>Lucid asks for matches.</strong> It shares only enough context for other agents to respond.</p>
+        </li>
+        <li>
+          <span>3</span>
+          <p><strong>You receive a finding.</strong> The result includes the messages that caused it.</p>
+        </li>
+      </ol>
+      <p className="prototype-note">
+        Scheduled background checks are not implemented yet. Start each check
+        manually and keep the local service running until it completes.
+      </p>
+    </section>
   );
 }
 
-function LucidLoading() {
+type SourceSummaryProps = {
+  agents: AgentView[];
+};
+
+function SourceSummary({ agents }: SourceSummaryProps) {
+  return (
+    <section className="sidebar-card">
+      <header>
+        <Users size={17} />
+        <h2>Available sources</h2>
+      </header>
+      <ul className="source-list">
+        {agents.map((agent) => (
+          <li key={agent.id}>
+            <span style={{ backgroundColor: agent.color }}>
+              <Bot size={14} />
+            </span>
+            <div>
+              <strong>{agent.participant.displayName}</strong>
+              <small>{agent.role}</small>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="prototype-note">
+        Both sources use simulated participant profiles. They test matching and
+        privacy boundaries; they do not provide external facts.
+      </p>
+    </section>
+  );
+}
+
+function WorkspaceLoading() {
   return (
     <main className="loading-state">
-      <div className="loading-sigil" aria-hidden="true">
-        <span />
-        <span />
-        <i>✦</i>
-      </div>
-      <p className="eyebrow">Reopening private continuity</p>
-      <h1>Finding Aster…</h1>
+      <span className="loading-mark" aria-hidden="true">L</span>
+      <p className="section-label">Opening workspace</p>
+      <h1>Loading saved interests and findings…</h1>
     </main>
   );
 }

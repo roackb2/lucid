@@ -2,23 +2,23 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { RotateCcw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-type ResetDialogProps = {
+type ResetWorkspaceDialogProps = {
   disabled: boolean;
   isPending: boolean;
   onReset(): void;
 };
 
-export function ResetDialog({
+export function ResetWorkspaceDialog({
   disabled,
   isPending,
   onReset,
-}: ResetDialogProps) {
+}: ResetWorkspaceDialogProps) {
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
         <Button disabled={disabled} size="small" variant="ghost">
           <RotateCcw size={14} />
-          New generation
+          Reset workspace
         </Button>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -29,16 +29,16 @@ export function ResetDialog({
               <X size={18} />
             </button>
           </Dialog.Close>
-          <p className="eyebrow">Clear the active laboratory</p>
-          <Dialog.Title>Begin a new First Return generation?</Dialog.Title>
+          <p className="section-label">Destructive workspace action</p>
+          <Dialog.Title>Reset this discovery workspace?</Dialog.Title>
           <Dialog.Description>
-            Lucid will clear this generation’s principals, agents, returns and
-            ledger, then assign new Heddle conversations. Older Heddle files
-            remain on disk for inspection.
+            Lucid will clear the saved interest, findings, feedback and event
+            log, then assign new Heddle conversations. Existing Heddle session
+            and trace files remain on disk.
           </Dialog.Description>
           <div className="dialog-actions">
             <Dialog.Close asChild>
-              <Button variant="secondary">Keep this generation</Button>
+              <Button variant="secondary">Keep workspace</Button>
             </Dialog.Close>
             <Dialog.Close asChild>
               <Button
@@ -46,7 +46,7 @@ export function ResetDialog({
                 onClick={onReset}
                 variant="danger"
               >
-                Begin again
+                Reset workspace
               </Button>
             </Dialog.Close>
           </div>

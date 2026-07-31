@@ -1,190 +1,11 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1bec4a1d-0736-477a-9392-48cfb2d2ed3e",
+  "id": "b55baede-a91c-4574-9c7a-c101c2f09ea9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "agents": {
-      "name": "agents",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "network_id": {
-          "name": "network_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "principal_id": {
-          "name": "principal_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "sigil": {
-          "name": "sigil",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "purpose": {
-          "name": "purpose",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "persona": {
-          "name": "persona",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "conversation_id": {
-          "name": "conversation_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "wake_count": {
-          "name": "wake_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "last_seen_sequence": {
-          "name": "last_seen_sequence",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "last_awake_at": {
-          "name": "last_awake_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "agents_network_sort_idx": {
-          "name": "agents_network_sort_idx",
-          "columns": [
-            "network_id",
-            "sort_order"
-          ],
-          "isUnique": false
-        },
-        "agents_principal_id_idx": {
-          "name": "agents_principal_id_idx",
-          "columns": [
-            "principal_id"
-          ],
-          "isUnique": true
-        },
-        "agents_conversation_id_idx": {
-          "name": "agents_conversation_id_idx",
-          "columns": [
-            "conversation_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "agents_network_id_network_states_id_fk": {
-          "name": "agents_network_id_network_states_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "network_states",
-          "columnsFrom": [
-            "network_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "agents_principal_id_principals_id_fk": {
-          "name": "agents_principal_id_principals_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "principals",
-          "columnsFrom": [
-            "principal_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "network_events": {
-      "name": "network_events",
+    "discovery_events": {
+      "name": "discovery_events",
       "columns": {
         "sequence": {
           "name": "sequence",
@@ -200,15 +21,15 @@
           "notNull": true,
           "autoincrement": false
         },
-        "network_id": {
-          "name": "network_id",
+        "workspace_id": {
+          "name": "workspace_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "tick": {
-          "name": "tick",
+        "step_number": {
+          "name": "step_number",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -235,8 +56,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "target_principal_id": {
-          "name": "target_principal_id",
+        "target_participant_id": {
+          "name": "target_participant_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -279,53 +100,53 @@
         }
       },
       "indexes": {
-        "network_events_id_idx": {
-          "name": "network_events_id_idx",
+        "discovery_events_id_idx": {
+          "name": "discovery_events_id_idx",
           "columns": [
             "id"
           ],
           "isUnique": true
         },
-        "network_events_network_sequence_idx": {
-          "name": "network_events_network_sequence_idx",
+        "discovery_events_workspace_sequence_idx": {
+          "name": "discovery_events_workspace_sequence_idx",
           "columns": [
-            "network_id",
+            "workspace_id",
             "sequence"
           ],
           "isUnique": false
         },
-        "network_events_actor_idx": {
-          "name": "network_events_actor_idx",
+        "discovery_events_actor_idx": {
+          "name": "discovery_events_actor_idx",
           "columns": [
             "actor_agent_id",
             "sequence"
           ],
           "isUnique": false
         },
-        "network_events_target_agent_idx": {
-          "name": "network_events_target_agent_idx",
+        "discovery_events_target_agent_idx": {
+          "name": "discovery_events_target_agent_idx",
           "columns": [
             "target_agent_id",
             "sequence"
           ],
           "isUnique": false
         },
-        "network_events_target_principal_idx": {
-          "name": "network_events_target_principal_idx",
+        "discovery_events_target_participant_idx": {
+          "name": "discovery_events_target_participant_idx",
           "columns": [
-            "target_principal_id",
+            "target_participant_id",
             "sequence"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "network_events_network_id_network_states_id_fk": {
-          "name": "network_events_network_id_network_states_id_fk",
-          "tableFrom": "network_events",
-          "tableTo": "network_states",
+        "discovery_events_workspace_id_discovery_workspaces_id_fk": {
+          "name": "discovery_events_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "discovery_events",
+          "tableTo": "discovery_workspaces",
           "columnsFrom": [
-            "network_id"
+            "workspace_id"
           ],
           "columnsTo": [
             "id"
@@ -338,8 +159,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "network_states": {
-      "name": "network_states",
+    "discovery_workspaces": {
+      "name": "discovery_workspaces",
       "columns": {
         "id": {
           "name": "id",
@@ -348,15 +169,15 @@
           "notNull": true,
           "autoincrement": false
         },
-        "generation": {
-          "name": "generation",
+        "version_id": {
+          "name": "version_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "current_tick": {
-          "name": "current_tick",
+        "current_step": {
+          "name": "current_step",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -383,8 +204,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "principals": {
-      "name": "principals",
+    "participants": {
+      "name": "participants",
       "columns": {
         "id": {
           "name": "id",
@@ -393,8 +214,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "network_id": {
-          "name": "network_id",
+        "workspace_id": {
+          "name": "workspace_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -437,21 +258,193 @@
         }
       },
       "indexes": {
-        "principals_network_idx": {
-          "name": "principals_network_idx",
+        "participants_workspace_idx": {
+          "name": "participants_workspace_idx",
           "columns": [
-            "network_id"
+            "workspace_id"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "principals_network_id_network_states_id_fk": {
-          "name": "principals_network_id_network_states_id_fk",
-          "tableFrom": "principals",
-          "tableTo": "network_states",
+        "participants_workspace_id_discovery_workspaces_id_fk": {
+          "name": "participants_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "participants",
+          "tableTo": "discovery_workspaces",
           "columnsFrom": [
-            "network_id"
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "representative_agents": {
+      "name": "representative_agents",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "participant_id": {
+          "name": "participant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "instructions": {
+          "name": "instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "run_count": {
+          "name": "run_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_seen_sequence": {
+          "name": "last_seen_sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_run_at": {
+          "name": "last_run_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "representative_agents_workspace_sort_idx": {
+          "name": "representative_agents_workspace_sort_idx",
+          "columns": [
+            "workspace_id",
+            "sort_order"
+          ],
+          "isUnique": false
+        },
+        "representative_agents_participant_idx": {
+          "name": "representative_agents_participant_idx",
+          "columns": [
+            "participant_id"
+          ],
+          "isUnique": true
+        },
+        "representative_agents_conversation_idx": {
+          "name": "representative_agents_conversation_idx",
+          "columns": [
+            "conversation_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "representative_agents_workspace_id_discovery_workspaces_id_fk": {
+          "name": "representative_agents_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "representative_agents",
+          "tableTo": "discovery_workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "representative_agents_participant_id_participants_id_fk": {
+          "name": "representative_agents_participant_id_participants_id_fk",
+          "tableFrom": "representative_agents",
+          "tableTo": "participants",
+          "columnsFrom": [
+            "participant_id"
           ],
           "columnsTo": [
             "id"

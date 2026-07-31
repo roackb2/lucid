@@ -1,49 +1,52 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  LucidBusyError,
-  LucidInputError,
-  LucidService,
-} from './lucid/service.js';
+  DiscoveryInputError,
+  DiscoveryRunBusyError,
+  DiscoveryRunService,
+} from './lucid/discovery-run-service.js';
 import { trpc } from './trpc.js';
 
-const intentInputSchema = z.object({
+const interestInputSchema = z.object({
   content: z.string().trim().min(1).max(1_600),
 });
 
 const feedbackInputSchema = z.object({
-  returnSequence: z.number().int().positive(),
+  findingSequence: z.number().int().positive(),
   content: z.string().trim().min(1).max(1_600),
 });
 
-export function createAppRouter(lucid: LucidService) {
+export function createAppRouter(discoveryRuns: DiscoveryRunService) {
   return trpc.router({
     system: trpc.router({
       health: trpc.procedure.query(() => ({
         status: 'ok' as const,
-        service: 'lucid-first-return',
+        service: 'lucid-discovery',
       })),
     }),
-    lucid: trpc.router({
-      snapshot: trpc.procedure.query(() => lucid.snapshot()),
-      setIntent: trpc.procedure
-        .input(intentInputSchema)
-        .mutation(({ input }) => resolveLucidError(
-          () => lucid.setIntent(input.content),
+    discovery: trpc.router({
+      snapshot: trpc.procedure.query(() => discoveryRuns.snapshot()),
+      saveInterest: trpc.procedure
+        .input(interestInputSchema)
+        .mutation(({ input }) => resolveDiscoveryError(
+          () => discoveryRuns.saveInterest(input.content),
         )),
-      startJourney: trpc.procedure.mutation(() => resolveLucidError(
-        () => lucid.startJourney(),
+      startRun: trpc.procedure.mutation(() => resolveDiscoveryError(
+        () => discoveryRuns.startRun(),
       )),
-      feedback: trpc.procedure
+      submitFeedback: trpc.procedure
         .input(feedbackInputSchema)
-        .mutation(({ input }) => resolveLucidError(
-          () => lucid.submitFeedback(input.returnSequence, input.content),
+        .mutation(({ input }) => resolveDiscoveryError(
+          () => discoveryRuns.submitFeedback(
+            input.findingSequence,
+            input.content,
+          ),
         )),
-      cancel: trpc.procedure.mutation(() => ({
-        cancelled: lucid.cancelJourney(),
+      cancelRun: trpc.procedure.mutation(() => ({
+        cancelled: discoveryRuns.cancelRun(),
       })),
-      reset: trpc.procedure.mutation(() => resolveLucidError(
-        () => lucid.reset(),
+      resetWorkspace: trpc.procedure.mutation(() => resolveDiscoveryError(
+        () => discoveryRuns.resetWorkspace(),
       )),
     }),
   });
@@ -51,17 +54,17 @@ export function createAppRouter(lucid: LucidService) {
 
 export type AppRouter = ReturnType<typeof createAppRouter>;
 
-function resolveLucidError<T>(operation: () => T): T {
+function resolveDiscoveryError<T>(operation: () => T): T {
   try {
     return operation();
   } catch (error) {
-    if (error instanceof LucidBusyError) {
+    if (error instanceof DiscoveryRunBusyError) {
       throw new TRPCError({
         code: 'CONFLICT',
         message: error.message,
       });
     }
-    if (error instanceof LucidInputError) {
+    if (error instanceof DiscoveryInputError) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: error.message,

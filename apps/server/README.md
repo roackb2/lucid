@@ -1,29 +1,51 @@
 # Lucid server
 
-The server is the single-host composition root for the First Return experiment.
+The server is the composition root for Lucid's local delegated-discovery
+prototype.
 
 It owns:
 
-- tRPC transport and CORS policy;
+- HTTP/tRPC transport and CORS policy;
 - SQLite lifecycle and checked-in Drizzle migrations;
-- construction of the Lucid repository and journey service;
-- construction of the Heddle-backed agent mind;
+- construction of the discovery repository and run coordinator;
+- construction of the Heddle-backed agent runner;
 - graceful shutdown ordering.
 
-The `src/lucid` domain owns principal, network, journey, visibility, return, and
-feedback behavior. Heddle is integrated only through `HeddleAgentMind`.
-Transport code must not make scheduling, visibility, source-validation, or
-model-tool decisions.
+The server does not decide whether a message is true or useful. It makes
+participant identity, event visibility, delivery order, source references,
+bounded execution, and recovery predictable.
 
-Entrypoints:
+## Entrypoints
 
-- `src/server.ts` starts the HTTP service.
+- `src/server.ts` starts the HTTP service and owns shutdown ordering.
 - `src/migrate.ts` applies checked-in SQLite migrations.
-- `src/router.ts` exposes snapshot, private intent, start, feedback, cancel,
-  and reset operations.
+- `src/router.ts` exposes the `discovery` tRPC namespace:
+  - `snapshot`
+  - `saveInterest`
+  - `startRun`
+  - `submitFeedback`
+  - `cancelRun`
+  - `resetWorkspace`
+- `src/config.ts` validates environment variables and resolves state paths.
 
-Runtime state defaults to `../../local/first-return`. The process must settle
-an active wake before closing SQLite so cancellation can durably restore the
-agent's status and preserve unread input.
+## Service boundary
 
-Read `src/lucid/README.md` before changing domain ownership or lifecycle.
+`src/lucid` owns participant, representative-agent, discovery-run, visibility,
+finding, and feedback behavior. Heddle is integrated only through
+`HeddleAgentRunner`.
+
+Transport code must not reproduce:
+
+- run ordering;
+- visibility rules;
+- source validation;
+- agent communication budgets;
+- Heddle tool selection;
+- recovery policy.
+
+Runtime state defaults to `../../local/discovery-home`. The process must settle
+an active agent step before closing SQLite so cancellation can durably restore
+the agent's status and preserve unread input.
+
+Read [`src/lucid/README.md`](src/lucid/README.md) before changing domain
+ownership or lifecycle behavior.
