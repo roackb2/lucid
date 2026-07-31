@@ -1,15 +1,15 @@
 import { Activity, GitBranch, Sparkles } from 'lucide-react';
-import type { TerrariumSnapshot } from '@/lib/trpc';
+import type { LucidSnapshot } from '@/lib/trpc';
 
-type TerrariumHeaderProps = {
-  snapshot: TerrariumSnapshot;
+type LucidHeaderProps = {
+  snapshot: LucidSnapshot;
 };
 
-export function TerrariumHeader({ snapshot }: TerrariumHeaderProps) {
-  const { activeCycle, runtime, world } = snapshot;
+export function LucidHeader({ snapshot }: LucidHeaderProps) {
+  const { activeJourney, network, runtime } = snapshot;
 
   return (
-    <header className="terrarium-header">
+    <header className="lucid-header">
       <div className="brand-lockup">
         <div className="brand-mark" aria-hidden="true">
           <span />
@@ -17,17 +17,17 @@ export function TerrariumHeader({ snapshot }: TerrariumHeaderProps) {
           <span />
         </div>
         <div>
-          <p className="eyebrow">Persistent synthetic ecology</p>
-          <h1>Lucid <i>Dream Terrarium</i></h1>
+          <p className="eyebrow">Persistent delegated encounter</p>
+          <h1>Lucid <i>First Return</i></h1>
         </div>
       </div>
 
-      <dl className="runtime-strip" aria-label="Terrarium runtime">
+      <dl className="runtime-strip" aria-label="Lucid runtime">
         <div>
           <dt><Activity size={14} /> State</dt>
-          <dd className={activeCycle ? 'status-awake' : 'status-resting'}>
+          <dd className={activeJourney ? 'status-away' : 'status-home'}>
             <span className="status-dot" />
-            {activeCycle ? 'Dreaming' : 'Quiet'}
+            {activeJourney ? 'Away' : 'Home'}
           </dd>
         </div>
         <div>
@@ -36,7 +36,7 @@ export function TerrariumHeader({ snapshot }: TerrariumHeaderProps) {
         </div>
         <div className="runtime-wide">
           <dt><GitBranch size={14} /> Generation</dt>
-          <dd title={world.generation}>{world.generation.slice(0, 8)}</dd>
+          <dd title={network.generation}>{network.generation.slice(0, 8)}</dd>
         </div>
       </dl>
     </header>

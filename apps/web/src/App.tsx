@@ -1,33 +1,31 @@
 import { CloudOff, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
-import { ActiveCycle } from '@/components/terrarium/active-cycle';
-import { DreamerObservatory } from '@/components/terrarium/dreamer-observatory';
-import { OperatorConsole } from '@/components/terrarium/operator-console';
-import { TerrariumHeader } from '@/components/terrarium/terrarium-header';
-import { WorldTimeline } from '@/components/terrarium/world-timeline';
+import { ActiveJourney } from '@/components/lucid/active-journey';
+import { IntentPanel } from '@/components/lucid/intent-panel';
+import { LucidHeader } from '@/components/lucid/lucid-header';
+import { NetworkObservatory } from '@/components/lucid/network-observatory';
+import { ReturnPanel } from '@/components/lucid/return-panel';
 import { Button } from '@/components/ui/button';
-import { useTerrarium } from '@/hooks/use-terrarium';
+import { useLucid } from '@/hooks/use-lucid';
 
 export default function App() {
-  const terrarium = useTerrarium();
-  const [selectedDreamerId, setSelectedDreamerId] = useState<string>();
-  const snapshot = terrarium.snapshot.data;
+  const lucid = useLucid();
+  const snapshot = lucid.snapshot.data;
 
-  if (terrarium.snapshot.isPending) {
-    return <TerrariumLoading />;
+  if (lucid.snapshot.isPending) {
+    return <LucidLoading />;
   }
 
   if (!snapshot) {
     return (
       <main className="fatal-state">
         <CloudOff size={32} />
-        <p className="eyebrow">The glass is unreachable</p>
-        <h1>Lucid cannot find its world.</h1>
+        <p className="eyebrow">The network is unreachable</p>
+        <h1>Lucid cannot find Aster.</h1>
         <p>
-          Start the local server, then reconnect. No world state has been
-          discarded.
+          Start the local server, then reconnect. Durable agent conversations
+          and completed network events remain on disk.
         </p>
-        <Button onClick={() => terrarium.snapshot.refetch()} variant="secondary">
+        <Button onClick={() => lucid.snapshot.refetch()} variant="secondary">
           <RefreshCw size={15} />
           Try again
         </Button>
@@ -35,86 +33,121 @@ export default function App() {
     );
   }
 
-  const activeCycle = snapshot.activeCycle;
+  const latestReturn = snapshot.returns[0];
+  const activeJourney = snapshot.activeJourney;
+  const homeAgent = snapshot.agents.find((agent) => agent.isHomeAgent);
 
   return (
     <div className="app-shell">
       <div className="ambient-orb ambient-orb--one" aria-hidden="true" />
       <div className="ambient-orb ambient-orb--two" aria-hidden="true" />
-      <TerrariumHeader snapshot={snapshot} />
+      <LucidHeader snapshot={snapshot} />
 
       <main>
-        <section className="world-intro">
+        <section className="first-return-intro">
           <div>
-            <p className="eyebrow">World tick {snapshot.world.currentTick}</p>
+            <p className="eyebrow">First Return · local network experiment</p>
             <h2>
-              A small society that only
-              <span> moves when observed.</span>
+              Leave one thought.
+              <span> See what comes back.</span>
             </h2>
             <p>
-              Three durable minds share one causal world. Give them a fragment,
-              wake them one at a time, and watch provenance survive—or mutate—as
-              it passes between them.
+              Tell one persistent agent what you care about. It will carry only
+              enough of that intent into a bounded network, meet two clearly
+              synthetic peers, and return with one causal encounter—or choose
+              not to interrupt you.
             </p>
           </div>
-          <WorldPulse
-            active={Boolean(activeCycle)}
-            eventCount={snapshot.events.length}
-            tick={snapshot.world.currentTick}
+          <JourneyPulse
+            active={Boolean(activeJourney)}
+            peerCount={snapshot.agents.length - 1}
+            returnCount={snapshot.returns.length}
           />
         </section>
 
-        {activeCycle ? (
-          <ActiveCycle
-            cycle={activeCycle}
-            isCancelling={terrarium.cancel.isPending}
-            onCancel={() => terrarium.cancel.mutate()}
+        {activeJourney ? (
+          <ActiveJourney
+            journey={activeJourney}
+            isCancelling={lucid.cancel.isPending}
+            onCancel={() => lucid.cancel.mutate()}
           />
         ) : null}
 
-        <DreamerObservatory
-          activeDreamerId={activeCycle?.dreamerId}
-          dreamers={snapshot.dreamers}
-          onSelectDreamer={setSelectedDreamerId}
-          selectedDreamerId={selectedDreamerId}
-        />
+        <section className="home-section" aria-labelledby="home-title">
+          <div className="section-heading home-heading">
+            <div>
+              <p className="eyebrow">Private relationship</p>
+              <h2 id="home-title">{homeAgent?.name ?? 'Aster'} represents you</h2>
+            </div>
+            <p>
+              Value is yours to judge. Lucid records delivery and provenance,
+              not universal confidence.
+            </p>
+          </div>
 
-        <div className="workbench">
-          <OperatorConsole
-            isActive={Boolean(activeCycle)}
-            isAdvancing={terrarium.advance.isPending}
-            isResetting={terrarium.reset.isPending}
-            isSeeding={terrarium.seed.isPending}
-            onAdvance={(steps) => terrarium.advance.mutate(steps)}
-            onReset={() => terrarium.reset.mutate()}
-            onSeed={(content) => terrarium.seed.mutate(content)}
-          />
-          <WorldTimeline
-            dreamers={snapshot.dreamers}
-            events={snapshot.events}
-            selectedDreamerId={selectedDreamerId}
-          />
-        </div>
+          <div className="home-grid">
+            <IntentPanel
+              agentName={homeAgent?.name ?? 'Aster'}
+              intent={snapshot.intent}
+              isActive={Boolean(activeJourney)}
+              isSaving={lucid.setIntent.isPending}
+              isStarting={lucid.startJourney.isPending}
+              onSetIntent={(content) => lucid.setIntent.mutate(content)}
+              onStartJourney={() => lucid.startJourney.mutate()}
+            />
+            <ReturnPanel
+              agents={snapshot.agents}
+              isSubmitting={lucid.feedback.isPending}
+              key={latestReturn?.event.sequence ?? 'empty'}
+              onFeedback={(returnSequence, content) => (
+                lucid.feedback.mutate({ returnSequence, content })
+              )}
+              value={latestReturn}
+            />
+          </div>
+        </section>
+
+        <aside className="epistemic-boundary">
+          <span aria-hidden="true">◎</span>
+          <div>
+            <p className="eyebrow">What this run can establish</p>
+            <p>
+              If Aster cites a peer event it could not see beforehand, the
+              network caused a new delivery path. Only your response can tell
+              us whether that encounter mattered. Neither result proves a
+              network effect.
+            </p>
+          </div>
+        </aside>
+
+        <NetworkObservatory
+          activeAgentId={activeJourney?.agentId}
+          agents={snapshot.agents}
+          events={snapshot.events}
+          isActive={Boolean(activeJourney)}
+          isResetting={lucid.reset.isPending}
+          onReset={() => lucid.reset.mutate()}
+        />
       </main>
 
       <footer className="app-footer">
         <span>Lucid / Heddle {snapshot.runtime.heddleVersion}</span>
-        <span>Local-first · operator-controlled · inspectable</span>
+        <span>One real principal · two synthetic peers · inspectable paths</span>
       </footer>
     </div>
   );
 }
 
-type WorldPulseProps = {
+type JourneyPulseProps = {
   active: boolean;
-  eventCount: number;
-  tick: number;
+  peerCount: number;
+  returnCount: number;
 };
 
-function WorldPulse({ active, eventCount, tick }: WorldPulseProps) {
+function JourneyPulse({ active, peerCount, returnCount }: JourneyPulseProps) {
   return (
-    <div className={`world-pulse ${active ? 'world-pulse--active' : ''}`}>
-      <div className="world-pulse__rings" aria-hidden="true">
+    <div className={`journey-pulse ${active ? 'journey-pulse--active' : ''}`}>
+      <div className="journey-pulse__rings" aria-hidden="true">
         <span />
         <span />
         <span />
@@ -122,19 +155,19 @@ function WorldPulse({ active, eventCount, tick }: WorldPulseProps) {
       </div>
       <dl>
         <div>
-          <dt>Tick</dt>
-          <dd>{String(tick).padStart(3, '0')}</dd>
+          <dt>Synthetic peers</dt>
+          <dd>{peerCount}</dd>
         </div>
         <div>
-          <dt>Visible ledger</dt>
-          <dd>{eventCount}</dd>
+          <dt>Returns</dt>
+          <dd>{String(returnCount).padStart(2, '0')}</dd>
         </div>
       </dl>
     </div>
   );
 }
 
-function TerrariumLoading() {
+function LucidLoading() {
   return (
     <main className="loading-state">
       <div className="loading-sigil" aria-hidden="true">
@@ -142,8 +175,8 @@ function TerrariumLoading() {
         <span />
         <i>✦</i>
       </div>
-      <p className="eyebrow">Condensation is gathering</p>
-      <h1>Opening the terrarium…</h1>
+      <p className="eyebrow">Reopening private continuity</p>
+      <h1>Finding Aster…</h1>
     </main>
   );
 }

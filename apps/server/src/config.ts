@@ -38,7 +38,9 @@ export type LucidConfig = {
 };
 
 export function resolveLucidConfig(): LucidConfig {
-  const stateRoot = resolve(environment.LUCID_STATE_ROOT ?? join(LUCID_REPO_ROOT, 'local', 'terrarium'));
+  const stateRoot = resolve(
+    environment.LUCID_STATE_ROOT ?? join(LUCID_REPO_ROOT, 'local', 'first-return'),
+  );
 
   return {
     host: environment.HOST,

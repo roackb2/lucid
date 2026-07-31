@@ -1,11 +1,11 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9bb5f500-cacb-4a65-9e46-7471cbdb955d",
+  "id": "1bec4a1d-0736-477a-9392-48cfb2d2ed3e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "dreamers": {
-      "name": "dreamers",
+    "agents": {
+      "name": "agents",
       "columns": {
         "id": {
           "name": "id",
@@ -14,8 +14,15 @@
           "notNull": true,
           "autoincrement": false
         },
-        "world_id": {
-          "name": "world_id",
+        "network_id": {
+          "name": "network_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "principal_id": {
+          "name": "principal_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -35,8 +42,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "archetype": {
-          "name": "archetype",
+        "role": {
+          "name": "role",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -121,16 +128,23 @@
         }
       },
       "indexes": {
-        "dreamers_world_sort_idx": {
-          "name": "dreamers_world_sort_idx",
+        "agents_network_sort_idx": {
+          "name": "agents_network_sort_idx",
           "columns": [
-            "world_id",
+            "network_id",
             "sort_order"
           ],
           "isUnique": false
         },
-        "dreamers_conversation_id_idx": {
-          "name": "dreamers_conversation_id_idx",
+        "agents_principal_id_idx": {
+          "name": "agents_principal_id_idx",
+          "columns": [
+            "principal_id"
+          ],
+          "isUnique": true
+        },
+        "agents_conversation_id_idx": {
+          "name": "agents_conversation_id_idx",
           "columns": [
             "conversation_id"
           ],
@@ -138,12 +152,25 @@
         }
       },
       "foreignKeys": {
-        "dreamers_world_id_world_states_id_fk": {
-          "name": "dreamers_world_id_world_states_id_fk",
-          "tableFrom": "dreamers",
-          "tableTo": "world_states",
+        "agents_network_id_network_states_id_fk": {
+          "name": "agents_network_id_network_states_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "network_states",
           "columnsFrom": [
-            "world_id"
+            "network_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agents_principal_id_principals_id_fk": {
+          "name": "agents_principal_id_principals_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "principals",
+          "columnsFrom": [
+            "principal_id"
           ],
           "columnsTo": [
             "id"
@@ -156,8 +183,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "world_events": {
-      "name": "world_events",
+    "network_events": {
+      "name": "network_events",
       "columns": {
         "sequence": {
           "name": "sequence",
@@ -173,8 +200,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "world_id": {
-          "name": "world_id",
+        "network_id": {
+          "name": "network_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -194,15 +221,22 @@
           "notNull": true,
           "autoincrement": false
         },
-        "actor_dreamer_id": {
-          "name": "actor_dreamer_id",
+        "actor_agent_id": {
+          "name": "actor_agent_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "target_dreamer_id": {
-          "name": "target_dreamer_id",
+        "target_agent_id": {
+          "name": "target_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "target_principal_id": {
+          "name": "target_principal_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -245,45 +279,53 @@
         }
       },
       "indexes": {
-        "world_events_id_idx": {
-          "name": "world_events_id_idx",
+        "network_events_id_idx": {
+          "name": "network_events_id_idx",
           "columns": [
             "id"
           ],
           "isUnique": true
         },
-        "world_events_world_sequence_idx": {
-          "name": "world_events_world_sequence_idx",
+        "network_events_network_sequence_idx": {
+          "name": "network_events_network_sequence_idx",
           "columns": [
-            "world_id",
+            "network_id",
             "sequence"
           ],
           "isUnique": false
         },
-        "world_events_actor_idx": {
-          "name": "world_events_actor_idx",
+        "network_events_actor_idx": {
+          "name": "network_events_actor_idx",
           "columns": [
-            "actor_dreamer_id",
+            "actor_agent_id",
             "sequence"
           ],
           "isUnique": false
         },
-        "world_events_target_idx": {
-          "name": "world_events_target_idx",
+        "network_events_target_agent_idx": {
+          "name": "network_events_target_agent_idx",
           "columns": [
-            "target_dreamer_id",
+            "target_agent_id",
+            "sequence"
+          ],
+          "isUnique": false
+        },
+        "network_events_target_principal_idx": {
+          "name": "network_events_target_principal_idx",
+          "columns": [
+            "target_principal_id",
             "sequence"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "world_events_world_id_world_states_id_fk": {
-          "name": "world_events_world_id_world_states_id_fk",
-          "tableFrom": "world_events",
-          "tableTo": "world_states",
+        "network_events_network_id_network_states_id_fk": {
+          "name": "network_events_network_id_network_states_id_fk",
+          "tableFrom": "network_events",
+          "tableTo": "network_states",
           "columnsFrom": [
-            "world_id"
+            "network_id"
           ],
           "columnsTo": [
             "id"
@@ -296,8 +338,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "world_states": {
-      "name": "world_states",
+    "network_states": {
+      "name": "network_states",
       "columns": {
         "id": {
           "name": "id",
@@ -320,9 +362,61 @@
           "notNull": true,
           "autoincrement": false
         },
-        "next_dreamer_index": {
-          "name": "next_dreamer_index",
-          "type": "integer",
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "principals": {
+      "name": "principals",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "network_id": {
+          "name": "network_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "private_context": {
+          "name": "private_context",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -342,8 +436,30 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
+      "indexes": {
+        "principals_network_idx": {
+          "name": "principals_network_idx",
+          "columns": [
+            "network_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "principals_network_id_network_states_id_fk": {
+          "name": "principals_network_id_network_states_id_fk",
+          "tableFrom": "principals",
+          "tableTo": "network_states",
+          "columnsFrom": [
+            "network_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}

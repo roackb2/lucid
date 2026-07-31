@@ -29,16 +29,16 @@ export function ResetDialog({
               <X size={18} />
             </button>
           </Dialog.Close>
-          <p className="eyebrow">Irreversible in this generation</p>
-          <Dialog.Title>Let the current world dissolve?</Dialog.Title>
+          <p className="eyebrow">Clear the active laboratory</p>
+          <Dialog.Title>Begin a new First Return generation?</Dialog.Title>
           <Dialog.Description>
-            Lucid will clear this world ledger and give all three Dreamers new
-            Heddle conversations. The files from older conversations remain on
-            disk, but this interface will begin from a clean origin.
+            Lucid will clear this generation’s principals, agents, returns and
+            ledger, then assign new Heddle conversations. Older Heddle files
+            remain on disk for inspection.
           </Dialog.Description>
           <div className="dialog-actions">
             <Dialog.Close asChild>
-              <Button variant="secondary">Keep this world</Button>
+              <Button variant="secondary">Keep this generation</Button>
             </Dialog.Close>
             <Dialog.Close asChild>
               <Button

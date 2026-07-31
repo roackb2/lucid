@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import { LUCID_MIGRATIONS_ROOT, resolveLucidConfig } from './config.js';
 import { LucidDatabaseService } from './database/service.js';
+import { HeddleAgentMind } from './lucid/heddle-agent-mind.js';
+import { LucidRepository } from './lucid/repository.js';
+import { LucidService } from './lucid/service.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
-import { HeddleDreamerMind } from './terrarium/heddle-dreamer-mind.js';
-import { TerrariumRepository } from './terrarium/repository.js';
-import { DreamTerrariumService } from './terrarium/service.js';
 
 const HEDDLE_VERSION = '5.6.1';
 const config = resolveLucidConfig();
@@ -15,9 +15,9 @@ const database = new LucidDatabaseService(config.databasePath);
 
 database.migrate(LUCID_MIGRATIONS_ROOT);
 
-const repository = new TerrariumRepository(database);
-const mind = new HeddleDreamerMind(repository, config);
-const terrarium = new DreamTerrariumService(
+const repository = new LucidRepository(database);
+const mind = new HeddleAgentMind(repository, config);
+const lucid = new LucidService(
   repository,
   mind,
   {
@@ -28,7 +28,7 @@ const terrarium = new DreamTerrariumService(
 );
 
 const server = createHTTPServer({
-  router: createAppRouter(terrarium),
+  router: createAppRouter(lucid),
   createContext: () => ({
     requestId: randomUUID(),
   }),
@@ -86,7 +86,7 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   const serverClosed = new Promise<Error | undefined>((resolve) => {
     server.close((error) => resolve(error));
   });
-  await terrarium.stop();
+  await lucid.stop();
 
   const closeError = await serverClosed;
   if (closeError) {

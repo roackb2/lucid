@@ -5,36 +5,34 @@ import {
   HeddleEventType,
   type ConversationActivity,
 } from '@roackb2/heddle';
-import {
-  ConversationRunService,
-} from '@roackb2/heddle/hosted';
+import { ConversationRunService } from '@roackb2/heddle/hosted';
 import type { LucidConfig } from '../config.js';
-import { buildDreamerSystemContext, buildWakePrompt } from './prompts.js';
-import type { TerrariumRepository } from './repository.js';
+import { AgentNetworkToolService } from './network-tools.js';
+import { buildAgentSystemContext, buildWakePrompt } from './prompts.js';
+import type { LucidRepository } from './repository.js';
 import {
-  type DreamerMind,
-  type DreamerMindResult,
-  type DreamerMindRun,
+  type AgentMind,
+  type AgentMindResult,
+  type AgentMindRun,
   type MindActivity,
-  type StartDreamerMindInput,
+  type StartAgentMindInput,
 } from './types.js';
-import { DreamerWorldToolService } from './world-tools.js';
 
-type DreamerRunAddress = {
-  dreamerId: string;
+type AgentRunAddress = {
+  agentId: string;
   sessionId: string;
 };
 
 /**
- * Owns the Heddle composition boundary for a Lucid Dreamer.
+ * Owns the Heddle composition boundary for one delegated Lucid agent.
  *
- * Lucid supplies persona, visible world events, and scoped world tools. Heddle
- * owns the durable conversation, model/tool loop, leases, activity stream,
- * cancellation, trace, and run result.
+ * Lucid supplies principal context, visible network events, journey phase and
+ * scoped tools. Heddle owns durable conversation state, model/tool execution,
+ * leases, cancellation, activity, trace and the final turn result.
  */
-export class HeddleDreamerMind implements DreamerMind {
-  private readonly runs = new ConversationRunService<DreamerRunAddress>({
-    addressKey: ({ dreamerId, sessionId }) => `${dreamerId}:${sessionId}`,
+export class HeddleAgentMind implements AgentMind {
+  private readonly runs = new ConversationRunService<AgentRunAddress>({
+    addressKey: ({ agentId, sessionId }) => `${agentId}:${sessionId}`,
     replay: {
       maxEventsPerRun: 256,
       retentionMs: 10 * 60_000,
@@ -42,21 +40,24 @@ export class HeddleDreamerMind implements DreamerMind {
   });
 
   constructor(
-    private readonly repository: TerrariumRepository,
+    private readonly repository: LucidRepository,
     private readonly config: LucidConfig,
   ) {}
 
-  async start(input: StartDreamerMindInput): Promise<DreamerMindRun> {
-    const tools = new DreamerWorldToolService(
+  async start(input: StartAgentMindInput): Promise<AgentMindRun> {
+    const tools = new AgentNetworkToolService(
       this.repository,
-      input.dreamer,
+      input.agent,
+      input.principal,
+      input.phase,
+      input.journeyId,
       input.tick,
     );
     const toolDefinitions = tools.definitions();
     const extension = defineHostExtension({
-      id: `lucid:dreamer:${input.dreamer.id}`,
+      id: `lucid:agent:${input.agent.id}`,
       tools: toolDefinitions,
-      systemContext: buildDreamerSystemContext(input.dreamer),
+      systemContext: buildAgentSystemContext(input.agent, input.principal),
     });
     const engine = createConversationEngine({
       workspaceRoot: this.config.repoRoot,
@@ -74,20 +75,25 @@ export class HeddleDreamerMind implements DreamerMind {
       hostExtensions: [extension],
     });
     const session = (await engine.sessions.ensure({
-      id: input.dreamer.conversationId,
-      name: `${input.dreamer.name} · ${input.dreamer.archetype}`,
+      id: input.agent.conversationId,
+      name: `${input.agent.name} · ${input.agent.role}`,
       model: this.config.model,
     })).session;
 
     const handle = this.runs.startTurn({
       address: {
-        dreamerId: input.dreamer.id,
+        agentId: input.agent.id,
         sessionId: session.id,
       },
       engine,
       turn: {
         sessionId: session.id,
-        prompt: buildWakePrompt(input.dreamer, input.tick, input.visibleEvents),
+        prompt: buildWakePrompt(
+          input.agent,
+          input.phase,
+          input.tick,
+          input.visibleEvents,
+        ),
         maxSteps: this.config.maxSteps,
         maxToolConcurrency: 1,
         includePlanTool: false,
@@ -110,15 +116,15 @@ export class HeddleDreamerMind implements DreamerMind {
           },
         },
       },
-      projectResult: (result): DreamerMindResult => ({
+      projectResult: (result): AgentMindResult => ({
         outcome: result.outcome,
         summary: result.summary,
         traceFile: result.traceFile,
         toolCount: result.toolResults.length,
       }),
       projectError: () => ({
-        code: 'dreamer_wake_failed',
-        message: 'The Dreamer could not complete this wake cycle.',
+        code: 'agent_wake_failed',
+        message: 'The delegated agent could not complete this journey wake.',
       }),
     });
 
@@ -177,8 +183,8 @@ function projectActivity(activity: ConversationActivity): MindActivity | undefin
       return {
         type: activity.type,
         summary: activity.outcome === 'done'
-          ? 'Returning to rest.'
-          : `Wake cycle ended: ${activity.outcome}.`,
+          ? 'Returning from this wake.'
+          : `Journey wake ended: ${activity.outcome}.`,
         timestamp,
       };
     default:

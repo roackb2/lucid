@@ -16,6 +16,7 @@ export const lucidClient = createTRPCClient<AppRouter>({
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 
-export type TerrariumSnapshot = RouterOutputs['terrarium']['snapshot'];
-export type TerrariumEvent = TerrariumSnapshot['events'][number];
-export type DreamerView = TerrariumSnapshot['dreamers'][number];
+export type LucidSnapshot = RouterOutputs['lucid']['snapshot'];
+export type NetworkEvent = LucidSnapshot['events'][number];
+export type AgentView = LucidSnapshot['agents'][number];
+export type ReturnView = LucidSnapshot['returns'][number];

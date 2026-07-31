@@ -1,23 +1,39 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { WorldEventMetadata } from '../terrarium/types.js';
+import type { NetworkEventMetadata } from '../lucid/types.js';
 
-export const worldStates = sqliteTable('world_states', {
+export const networkStates = sqliteTable('network_states', {
   id: text('id').primaryKey(),
   generation: text('generation').notNull(),
   currentTick: integer('current_tick').notNull(),
-  nextDreamerIndex: integer('next_dreamer_index').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
 
-export const dreamers = sqliteTable('dreamers', {
+export const principals = sqliteTable('principals', {
   id: text('id').primaryKey(),
-  worldId: text('world_id')
+  networkId: text('network_id')
     .notNull()
-    .references(() => worldStates.id, { onDelete: 'cascade' }),
+    .references(() => networkStates.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  displayName: text('display_name').notNull(),
+  privateContext: text('private_context').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('principals_network_idx').on(table.networkId),
+]);
+
+export const agents = sqliteTable('agents', {
+  id: text('id').primaryKey(),
+  networkId: text('network_id')
+    .notNull()
+    .references(() => networkStates.id, { onDelete: 'cascade' }),
+  principalId: text('principal_id')
+    .notNull()
+    .references(() => principals.id, { onDelete: 'cascade' }),
   sortOrder: integer('sort_order').notNull(),
   name: text('name').notNull(),
-  archetype: text('archetype').notNull(),
+  role: text('role').notNull(),
   sigil: text('sigil').notNull(),
   color: text('color').notNull(),
   purpose: text('purpose').notNull(),
@@ -30,28 +46,31 @@ export const dreamers = sqliteTable('dreamers', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [
-  index('dreamers_world_sort_idx').on(table.worldId, table.sortOrder),
-  uniqueIndex('dreamers_conversation_id_idx').on(table.conversationId),
+  index('agents_network_sort_idx').on(table.networkId, table.sortOrder),
+  uniqueIndex('agents_principal_id_idx').on(table.principalId),
+  uniqueIndex('agents_conversation_id_idx').on(table.conversationId),
 ]);
 
-export const worldEvents = sqliteTable('world_events', {
+export const networkEvents = sqliteTable('network_events', {
   sequence: integer('sequence').primaryKey({ autoIncrement: true }),
   id: text('id').notNull(),
-  worldId: text('world_id')
+  networkId: text('network_id')
     .notNull()
-    .references(() => worldStates.id, { onDelete: 'cascade' }),
+    .references(() => networkStates.id, { onDelete: 'cascade' }),
   tick: integer('tick').notNull(),
   kind: text('kind').notNull(),
-  actorDreamerId: text('actor_dreamer_id'),
-  targetDreamerId: text('target_dreamer_id'),
+  actorAgentId: text('actor_agent_id'),
+  targetAgentId: text('target_agent_id'),
+  targetPrincipalId: text('target_principal_id'),
   parentSequence: integer('parent_sequence'),
   title: text('title').notNull(),
   content: text('content').notNull(),
-  metadata: text('metadata', { mode: 'json' }).$type<WorldEventMetadata>().notNull(),
+  metadata: text('metadata', { mode: 'json' }).$type<NetworkEventMetadata>().notNull(),
   createdAt: text('created_at').notNull(),
 }, (table) => [
-  uniqueIndex('world_events_id_idx').on(table.id),
-  index('world_events_world_sequence_idx').on(table.worldId, table.sequence),
-  index('world_events_actor_idx').on(table.actorDreamerId, table.sequence),
-  index('world_events_target_idx').on(table.targetDreamerId, table.sequence),
+  uniqueIndex('network_events_id_idx').on(table.id),
+  index('network_events_network_sequence_idx').on(table.networkId, table.sequence),
+  index('network_events_actor_idx').on(table.actorAgentId, table.sequence),
+  index('network_events_target_agent_idx').on(table.targetAgentId, table.sequence),
+  index('network_events_target_principal_idx').on(table.targetPrincipalId, table.sequence),
 ]);

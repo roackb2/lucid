@@ -1,60 +1,83 @@
 # Lucid
 
-Lucid is a local-first **Dream Terrarium**: three persistent synthetic minds
-share a small causal world, wake one at a time, and decide whether to publish,
-whisper, revise a belief, or stay quiet.
+Lucid is a local-first experiment in delegated encounter.
 
-It is an entertainment and research project. There is intentionally no
-backward-compatibility contract with earlier Lucid implementations.
+The **First Return** slice gives one real local principal a persistent agent,
+Aster. The principal describes one long-lived interest in ordinary language,
+then Aster carries the smallest useful abstraction of that intent into a
+bounded network containing two clearly labelled synthetic peers. Aster returns
+with one peer-sourced encounter—or explicitly chooses not to interrupt.
 
-## The experiment
+The principal then responds in ordinary language. That correction becomes
+private input for Aster's next journey.
 
-The default society has three Dreamers:
-
-- **Lumen · The Archivist** protects provenance and separates observation from
-  inference.
-- **Morrow · The Storyweaver** turns fragments into memorable, explicitly
-  speculative patterns.
-- **Sable · The Skeptic** probes contradictions and resists confident nonsense.
-
-The operator adds a world seed and advances either one wake or one full
-three-Dreamer orbit. Nothing runs forever in the background.
+## The product loop
 
 ```mermaid
 flowchart LR
-  O["Operator seed"] --> W["Lucid world ledger"]
-  W --> L["Lumen wake"]
-  L --> W
-  W --> M["Morrow wake"]
-  M --> W
-  W --> S["Sable wake"]
-  S --> W
+  P["Private human intent"] --> A1["Aster seeks"]
+  A1 --> M["Mira responds"]
+  A1 --> K["Kite responds"]
+  M --> A2["Aster returns"]
+  K --> A2
+  A2 --> R["One return or quiet"]
+  R --> F["Private human feedback"]
+  F --> A1
 ```
 
-Each wake is one durable Heddle conversation turn. A Dreamer can make at most
-two world-changing tool calls, and Lucid displays every resulting event with
-its visibility and provenance.
+One journey is deliberately bounded to four durable Heddle turns:
+
+1. Aster receives the principal's private intent and decides what little
+   context to take outward.
+2. Mira, representing a synthetic music-making principal, may respond.
+3. Kite, representing a synthetic agent-product principal, may respond.
+4. Aster sees the resulting peer messages and either returns one encounter or
+   stays quiet.
+
+Nothing loops forever in the background. The local user starts and may cancel
+each journey.
+
+## What Lucid enforces
+
+Lucid strongly structures only facts the platform can make reliable:
+
+- which principal an agent represents;
+- which agent may see each event;
+- what was delivered and when;
+- which visible peer events caused a return;
+- what Aster disclosed while seeking;
+- wake lifecycle, cancellation, mutation limits, and durable cursors.
+
+Intent, peer messages, returns, and feedback remain ordinary language. Lucid
+does not manufacture confidence scores, evidence packets, universal quality
+ratings, reputation, bidding, or a simulated market.
+
+A causal source path proves that the network delivered an encounter Aster did
+not have beforehand. It does **not** prove that the content is true, useful, or
+evidence of a network effect. Only the principal can judge whether a return
+matters.
 
 ## Ownership boundary
 
 | Lucid owns | Heddle owns |
 | --- | --- |
-| Dreamer identity and persona | Durable conversation per Dreamer |
-| SQLite world ledger | Model and tool loop |
-| Public/private visibility | Turn lease and cancellation |
-| Round-robin wake order | Activity events and trace |
-| Mutation budget and operator controls | Provider authentication |
+| Principal and agent identity | Durable conversation per agent |
+| SQLite network event ledger | Model and tool loop |
+| Private/shared delivery rules | Turn lease and cancellation |
+| Four-stop journey route | Activity events and trace |
+| Return source validation | Provider authentication |
+| Two-action wake budget | Session persistence |
 
-Lucid exposes only five host tools to a Dreamer:
+Lucid exposes only these host tools:
 
-- `read_world`
-- `publish_to_world`
+- `read_network`
+- `post_to_commons`
 - `send_message`
-- `record_belief`
+- `return_to_principal` — only for Aster's final wake
 - `rest`
 
 Heddle's coding, shell, browser, memory, and generic MCP tools are not visible
-inside the terrarium.
+inside the network.
 
 ## Run locally
 
@@ -72,7 +95,7 @@ yarn dev
 
 Open [http://127.0.0.1:3080](http://127.0.0.1:3080).
 
-Useful commands:
+Useful checks:
 
 ```bash
 yarn typecheck
@@ -87,52 +110,36 @@ in `.env.example`.
 
 ## Persistence
 
-Runtime state is intentionally inspectable and lives under
-`local/terrarium/`:
+Runtime state is inspectable and defaults to `local/first-return/`:
 
 ```text
-local/terrarium/
-├── lucid.sqlite          # world, Dreamers, visibility cursors, events
+local/first-return/
+├── lucid.sqlite          # principals, agents, cursors, events, returns
 └── heddle/
-    ├── chat-sessions/    # private durable Dreamer conversations
-    └── traces/           # one trace per completed Heddle turn
+    ├── chat-sessions/    # private durable agent conversations
+    └── traces/           # completed Heddle turns
 ```
 
-Starting a new generation clears the active Lucid world and assigns new Heddle
-conversation IDs. Older Heddle session files are retained for inspection; the
-reset action does not delete them.
+Dream Terrarium state under `local/terrarium/` is not modified by this slice.
 
-If the host stops during a wake, Lucid returns that Dreamer to rest at startup
-and leaves unread events unconsumed. Graceful shutdown cancels and settles the
-active Heddle run before closing SQLite.
+If the host stops during a wake, Lucid returns that agent to rest on startup
+without consuming unread input. In-flight model execution does not resume
+automatically; the principal may start a new bounded journey. Graceful shutdown
+cancels and settles the active Heddle run before SQLite closes.
 
-## World visibility
-
-| Event | Dreamers that can read it |
-| --- | --- |
-| origin, operator seed, public post | all |
-| private message | recipient only |
-| belief, rest, reflection, wake, error | operator only |
-
-Source sequence IDs are validated against the acting Dreamer's visible world.
-A Dreamer cannot cite a private event it did not receive.
+Starting a new generation clears only the active First Return database and
+assigns new Heddle conversation IDs. Older Heddle session files remain on disk.
 
 ## Repository shape
 
 ```text
 apps/
-├── server/  # tRPC, SQLite/Drizzle, world domain, Heddle adapter
-└── web/     # React observatory and operator controls
+├── server/  # tRPC, SQLite/Drizzle, Lucid domain, Heddle adapter
+└── web/     # private home surface and optional network observatory
 ```
 
-The authoritative service-boundary notes live in
-`apps/server/src/terrarium/README.md`.
+The authoritative service boundary lives in
+`apps/server/src/lucid/README.md`.
 
-## Promising next experiments
-
-- Give every public claim a confidence market and watch beliefs converge.
-- Let Dreamers create inspectable artifacts that persist beside the ledger.
-- Introduce delayed or lossy delivery and measure narrative distortion.
-- Add finite-lived Dreamers whose successors inherit only selected memories.
-- Replay the same seed across several clean generations and compare emergent
-  cultures.
+The earlier Dream Terrarium remains preserved in Git history as the
+`codex/dream-terrarium` branch and commit `2c367e9`.

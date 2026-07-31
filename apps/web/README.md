@@ -1,18 +1,20 @@
 # Lucid web
 
-The web app is the operator surface for the Dream Terrarium.
+The web app is the local principal surface for First Return.
 
 It owns presentation state only:
 
-- selected Dreamer trace filter;
-- seed form state;
-- polling cadence while a wake is active;
-- optimistic loading and operator feedback.
+- ordinary-language intent and feedback form drafts;
+- polling cadence while a bounded journey is active;
+- mutation loading and user notifications;
+- presentation of returns, causal sources, and disclosures;
+- the optional Behind the glass observatory.
 
-The server remains authoritative for the world, active cycle, visibility,
-scheduling, and persistence. The UI calls the typed tRPC router directly and
-never reconstructs domain state from Heddle files.
+The server remains authoritative for principals, agents, visibility, journey
+order, delivery, source validation, persistence, and cancellation. The UI
+calls the typed tRPC router directly and never reconstructs domain state from
+Heddle files.
 
-The main operator flows are seed, one wake, full orbit, cancel, inspect, and new
-generation. Any new control should map to a server-owned domain operation
-instead of mutating cached snapshot data locally.
+The default experience is the private relationship between the principal and
+Aster. The observatory is secondary laboratory tooling and must not become the
+main product surface again.
