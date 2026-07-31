@@ -33,8 +33,9 @@ export function ResetWorkspaceDialog({
           <Dialog.Title>Reset this discovery workspace?</Dialog.Title>
           <Dialog.Description>
             Lucid will clear the saved interest, findings, feedback and event
-            log, then assign new Heddle conversations. Existing Heddle session
-            and trace files remain on disk.
+            log. Running wakes will stop, and the current Heddle tasks,
+            checkpoints and run history will be replaced with a clean
+            workspace.
           </Dialog.Description>
           <div className="dialog-actions">
             <Dialog.Close asChild>

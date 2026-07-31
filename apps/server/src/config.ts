@@ -18,6 +18,16 @@ const environmentSchema = z.object({
   LUCID_STATE_ROOT: z.string().trim().min(1).optional(),
   LUCID_MODEL: z.string().trim().min(1).default('gpt-5.4-mini'),
   LUCID_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(7),
+  LUCID_HEARTBEAT_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(10_000)
+    .default(15 * 60_000),
+  LUCID_HEARTBEAT_POLL_MS: z.coerce
+    .number()
+    .int()
+    .min(250)
+    .default(1_000),
   LUCID_PREFER_API_KEY: z.enum(['true', 'false']).default('false'),
 });
 
@@ -34,6 +44,8 @@ export type LucidConfig = {
   heddleStateRoot: string;
   model: string;
   maxSteps: number;
+  heartbeatIntervalMs: number;
+  heartbeatPollMs: number;
   preferApiKey: boolean;
 };
 
@@ -53,6 +65,8 @@ export function resolveLucidConfig(): LucidConfig {
     heddleStateRoot: join(stateRoot, 'heddle'),
     model: environment.LUCID_MODEL,
     maxSteps: environment.LUCID_MAX_STEPS,
+    heartbeatIntervalMs: environment.LUCID_HEARTBEAT_INTERVAL_MS,
+    heartbeatPollMs: environment.LUCID_HEARTBEAT_POLL_MS,
     preferApiKey: environment.LUCID_PREFER_API_KEY === 'true',
   };
 }

@@ -2,7 +2,6 @@ import dayjs from 'dayjs';
 import {
   CheckCircle2,
   ChevronDown,
-  CircleSlash2,
   MessageSquareText,
   Route,
   Send,
@@ -44,16 +43,14 @@ export function FindingCard({
   };
 
   return (
-    <article className={`finding-card ${finding.noMatch ? 'finding-card--empty' : ''}`}>
+    <article className="finding-card">
       <header className="finding-card__header">
         <div className="finding-card__status" aria-hidden="true">
-          {finding.noMatch
-            ? <CircleSlash2 size={18} />
-            : <CheckCircle2 size={18} />}
+          <CheckCircle2 size={18} />
         </div>
         <div>
           <div className="finding-card__meta">
-            <span>{finding.noMatch ? 'Completed check' : 'Possible match'}</span>
+            <span>Possible match</span>
             {isLatest ? <span className="new-badge">Latest</span> : null}
             <time dateTime={finding.finding.createdAt}>
               {dayjs(finding.finding.createdAt).format('MMM D, HH:mm')}
@@ -129,14 +126,12 @@ export function FindingCard({
             <strong>Your feedback</strong>
           </div>
           <p>{finding.feedback.content}</p>
-          <small>Lucid will receive this during the next check.</small>
+          <small>Lucid will receive this during its next wake.</small>
         </section>
       ) : (
         <form className="finding-feedback" onSubmit={submitFeedback}>
           <label htmlFor={`finding-feedback-${finding.finding.sequence}`}>
-            {finding.noMatch
-              ? 'Was reporting no match the right choice?'
-              : 'Was this useful? Tell Lucid what it understood or missed.'}
+            Was this useful? Tell Lucid what it understood or missed.
           </label>
           <div>
             <textarea

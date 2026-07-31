@@ -5,9 +5,9 @@ import {
   RefreshCw,
   Users,
 } from 'lucide-react';
-import { ActiveDiscoveryRun } from '@/components/lucid/active-discovery-run';
 import { ActivityPanel } from '@/components/lucid/activity-panel';
 import { AppHeader } from '@/components/lucid/app-header';
+import { BackgroundChecks } from '@/components/lucid/background-checks';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { InterestComposer } from '@/components/lucid/interest-composer';
 import { Button } from '@/components/ui/button';
@@ -43,9 +43,8 @@ export default function App() {
     );
   }
 
-  const activeRun = snapshot.activeRun;
+  const backgroundChecks = snapshot.backgroundChecks;
   const sourceAgents = snapshot.agents.filter((agent) => !agent.isUserAgent);
-  const latestFindingAt = snapshot.findings[0]?.finding.createdAt;
 
   return (
     <div className="workspace-shell">
@@ -73,7 +72,7 @@ export default function App() {
             </div>
             <div>
               <dt>Mode</dt>
-              <dd>Manual</dd>
+              <dd>{backgroundChecks.enabled ? 'Background' : 'Paused'}</dd>
             </div>
           </dl>
         </section>
@@ -82,28 +81,30 @@ export default function App() {
           <div className="workspace-main">
             <InterestComposer
               interest={snapshot.interest}
-              isRunActive={Boolean(activeRun)}
+              backgroundChecksEnabled={backgroundChecks.enabled}
+              isChecking={backgroundChecks.running}
               isSaving={discovery.saveInterest.isPending}
-              isStarting={discovery.startRun.isPending}
-              lastCheckedAt={latestFindingAt}
+              isRunningNow={discovery.runNow.isPending}
+              lastCheckedAt={backgroundChecks.lastRunAt}
               onSaveInterest={(content) => (
                 discovery.saveInterest.mutateAsync(content)
               )}
-              onStartRun={() => discovery.startRun.mutate()}
+              onRunNow={() => discovery.runNow.mutate()}
             />
 
-            {activeRun ? (
-              <ActiveDiscoveryRun
-                isCancelling={discovery.cancelRun.isPending}
-                onCancel={() => discovery.cancelRun.mutate()}
-                run={activeRun}
-              />
-            ) : null}
+            <BackgroundChecks
+              checks={backgroundChecks}
+              isUpdating={discovery.setBackgroundChecksEnabled.isPending}
+              onSetEnabled={(enabled) => (
+                discovery.setBackgroundChecksEnabled.mutate(enabled)
+              )}
+            />
 
             <FindingsFeed
               agents={snapshot.agents}
+              backgroundChecksEnabled={backgroundChecks.enabled}
               findings={snapshot.findings}
-              isRunActive={Boolean(activeRun)}
+              isChecking={backgroundChecks.running}
               isSubmittingFeedback={discovery.submitFeedback.isPending}
               onFeedback={(findingSequence, content) => (
                 discovery.submitFeedback.mutateAsync({
@@ -121,18 +122,17 @@ export default function App() {
         </div>
 
         <ActivityPanel
-          activeAgentId={activeRun?.agentId}
           agents={snapshot.agents}
           events={snapshot.events}
           isResetting={discovery.resetWorkspace.isPending}
-          isRunActive={Boolean(activeRun)}
           onReset={() => discovery.resetWorkspace.mutate()}
+          tasks={backgroundChecks.tasks}
         />
       </main>
 
       <footer className="workspace-footer">
         <span>Lucid · Heddle {snapshot.runtime.heddleVersion}</span>
-        <span>Local prototype · manual checks · inspectable delivery</span>
+        <span>Local prototype · durable background checks · inspectable delivery</span>
       </footer>
     </div>
   );
@@ -152,7 +152,7 @@ function HowItWorks() {
         </li>
         <li>
           <span>2</span>
-          <p><strong>Lucid asks for matches.</strong> It shares only enough context for other agents to respond.</p>
+          <p><strong>Agents wake on a schedule.</strong> New messages can wake the relevant representative sooner.</p>
         </li>
         <li>
           <span>3</span>
@@ -160,8 +160,8 @@ function HowItWorks() {
         </li>
       </ol>
       <p className="prototype-note">
-        Scheduled background checks are not implemented yet. Start each check
-        manually and keep the local service running until it completes.
+        Empty wakes do not call the model. Lucid acts only when an agent has
+        unread user input or another agent’s message.
       </p>
     </section>
   );

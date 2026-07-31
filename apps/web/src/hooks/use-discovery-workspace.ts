@@ -13,7 +13,7 @@ export function useDiscoveryWorkspace() {
     queryKey: SNAPSHOT_KEY,
     queryFn: () => lucidClient.discovery.snapshot.query(),
     refetchInterval: (query) => (
-      query.state.data?.activeRun ? 700 : 4_000
+      query.state.data?.backgroundChecks.running ? 700 : 4_000
     ),
     retry: 2,
   });
@@ -27,16 +27,37 @@ export function useDiscoveryWorkspace() {
         SNAPSHOT_KEY,
         nextSnapshot,
       );
-      toast.success('Lucid saved what to look for.');
+      toast.success('Interest saved. Lucid will check it in the background.');
     },
     onError: notifyError,
   });
 
-  const startRun = useMutation({
-    mutationFn: () => lucidClient.discovery.startRun.mutate(),
-    onSuccess: async () => {
-      toast.message('Discovery check started.');
-      await queryClient.invalidateQueries({ queryKey: SNAPSHOT_KEY });
+  const runNow = useMutation({
+    mutationFn: () => lucidClient.discovery.runNow.mutate(),
+    onSuccess: (nextSnapshot) => {
+      queryClient.setQueryData<DiscoverySnapshot>(
+        SNAPSHOT_KEY,
+        nextSnapshot,
+      );
+      toast.message('A fresh check has been queued.');
+    },
+    onError: notifyError,
+  });
+
+  const setBackgroundChecksEnabled = useMutation({
+    mutationFn: (enabled: boolean) => (
+      lucidClient.discovery.setBackgroundChecksEnabled.mutate({ enabled })
+    ),
+    onSuccess: (nextSnapshot) => {
+      queryClient.setQueryData<DiscoverySnapshot>(
+        SNAPSHOT_KEY,
+        nextSnapshot,
+      );
+      toast.message(
+        nextSnapshot.backgroundChecks.enabled
+          ? 'Background checks resumed.'
+          : 'Background checks paused.',
+      );
     },
     onError: notifyError,
   });
@@ -50,18 +71,7 @@ export function useDiscoveryWorkspace() {
         SNAPSHOT_KEY,
         nextSnapshot,
       );
-      toast.success('Feedback saved for the next check.');
-    },
-    onError: notifyError,
-  });
-
-  const cancelRun = useMutation({
-    mutationFn: () => lucidClient.discovery.cancelRun.mutate(),
-    onSuccess: async ({ cancelled }) => {
-      if (cancelled) {
-        toast.message('Stopping the discovery check.');
-      }
-      await queryClient.invalidateQueries({ queryKey: SNAPSHOT_KEY });
+      toast.success('Feedback saved for Lucid’s next wake.');
     },
     onError: notifyError,
   });
@@ -81,9 +91,9 @@ export function useDiscoveryWorkspace() {
   return {
     snapshot,
     saveInterest,
-    startRun,
+    runNow,
+    setBackgroundChecksEnabled,
     submitFeedback,
-    cancelRun,
     resetWorkspace,
   };
 }
