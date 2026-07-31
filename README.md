@@ -86,6 +86,7 @@ The implementation uses responsibility-based names:
 
 | Name | Responsibility |
 | --- | --- |
+| `LucidSqliteDatabase` | Owns the concrete SQLite connection, pragmas, migrations, and shutdown |
 | `DiscoveryRunService` | Coordinates one bounded four-step discovery run |
 | `DiscoveryEventRepository` | Persists participants, agents, events, visibility, and cursors |
 | `HeddleAgentRunner` | Executes one representative-agent step through Heddle |
@@ -93,7 +94,8 @@ The implementation uses responsibility-based names:
 | `DiscoveryWorkspace` | Durable state for the local discovery product |
 | `FindingView` | User-facing finding plus source messages and feedback |
 
-The authoritative backend boundary is documented in
+The authoritative backend boundaries are documented in
+[`apps/server/src/database/README.md`](apps/server/src/database/README.md) and
 [`apps/server/src/lucid/README.md`](apps/server/src/lucid/README.md).
 
 ## Run locally

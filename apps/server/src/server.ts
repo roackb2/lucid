@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import { LUCID_MIGRATIONS_ROOT, resolveLucidConfig } from './config.js';
-import { LucidDatabaseService } from './database/service.js';
+import { LucidSqliteDatabase } from './database/sqlite-database.js';
 import { DiscoveryEventRepository } from './lucid/discovery-event-repository.js';
 import { DiscoveryRunService } from './lucid/discovery-run-service.js';
 import { HeddleAgentRunner } from './lucid/heddle-agent-runner.js';
@@ -11,7 +11,7 @@ import { createAppRouter } from './router.js';
 const HEDDLE_VERSION = '5.6.1';
 const config = resolveLucidConfig();
 const logger = createLucidLogger(config.logLevel);
-const database = new LucidDatabaseService(config.databasePath);
+const database = new LucidSqliteDatabase(config.databasePath);
 
 database.migrate(LUCID_MIGRATIONS_ROOT);
 

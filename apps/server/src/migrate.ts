@@ -1,8 +1,8 @@
 import { LUCID_MIGRATIONS_ROOT, resolveLucidConfig } from './config.js';
-import { LucidDatabaseService } from './database/service.js';
+import { LucidSqliteDatabase } from './database/sqlite-database.js';
 
 const config = resolveLucidConfig();
-const database = new LucidDatabaseService(config.databasePath);
+const database = new LucidSqliteDatabase(config.databasePath);
 
 try {
   database.migrate(LUCID_MIGRATIONS_ROOT);

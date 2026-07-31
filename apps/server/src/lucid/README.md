@@ -21,6 +21,28 @@ Names in this directory should describe an engineering responsibility. Avoid
 metaphorical lifecycle terms when `run`, `step`, `message`, `finding`,
 `participant`, or `event` states the behavior directly.
 
+## Data model intent
+
+The four persisted records have different lifetimes:
+
+| Record | Meaning |
+| --- | --- |
+| `DiscoveryWorkspace` | One local product workspace and its current reset generation |
+| `Participant` | The human or explicit synthetic subject whose private context an agent represents |
+| `Agent` | The executable representative, Heddle conversation identity, status, and durable unread cursor |
+| `DiscoveryEvent` | Append-only input, communication, result, feedback, and lifecycle history |
+
+`Participant` does not mean "a thing to search for." It answers who the agent
+represents and owns relatively stable private background. The local user's
+current interest is an `interest_saved` event visible only to that participant
+and its agent. Keeping the interest in the event history preserves changes and
+feedback without overwriting the participant record.
+
+The current schema intentionally enforces one representative agent per
+participant. A first-class interest entity should be introduced only when the
+product needs independently scheduled, paused, or concurrently active
+interests.
+
 ## Lucid owns
 
 - participant identity and representative-agent ownership;
@@ -70,6 +92,30 @@ order, or whether a finding was delivered.
 
 Only a successful Heddle turn advances an agent's visible-event cursor.
 Cancellation or failure leaves unread events available for a later attempt.
+
+## Agent-to-agent message delivery
+
+Agents do not call one another's Heddle sessions directly and there is no
+real-time socket or peer process. Lucid provides a serialized mailbox over the
+append-only `discovery_events` table:
+
+1. `DiscoveryRunService` chooses the next agent in the bounded route.
+2. `DiscoveryEventRepository.beginAgentStep` reads only events visible to that
+   agent after its durable `lastSeenSequence`.
+3. `HeddleAgentRunner` starts one Heddle turn with those unread events and a
+   scoped `AgentCommunicationToolService`.
+4. `post_shared_message` appends an event visible to every other
+   representative agent; `send_direct_message` appends one visible only to the
+   named recipient and local operator.
+5. A later agent step reads the new event. The sender never mutates another
+   Heddle conversation directly.
+6. After a successful turn, the cursor advances to the step's original event
+   horizon. Messages created during the step remain unread for their eventual
+   recipients.
+
+`source_event_ids` and `parentSequence` preserve causal delivery. They show
+which visible message caused a later message or finding, but do not certify
+the content as true.
 
 ## Recovery boundary
 

@@ -10,7 +10,7 @@ import * as schema from './schema.js';
  * relies on. Domain repositories receive the Drizzle handle; they do not
  * configure or close the underlying database themselves.
  */
-export class LucidDatabaseService {
+export class LucidSqliteDatabase {
   readonly client: BetterSqlite3.Database;
   readonly orm: BetterSQLite3Database<typeof schema>;
 

@@ -19,6 +19,8 @@ bounded execution, and recovery predictable.
 
 - `src/server.ts` starts the HTTP service and owns shutdown ordering.
 - `src/migrate.ts` applies checked-in SQLite migrations.
+- `src/database/sqlite-database.ts` owns the concrete SQLite connection,
+  pragmas, migrations, and shutdown.
 - `src/router.ts` exposes the `discovery` tRPC namespace:
   - `snapshot`
   - `saveInterest`
@@ -47,5 +49,7 @@ Runtime state defaults to `../../local/discovery-home`. The process must settle
 an active agent step before closing SQLite so cancellation can durably restore
 the agent's status and preserve unread input.
 
-Read [`src/lucid/README.md`](src/lucid/README.md) before changing domain
-ownership or lifecycle behavior.
+Read [`src/database/README.md`](src/database/README.md) before changing
+persistence infrastructure or schema ownership. Read
+[`src/lucid/README.md`](src/lucid/README.md) before changing domain ownership
+or lifecycle behavior.

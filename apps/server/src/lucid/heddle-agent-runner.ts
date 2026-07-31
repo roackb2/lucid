@@ -61,10 +61,9 @@ export class HeddleAgentRunner implements AgentRunner {
     const extension = defineHostExtension({
       id: `lucid:agent:${input.agent.id}`,
       tools: toolDefinitions,
-      systemContext: [
-        buildRepresentativeAgentInstructions(input.agent, input.participant),
-        buildHeddleToolPolicyInstructions(this.config.repoRoot),
-      ].join('\n\n'),
+      systemContext: `${buildRepresentativeAgentInstructions(input.agent, input.participant)}
+
+${buildHeddleToolPolicyInstructions(this.config.repoRoot)}`,
     });
     const engine = createConversationEngine({
       workspaceRoot: this.config.repoRoot,

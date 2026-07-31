@@ -8,14 +8,18 @@ import {
   it,
   vi,
 } from 'vitest';
-import { LucidDatabaseService } from '../database/service.js';
+import { LucidSqliteDatabase } from '../database/sqlite-database.js';
 import { createLucidLogger } from '../logger.js';
 import { AgentCommunicationToolService } from './agent-communication-tools.js';
 import {
   LOCAL_USER_ID,
   USER_AGENT_ID,
 } from './default-participants.js';
-import { buildHeddleToolPolicyInstructions } from './agent-prompts.js';
+import {
+  buildDiscoveryStepPrompt,
+  buildHeddleToolPolicyInstructions,
+  buildRepresentativeAgentInstructions,
+} from './agent-prompts.js';
 import { DiscoveryEventRepository } from './discovery-event-repository.js';
 import { DiscoveryRunService } from './discovery-run-service.js';
 import type {
@@ -26,11 +30,11 @@ import type {
 const MIGRATIONS_ROOT = fileURLToPath(new URL('../../drizzle', import.meta.url));
 
 describe('delegated discovery flow', () => {
-  let database: LucidDatabaseService;
+  let database: LucidSqliteDatabase;
   let repository: DiscoveryEventRepository;
 
   beforeEach(() => {
-    database = new LucidDatabaseService(':memory:');
+    database = new LucidSqliteDatabase(':memory:');
     database.migrate(MIGRATIONS_ROOT);
     repository = new DiscoveryEventRepository(database);
     repository.initialize();
@@ -118,6 +122,24 @@ describe('delegated discovery flow', () => {
     expect(buildHeddleToolPolicyInstructions(workspaceRoot)).toContain(
       `targetRoots as ["${workspaceRoot}"]`,
     );
+  });
+
+  it('interpolates participant context and visible events into readable prompts', () => {
+    const agent = repository.requireUserAgent();
+    const participant = repository.requireParticipant(LOCAL_USER_ID);
+    const interest = repository.saveInterest(
+      'Find a concrete agent-native product experiment.',
+    );
+
+    expect(
+      buildRepresentativeAgentInstructions(agent, participant),
+    ).toContain(`You represent ${participant.displayName}.
+You represent the real local user.
+Their saved interest and feedback are private.`);
+    expect(
+      buildDiscoveryStepPrompt(agent, 'requesting', 1, [interest]),
+    ).toContain(`Unread events visible to this agent:
+- #${interest.sequence} [private user interest]`);
   });
 
   it('runs each participant once and reports a peer-sourced finding', async () => {

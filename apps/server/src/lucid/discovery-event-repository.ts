@@ -10,7 +10,7 @@ import {
   ne,
   or,
 } from 'drizzle-orm';
-import type { LucidDatabaseService } from '../database/service.js';
+import type { LucidSqliteDatabase } from '../database/sqlite-database.js';
 import {
   discoveryEvents,
   discoveryWorkspaces,
@@ -76,7 +76,7 @@ export type DiscoveryRepositorySnapshot = {
  * cursors. Content remains ordinary language and is never scored here.
  */
 export class DiscoveryEventRepository {
-  constructor(private readonly database: LucidDatabaseService) {}
+  constructor(private readonly database: LucidSqliteDatabase) {}
 
   initialize(): void {
     const workspace = this.findWorkspace();
