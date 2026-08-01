@@ -252,6 +252,27 @@ describe('representative-agent heartbeat service', () => {
     await workspace.setBackgroundChecksEnabled(false);
   });
 
+  it('resets dynamic participants and tasks to the default network', async () => {
+    const { workspace } = await startServices(new CountingHeartbeatRunner());
+    const created = await workspace.createAssistedParticipant({
+      displayName: 'Avery',
+      privateContext: 'Temporary context for reset verification.',
+      contextApproved: true,
+    });
+    expect(created.agents).toHaveLength(4);
+    expect(created.backgroundChecks.tasks).toHaveLength(4);
+
+    const reset = await workspace.resetWorkspace();
+
+    expect(reset.agents.map(({ name }) => name)).toEqual([
+      'Lucid',
+      'Music maker agent',
+      'Product research agent',
+    ]);
+    expect(reset.backgroundChecks.tasks).toHaveLength(3);
+    expect(reset.backgroundChecks.enabled).toBe(true);
+  });
+
   it('recovers both a Heddle task and its claimed mailbox wake after restart', async () => {
     const initialHeartbeat = await createHeartbeat(
       new CountingHeartbeatRunner(),
