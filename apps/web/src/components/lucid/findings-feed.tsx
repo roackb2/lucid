@@ -8,7 +8,8 @@ import { FindingCard } from './finding-card';
 type FindingsFeedProps = {
   agents: AgentView[];
   findings: FindingView[];
-  isRunActive: boolean;
+  backgroundChecksEnabled: boolean;
+  isChecking: boolean;
   isSubmittingFeedback: boolean;
   onFeedback(findingSequence: number, content: string): Promise<unknown>;
 };
@@ -16,7 +17,8 @@ type FindingsFeedProps = {
 export function FindingsFeed({
   agents,
   findings,
-  isRunActive,
+  backgroundChecksEnabled,
+  isChecking,
   isSubmittingFeedback,
   onFeedback,
 }: FindingsFeedProps) {
@@ -47,11 +49,19 @@ export function FindingsFeed({
         <div className="findings-empty">
           <span aria-hidden="true"><Inbox size={22} /></span>
           <div>
-            <h3>{isRunActive ? 'Checking available sources…' : 'No findings yet'}</h3>
+            <h3>
+              {isChecking
+                ? 'Checking available messages…'
+                : backgroundChecksEnabled
+                  ? 'Waiting for a useful match'
+                  : 'Background checks are paused'}
+            </h3>
             <p>
-              {isRunActive
-                ? 'The first result will appear here when the current check finishes.'
-                : 'Save an interest and run a discovery check. Lucid will report a possible match or an explicit no-match result.'}
+              {isChecking
+                ? 'A finding will appear only if participant agents return a specific connection.'
+                : backgroundChecksEnabled
+                  ? 'You can leave this workspace. Lucid will keep the interest and report when another agent delivers something relevant.'
+                  : 'Resume background checks when you want representative agents to process new messages.'}
             </p>
           </div>
         </div>

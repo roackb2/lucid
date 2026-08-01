@@ -1,5 +1,9 @@
 import { ChevronDown, Wrench } from 'lucide-react';
-import type { AgentView, DiscoveryEvent } from '@/lib/trpc';
+import type {
+  AgentView,
+  DiscoveryEvent,
+  DiscoverySnapshot,
+} from '@/lib/trpc';
 import { ActivityLog } from './activity-log';
 import { RepresentativeAgentCard } from './representative-agent-card';
 import { ResetWorkspaceDialog } from './reset-workspace-dialog';
@@ -7,8 +11,7 @@ import { ResetWorkspaceDialog } from './reset-workspace-dialog';
 type ActivityPanelProps = {
   agents: AgentView[];
   events: DiscoveryEvent[];
-  activeAgentId?: string;
-  isRunActive: boolean;
+  tasks: DiscoverySnapshot['backgroundChecks']['tasks'];
   isResetting: boolean;
   onReset(): void;
 };
@@ -16,11 +19,14 @@ type ActivityPanelProps = {
 export function ActivityPanel({
   agents,
   events,
-  activeAgentId,
-  isRunActive,
+  tasks,
   isResetting,
   onReset,
 }: ActivityPanelProps) {
+  const taskByAgentId = new Map(
+    tasks.map((task) => [task.agentId, task]),
+  );
+
   return (
     <details className="activity-panel" id="activity">
       <summary>
@@ -53,8 +59,8 @@ export function ActivityPanel({
             {agents.map((agent) => (
               <RepresentativeAgentCard
                 agent={agent}
-                isActive={activeAgentId === agent.id}
                 key={agent.id}
+                task={taskByAgentId.get(agent.id)}
               />
             ))}
           </div>
@@ -65,11 +71,10 @@ export function ActivityPanel({
         <footer className="activity-panel__footer">
           <p>
             Resetting clears the active discovery workspace and creates new
-            Heddle conversations. Existing session and trace files remain on
-            disk.
+            Heddle tasks and checkpoints for the replacement workspace.
           </p>
           <ResetWorkspaceDialog
-            disabled={isRunActive}
+            disabled={isResetting}
             isPending={isResetting}
             onReset={onReset}
           />

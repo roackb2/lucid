@@ -10,7 +10,6 @@ import type { DiscoveryRepository } from './discovery-repository.js';
 import type {
   Agent,
   DiscoveryEvent,
-  DiscoveryRunPhase,
   Participant,
 } from './discovery-types.js';
 
@@ -20,12 +19,12 @@ const readMessagesInputSchema = z.object({
 });
 const sharedMessageInputSchema = z.object({
   content: z.string().trim().min(1).max(900),
-  source_event_ids: z.array(z.number().int().positive()).max(8).default([]),
+  source_event_ids: z.array(z.number().int().positive()).min(1).max(8),
 });
 const directMessageInputSchema = z.object({
   target_agent_id: z.string().trim().min(1),
   content: z.string().trim().min(1).max(700),
-  source_event_ids: z.array(z.number().int().positive()).max(8).default([]),
+  source_event_ids: z.array(z.number().int().positive()).min(1).max(8),
 });
 const findingInputSchema = z.object({
   content: z.string().trim().min(1).max(1_200),
@@ -55,7 +54,7 @@ const WRITE_DISCOVERY_STATE_POLICY = {
 
 /**
  * Grants one representative agent a bounded set of communication operations
- * for one discovery step. It validates visibility and causal references before
+ * for one wake. It validates visibility and causal references before
  * writing events, but never scores message truth or usefulness.
  */
 export class AgentCommunicationToolService {
@@ -65,9 +64,9 @@ export class AgentCommunicationToolService {
     private readonly repository: DiscoveryRepository,
     private readonly agent: Agent,
     private readonly participant: Participant,
-    private readonly phase: DiscoveryRunPhase,
-    private readonly discoveryRunId: string,
-    private readonly stepNumber: number,
+    private readonly wakeId: string,
+    private readonly wakeNumber: number,
+    private readonly horizonSequence: number,
   ) {}
 
   async definitions(): Promise<ToolDefinition[]> {
@@ -111,12 +110,14 @@ export class AgentCommunicationToolService {
             content: { type: 'string', minLength: 1, maxLength: 900 },
             source_event_ids: {
               type: 'array',
+              minItems: 1,
               maxItems: 8,
               items: { type: 'integer', minimum: 1 },
-              description: 'Visible event sequences that caused this message.',
+              description:
+                'Visible event sequences that caused this message and identify its causal thread.',
             },
           },
-          required: ['content'],
+          required: ['content', 'source_event_ids'],
           additionalProperties: false,
         },
         execute: async (input) => this.postSharedMessage(input),
@@ -139,11 +140,12 @@ export class AgentCommunicationToolService {
             content: { type: 'string', minLength: 1, maxLength: 700 },
             source_event_ids: {
               type: 'array',
+              minItems: 1,
               maxItems: 8,
               items: { type: 'integer', minimum: 1 },
             },
           },
-          required: ['target_agent_id', 'content'],
+          required: ['target_agent_id', 'content', 'source_event_ids'],
           additionalProperties: false,
         },
         execute: async (input) => this.sendDirectMessage(input),
@@ -151,7 +153,7 @@ export class AgentCommunicationToolService {
       {
         name: 'finish_without_action',
         description:
-          'Finish this discovery step without sending a message. Use this when there is no specific match or useful contribution.',
+          'Finish this wake without sending a message. Use this when there is no specific match or useful contribution.',
         capabilities: ['lucid.discovery.write'],
         hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
         parameters: {
@@ -166,15 +168,9 @@ export class AgentCommunicationToolService {
       },
     ];
 
-    const availableTools = this.phase === 'reporting'
-      ? commonTools.filter(({ name }) => (
-          ['read_available_messages', 'finish_without_action'].includes(name)
-        ))
-      : commonTools;
-
     return this.canReportFinding()
-      ? [...availableTools, this.createReportFindingTool()]
-      : availableTools;
+      ? [...commonTools, this.createReportFindingTool()]
+      : commonTools;
   }
 
   private createReportFindingTool(): ToolDefinition {
@@ -215,6 +211,7 @@ export class AgentCommunicationToolService {
         this.agent.id,
         parsed.data.after_sequence ?? this.agent.lastSeenSequence,
         parsed.data.limit,
+        this.horizonSequence,
       ),
       this.repository.listAgents(),
     ]);
@@ -238,22 +235,28 @@ export class AgentCommunicationToolService {
     if (validationFailure) {
       return validationFailure;
     }
-    const budgetFailure = this.reserveMutation();
-    if (budgetFailure) {
-      return budgetFailure;
+    const repeatedContribution = await this.validateThreadContribution(
+      sourceEventIds,
+    );
+    if (repeatedContribution) {
+      return repeatedContribution;
+    }
+    const actionIndex = this.reserveMutation();
+    if (typeof actionIndex !== 'number') {
+      return actionIndex;
     }
 
     return eventResult(await this.repository.appendEvent({
-      stepNumber: this.stepNumber,
+      wakeNumber: this.wakeNumber,
       kind: 'shared_message',
       actorAgentId: this.agent.id,
       parentSequence: sourceEventIds[0],
+      idempotencyKey: this.actionIdempotencyKey(actionIndex),
       title: `${this.agent.name} posts a shared message`,
       content: parsed.data.content,
       metadata: {
         visibility: 'shared',
-        discoveryRunId: this.discoveryRunId,
-        phase: this.phase,
+        wakeId: this.wakeId,
         sourceEventIds,
       },
     }));
@@ -278,23 +281,29 @@ export class AgentCommunicationToolService {
     if (validationFailure) {
       return validationFailure;
     }
-    const budgetFailure = this.reserveMutation();
-    if (budgetFailure) {
-      return budgetFailure;
+    const repeatedContribution = await this.validateThreadContribution(
+      sourceEventIds,
+    );
+    if (repeatedContribution) {
+      return repeatedContribution;
+    }
+    const actionIndex = this.reserveMutation();
+    if (typeof actionIndex !== 'number') {
+      return actionIndex;
     }
 
     return eventResult(await this.repository.appendEvent({
-      stepNumber: this.stepNumber,
+      wakeNumber: this.wakeNumber,
       kind: 'direct_message',
       actorAgentId: this.agent.id,
       targetAgentId: target.id,
       parentSequence: sourceEventIds[0],
+      idempotencyKey: this.actionIdempotencyKey(actionIndex),
       title: `${this.agent.name} messages ${target.name}`,
       content: parsed.data.content,
       metadata: {
         visibility: 'target-agent',
-        discoveryRunId: this.discoveryRunId,
-        phase: this.phase,
+        wakeId: this.wakeId,
         sourceEventIds,
       },
     }));
@@ -304,11 +313,8 @@ export class AgentCommunicationToolService {
     if (!this.canReportFinding()) {
       return {
         ok: false,
-        error: 'This agent cannot report a finding during the current phase.',
+        error: 'Only the local user’s representative agent can report findings.',
       };
-    }
-    if (await this.repository.hasFindingForRun(this.discoveryRunId)) {
-      return { ok: false, error: 'This discovery run already has a finding.' };
     }
 
     const parsed = findingInputSchema.safeParse(input);
@@ -336,23 +342,29 @@ export class AgentCommunicationToolService {
           'A finding must cite at least one visible shared or direct message from another agent.',
       };
     }
-    const budgetFailure = this.reserveMutation();
-    if (budgetFailure) {
-      return budgetFailure;
+    if (await this.repository.hasFindingUsingAnySource(sourceEventIds)) {
+      return {
+        ok: false,
+        error: 'A finding already used one or more of these source messages.',
+      };
+    }
+    const actionIndex = this.reserveMutation();
+    if (typeof actionIndex !== 'number') {
+      return actionIndex;
     }
 
     return eventResult(await this.repository.appendEvent({
-      stepNumber: this.stepNumber,
+      wakeNumber: this.wakeNumber,
       kind: 'finding_reported',
       actorAgentId: this.agent.id,
       targetParticipantId: LOCAL_USER_ID,
       parentSequence: sourceEventIds[0],
+      idempotencyKey: this.actionIdempotencyKey(actionIndex),
       title: 'Lucid found a possible match',
       content: parsed.data.content,
       metadata: {
         visibility: 'user',
-        discoveryRunId: this.discoveryRunId,
-        noMatch: false,
+        wakeId: this.wakeId,
         sourceEventIds,
       },
     }));
@@ -363,39 +375,43 @@ export class AgentCommunicationToolService {
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
-    const budgetFailure = this.reserveMutation();
-    if (budgetFailure) {
-      return budgetFailure;
+    const actionIndex = this.reserveMutation();
+    if (typeof actionIndex !== 'number') {
+      return actionIndex;
     }
 
     return eventResult(await this.repository.appendEvent({
-      stepNumber: this.stepNumber,
-      kind: 'no_action',
+      wakeNumber: this.wakeNumber,
+      kind: 'agent_wake_no_action',
       actorAgentId: this.agent.id,
+      idempotencyKey: this.actionIdempotencyKey(actionIndex),
       title: `${this.agent.name} finishes without sending a message`,
       content: parsed.data.reason,
       metadata: {
         visibility: 'operator',
-        discoveryRunId: this.discoveryRunId,
-        phase: this.phase,
+        wakeId: this.wakeId,
       },
     }));
   }
 
   private canReportFinding(): boolean {
-    return this.phase === 'reporting' && this.participant.kind === 'human';
+    return this.participant.kind === 'human';
   }
 
-  private reserveMutation(): ToolResult | undefined {
+  private reserveMutation(): number | ToolResult {
     if (this.mutations >= 2) {
       return {
         ok: false,
         error:
-          'This agent step already used its two communication actions. Finish the run.',
+          'This agent wake already used its two communication actions.',
       };
     }
     this.mutations += 1;
-    return undefined;
+    return this.mutations;
+  }
+
+  private actionIdempotencyKey(actionIndex: number): string {
+    return `${this.wakeId}:action:${actionIndex}`;
   }
 
   private async validateSources(
@@ -403,6 +419,15 @@ export class AgentCommunicationToolService {
   ): Promise<ToolResult | undefined> {
     if (!sourceEventIds.length) {
       return undefined;
+    }
+    const laterEvents = sourceEventIds.filter(
+      (sequence) => sequence > this.horizonSequence,
+    );
+    if (laterEvents.length) {
+      return {
+        ok: false,
+        error: `Source event sequences arrived after this wake was claimed: ${laterEvents.join(', ')}`,
+      };
     }
     const visibleSequences = new Set(
       (await this.repository
@@ -416,6 +441,24 @@ export class AgentCommunicationToolService {
       ? {
           ok: false,
           error: `Unknown or invisible source event sequences: ${unavailable.join(', ')}`,
+        }
+      : undefined;
+  }
+
+  private async validateThreadContribution(
+    sourceEventIds: number[],
+  ): Promise<ToolResult | undefined> {
+    const alreadyContributed = await this.repository
+      .hasAgentContributedToCausalThread(
+        this.agent.id,
+        sourceEventIds,
+        this.wakeId,
+      );
+    return alreadyContributed
+      ? {
+          ok: false,
+          error:
+            'This representative already communicated in the same causal thread. Finish without action unless a new user request starts a new thread.',
         }
       : undefined;
   }
@@ -447,7 +490,7 @@ function projectEvent(
 ) {
   return {
     sequence: event.sequence,
-    stepNumber: event.stepNumber,
+    wakeNumber: event.wakeNumber,
     kind: event.kind,
     actor: event.actorAgentId
       ? agentById.get(event.actorAgentId)?.name ?? event.actorAgentId

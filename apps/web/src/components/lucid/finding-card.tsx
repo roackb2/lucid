@@ -129,7 +129,7 @@ export function FindingCard({
             <strong>Your feedback</strong>
           </div>
           <p>{finding.feedback.content}</p>
-          <small>Lucid will receive this during the next check.</small>
+          <small>Lucid will receive this during its next wake.</small>
         </section>
       ) : (
         <form className="finding-feedback" onSubmit={submitFeedback}>

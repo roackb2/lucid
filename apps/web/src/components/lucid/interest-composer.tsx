@@ -12,11 +12,12 @@ import type { DiscoverySnapshot } from '@/lib/trpc';
 type InterestComposerProps = {
   interest?: DiscoverySnapshot['interest'];
   lastCheckedAt?: string;
-  isRunActive: boolean;
+  backgroundChecksEnabled: boolean;
+  isChecking: boolean;
   isSaving: boolean;
-  isStarting: boolean;
+  isRunningNow: boolean;
   onSaveInterest(content: string): Promise<unknown>;
-  onStartRun(): void;
+  onRunNow(): void;
 };
 
 const EXAMPLE_INTERESTS = [
@@ -27,11 +28,12 @@ const EXAMPLE_INTERESTS = [
 export function InterestComposer({
   interest,
   lastCheckedAt,
-  isRunActive,
+  backgroundChecksEnabled,
+  isChecking,
   isSaving,
-  isStarting,
+  isRunningNow,
   onSaveInterest,
-  onStartRun,
+  onRunNow,
 }: InterestComposerProps) {
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
@@ -118,7 +120,7 @@ export function InterestComposer({
                 </Button>
               ) : null}
               <Button
-                disabled={!draft.trim() || isSaving || isRunActive}
+                disabled={!draft.trim() || isSaving}
                 size="small"
                 type="submit"
               >
@@ -136,7 +138,6 @@ export function InterestComposer({
               Updated {dayjs(interest.createdAt).format('MMM D, HH:mm')}
             </span>
             <button
-              disabled={isRunActive}
               onClick={beginEditing}
               type="button"
             >
@@ -151,20 +152,27 @@ export function InterestComposer({
         <div>
           <strong>
             {lastCheckedAt
-              ? `Last checked ${dayjs(lastCheckedAt).format('MMM D, HH:mm')}`
-              : 'Not checked yet'}
+              ? `Last agent wake ${dayjs(lastCheckedAt).format('MMM D, HH:mm')}`
+              : 'Waiting for the first agent wake'}
           </strong>
           <p>
-            Checks are manual in this prototype. One check takes about a minute
-            and compares this interest with the available participant sources.
+            Saving changes automatically notifies your agent. Run now adds a
+            fresh request without changing the scheduled background checks.
           </p>
         </div>
         <Button
-          disabled={!interest || isRunActive || isStarting || editing}
-          onClick={onStartRun}
+          disabled={
+            !interest
+            || !backgroundChecksEnabled
+            || isRunningNow
+            || editing
+          }
+          onClick={onRunNow}
         >
-          <RefreshCw size={15} />
-          Check for discoveries
+          <span className={isChecking ? 'button-spinner' : ''}>
+            <RefreshCw size={15} />
+          </span>
+          {isChecking ? 'Checking…' : 'Run a check now'}
         </Button>
       </footer>
     </section>

@@ -1,41 +1,44 @@
-# Lucid web
+# Lucid web workspace
 
-The web app is a practical discovery workspace for the local user.
+This app presents the user-facing delegated-discovery workspace. It depends on
+the server's typed tRPC router and does not reproduce mailbox, scheduling,
+visibility, or finding rules in React.
 
-Its primary flow is:
+## Product boundary
 
-1. save an ongoing interest in ordinary language;
-2. start or stop a manual discovery check;
-3. wait while representative agents run;
-4. review findings and the messages that caused them;
-5. save private, free-text feedback.
+The primary path is:
 
-The interface should feel useful without imitating an existing social network.
-The saved interest and findings inbox are the default product surface.
-Representative-agent state and the complete event history live in the folded
-Technical activity panel.
+1. save or edit an ordinary-language interest;
+2. see whether background checks are enabled and when agents last woke;
+3. optionally request an immediate check;
+4. read specific findings and leave private feedback.
+
+The default interface describes product outcomes. Heddle task status, agent
+identity, event visibility, and causal delivery remain available in the
+collapsed technical activity panel for inspection.
 
 ## Component responsibilities
 
 | Component | Responsibility |
 | --- | --- |
-| `interest-composer.tsx` | Create, edit, and save the user's ongoing interest |
-| `active-discovery-run.tsx` | Show bounded run progress and cancellation |
-| `findings-feed.tsx` | Present empty, running, and result states |
-| `finding-card.tsx` | Show one finding, causal messages, disclosures, and feedback |
+| `interest-composer.tsx` | Create, edit, save, and manually re-check an interest |
+| `background-checks.tsx` | Present scheduler state and pause/resume controls |
+| `findings-feed.tsx` | Present waiting, checking, paused, and finding states |
+| `finding-card.tsx` | Show one finding, causal messages, and private feedback |
 | `activity-panel.tsx` | Folded technical inspection surface |
-| `representative-agent-card.tsx` | Show execution status and participant ownership |
-| `activity-log.tsx` | Render the append-only event history |
-| `use-discovery-workspace.ts` | Own tRPC queries, mutations, and active-run polling |
+| `representative-agent-card.tsx` | Show agent and heartbeat-task status |
+| `activity-log.tsx` | Render append-only mailbox and lifecycle events |
+| `use-discovery-workspace.ts` | Own tRPC queries, mutations, cache, and polling |
 
-The web app owns presentation state only:
+## Data and mutation rules
 
-- interest and feedback form drafts;
-- polling cadence while a discovery run is active;
-- mutation loading and notifications;
-- responsive presentation of findings, sources, and activity.
+- `src/hooks/use-discovery-workspace.ts` is the only React Query/tRPC
+  composition hook.
+- Successful mutations replace the cached workspace with the server-returned
+  snapshot.
+- Polling is faster only while a representative task is running.
+- Components receive server projections; they must not infer unread delivery,
+  fabricate no-match results, or schedule work locally.
 
-The server remains authoritative for participants, agents, visibility, run
-order, delivery, source validation, persistence, and cancellation. The UI calls
-the typed `discovery` tRPC namespace and never reconstructs domain state from
-Heddle files.
+Run `yarn workspace @lucid/web typecheck` and
+`yarn workspace @lucid/web build` after UI changes.

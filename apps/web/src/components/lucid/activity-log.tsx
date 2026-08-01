@@ -39,9 +39,14 @@ const EVENT_PRESENTATION: Record<
     label: 'Interest',
     visibility: 'user',
   },
-  agent_step_started: {
+  check_requested: {
+    icon: Search,
+    label: 'Check request',
+    visibility: 'user',
+  },
+  agent_wake_started: {
     icon: PlayCircle,
-    label: 'Agent step',
+    label: 'Agent wake',
     visibility: 'internal',
   },
   shared_message: {
@@ -64,14 +69,14 @@ const EVENT_PRESENTATION: Record<
     label: 'Feedback',
     visibility: 'user',
   },
-  no_action: {
+  agent_wake_no_action: {
     icon: CircleSlash2,
     label: 'No action',
     visibility: 'internal',
   },
-  agent_step_completed: {
+  agent_wake_completed: {
     icon: CheckCircle2,
-    label: 'Step result',
+    label: 'Wake result',
     visibility: 'internal',
   },
   error: {
@@ -111,9 +116,11 @@ export function ActivityLog({ agents, events }: ActivityLogProps) {
           const target = event.targetAgentId
             ? agentById.get(event.targetAgentId)
             : undefined;
-          const userAuthored = ['interest_saved', 'feedback_saved'].includes(
-            event.kind,
-          );
+          const userAuthored = [
+            'interest_saved',
+            'check_requested',
+            'feedback_saved',
+          ].includes(event.kind);
 
           return (
             <li
@@ -127,7 +134,7 @@ export function ActivityLog({ agents, events }: ActivityLogProps) {
                 <header>
                   <div>
                     <span>#{event.sequence}</span>
-                    <span>step {event.stepNumber}</span>
+                    <span>wake {event.wakeNumber}</span>
                     <span>{presentation.label}</span>
                     {event.parentSequence
                       ? <span>from #{event.parentSequence}</span>

@@ -2,20 +2,20 @@ import type {
   Agent,
   DiscoveryEvent,
   DiscoveryEventKind,
-  DiscoveryRunPhase,
   Participant,
 } from './discovery-types.js';
 
 const EVENT_LABELS: Record<DiscoveryEventKind, string> = {
   workspace_created: 'shared workspace event',
   interest_saved: 'private user interest',
-  agent_step_started: 'internal agent step',
+  check_requested: 'private user check request',
+  agent_wake_started: 'internal agent wake',
   shared_message: 'shared agent message',
   direct_message: 'private agent message',
   finding_reported: 'private user finding',
   feedback_saved: 'private user feedback',
-  no_action: 'internal no-action result',
-  agent_step_completed: 'internal agent result',
+  agent_wake_no_action: 'internal no-action result',
+  agent_wake_completed: 'internal agent result',
   error: 'internal error',
 };
 
@@ -47,10 +47,11 @@ ${participant.privateContext}
 - A source reference proves where a message came from, not that its content is true.
 - Shared messages are visible to all representative agents. Direct messages are visible only to the recipient and local operator.
 - Never claim to know information absent from visible events or private participant context.
-- Use no more than two communication actions in one discovery step.
+- Use no more than two communication actions in one wake.
+- Contribute to each user-initiated causal thread at most once. Later messages in the same thread may be read, but should end without another message.
 - If there is no specific contribution or match, finish without action.
 
-Use only the Lucid communication tools available in this step. Finish with a short internal summary.`;
+Use only the Lucid communication tools available in this wake. Finish with a short internal summary.`;
 }
 
 export function buildHeddleToolPolicyInstructions(workspaceRoot: string): string {
@@ -62,40 +63,36 @@ For read_available_messages, declare operations as ["read"]; targetRoots may be 
 Never abandon a valid Lucid communication action merely because this metadata is required.`;
 }
 
-export function buildDiscoveryStepPrompt(
+export function buildAgentWakePrompt(
   agent: Agent,
-  phase: DiscoveryRunPhase,
-  stepNumber: number,
+  participant: Participant,
+  wakeNumber: number,
   visibleEvents: DiscoveryEvent[],
 ): string {
   const visibleEventList = visibleEvents.length
     ? visibleEvents.map(formatDiscoveryEvent).join('\n')
     : '(No unread shared messages, direct messages, or user input.)';
 
-  return `Discovery step ${stepNumber}.
+  const responsibility = participant.kind === 'human'
+    ? `When an unread interest_saved event appears, share a minimal request that represents it.
+When an unread check_requested event appears, it starts a new causal thread even if the saved interest text is unchanged. You must post a fresh minimal shared request citing that check event.
+When peer-authored messages contain a specific useful match, report it with report_finding.
+Do not report the same source message twice. Feedback is private guidance for later behavior.`
+    : `Respond only when an unread request or message has a specific connection to this participant’s private context.
+Do not generate generic advice merely to appear active.`;
+
+  return `Representative-agent wake ${wakeNumber}.
 
 Agent: ${agent.name}
 Responsibility: ${agent.purpose}
-Run phase: ${phase}
 
-${phaseInstruction(phase)}
+${responsibility}
 
 Unread events visible to this agent:
 ${visibleEventList}
 
 Take zero to two deliberate communication actions.
 Use read_available_messages for older visible context. Use finish_without_action when there is no specific contribution.`;
-}
-
-function phaseInstruction(phase: DiscoveryRunPhase): string {
-  return {
-    requesting:
-      'Translate the user’s saved interest into the smallest shared request that lets another participant recognize a specific match. Do not report a finding yet.',
-    responding:
-      'Respond only when the participant’s private context contains a specific match for a visible request. Do not generate generic advice to appear active.',
-    reporting:
-      'Review the messages other agents actually sent. Use report_finding with peer source sequences when one match deserves the user’s attention. Otherwise finish_without_action.',
-  }[phase];
 }
 
 function formatDiscoveryEvent(event: DiscoveryEvent): string {

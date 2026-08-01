@@ -6,7 +6,8 @@ type AppHeaderProps = {
 };
 
 export function AppHeader({ snapshot }: AppHeaderProps) {
-  const isRunning = Boolean(snapshot.activeRun);
+  const isRunning = snapshot.backgroundChecks.running;
+  const isEnabled = snapshot.backgroundChecks.enabled;
 
   return (
     <header className="app-header">
@@ -29,7 +30,11 @@ export function AppHeader({ snapshot }: AppHeaderProps) {
         title={`Model: ${snapshot.runtime.model}`}
       >
         <span />
-        {isRunning ? 'Checking sources' : 'Ready'}
+        {isRunning
+          ? 'Checking messages'
+          : isEnabled
+            ? 'Background checks on'
+            : 'Checks paused'}
       </div>
     </header>
   );

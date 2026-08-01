@@ -2,9 +2,8 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   DiscoveryInputError,
-  DiscoveryRunBusyError,
-  DiscoveryRunService,
-} from './lucid/discovery-run-service.js';
+  DiscoveryWorkspaceService,
+} from './lucid/discovery-workspace-service.js';
 import { trpc } from './trpc.js';
 
 const interestInputSchema = z.object({
@@ -16,7 +15,13 @@ const feedbackInputSchema = z.object({
   content: z.string().trim().min(1).max(1_600),
 });
 
-export function createAppRouter(discoveryRuns: DiscoveryRunService) {
+const backgroundChecksInputSchema = z.object({
+  enabled: z.boolean(),
+});
+
+export function createAppRouter(
+  discoveryWorkspace: DiscoveryWorkspaceService,
+) {
   return trpc.router({
     system: trpc.router({
       health: trpc.procedure.query(() => ({
@@ -25,28 +30,30 @@ export function createAppRouter(discoveryRuns: DiscoveryRunService) {
       })),
     }),
     discovery: trpc.router({
-      snapshot: trpc.procedure.query(() => discoveryRuns.snapshot()),
+      snapshot: trpc.procedure.query(() => discoveryWorkspace.snapshot()),
       saveInterest: trpc.procedure
         .input(interestInputSchema)
         .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryRuns.saveInterest(input.content),
+          () => discoveryWorkspace.saveInterest(input.content),
         )),
-      startRun: trpc.procedure.mutation(() => resolveDiscoveryError(
-        () => discoveryRuns.startRun(),
+      runNow: trpc.procedure.mutation(() => resolveDiscoveryError(
+        () => discoveryWorkspace.runNow(),
       )),
+      setBackgroundChecksEnabled: trpc.procedure
+        .input(backgroundChecksInputSchema)
+        .mutation(({ input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.setBackgroundChecksEnabled(input.enabled),
+        )),
       submitFeedback: trpc.procedure
         .input(feedbackInputSchema)
         .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryRuns.submitFeedback(
+          () => discoveryWorkspace.submitFeedback(
             input.findingSequence,
             input.content,
           ),
         )),
-      cancelRun: trpc.procedure.mutation(() => ({
-        cancelled: discoveryRuns.cancelRun(),
-      })),
       resetWorkspace: trpc.procedure.mutation(() => resolveDiscoveryError(
-        () => discoveryRuns.resetWorkspace(),
+        () => discoveryWorkspace.resetWorkspace(),
       )),
     }),
   });
@@ -60,12 +67,6 @@ async function resolveDiscoveryError<T>(
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof DiscoveryRunBusyError) {
-      throw new TRPCError({
-        code: 'CONFLICT',
-        message: error.message,
-      });
-    }
     if (error instanceof DiscoveryInputError) {
       throw new TRPCError({
         code: 'BAD_REQUEST',

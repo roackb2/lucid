@@ -7,48 +7,40 @@ infrastructure, not the delegated-discovery domain.
 
 | File | Responsibility |
 | --- | --- |
-| `sqlite-database.ts` | Opens and closes SQLite, creates the parent directory, applies durability pragmas, exposes the Drizzle handle, and runs migrations |
-| `sqlite-discovery-repository.ts` | Implements the async `DiscoveryRepository` domain port with SQLite and Drizzle |
-| `schema.ts` | Declares the persisted tables, indexes, and database-level constraints |
+| `sqlite-database.ts` | Opens and closes SQLite, applies durability pragmas, and runs migrations |
+| `sqlite-discovery-repository.ts` | Implements the async `DiscoveryRepository` port with SQLite and Drizzle |
+| `schema.ts` | Declares persisted tables, indexes, and database constraints |
 
 `LucidSqliteDatabase` is deliberately not named a service or repository. It
 owns the lifetime and configuration of one SQLite resource. Domain
-repositories own data access and behavior. The storage-independent contract is
-`../lucid/discovery-repository.ts`; `SqliteDiscoveryRepository` is the current
-adapter.
+repositories own data access and transactional behavior.
 
 The port is asynchronous even though `better-sqlite3` performs synchronous
 local I/O. A PostgreSQL adapter can therefore use a conventional async driver
-without changing `DiscoveryRunService`, `HeddleAgentRunner`,
-`AgentCommunicationToolService`, or tRPC.
+without changing `DiscoveryWorkspaceService`,
+`RepresentativeAgentHeartbeatService`,
+`HeddleRepresentativeAgentRunner`, or tRPC.
 
 Replacing the adapter is not the same as making Lucid distributed. A remote
-adapter must preserve transaction boundaries, monotonic event sequences, and
-cursor semantics. Process-local active runs, cancellation handles, and
-heartbeat scheduler ownership require a separate hosted execution design.
+adapter must preserve atomic wake claims, monotonic event sequences, unique
+idempotency keys, and cursor semantics. Multi-host scheduling additionally
+requires leased task ownership outside the current file-backed Heddle
+scheduler.
 
 ## Data ownership
 
-- `discovery_workspaces` identifies one local product workspace and its current
-  generation.
-- `participants` stores the people or explicit synthetic fixtures represented
-  in the workspace, including private background available only to their own
-  agent.
-- `representative_agents` stores the execution identity and durable delivery
-  cursor for the agent assigned to each participant.
-- `discovery_events` is the append-only product and communication history.
-  Saved interests, messages, findings, feedback, lifecycle events, and errors
-  are event kinds.
+- `discovery_workspaces` identifies one local workspace generation and its
+  monotonic wake number.
+- `participants` stores the human or explicit synthetic subject represented,
+  including private background visible only to its own agent.
+- `representative_agents` stores execution status, delivery cursor, and the
+  active wake's durable ID, number, and fixed event horizon.
+- `discovery_events` is the append-only product and mailbox history. It has a
+  nullable unique idempotency key for retry-safe agent side effects.
 
-A participant is not a saved search or interest. The participant answers
-"whose context and intent does this agent represent?" A saved interest answers
-"what does the local user want the agent to notice now?" and is currently a
-private `interest_saved` event. This keeps changing user input in the event
-history instead of overwriting the participant's stable private context.
-
-Do not add a first-class interest table until the product needs independently
-addressable interest lifecycle such as multiple active interests, scheduling,
-pause/resume, or per-interest delivery state.
+A participant answers "whose context and intent does this agent represent?"
+A saved interest answers "what does the local user want the agent to notice
+now?" and remains a private event rather than a participant field.
 
 ## Relations
 
@@ -58,10 +50,10 @@ participants         1 ── 1 representative_agents
 discovery_workspaces 1 ── * representative_agents
 discovery_workspaces 1 ── * discovery_events
 
-representative_agents.conversation_id ──> Heddle session storage
-discovery_events actor/target/source     ──> logical delivery and causality
+representative_agents.id   ──> logical Heddle task ID
+discovery_events actor/target/source ──> delivery and causal references
 ```
 
-The schema uses foreign keys for workspace and participant ownership.
-Event actor, recipient, and source identifiers remain logical references in
-the append-only ledger and are validated by the repository adapter.
+Workspace and participant ownership use foreign keys. Event actor, recipient,
+and causal identifiers remain append-only logical references validated by the
+repository adapter.

@@ -4,7 +4,7 @@ import type { DiscoveryEventMetadata } from '../lucid/discovery-types.js';
 export const discoveryWorkspaces = sqliteTable('discovery_workspaces', {
   id: text('id').primaryKey(),
   versionId: text('version_id').notNull(),
-  currentStep: integer('current_step').notNull(),
+  currentWake: integer('current_wake').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
@@ -37,10 +37,12 @@ export const representativeAgents = sqliteTable('representative_agents', {
   color: text('color').notNull(),
   purpose: text('purpose').notNull(),
   instructions: text('instructions').notNull(),
-  conversationId: text('conversation_id').notNull(),
   status: text('status').notNull(),
   runCount: integer('run_count').notNull(),
   lastSeenSequence: integer('last_seen_sequence').notNull(),
+  activeWakeId: text('active_wake_id'),
+  activeWakeNumber: integer('active_wake_number'),
+  activeWakeHorizon: integer('active_wake_horizon'),
   lastRunAt: text('last_run_at'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
@@ -50,7 +52,6 @@ export const representativeAgents = sqliteTable('representative_agents', {
     table.sortOrder,
   ),
   uniqueIndex('representative_agents_participant_idx').on(table.participantId),
-  uniqueIndex('representative_agents_conversation_idx').on(table.conversationId),
 ]);
 
 export const discoveryEvents = sqliteTable('discovery_events', {
@@ -59,18 +60,20 @@ export const discoveryEvents = sqliteTable('discovery_events', {
   workspaceId: text('workspace_id')
     .notNull()
     .references(() => discoveryWorkspaces.id, { onDelete: 'cascade' }),
-  stepNumber: integer('step_number').notNull(),
+  wakeNumber: integer('wake_number').notNull(),
   kind: text('kind').notNull(),
   actorAgentId: text('actor_agent_id'),
   targetAgentId: text('target_agent_id'),
   targetParticipantId: text('target_participant_id'),
   parentSequence: integer('parent_sequence'),
+  idempotencyKey: text('idempotency_key'),
   title: text('title').notNull(),
   content: text('content').notNull(),
   metadata: text('metadata', { mode: 'json' }).$type<DiscoveryEventMetadata>().notNull(),
   createdAt: text('created_at').notNull(),
 }, (table) => [
   uniqueIndex('discovery_events_id_idx').on(table.id),
+  uniqueIndex('discovery_events_idempotency_idx').on(table.idempotencyKey),
   index('discovery_events_workspace_sequence_idx').on(
     table.workspaceId,
     table.sequence,

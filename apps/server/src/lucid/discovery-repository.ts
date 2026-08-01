@@ -1,11 +1,10 @@
 import type {
   Agent,
-  AgentStepContext,
+  AgentWakeContext,
   AgentView,
   DiscoveryEvent,
   DiscoveryEventKind,
   DiscoveryEventMetadata,
-  DiscoveryRunPhase,
   DiscoveryWorkspace,
   FindingView,
   Participant,
@@ -13,12 +12,13 @@ import type {
 } from './discovery-types.js';
 
 export type AppendDiscoveryEventInput = {
-  stepNumber?: number;
+  wakeNumber?: number;
   kind: DiscoveryEventKind;
   actorAgentId?: string;
   targetAgentId?: string;
   targetParticipantId?: string;
   parentSequence?: number;
+  idempotencyKey?: string;
   title: string;
   content: string;
   metadata?: DiscoveryEventMetadata;
@@ -52,6 +52,7 @@ export interface DiscoveryRepository {
    * and default-record insertion atomically.
    */
   reset(): Promise<void>;
+  readWorkspace(): Promise<DiscoveryWorkspace>;
   readSnapshot(): Promise<DiscoveryRepositorySnapshot>;
   listParticipants(): Promise<Participant[]>;
   listAgents(): Promise<Agent[]>;
@@ -68,6 +69,7 @@ export interface DiscoveryRepository {
     agentId: string,
     afterSequence: number,
     limit?: number,
+    throughSequence?: number,
   ): Promise<DiscoveryEvent[]>;
   readVisibleEventsBySequence(
     agentId: string,
@@ -75,25 +77,26 @@ export interface DiscoveryRepository {
   ): Promise<DiscoveryEvent[]>;
 
   /**
-   * Atomically records the next step and marks its agent running while
-   * returning a fixed unread-event horizon for the model turn.
+   * Atomically claims one agent wake and returns a fixed unread-event horizon.
+   * A wake without unread input returns undefined without incrementing the
+   * agent run count or changing its status.
    */
-  beginAgentStep(
+  beginAgentWake(
     agentId: string,
-    discoveryRunId: string,
-    phase: DiscoveryRunPhase,
-  ): Promise<AgentStepContext>;
-  completeAgentStep(
+    wakeId: string,
+  ): Promise<AgentWakeContext | undefined>;
+  completeAgentWake(
     agentId: string,
     horizonSequence: number,
   ): Promise<void>;
-  failAgentStep(agentId: string): Promise<void>;
-  interruptAgentStep(agentId: string): Promise<void>;
-  hasFindingForRun(discoveryRunId: string): Promise<boolean>;
-  ensureNoFindingResult(
-    discoveryRunId: string,
-    stepNumber: number,
-  ): Promise<DiscoveryEvent>;
+  failAgentWake(agentId: string): Promise<void>;
+  interruptAgentWake(agentId: string): Promise<void>;
+  hasFindingUsingAnySource(sourceEventIds: number[]): Promise<boolean>;
+  hasAgentContributedToCausalThread(
+    agentId: string,
+    sourceEventIds: number[],
+    currentWakeId: string,
+  ): Promise<boolean>;
 
   /**
    * Appends one immutable event and returns its storage-assigned sequence.

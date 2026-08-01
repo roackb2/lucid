@@ -2,34 +2,29 @@ import { z } from 'zod';
 
 export const participantKindSchema = z.enum(['human', 'synthetic']);
 export const agentStatusSchema = z.enum(['idle', 'running', 'error']);
-export const discoveryRunPhaseSchema = z.enum([
-  'requesting',
-  'responding',
-  'reporting',
-]);
 export const discoveryEventKindSchema = z.enum([
   'workspace_created',
   'interest_saved',
-  'agent_step_started',
+  'check_requested',
+  'agent_wake_started',
   'shared_message',
   'direct_message',
   'finding_reported',
   'feedback_saved',
-  'no_action',
-  'agent_step_completed',
+  'agent_wake_no_action',
+  'agent_wake_completed',
   'error',
 ]);
 
 export type ParticipantKind = z.infer<typeof participantKindSchema>;
 export type AgentStatus = z.infer<typeof agentStatusSchema>;
-export type DiscoveryRunPhase = z.infer<typeof discoveryRunPhaseSchema>;
 export type DiscoveryEventKind = z.infer<typeof discoveryEventKindSchema>;
 export type DiscoveryEventMetadata = Record<string, unknown>;
 
 export type DiscoveryWorkspace = {
   id: string;
   versionId: string;
-  currentStep: number;
+  currentWake: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -56,10 +51,12 @@ export type Agent = {
   color: string;
   purpose: string;
   instructions: string;
-  conversationId: string;
   status: AgentStatus;
   runCount: number;
   lastSeenSequence: number;
+  activeWakeId?: string;
+  activeWakeNumber?: number;
+  activeWakeHorizon?: number;
   lastRunAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -67,7 +64,11 @@ export type Agent = {
 
 export type AgentView = Omit<
   Agent,
-  'instructions' | 'conversationId' | 'lastSeenSequence'
+  | 'instructions'
+  | 'lastSeenSequence'
+  | 'activeWakeId'
+  | 'activeWakeNumber'
+  | 'activeWakeHorizon'
 > & {
   participant: ParticipantView;
   unreadCount: number;
@@ -78,12 +79,13 @@ export type DiscoveryEvent = {
   sequence: number;
   id: string;
   workspaceId: string;
-  stepNumber: number;
+  wakeNumber: number;
   kind: DiscoveryEventKind;
   actorAgentId?: string;
   targetAgentId?: string;
   targetParticipantId?: string;
   parentSequence?: number;
+  idempotencyKey?: string;
   title: string;
   content: string;
   metadata: DiscoveryEventMetadata;
@@ -98,27 +100,43 @@ export type FindingView = {
   noMatch: boolean;
 };
 
-export type AgentStepContext = {
+export type AgentWakeContext = {
   agent: Agent;
   participant: Participant;
-  phase: DiscoveryRunPhase;
-  discoveryRunId: string;
-  stepNumber: number;
+  wakeId: string;
+  wakeNumber: number;
   visibleEvents: DiscoveryEvent[];
   horizonSequence: number;
 };
 
-export type ActiveDiscoveryRunView = {
-  id: string;
-  totalSteps: number;
-  completedSteps: number;
-  startedAt: string;
-  phase?: DiscoveryRunPhase;
-  agentId?: string;
-  agentName?: string;
-  agentExecutionId?: string;
-  latestActivity: string;
-  cancelRequested: boolean;
+export type RepresentativeAgentTaskStatus =
+  | 'idle'
+  | 'running'
+  | 'waiting'
+  | 'blocked'
+  | 'complete'
+  | 'failed';
+
+export type RepresentativeAgentTaskView = {
+  taskId: string;
+  agentId: string;
+  enabled: boolean;
+  status: RepresentativeAgentTaskStatus;
+  progress: string;
+  intervalMs: number;
+  nextRunAt?: string;
+  lastRunAt?: string;
+  lastSummary?: string;
+  error?: string;
+};
+
+export type BackgroundChecksView = {
+  enabled: boolean;
+  running: boolean;
+  intervalMs: number;
+  nextRunAt?: string;
+  lastRunAt?: string;
+  tasks: RepresentativeAgentTaskView[];
 };
 
 export type DiscoveryWorkspaceSnapshot = {
@@ -128,43 +146,9 @@ export type DiscoveryWorkspaceSnapshot = {
   interest?: DiscoveryEvent;
   findings: FindingView[];
   events: DiscoveryEvent[];
-  activeRun?: ActiveDiscoveryRunView;
+  backgroundChecks: BackgroundChecksView;
   runtime: {
     model: string;
     heddleVersion: string;
   };
 };
-
-export type AgentRunActivity = {
-  type: string;
-  summary: string;
-  timestamp: string;
-};
-
-export type AgentRunResult = {
-  outcome: string;
-  summary: string;
-  traceFile?: string;
-  toolCount: number;
-};
-
-export type AgentRunHandle = {
-  executionId: string;
-  result: Promise<AgentRunResult>;
-  cancel(): boolean;
-};
-
-export type StartAgentRunInput = {
-  agent: Agent;
-  participant: Participant;
-  phase: DiscoveryRunPhase;
-  discoveryRunId: string;
-  stepNumber: number;
-  visibleEvents: DiscoveryEvent[];
-  signal: AbortSignal;
-  onActivity?(activity: AgentRunActivity): void;
-};
-
-export interface AgentRunner {
-  startAgentStep(input: StartAgentRunInput): Promise<AgentRunHandle>;
-}

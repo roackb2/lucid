@@ -7,6 +7,7 @@ import {
   eq,
   gt,
   inArray,
+  lte,
   ne,
   or,
 } from 'drizzle-orm';
@@ -26,9 +27,8 @@ import {
   discoveryEventKindSchema,
   participantKindSchema,
   type Agent,
-  type AgentStepContext,
+  type AgentWakeContext,
   type DiscoveryEvent,
-  type DiscoveryRunPhase,
   type DiscoveryWorkspace,
   type FindingView,
   type Participant,
@@ -77,6 +77,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     })();
   }
 
+  async readWorkspace(): Promise<DiscoveryWorkspace> {
+    return this.requireWorkspace();
+  }
+
   async readSnapshot(): Promise<DiscoveryRepositorySnapshot> {
     const workspace = this.requireWorkspace();
     const [user, participantList, agentList] = await Promise.all([
@@ -96,8 +100,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       }
       const {
         instructions: _instructions,
-        conversationId: _conversationId,
         lastSeenSequence: _lastSeenSequence,
+        activeWakeId: _activeWakeId,
+        activeWakeNumber: _activeWakeNumber,
+        activeWakeHorizon: _activeWakeHorizon,
         ...view
       } = agent;
       return {
@@ -250,6 +256,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     agentId: string,
     afterSequence: number,
     limit = 40,
+    throughSequence?: number,
   ): Promise<DiscoveryEvent[]> {
     return this.database.orm
       .select()
@@ -257,8 +264,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         gt(discoveryEvents.sequence, afterSequence),
+        throughSequence === undefined
+          ? undefined
+          : lte(discoveryEvents.sequence, throughSequence),
         or(
-          eq(discoveryEvents.kind, 'workspace_created'),
           and(
             eq(discoveryEvents.kind, 'shared_message'),
             ne(discoveryEvents.actorAgentId, agentId),
@@ -268,7 +277,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             eq(discoveryEvents.targetAgentId, agentId),
           ),
           and(
-            inArray(discoveryEvents.kind, ['interest_saved', 'feedback_saved']),
+            inArray(
+              discoveryEvents.kind,
+              ['interest_saved', 'check_requested', 'feedback_saved'],
+            ),
             eq(discoveryEvents.targetAgentId, agentId),
           ),
         ),
@@ -294,14 +306,16 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         inArray(discoveryEvents.sequence, sequences),
         or(
-          eq(discoveryEvents.kind, 'workspace_created'),
           eq(discoveryEvents.kind, 'shared_message'),
           and(
             eq(discoveryEvents.kind, 'direct_message'),
             eq(discoveryEvents.targetAgentId, agentId),
           ),
           and(
-            inArray(discoveryEvents.kind, ['interest_saved', 'feedback_saved']),
+            inArray(
+              discoveryEvents.kind,
+              ['interest_saved', 'check_requested', 'feedback_saved'],
+            ),
             eq(discoveryEvents.targetAgentId, agentId),
           ),
         ),
@@ -311,83 +325,186 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .map(toDiscoveryEvent);
   }
 
-  async beginAgentStep(
+  async beginAgentWake(
     agentId: string,
-    discoveryRunId: string,
-    phase: DiscoveryRunPhase,
-  ): Promise<AgentStepContext> {
-    const workspace = this.requireWorkspace();
-    const selectedAgent = await this.requireAgent(agentId);
-    const participant = await this.requireParticipant(selectedAgent.participantId);
-    const visibleEvents = await this.listEventsVisibleToAgent(
-      selectedAgent.id,
-      selectedAgent.lastSeenSequence,
-    );
-    const horizonSequence = visibleEvents.at(-1)?.sequence
-      ?? selectedAgent.lastSeenSequence;
-    const stepNumber = workspace.currentStep + 1;
+    wakeId: string,
+  ): Promise<AgentWakeContext | undefined> {
     const now = dayjs().toISOString();
 
-    this.database.orm.transaction((transaction) => {
-      transaction
-        .update(discoveryWorkspaces)
-        .set({ currentStep: stepNumber, updatedAt: now })
+    return this.database.orm.transaction((transaction) => {
+      const workspaceRow = transaction
+        .select()
+        .from(discoveryWorkspaces)
         .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
-        .run();
+        .get();
+      if (!workspaceRow) {
+        throw new Error(
+          'Discovery workspace is missing. Run the database migration and restart the service.',
+        );
+      }
+
+      const agentRow = transaction
+        .select()
+        .from(representativeAgents)
+        .where(and(
+          eq(representativeAgents.workspaceId, WORKSPACE_ID),
+          eq(representativeAgents.id, agentId),
+        ))
+        .get();
+      if (!agentRow) {
+        throw new Error(`Representative agent not found: ${agentId}`);
+      }
+      const selectedAgent = toAgent(agentRow);
+      if (selectedAgent.status === 'running') {
+        throw new Error(`Representative agent is already running: ${agentId}`);
+      }
+
+      const participantRow = transaction
+        .select()
+        .from(participants)
+        .where(and(
+          eq(participants.workspaceId, WORKSPACE_ID),
+          eq(participants.id, selectedAgent.participantId),
+        ))
+        .get();
+      if (!participantRow) {
+        throw new Error(`Participant not found: ${selectedAgent.participantId}`);
+      }
+
+      const resumingWake = Boolean(
+        selectedAgent.activeWakeId
+        && selectedAgent.activeWakeNumber !== undefined
+        && selectedAgent.activeWakeHorizon !== undefined
+        && selectedAgent.activeWakeHorizon > selectedAgent.lastSeenSequence,
+      );
+      const visibleEventConditions = [
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        gt(discoveryEvents.sequence, selectedAgent.lastSeenSequence),
+        ...(resumingWake
+          ? [lte(
+              discoveryEvents.sequence,
+              selectedAgent.activeWakeHorizon!,
+            )]
+          : []),
+        or(
+          and(
+            eq(discoveryEvents.kind, 'shared_message'),
+            ne(discoveryEvents.actorAgentId, selectedAgent.id),
+          ),
+          and(
+            eq(discoveryEvents.kind, 'direct_message'),
+            eq(discoveryEvents.targetAgentId, selectedAgent.id),
+          ),
+          and(
+            inArray(
+              discoveryEvents.kind,
+              ['interest_saved', 'check_requested', 'feedback_saved'],
+            ),
+            eq(discoveryEvents.targetAgentId, selectedAgent.id),
+          ),
+        ),
+      ];
+      const visibleEvents = transaction
+        .select()
+        .from(discoveryEvents)
+        .where(and(...visibleEventConditions))
+        .orderBy(asc(discoveryEvents.sequence))
+        .limit(40)
+        .all()
+        .map(toDiscoveryEvent);
+      if (!visibleEvents.length) {
+        if (selectedAgent.activeWakeId) {
+          transaction
+            .update(representativeAgents)
+            .set({
+              activeWakeId: null,
+              activeWakeNumber: null,
+              activeWakeHorizon: null,
+              updatedAt: now,
+            })
+            .where(eq(representativeAgents.id, selectedAgent.id))
+            .run();
+        }
+        return undefined;
+      }
+
+      const activeWakeId = resumingWake
+        ? selectedAgent.activeWakeId!
+        : wakeId;
+      const horizonSequence = resumingWake
+        ? selectedAgent.activeWakeHorizon!
+        : visibleEvents.at(-1)!.sequence;
+      const wakeNumber = resumingWake
+        ? selectedAgent.activeWakeNumber!
+        : workspaceRow.currentWake + 1;
+
+      if (!resumingWake) {
+        transaction
+          .update(discoveryWorkspaces)
+          .set({ currentWake: wakeNumber, updatedAt: now })
+          .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
+          .run();
+      }
       transaction
         .update(representativeAgents)
         .set({
           status: 'running',
           runCount: selectedAgent.runCount + 1,
+          activeWakeId,
+          activeWakeNumber: wakeNumber,
+          activeWakeHorizon: horizonSequence,
           lastRunAt: now,
           updatedAt: now,
         })
         .where(eq(representativeAgents.id, selectedAgent.id))
         .run();
-      transaction
-        .insert(discoveryEvents)
-        .values({
-          id: `event_${randomUUID()}`,
-          workspaceId: WORKSPACE_ID,
-          stepNumber,
-          kind: 'agent_step_started',
-          actorAgentId: selectedAgent.id,
-          title: `${selectedAgent.name} starts a discovery step`,
-          content: visibleEvents.length
-            ? `${visibleEvents.length} unread ${
-                visibleEvents.length === 1 ? 'event is' : 'events are'
-              } available during the ${phase} phase.`
-            : `The ${phase} phase starts without unread events.`,
-          metadata: {
-            visibility: 'operator',
-            visibleEventSequences: visibleEvents.map((event) => event.sequence),
-            horizonSequence,
-            discoveryRunId,
-            phase,
-          },
-          createdAt: now,
-        })
-        .run();
+      if (!resumingWake) {
+        transaction
+          .insert(discoveryEvents)
+          .values({
+            id: `event_${randomUUID()}`,
+            workspaceId: WORKSPACE_ID,
+            wakeNumber,
+            kind: 'agent_wake_started',
+            actorAgentId: selectedAgent.id,
+            idempotencyKey: `${activeWakeId}:started`,
+            title: `${selectedAgent.name} wakes for new messages`,
+            content: `${visibleEvents.length} unread ${
+              visibleEvents.length === 1 ? 'event is' : 'events are'
+            } available during this wake.`,
+            metadata: {
+              visibility: 'operator',
+              visibleEventSequences: visibleEvents.map(
+                (event) => event.sequence,
+              ),
+              horizonSequence,
+              wakeId: activeWakeId,
+            },
+            createdAt: now,
+          })
+          .run();
+      }
+      return {
+        agent: {
+          ...selectedAgent,
+          status: 'running',
+          runCount: selectedAgent.runCount + 1,
+          activeWakeId,
+          activeWakeNumber: wakeNumber,
+          activeWakeHorizon: horizonSequence,
+          lastRunAt: now,
+          updatedAt: now,
+        },
+        participant: toParticipant(participantRow),
+        wakeId: activeWakeId,
+        wakeNumber,
+        visibleEvents,
+        horizonSequence,
+      };
     });
-
-    return {
-      agent: {
-        ...selectedAgent,
-        status: 'running',
-        runCount: selectedAgent.runCount + 1,
-        lastRunAt: now,
-        updatedAt: now,
-      },
-      participant,
-      phase,
-      discoveryRunId,
-      stepNumber,
-      visibleEvents,
-      horizonSequence,
-    };
   }
 
-  async completeAgentStep(
+  async completeAgentWake(
     agentId: string,
     horizonSequence: number,
   ): Promise<void> {
@@ -397,13 +514,16 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .set({
         status: 'idle',
         lastSeenSequence: Math.max(agent.lastSeenSequence, horizonSequence),
+        activeWakeId: null,
+        activeWakeNumber: null,
+        activeWakeHorizon: null,
         updatedAt: dayjs().toISOString(),
       })
       .where(eq(representativeAgents.id, agentId))
       .run();
   }
 
-  async failAgentStep(agentId: string): Promise<void> {
+  async failAgentWake(agentId: string): Promise<void> {
     this.database.orm
       .update(representativeAgents)
       .set({ status: 'error', updatedAt: dayjs().toISOString() })
@@ -411,7 +531,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .run();
   }
 
-  async interruptAgentStep(agentId: string): Promise<void> {
+  async interruptAgentWake(agentId: string): Promise<void> {
     this.database.orm
       .update(representativeAgents)
       .set({ status: 'idle', updatedAt: dayjs().toISOString() })
@@ -419,51 +539,84 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .run();
   }
 
-  async hasFindingForRun(discoveryRunId: string): Promise<boolean> {
-    return Boolean(this.findFindingForRun(discoveryRunId));
+  async hasFindingUsingAnySource(sourceEventIds: number[]): Promise<boolean> {
+    if (!sourceEventIds.length) {
+      return false;
+    }
+    const requested = new Set(sourceEventIds);
+    return this.database.orm
+      .select({ metadata: discoveryEvents.metadata })
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'finding_reported'),
+        eq(discoveryEvents.targetParticipantId, LOCAL_USER_ID),
+      ))
+      .all()
+      .some(({ metadata }) => (
+        readSequenceIds(metadata?.sourceEventIds)
+          .some((sequence) => requested.has(sequence))
+      ));
   }
 
-  async ensureNoFindingResult(
-    discoveryRunId: string,
-    stepNumber: number,
-  ): Promise<DiscoveryEvent> {
-    const existing = this.findFindingForRun(discoveryRunId);
-    if (existing) {
-      return existing;
+  async hasAgentContributedToCausalThread(
+    agentId: string,
+    sourceEventIds: number[],
+    currentWakeId: string,
+  ): Promise<boolean> {
+    const sourceRoots = this.findCausalRootSequences(sourceEventIds);
+    if (!sourceRoots.size) {
+      return false;
     }
 
-    return await this.appendEvent({
-      stepNumber,
-      kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
-      title: 'No relevant match found',
-      content:
-        'This check did not find a specific match worth reporting. Lucid kept the result quiet instead of manufacturing a recommendation.',
-      metadata: {
-        visibility: 'user',
-        discoveryRunId,
-        noMatch: true,
-        sourceEventIds: [],
-      },
-    });
+    return this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.actorAgentId, agentId),
+        inArray(
+          discoveryEvents.kind,
+          ['shared_message', 'direct_message'],
+        ),
+      ))
+      .all()
+      .map(toDiscoveryEvent)
+      .filter((event) => event.metadata.wakeId !== currentWakeId)
+      .some((event) => [...this.findCausalRootSequences([event.sequence])]
+        .some((root) => sourceRoots.has(root)));
   }
 
   async appendEvent(
     input: AppendDiscoveryEventInput,
   ): Promise<DiscoveryEvent> {
+    if (input.idempotencyKey) {
+      const existing = this.database.orm
+        .select()
+        .from(discoveryEvents)
+        .where(and(
+          eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+          eq(discoveryEvents.idempotencyKey, input.idempotencyKey),
+        ))
+        .get();
+      if (existing) {
+        return toDiscoveryEvent(existing);
+      }
+    }
+
     const workspace = this.requireWorkspace();
     const row = this.database.orm
       .insert(discoveryEvents)
       .values({
         id: `event_${randomUUID()}`,
         workspaceId: WORKSPACE_ID,
-        stepNumber: input.stepNumber ?? workspace.currentStep,
+        wakeNumber: input.wakeNumber ?? workspace.currentWake,
         kind: input.kind,
         actorAgentId: input.actorAgentId,
         targetAgentId: input.targetAgentId,
         targetParticipantId: input.targetParticipantId,
         parentSequence: input.parentSequence,
+        idempotencyKey: input.idempotencyKey,
         title: input.title,
         content: input.content,
         metadata: input.metadata ?? {},
@@ -490,7 +643,6 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .map(toDiscoveryEvent)
       .map((finding) => {
         const sourceEventIds = readSequenceIds(finding.metadata.sourceEventIds);
-        const discoveryRunId = readString(finding.metadata.discoveryRunId);
         const feedbackRow = this.database.orm
           .select()
           .from(discoveryEvents)
@@ -505,28 +657,68 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         return {
           finding,
           sources: this.readEventsBySequence(sourceEventIds),
-          outboundMessages: discoveryRunId
-            ? this.listRunOutboundMessages(discoveryRunId)
-            : [],
+          outboundMessages: this.listCausalOutboundMessages(sourceEventIds),
           feedback: feedbackRow ? toDiscoveryEvent(feedbackRow) : undefined,
           noMatch: finding.metadata.noMatch === true,
         };
       });
   }
 
-  private listRunOutboundMessages(discoveryRunId: string): DiscoveryEvent[] {
-    return this.database.orm
-      .select()
-      .from(discoveryEvents)
-      .where(and(
-        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
-        eq(discoveryEvents.actorAgentId, USER_AGENT_ID),
-        inArray(discoveryEvents.kind, ['shared_message', 'direct_message']),
-      ))
-      .orderBy(asc(discoveryEvents.sequence))
-      .all()
-      .map(toDiscoveryEvent)
-      .filter((event) => event.metadata.discoveryRunId === discoveryRunId);
+  private listCausalOutboundMessages(sourceEventIds: number[]): DiscoveryEvent[] {
+    const visited = new Set(sourceEventIds);
+    const queue = this.readEventsBySequence(sourceEventIds);
+    const outboundMessages: DiscoveryEvent[] = [];
+
+    while (queue.length) {
+      const event = queue.shift()!;
+      if (
+        event.actorAgentId === USER_AGENT_ID
+        && ['shared_message', 'direct_message'].includes(event.kind)
+      ) {
+        outboundMessages.push(event);
+      }
+
+      const ancestorIds = [
+        ...readSequenceIds(event.metadata.sourceEventIds),
+        ...(event.parentSequence ? [event.parentSequence] : []),
+      ].filter((sequence) => !visited.has(sequence));
+      ancestorIds.forEach((sequence) => visited.add(sequence));
+      queue.push(...this.readEventsBySequence(ancestorIds));
+    }
+
+    return outboundMessages.sort(
+      (left, right) => left.sequence - right.sequence,
+    );
+  }
+
+  private findCausalRootSequences(sequences: number[]): Set<number> {
+    const roots = new Set<number>();
+    const visited = new Set<number>();
+    const queue = [...sequences];
+
+    while (queue.length) {
+      const sequence = queue.shift()!;
+      if (visited.has(sequence)) {
+        continue;
+      }
+      visited.add(sequence);
+
+      const event = this.readEventsBySequence([sequence])[0];
+      if (!event) {
+        continue;
+      }
+      const ancestors = [
+        ...readSequenceIds(event.metadata.sourceEventIds),
+        ...(event.parentSequence ? [event.parentSequence] : []),
+      ];
+      if (!ancestors.length) {
+        roots.add(event.sequence);
+        continue;
+      }
+      queue.push(...ancestors);
+    }
+
+    return roots;
   }
 
   private readEventsBySequence(sequences: number[]): DiscoveryEvent[] {
@@ -562,23 +754,6 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     return toDiscoveryEvent(row);
   }
 
-  private findFindingForRun(discoveryRunId: string): DiscoveryEvent | undefined {
-    const row = this.database.orm
-      .select()
-      .from(discoveryEvents)
-      .where(and(
-        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
-        eq(discoveryEvents.kind, 'finding_reported'),
-        eq(discoveryEvents.targetParticipantId, LOCAL_USER_ID),
-      ))
-      .orderBy(desc(discoveryEvents.sequence))
-      .all()
-      .find((candidate) => (
-        candidate.metadata?.discoveryRunId === discoveryRunId
-      ));
-    return row ? toDiscoveryEvent(row) : undefined;
-  }
-
   private findWorkspace(): DiscoveryWorkspace | undefined {
     const row = this.database.orm
       .select()
@@ -611,7 +786,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     this.database.orm.insert(discoveryWorkspaces).values({
       id: WORKSPACE_ID,
       versionId,
-      currentStep: 0,
+      currentWake: 0,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -627,7 +802,6 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       DEFAULT_AGENTS.map((agent) => ({
         ...agent,
         workspaceId: WORKSPACE_ID,
-        conversationId: `agent_${agent.id}_${versionId}`,
         status: 'idle',
         runCount: 0,
         lastSeenSequence: 0,
@@ -638,7 +812,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     this.database.orm.insert(discoveryEvents).values({
       id: `event_${randomUUID()}`,
       workspaceId: WORKSPACE_ID,
-      stepNumber: 0,
+      wakeNumber: 0,
       kind: 'workspace_created',
       title: 'Discovery workspace created',
       content:
@@ -678,9 +852,9 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       transaction.insert(discoveryEvents).values({
         id: `event_${randomUUID()}`,
         workspaceId: WORKSPACE_ID,
-        stepNumber: workspace.currentStep,
+        wakeNumber: workspace.currentWake,
         kind: 'error',
-        title: 'Interrupted agent steps recovered',
+        title: 'Interrupted agent wakes recovered',
         content:
           `${interrupted.map((agent) => agent.name).join(', ')} ${
             interrupted.length === 1 ? 'was' : 'were'
@@ -699,6 +873,9 @@ function toAgent(row: AgentRow): Agent {
   return {
     ...row,
     status: agentStatusSchema.parse(row.status),
+    activeWakeId: row.activeWakeId ?? undefined,
+    activeWakeNumber: row.activeWakeNumber ?? undefined,
+    activeWakeHorizon: row.activeWakeHorizon ?? undefined,
     lastRunAt: row.lastRunAt ?? undefined,
   };
 }
@@ -723,6 +900,7 @@ function toDiscoveryEvent(row: DiscoveryEventRow): DiscoveryEvent {
     targetAgentId: row.targetAgentId ?? undefined,
     targetParticipantId: row.targetParticipantId ?? undefined,
     parentSequence: row.parentSequence ?? undefined,
+    idempotencyKey: row.idempotencyKey ?? undefined,
     metadata: row.metadata ?? {},
   };
 }
@@ -737,8 +915,4 @@ function readSequenceIds(value: unknown): number[] {
   return Array.isArray(value)
     ? value.filter((item): item is number => Number.isInteger(item) && item > 0)
     : [];
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value ? value : undefined;
 }

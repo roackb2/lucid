@@ -3,8 +3,13 @@ import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import { LUCID_MIGRATIONS_ROOT, resolveLucidConfig } from './config.js';
 import { LucidSqliteDatabase } from './database/sqlite-database.js';
 import { SqliteDiscoveryRepository } from './database/sqlite-discovery-repository.js';
-import { DiscoveryRunService } from './lucid/discovery-run-service.js';
-import { HeddleAgentRunner } from './lucid/heddle-agent-runner.js';
+import { DiscoveryWorkspaceService } from './lucid/discovery-workspace-service.js';
+import {
+  HeddleRepresentativeAgentRunner,
+} from './lucid/heddle-representative-agent-runner.js';
+import {
+  RepresentativeAgentHeartbeatService,
+} from './lucid/representative-agent-heartbeat-service.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
 
@@ -17,19 +22,26 @@ database.migrate(LUCID_MIGRATIONS_ROOT);
 
 const repository = new SqliteDiscoveryRepository(database);
 await repository.initialize();
-const agentRunner = new HeddleAgentRunner(repository, config);
-const discoveryRuns = new DiscoveryRunService(
+const agentRunner = new HeddleRepresentativeAgentRunner(repository, config);
+const heartbeats = new RepresentativeAgentHeartbeatService(
   repository,
   agentRunner,
+  config,
+  logger,
+);
+await heartbeats.initialize();
+heartbeats.start();
+const discoveryWorkspace = new DiscoveryWorkspaceService(
+  repository,
+  heartbeats,
   {
     model: config.model,
     heddleVersion: HEDDLE_VERSION,
   },
-  logger,
 );
 
 const server = createHTTPServer({
-  router: createAppRouter(discoveryRuns),
+  router: createAppRouter(discoveryWorkspace),
   createContext: () => ({
     requestId: randomUUID(),
   }),
@@ -87,7 +99,7 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   const serverClosed = new Promise<Error | undefined>((resolve) => {
     server.close((error) => resolve(error));
   });
-  await discoveryRuns.stop();
+  await heartbeats.stop();
 
   const closeError = await serverClosed;
   if (closeError) {

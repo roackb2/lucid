@@ -3,43 +3,46 @@
 Lucid is a local prototype for delegated discovery between agents that
 represent different people.
 
-The default experience is practical:
+The product loop is intentionally practical:
 
 1. describe an ongoing interest in ordinary language;
-2. start a bounded discovery check;
-3. let the user's representative agent ask available participant agents for
-   specific matches;
-4. receive a finding or an explicit no-match result;
-5. leave private, free-text feedback for the next check.
+2. let a representative agent keep that intent in its private mailbox;
+3. leave background checks running while representative agents exchange
+   relevant messages;
+4. receive a finding only when another agent provides a specific match;
+5. give free-text feedback that guides the user's agent on a later wake.
 
-The current participants are one local user and two clearly labelled simulated
-profiles. They exercise matching, privacy, delivery, persistence, and recovery.
-They are not real users, external information sources, or evidence that an
-agent network is economically useful.
+The current network contains one local user and two clearly labelled simulated
+participants. They exercise matching, privacy, delivery, persistence, and
+recovery. They are not real users, external sources, or evidence that an agent
+network is economically useful.
 
 ## Current product loop
 
 ```mermaid
 flowchart LR
-  I["Private saved interest"] --> U1["User agent requests matches"]
-  U1 --> S1["Simulated music source responds"]
-  U1 --> S2["Simulated product source responds"]
-  S1 --> U2["User agent reviews messages"]
-  S2 --> U2
-  U2 --> F["Finding or no-match result"]
+  I["Private saved interest"] --> U["User representative mailbox"]
+  U --> H["Heddle heartbeat wake"]
+  H --> M["Minimal shared or direct message"]
+  M --> P1["Participant representative"]
+  M --> P2["Participant representative"]
+  P1 --> U
+  P2 --> U
+  U --> F["Specific peer-sourced finding"]
   F --> B["Private user feedback"]
-  B --> U1
+  B --> U
 ```
 
-One check uses four durable Heddle agent steps:
+Each representative owns one durable Heddle heartbeat task. A scheduled task
+with no unread mailbox input records a healthy idle run without calling the
+model. New mail accelerates the relevant recipient task. `Run now` appends a
+fresh private check request to the user's mailbox. The user's representative
+must turn that event into a new minimal request even when the saved interest
+text has not changed. It uses the same task network; it is not a separate
+execution path.
 
-1. the user agent receives the private interest and posts a minimal request;
-2. the music participant agent may respond;
-3. the product research participant agent may respond;
-4. the user agent reports one specific finding or finishes without a match.
-
-Checks are manual in this version. There is no scheduler, open network, search
-engine, payment system, bidding, or external fact retrieval yet.
+There is no open network, search engine, payment system, bidding, or external
+fact retrieval yet.
 
 ## Reliability boundaries
 
@@ -48,10 +51,13 @@ Lucid structures only behavior the platform can enforce:
 - participant and representative-agent identity;
 - private, shared, target-agent, user, and operator visibility;
 - event delivery order and durable unread cursors;
+- fixed event horizons for each claimed wake;
 - which peer messages caused a finding;
 - what the user agent shared while looking;
-- a two-action communication budget for each agent step;
-- bounded execution, cancellation, recovery, and persistence.
+- a two-action communication budget per wake;
+- at most one representative contribution per user-initiated causal thread;
+- idempotent communication slots across retries;
+- pause, restart, reset, and graceful-shutdown recovery.
 
 Interest, messages, findings, and feedback remain ordinary text. Lucid does not
 invent confidence levels, reputation scores, evidence packets, or universal
@@ -62,62 +68,40 @@ the prototype. It does not prove that the message is true or useful.
 
 | Lucid owns | Heddle owns |
 | --- | --- |
-| Participants and representative agents | Durable conversation per agent |
-| Async discovery repository and storage adapters | Model and tool loop |
-| Visibility and causal-source validation | Turn leases and cancellation |
-| Four-step discovery route | Activity events and traces |
+| Participants and representative agents | One durable heartbeat task per agent |
+| Async discovery repository and storage adapters | Scheduler timing and due-task selection |
+| Mailbox visibility and causal-source validation | Agent checkpoints and task run history |
+| Atomic wake claims and unread cursors | Model and tool loop |
 | Finding and feedback delivery | Provider authentication |
-| Communication action budget | Conversation persistence |
+| Communication budgets and idempotency keys | Heartbeat decision and retry state |
 
 Lucid exposes five domain tools to representative agents:
 
 - `read_available_messages`
 - `post_shared_message`
 - `send_direct_message`
-- `report_finding` — available only to the user agent during reporting
+- `report_finding` — available only to the user's representative
 - `finish_without_action`
 
 Heddle's coding, shell, browser, generic memory, and MCP tools are not exposed
-inside a discovery check.
+inside a representative wake.
 
 ## Engineering vocabulary
 
-The implementation uses responsibility-based names:
-
 | Name | Responsibility |
 | --- | --- |
-| `LucidSqliteDatabase` | Owns the concrete SQLite connection, pragmas, migrations, and shutdown |
-| `DiscoveryRepository` | Async domain persistence contract used by Lucid services |
+| `LucidSqliteDatabase` | Owns the SQLite connection, pragmas, migrations, and shutdown |
+| `DiscoveryRepository` | Async domain persistence contract |
 | `SqliteDiscoveryRepository` | SQLite/Drizzle implementation of that contract |
-| `DiscoveryRunService` | Coordinates one bounded four-step discovery run |
-| `HeddleAgentRunner` | Executes one representative-agent step through Heddle |
+| `DiscoveryWorkspaceService` | Coordinates user workspace operations across storage and scheduling |
+| `RepresentativeAgentHeartbeatService` | Maps agents to Heddle tasks and settles mailbox wakes |
+| `HeddleRepresentativeAgentRunner` | Runs one claimed representative wake through Heddle |
 | `AgentCommunicationToolService` | Validates and executes scoped communication operations |
-| `DiscoveryWorkspace` | Durable state for the local discovery product |
-| `FindingView` | User-facing finding plus source messages and feedback |
+| `FindingView` | User-facing finding plus causal messages and feedback |
 
 The authoritative backend boundaries are documented in
 [`apps/server/src/database/README.md`](apps/server/src/database/README.md) and
 [`apps/server/src/lucid/README.md`](apps/server/src/lucid/README.md).
-
-## Periodic discovery direction
-
-Heddle heartbeat is the right local execution primitive for scheduled Lucid
-checks, but Lucid remains the host and product scheduler:
-
-- Each representative agent owns one heartbeat task and durable checkpoint.
-- On wake, the agent reads only its visible mailbox events and takes bounded
-  communication actions.
-- Lucid owns participant identity, visibility, finding delivery, and
-  idempotent wake claims.
-- Heddle records task timing, run history, retry/checkpoint state, and owns the
-  local scheduler loop.
-
-This should replace manual-only checks in the next slice. It should not replace
-the representative-agent mailbox or wrap the existing fixed route in a second
-heartbeat lifecycle. Manual start can become a run-now operation over these
-tasks. Heddle's built-in scheduler is single-host and not distributed
-exactly-once; a hosted multi-replica version would need an external durable
-queue/workflow layer.
 
 ## Run locally
 
@@ -154,20 +138,28 @@ Runtime state defaults to `local/discovery-home/`:
 
 ```text
 local/discovery-home/
-├── lucid.sqlite          # workspace, participants, agents, events, findings
+├── lucid.sqlite
 └── heddle/
-    ├── chat-sessions/    # private durable agent conversations
-    └── traces/           # completed Heddle agent steps
+    └── heartbeat/
+        ├── tasks/        # schedule and operator-facing task state
+        ├── checkpoints/  # one agent-loop checkpoint per representative
+        └── runs/         # inspectable Heddle run records
 ```
 
-If the process stops during an agent step, Lucid restores that agent to `idle`
-on startup without consuming unread input. In-flight model execution is not
-replayed; the user can start another bounded check. Graceful shutdown cancels
-and settles the active Heddle run before SQLite closes.
+If the process stops during a wake, Lucid releases the stale agent status
+without advancing its cursor. At startup it also returns stale Heddle task
+state from `running` to `waiting`, then retries the same fixed event horizon
+and idempotency slots. Graceful shutdown aborts active wakes, waits for Heddle
+to finish its outer task-state write, and closes SQLite last.
 
-Resetting the workspace clears active Lucid product data and assigns new
-Heddle conversation IDs. Existing Heddle session and trace files remain on
-disk for inspection.
+Resetting clears Lucid product data and replaces the current representative
+tasks, checkpoints, and task run history. The previous enabled or paused mode
+is preserved.
+
+The built-in file scheduler is suitable for this single-host experiment. A
+multi-replica deployment would require a durable queue or workflow executor
+with leased task claims; changing SQLite to PostgreSQL alone would not provide
+distributed execution.
 
 Older experiments remain available in Git history. The previous Dream
 Terrarium is preserved on `codex/dream-terrarium` at commit `2c367e9`.
@@ -176,6 +168,6 @@ Terrarium is preserved on `codex/dream-terrarium` at commit `2c367e9`.
 
 ```text
 apps/
-├── server/  # tRPC, SQLite/Drizzle, Lucid domain, Heddle adapter
+├── server/  # tRPC, SQLite/Drizzle, Lucid domain, Heddle heartbeat host
 └── web/     # practical discovery workspace and technical activity panel
 ```
