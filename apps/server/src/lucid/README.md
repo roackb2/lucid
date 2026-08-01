@@ -14,6 +14,7 @@ concrete lifecycle.
 | `discovery-repository.ts` | Defines the async storage-independent domain port |
 | `agent-communication-tools.ts` | Validates bounded mailbox and finding operations |
 | `agent-prompts.ts` | Builds representative identity and readable wake prompts |
+| `assisted-participant-profile.ts` | Builds the maintained agent profile for operator-assisted real participants |
 | `default-participants.ts` | Defines the local user and explicit simulated fixtures |
 | `discovery-types.ts` | Defines persisted records and API projections |
 | `discovery-repository.test.ts` | Verifies visibility, claims, idempotency, and recovery |
@@ -42,6 +43,7 @@ needs multiple independently scheduled or paused interests.
 Lucid owns:
 
 - participant and representative identity;
+- participant consent, active/disabled/retired lifecycle, and context removal;
 - mailbox visibility and append-only events;
 - private interest and feedback delivery;
 - atomic wake claims with a fixed unread-event horizon;
@@ -49,7 +51,7 @@ Lucid owns:
 - one representative contribution per causal thread across later wakes;
 - finding validation against visible peer-authored messages;
 - causal projections of what the user agent shared;
-- durable cursors and action idempotency keys.
+- durable cursors, mailbox eligibility floors, and action idempotency keys.
 
 Heddle owns:
 
@@ -91,6 +93,31 @@ interest and accelerates unread agents. The user representative must treat the
 event as a new causal thread and issue a fresh minimal request even when the
 interest text is unchanged. It uses the same lifecycle.
 
+## Assisted participant lifecycle
+
+The operator can add one real participant using ordinary-language context only
+after confirming that the person knowingly approved its use in this local
+experiment. Lucid creates the participant, representative agent, and Heddle
+task through the same repository and heartbeat path as the built-in fixtures.
+No account, invitation, or second runtime is involved.
+
+Each representative has both a processed-message cursor and a mailbox floor.
+The floor is the earliest event the participant is eligible to read, even if a
+model tool asks for an older sequence. It starts at the join boundary and moves
+forward when a participant is re-enabled, so neither pre-join nor paused-period
+messages can be recovered by requesting `after_sequence: 0`.
+
+- `active` participants receive new mail and have an enabled task when global
+  background checks are enabled;
+- `disabled` participants have no active wake, an off task, and receive no mail;
+- re-enabling advances the mailbox floor before scheduling future work;
+- `retired` participants lose private context permanently and their task is
+  deleted, while identity and prior non-sensitive event attribution remain.
+
+Repository participant status and the workspace's global background-check
+setting are authoritative. Task reconciliation is idempotent and repairs the
+file-backed Heddle task set without treating a live task as a restart artifact.
+
 ## Messages and findings
 
 Agents do not invoke one another's Heddle runtime. They communicate by appending
@@ -120,10 +147,10 @@ slots. Repository startup releases stale agent `running` status. Heartbeat
 startup changes stale Heddle tasks from `running` to `waiting` and makes them
 immediately due.
 
-Pause and reset first abort active model work, then wait until Heddle has
-finished writing its outer task state. Only then are task files disabled or
-deleted. Shutdown aborts the scheduler and waits for the same ordering before
-SQLite closes.
+Global pause, participant disable/retire, and reset first abort relevant active
+model work, then wait until Heddle has finished writing its outer task state.
+Only then are task files disabled or deleted. Shutdown aborts the scheduler and
+waits for the same ordering before SQLite closes.
 
 The file-backed Heddle scheduler is a single-host primitive without distributed
 leases. A hosted multi-replica version needs a durable queue or workflow

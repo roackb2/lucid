@@ -29,18 +29,25 @@ scheduler.
 
 ## Data ownership
 
-- `discovery_workspaces` identifies one local workspace generation and its
-  monotonic wake number.
+- `discovery_workspaces` identifies one local workspace generation, its
+  monotonic wake number, and the durable global background-check preference.
 - `participants` stores the human or explicit synthetic subject represented,
-  including private background visible only to its own agent.
-- `representative_agents` stores execution status, delivery cursor, and the
-  active wake's durable ID, number, and fixed event horizon.
+  including lifecycle status, approved-context timestamp, and private
+  background visible only to its own agent.
+- `representative_agents` stores execution status, delivery cursor, mailbox
+  floor, and the active wake's durable ID, number, and fixed event horizon.
 - `discovery_events` is the append-only product and mailbox history. It has a
   nullable unique idempotency key for retry-safe agent side effects.
 
 A participant answers "whose context and intent does this agent represent?"
 A saved interest answers "what does the local user want the agent to notice
 now?" and remains a private event rather than a participant field.
+
+The mailbox floor is distinct from the delivery cursor. The cursor records
+successfully processed mail; the floor enforces that a newly joined or resumed
+participant cannot request messages from before its current eligibility
+boundary. Retiring a participant scrubs `private_context` but keeps its row and
+representative identity for append-only historical attribution.
 
 ## Relations
 

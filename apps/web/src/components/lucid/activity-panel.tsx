@@ -26,6 +26,12 @@ export function ActivityPanel({
   const taskByAgentId = new Map(
     tasks.map((task) => [task.agentId, task]),
   );
+  const realAssistedCount = agents.filter(
+    (agent) => !agent.isUserAgent && agent.participant.kind === 'human',
+  ).length;
+  const simulatedCount = agents.filter(
+    (agent) => agent.participant.kind === 'synthetic',
+  ).length;
 
   return (
     <details className="activity-panel" id="activity">
@@ -51,8 +57,9 @@ export function ActivityPanel({
               <h3 id="representatives-title">Representative agents</h3>
             </div>
             <p>
-              Two participant profiles contain simulated test data. Their
-              private context is never included in the user snapshot.
+              {simulatedCount} simulated and {realAssistedCount} assisted real
+              source {simulatedCount + realAssistedCount === 1 ? 'is' : 'are'}
+              {' '}recorded. Private context is never included in this snapshot.
             </p>
           </header>
           <div className="representative-grid">

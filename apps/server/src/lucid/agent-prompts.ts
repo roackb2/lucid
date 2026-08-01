@@ -4,6 +4,7 @@ import type {
   DiscoveryEventKind,
   Participant,
 } from './discovery-types.js';
+import { USER_AGENT_ID } from './default-participants.js';
 
 const EVENT_LABELS: Record<DiscoveryEventKind, string> = {
   workspace_created: 'shared workspace event',
@@ -14,6 +15,10 @@ const EVENT_LABELS: Record<DiscoveryEventKind, string> = {
   direct_message: 'private agent message',
   finding_reported: 'private user finding',
   feedback_saved: 'private user feedback',
+  participant_added: 'internal participant lifecycle',
+  participant_disabled: 'internal participant lifecycle',
+  participant_enabled: 'internal participant lifecycle',
+  participant_retired: 'internal participant lifecycle',
   agent_wake_no_action: 'internal no-action result',
   agent_wake_completed: 'internal agent result',
   error: 'internal error',
@@ -23,9 +28,12 @@ export function buildRepresentativeAgentInstructions(
   agent: Agent,
   participant: Participant,
 ): string {
-  const privacyRules = participant.kind === 'human'
+  const privacyRules = agent.id === USER_AGENT_ID
     ? `You represent the real local user.
 Their saved interest and feedback are private. Share only the smallest useful abstraction, never a verbatim private message unless it is necessary.`
+    : participant.kind === 'human'
+      ? `You represent a real assisted participant whose context was knowingly supplied for this local experiment.
+Use only the approved private context below. Share the smallest relevant detail and never imply that personal claims are independently verified.`
     : `You represent an explicitly simulated test participant, not a real person or external source.
 Never imply this participant’s private context is verified. Label it as simulated when sharing it could otherwise be misleading.`;
 
@@ -73,7 +81,7 @@ export function buildAgentWakePrompt(
     ? visibleEvents.map(formatDiscoveryEvent).join('\n')
     : '(No unread shared messages, direct messages, or user input.)';
 
-  const responsibility = participant.kind === 'human'
+  const responsibility = agent.id === USER_AGENT_ID
     ? `When an unread interest_saved event appears, share a minimal request that represents it.
 When an unread check_requested event appears, it starts a new causal thread even if the saved interest text is unchanged. You must post a fresh minimal shared request citing that check event.
 When peer-authored messages contain a specific useful match, report it with report_finding.

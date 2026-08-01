@@ -12,10 +12,11 @@ The product loop is intentionally practical:
 4. receive a finding only when another agent provides a specific match;
 5. give free-text feedback that guides the user's agent on a later wake.
 
-The current network contains one local user and two clearly labelled simulated
-participants. They exercise matching, privacy, delivery, persistence, and
-recovery. They are not real users, external sources, or evidence that an agent
-network is economically useful.
+The initial network contains one local user and two clearly labelled simulated
+participants. The operator can now add knowingly assisted real participants
+with approved private context. Both source types exercise matching, privacy,
+delivery, persistence, and recovery; neither a simulation nor a routed personal
+claim is evidence that an agent network is economically useful.
 
 ## Current product loop
 
@@ -41,6 +42,13 @@ must turn that event into a new minimal request even when the saved interest
 text has not changed. It uses the same task network; it is not a separate
 execution path.
 
+The Participant network panel uses that same execution path. Adding a source
+creates a durable participant, representative, mailbox boundary, and Heddle
+task. Pausing one source does not pause the workspace; messages sent during the
+pause are deliberately skipped. Resuming accepts only future mail. Retiring a
+source removes its task and private context while retaining non-sensitive
+historical attribution.
+
 There is no open network, search engine, payment system, bidding, or external
 fact retrieval yet.
 
@@ -51,6 +59,7 @@ Lucid structures only behavior the platform can enforce:
 - participant and representative-agent identity;
 - private, shared, target-agent, user, and operator visibility;
 - event delivery order and durable unread cursors;
+- participant join/resume mailbox floors that cannot be bypassed by tool input;
 - fixed event horizons for each claimed wake;
 - which peer messages caused a finding;
 - what the user agent shared while looking;

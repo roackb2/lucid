@@ -10,6 +10,7 @@ import {
   MessagesSquare,
   PlayCircle,
   Search,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 import type { AgentView, DiscoveryEvent } from '@/lib/trpc';
@@ -68,6 +69,26 @@ const EVENT_PRESENTATION: Record<
     icon: MessageSquareReply,
     label: 'Feedback',
     visibility: 'user',
+  },
+  participant_added: {
+    icon: Users,
+    label: 'Participant added',
+    visibility: 'internal',
+  },
+  participant_disabled: {
+    icon: Users,
+    label: 'Participant paused',
+    visibility: 'internal',
+  },
+  participant_enabled: {
+    icon: Users,
+    label: 'Participant enabled',
+    visibility: 'internal',
+  },
+  participant_retired: {
+    icon: Users,
+    label: 'Participant retired',
+    visibility: 'internal',
   },
   agent_wake_no_action: {
     icon: CircleSlash2,

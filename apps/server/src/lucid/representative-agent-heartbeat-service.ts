@@ -59,9 +59,9 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   async initialize(): Promise<void> {
-    await this.ensureAgentTasks();
-    const snapshot = await this.snapshot();
-    this.paused = !snapshot.enabled;
+    const workspace = await this.repository.readWorkspace();
+    this.paused = !workspace.backgroundChecksEnabled;
+    await this.ensureAgentTasks({ recoverInterrupted: true });
   }
 
   start(): void {
@@ -96,22 +96,38 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   async snapshot(): Promise<BackgroundChecksView> {
-    const [agents, taskViews] = await Promise.all([
+    const [workspace, participants, agents, taskViews] = await Promise.all([
+      this.repository.readWorkspace(),
+      this.repository.listParticipants(),
       this.repository.listAgents(),
       this.tasks.listTaskViews(),
     ]);
+    const participantById = new Map(
+      participants.map((participant) => [participant.id, participant]),
+    );
+    const visibleAgents = agents.filter(
+      (agent) => participantById.get(agent.participantId)?.status !== 'retired',
+    );
+    const activeAgentIds = new Set(
+      visibleAgents
+        .filter((agent) => (
+          participantById.get(agent.participantId)?.status === 'active'
+        ))
+        .map((agent) => agent.id),
+    );
     const taskById = new Map(
       taskViews.map((task) => [task.taskId, task]),
     );
-    const tasks = agents.flatMap((agent) => {
+    const tasks = visibleAgents.flatMap((agent) => {
       const task = taskById.get(taskIdForAgent(agent.id));
       return task ? [toRepresentativeAgentTaskView(agent.id, task)] : [];
     });
-    const enabledTasks = tasks.filter((task) => task.enabled);
+    const activeTasks = tasks.filter((task) => activeAgentIds.has(task.agentId));
+    const enabledTasks = activeTasks.filter((task) => task.enabled);
 
     return {
-      enabled: tasks.length > 0 && enabledTasks.length === tasks.length,
-      running: tasks.some((task) => task.status === 'running'),
+      enabled: workspace.backgroundChecksEnabled,
+      running: activeTasks.some((task) => task.status === 'running'),
       intervalMs: this.config.heartbeatIntervalMs,
       nextRunAt: earliest(
         enabledTasks.flatMap((task) => task.nextRunAt ?? []),
@@ -148,38 +164,80 @@ export class RepresentativeAgentHeartbeatService {
     if (!enabled) {
       await this.pauseRunningTasks();
     }
-
-    const tasks = await this.listManagedTasks();
-    await Promise.all(tasks.map(async (task) => {
-      if (task.state?.status === 'blocked' && enabled) {
-        await this.tasks.resumeTask(task.id);
-        return;
-      }
-      await this.tasks.setTaskEnabled(task.id, enabled);
-    }));
+    await this.repository.setBackgroundChecksEnabled(enabled);
     this.paused = !enabled;
+    await this.ensureAgentTasks();
     if (enabled) {
+      await this.resumeBlockedActiveTasks();
       await this.triggerAgentsWithUnreadEvents();
     }
     return await this.snapshot();
   }
 
   async resetWorkspace(): Promise<void> {
-    const wasEnabled = (await this.snapshot()).enabled;
+    const wasEnabled = (await this.repository.readWorkspace())
+      .backgroundChecksEnabled;
     await this.pauseRunningTasks();
     await this.deleteManagedTasks();
-    await this.repository.reset();
-    await this.ensureAgentTasks(wasEnabled);
+    await this.repository.reset({ backgroundChecksEnabled: wasEnabled });
     this.paused = !wasEnabled;
+    await this.ensureAgentTasks();
   }
 
-  private async ensureAgentTasks(defaultEnabled = true): Promise<void> {
-    const [workspace, agents, existingTasks] = await Promise.all([
+  async reconcileAgentTasks(): Promise<void> {
+    await this.ensureAgentTasks();
+  }
+
+  async enableAgentTask(agentId: string): Promise<void> {
+    await this.ensureAgentTasks();
+    if (this.paused) {
+      return;
+    }
+    const task = (await this.listManagedTasks()).find(
+      (candidate) => candidate.id === taskIdForAgent(agentId),
+    );
+    if (!task) {
+      throw new Error(`Heartbeat task is missing for agent: ${agentId}`);
+    }
+    if (task.state?.status === 'blocked') {
+      await this.tasks.resumeTask(task.id);
+    } else if (!task.enabled) {
+      await this.tasks.setTaskEnabled(task.id, true);
+    }
+  }
+
+  async disableAgentTask(agentId: string): Promise<void> {
+    const activeWake = this.activeWakes.get(agentId);
+    activeWake?.controller.abort();
+    await activeWake?.settled;
+    await this.pendingTriggerChecks.get(agentId);
+
+    const taskId = taskIdForAgent(agentId);
+    await this.waitForTaskToSettle(taskId);
+    const task = (await this.listManagedTasks()).find(
+      (candidate) => candidate.id === taskId,
+    );
+    if (task?.enabled) {
+      await this.tasks.setTaskEnabled(task.id, false);
+    }
+  }
+
+  private async ensureAgentTasks(
+    options: { recoverInterrupted?: boolean } = {},
+  ): Promise<void> {
+    const [workspace, participants, agents, existingTasks] = await Promise.all([
       this.repository.readWorkspace(),
+      this.repository.listParticipants(),
       this.repository.listAgents(),
       this.listManagedTasks(),
     ]);
-    const agentIds = new Set(agents.map((agent) => agent.id));
+    const participantById = new Map(
+      participants.map((participant) => [participant.id, participant]),
+    );
+    const managedAgents = agents.filter(
+      (agent) => participantById.get(agent.participantId)?.status !== 'retired',
+    );
+    const agentIds = new Set(managedAgents.map((agent) => agent.id));
 
     for (const task of existingTasks) {
       const agentId = agentIdFromTask(task.id);
@@ -195,7 +253,13 @@ export class RepresentativeAgentHeartbeatService {
     const currentTasks = new Map(
       (await this.listManagedTasks()).map((task) => [task.id, task]),
     );
-    for (const agent of agents) {
+    for (const agent of managedAgents) {
+      const participant = participantById.get(agent.participantId);
+      if (!participant) {
+        throw new Error(`Participant not found for agent: ${agent.id}`);
+      }
+      const desiredEnabled = workspace.backgroundChecksEnabled
+        && participant.status === 'active';
       const taskId = taskIdForAgent(agent.id);
       const existing = currentTasks.get(taskId);
       if (!existing) {
@@ -204,7 +268,7 @@ export class RepresentativeAgentHeartbeatService {
           workspaceId: workspace.versionId,
           name: `${agent.name} background checks`,
           task: agent.purpose,
-          enabled: defaultEnabled,
+          enabled: desiredEnabled,
           continuationMode: 'operator',
           intervalMs: this.config.heartbeatIntervalMs,
           defer: true,
@@ -216,8 +280,12 @@ export class RepresentativeAgentHeartbeatService {
         continue;
       }
 
+      if (existing.state?.status === 'running' && !options.recoverInterrupted) {
+        continue;
+      }
+
       const interrupted = existing.state?.status === 'running';
-      await this.tasks.saveTask({
+      const recoveredTask: HeartbeatTask = {
         ...existing,
         workspaceId: workspace.versionId,
         name: `${agent.name} background checks`,
@@ -247,7 +315,14 @@ export class RepresentativeAgentHeartbeatService {
               updatedAt: dayjs().toISOString(),
             }
           : existing.state,
-      });
+      };
+      await this.tasks.saveTask(recoveredTask);
+      if (
+        recoveredTask.enabled !== desiredEnabled
+        && !(desiredEnabled && recoveredTask.state?.status === 'blocked')
+      ) {
+        await this.tasks.setTaskEnabled(recoveredTask.id, desiredEnabled);
+      }
     }
   }
 
@@ -376,7 +451,7 @@ export class RepresentativeAgentHeartbeatService {
 
   private async triggerAgentsWithUnreadEvents(): Promise<void> {
     const [agents, tasks] = await Promise.all([
-      this.repository.listAgents(),
+      this.repository.listActiveAgents(),
       this.listManagedTasks(),
     ]);
     const taskById = new Map(tasks.map((task) => [task.id, task]));
@@ -433,6 +508,36 @@ export class RepresentativeAgentHeartbeatService {
     return (await this.tasks.listTasks()).filter(
       (task) => task.id.startsWith(TASK_ID_PREFIX),
     );
+  }
+
+  private async resumeBlockedActiveTasks(): Promise<void> {
+    const [agents, tasks] = await Promise.all([
+      this.repository.listActiveAgents(),
+      this.listManagedTasks(),
+    ]);
+    const activeAgentIds = new Set(agents.map((agent) => agent.id));
+    await Promise.all(tasks
+      .filter((task) => {
+        const agentId = agentIdFromTask(task.id);
+        return agentId
+          && activeAgentIds.has(agentId)
+          && task.state?.status === 'blocked';
+      })
+      .map((task) => this.tasks.resumeTask(task.id)));
+  }
+
+  private async waitForTaskToSettle(taskId: string): Promise<void> {
+    const deadline = dayjs().add(30, 'second');
+    while (dayjs().isBefore(deadline)) {
+      const task = (await this.listManagedTasks()).find(
+        (candidate) => candidate.id === taskId,
+      );
+      if (!task || task.state?.status !== 'running') {
+        return;
+      }
+      await delay(25);
+    }
+    throw new Error(`Timed out while waiting for heartbeat task: ${taskId}`);
   }
 
   private async deleteManagedTasks(): Promise<void> {

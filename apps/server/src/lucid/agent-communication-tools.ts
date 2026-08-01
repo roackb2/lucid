@@ -5,7 +5,10 @@ import type {
   ToolPolicyHostContext,
   ToolResult,
 } from '@roackb2/heddle';
-import { LOCAL_USER_ID } from './default-participants.js';
+import {
+  LOCAL_USER_ID,
+  USER_AGENT_ID,
+} from './default-participants.js';
 import type { DiscoveryRepository } from './discovery-repository.js';
 import type {
   Agent,
@@ -70,7 +73,7 @@ export class AgentCommunicationToolService {
   ) {}
 
   async definitions(): Promise<ToolDefinition[]> {
-    const agents = await this.repository.listAgents();
+    const agents = await this.repository.listActiveAgents();
     const commonTools: ToolDefinition[] = [
       {
         name: 'read_available_messages',
@@ -267,7 +270,7 @@ export class AgentCommunicationToolService {
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
-    const target = (await this.repository.listAgents())
+    const target = (await this.repository.listActiveAgents())
       .find((candidate) => candidate.id === parsed.data.target_agent_id);
     if (!target) {
       return { ok: false, error: 'The requested agent does not exist.' };
@@ -395,7 +398,7 @@ export class AgentCommunicationToolService {
   }
 
   private canReportFinding(): boolean {
-    return this.participant.kind === 'human';
+    return this.agent.id === USER_AGENT_ID;
   }
 
   private reserveMutation(): number | ToolResult {

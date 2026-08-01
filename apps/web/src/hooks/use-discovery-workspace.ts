@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   lucidClient,
+  type CreateAssistedParticipantInput,
   type DiscoverySnapshot,
 } from '@/lib/trpc';
 
@@ -76,6 +77,43 @@ export function useDiscoveryWorkspace() {
     onError: notifyError,
   });
 
+  const createAssistedParticipant = useMutation({
+    mutationFn: (input: CreateAssistedParticipantInput) => (
+      lucidClient.discovery.createAssistedParticipant.mutate(input)
+    ),
+    onSuccess: (nextSnapshot) => {
+      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
+      toast.success('Participant added. Their representative is now scheduled.');
+    },
+    onError: notifyError,
+  });
+
+  const setParticipantEnabled = useMutation({
+    mutationFn: (input: { participantId: string; enabled: boolean }) => (
+      lucidClient.discovery.setParticipantEnabled.mutate(input)
+    ),
+    onSuccess: (nextSnapshot, input) => {
+      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
+      toast.message(
+        input.enabled
+          ? 'Participant resumed. Only new messages will be delivered.'
+          : 'Participant paused. New messages will be skipped.',
+      );
+    },
+    onError: notifyError,
+  });
+
+  const retireParticipant = useMutation({
+    mutationFn: (participantId: string) => (
+      lucidClient.discovery.retireParticipant.mutate({ participantId })
+    ),
+    onSuccess: (nextSnapshot) => {
+      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
+      toast.success('Participant retired and private context removed.');
+    },
+    onError: notifyError,
+  });
+
   const resetWorkspace = useMutation({
     mutationFn: () => lucidClient.discovery.resetWorkspace.mutate(),
     onSuccess: (nextSnapshot) => {
@@ -93,6 +131,9 @@ export function useDiscoveryWorkspace() {
     saveInterest,
     runNow,
     setBackgroundChecksEnabled,
+    createAssistedParticipant,
+    setParticipantEnabled,
+    retireParticipant,
     submitFeedback,
     resetWorkspace,
   };

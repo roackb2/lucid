@@ -23,7 +23,9 @@ export function RepresentativeAgentCard({
   return (
     <article
       className={`representative-card ${
-        agent.status === 'running' ? 'representative-card--active' : ''
+        agent.participant.status === 'active' && agent.status === 'running'
+          ? 'representative-card--active'
+          : ''
       }`}
       style={{ '--agent-color': agent.color } as CSSProperties}
     >
@@ -55,6 +57,12 @@ function representativeStatus(
   agent: AgentView,
   task: RepresentativeAgentCardProps['task'],
 ) {
+  if (agent.participant.status === 'retired') {
+    return { icon: Pause, label: 'Retired', kind: 'idle' };
+  }
+  if (agent.participant.status === 'disabled') {
+    return { icon: Pause, label: 'Paused', kind: 'idle' };
+  }
   if (agent.status === 'running' || task?.status === 'running') {
     return { icon: LoaderCircle, label: 'Checking', kind: 'running' };
   }
