@@ -216,7 +216,9 @@ function AddParticipantDialog({
           <Dialog.Description>
             You are operating this participant’s agent. Record only context
             they understand and have agreed may be used to find relevant
-            connections inside this local experiment.
+            connections inside this local experiment. Lucid stores it in the
+            local SQLite database; private means scoped from other agents and
+            the UI, not encrypted at rest.
           </Dialog.Description>
 
           <form className="participant-form" onSubmit={handleSubmit}>

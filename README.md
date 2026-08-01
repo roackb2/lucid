@@ -73,6 +73,11 @@ invent confidence levels, reputation scores, evidence packets, or universal
 quality judgments. A source path proves that a message was delivered through
 the prototype. It does not prove that the message is true or useful.
 
+`private` currently describes Lucid visibility and prompt boundaries, not
+encryption at rest. Approved participant context is stored as ordinary text in
+the local SQLite database until retirement scrubs it. Do not enter secrets or
+highly sensitive personal information into this experiment.
+
 ## Service ownership
 
 | Lucid owns | Heddle owns |

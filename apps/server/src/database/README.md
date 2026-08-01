@@ -49,6 +49,10 @@ participant cannot request messages from before its current eligibility
 boundary. Retiring a participant scrubs `private_context` but keeps its row and
 representative identity for append-only historical attribution.
 
+SQLite does not encrypt `private_context` at rest. The field is private because
+repository projections and agent visibility exclude it from every non-owner,
+not because the database file is cryptographically protected.
+
 ## Relations
 
 ```text
