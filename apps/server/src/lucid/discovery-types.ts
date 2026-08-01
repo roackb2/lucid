@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
 export const participantKindSchema = z.enum(['human', 'synthetic']);
+export const participantStatusSchema = z.enum([
+  'active',
+  'disabled',
+  'retired',
+]);
 export const agentStatusSchema = z.enum(['idle', 'running', 'error']);
 export const discoveryEventKindSchema = z.enum([
   'workspace_created',
@@ -11,12 +16,17 @@ export const discoveryEventKindSchema = z.enum([
   'direct_message',
   'finding_reported',
   'feedback_saved',
+  'participant_added',
+  'participant_disabled',
+  'participant_enabled',
+  'participant_retired',
   'agent_wake_no_action',
   'agent_wake_completed',
   'error',
 ]);
 
 export type ParticipantKind = z.infer<typeof participantKindSchema>;
+export type ParticipantStatus = z.infer<typeof participantStatusSchema>;
 export type AgentStatus = z.infer<typeof agentStatusSchema>;
 export type DiscoveryEventKind = z.infer<typeof discoveryEventKindSchema>;
 export type DiscoveryEventMetadata = Record<string, unknown>;
@@ -25,6 +35,7 @@ export type DiscoveryWorkspace = {
   id: string;
   versionId: string;
   currentWake: number;
+  backgroundChecksEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -33,13 +44,21 @@ export type Participant = {
   id: string;
   workspaceId: string;
   kind: ParticipantKind;
+  status: ParticipantStatus;
   displayName: string;
   privateContext: string;
+  contextConsentAt?: string;
   createdAt: string;
   updatedAt: string;
 };
 
 export type ParticipantView = Omit<Participant, 'privateContext'>;
+
+export type CreateAssistedParticipantInput = {
+  displayName: string;
+  privateContext: string;
+  contextApproved: boolean;
+};
 
 export type Agent = {
   id: string;
@@ -53,6 +72,7 @@ export type Agent = {
   instructions: string;
   status: AgentStatus;
   runCount: number;
+  mailboxFloorSequence: number;
   lastSeenSequence: number;
   activeWakeId?: string;
   activeWakeNumber?: number;
@@ -65,6 +85,7 @@ export type Agent = {
 export type AgentView = Omit<
   Agent,
   | 'instructions'
+  | 'mailboxFloorSequence'
   | 'lastSeenSequence'
   | 'activeWakeId'
   | 'activeWakeNumber'

@@ -1,3 +1,9 @@
+/**
+ * Relational persistence model for one local Lucid discovery workspace.
+ * Participants own private context, representatives own durable mailbox/wake
+ * cursors, and immutable discovery events are the communication and audit log.
+ * The schema records provenance and delivery state, not truth or value scores.
+ */
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { DiscoveryEventMetadata } from '../lucid/discovery-types.js';
 
@@ -5,6 +11,9 @@ export const discoveryWorkspaces = sqliteTable('discovery_workspaces', {
   id: text('id').primaryKey(),
   versionId: text('version_id').notNull(),
   currentWake: integer('current_wake').notNull(),
+  backgroundChecksEnabled: integer('background_checks_enabled', {
+    mode: 'boolean',
+  }).notNull().default(true),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
@@ -15,8 +24,10 @@ export const participants = sqliteTable('participants', {
     .notNull()
     .references(() => discoveryWorkspaces.id, { onDelete: 'cascade' }),
   kind: text('kind').notNull(),
+  status: text('status').notNull().default('active'),
   displayName: text('display_name').notNull(),
   privateContext: text('private_context').notNull(),
+  contextConsentAt: text('context_consent_at'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => [
@@ -39,6 +50,7 @@ export const representativeAgents = sqliteTable('representative_agents', {
   instructions: text('instructions').notNull(),
   status: text('status').notNull(),
   runCount: integer('run_count').notNull(),
+  mailboxFloorSequence: integer('mailbox_floor_sequence').notNull().default(0),
   lastSeenSequence: integer('last_seen_sequence').notNull(),
   activeWakeId: text('active_wake_id'),
   activeWakeNumber: integer('active_wake_number'),

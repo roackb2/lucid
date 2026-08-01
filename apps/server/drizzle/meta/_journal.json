@@ -15,6 +15,13 @@
       "when": 1785489926630,
       "tag": "0001_robust_karen_page",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785561163095,
+      "tag": "0002_nice_quentin_quire",
+      "breakpoints": true
     }
   ]
 }

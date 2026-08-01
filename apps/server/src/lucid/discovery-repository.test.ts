@@ -73,6 +73,110 @@ describe('SQLite discovery repository', () => {
     ).not.toContain(interest.sequence);
   });
 
+  it('keeps assisted participant context private across its lifecycle', async () => {
+    const historicalMessage = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      title: 'Message from before the participant joined',
+      content: 'A new participant must not inherit this old message.',
+    });
+    const privateContext =
+      'I enjoy small live jazz venues and avoid crowded festival settings.';
+    const created = await repository.createAssistedParticipant({
+      displayName: 'Avery',
+      privateContext,
+      contextApproved: true,
+    });
+
+    const createdSnapshot = await repository.readSnapshot();
+    const participantView = createdSnapshot.agents.find(
+      (agent) => agent.id === created.agent.id,
+    )?.participant;
+    expect(participantView).toMatchObject({
+      id: created.participant.id,
+      kind: 'human',
+      status: 'active',
+      displayName: 'Avery',
+      contextConsentAt: expect.any(String),
+    });
+    expect(JSON.stringify(createdSnapshot)).not.toContain(privateContext);
+    expect(
+      await repository.listEventsVisibleToAgent(created.agent.id, 0),
+    ).not.toContainEqual(
+      expect.objectContaining({ sequence: historicalMessage.sequence }),
+    );
+    expect(
+      await repository.readVisibleEventsBySequence(
+        created.agent.id,
+        [historicalMessage.sequence],
+      ),
+    ).toEqual([]);
+    expect(createdSnapshot.events).toContainEqual(
+      expect.objectContaining({
+        kind: 'participant_added',
+        content: expect.not.stringContaining(privateContext),
+      }),
+    );
+
+    await repository.setParticipantStatus(created.participant.id, 'disabled');
+    const disabledPeriodMessage = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      title: 'Message sent while Avery is paused',
+      content: 'This message should not be replayed after Avery returns.',
+    });
+    expect(
+      await repository.listEventsVisibleToAgent(created.agent.id, 0),
+    ).toEqual([]);
+    expect(
+      await repository.beginAgentWake(created.agent.id, 'disabled_wake'),
+    ).toBeUndefined();
+
+    await repository.setParticipantStatus(created.participant.id, 'active');
+    expect(
+      await repository.listEventsVisibleToAgent(created.agent.id, 0),
+    ).not.toContainEqual(
+      expect.objectContaining({ sequence: disabledPeriodMessage.sequence }),
+    );
+    expect(
+      await repository.readVisibleEventsBySequence(
+        created.agent.id,
+        [disabledPeriodMessage.sequence],
+      ),
+    ).toEqual([]);
+    const futureMessage = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      title: 'Message sent after Avery returns',
+      content: 'This message should be delivered normally.',
+    });
+    expect(
+      await repository.listEventsVisibleToAgent(
+        created.agent.id,
+        (await repository.requireAgent(created.agent.id)).lastSeenSequence,
+      ),
+    ).toContainEqual(expect.objectContaining({ sequence: futureMessage.sequence }));
+
+    const retired = await repository.retireParticipant(created.participant.id);
+    expect(retired.participant).toMatchObject({
+      status: 'retired',
+      privateContext: '',
+    });
+    expect((await repository.listActiveAgents()).map(({ id }) => id))
+      .not.toContain(created.agent.id);
+    const retiredSnapshot = await repository.readSnapshot();
+    expect(retiredSnapshot.agents).toContainEqual(
+      expect.objectContaining({
+        id: created.agent.id,
+        participant: expect.objectContaining({
+          displayName: 'Avery',
+          status: 'retired',
+        }),
+      }),
+    );
+    expect(JSON.stringify(retiredSnapshot)).not.toContain(privateContext);
+  });
+
   it('preserves the no-match status of findings from earlier versions', async () => {
     const finding = await repository.appendEvent({
       kind: 'finding_reported',

@@ -1,3 +1,11 @@
+/**
+ * Host-enforced communication boundary for one representative-agent wake.
+ *
+ * The model receives ordinary-language tools, while this module enforces the
+ * facts prompts cannot guarantee: mailbox visibility, the claimed event
+ * horizon, causal provenance, per-wake action limits, and retry idempotency.
+ * It records delivery and never evaluates whether a claim is true or valuable.
+ */
 import uniq from 'lodash/uniq.js';
 import { z } from 'zod';
 import type {
@@ -5,7 +13,10 @@ import type {
   ToolPolicyHostContext,
   ToolResult,
 } from '@roackb2/heddle';
-import { LOCAL_USER_ID } from './default-participants.js';
+import {
+  LOCAL_USER_ID,
+  USER_AGENT_ID,
+} from './default-participants.js';
 import type { DiscoveryRepository } from './discovery-repository.js';
 import type {
   Agent,
@@ -70,7 +81,9 @@ export class AgentCommunicationToolService {
   ) {}
 
   async definitions(): Promise<ToolDefinition[]> {
-    const agents = await this.repository.listAgents();
+    // Only currently active representatives are addressable. The participant
+    // lifecycle therefore constrains both discovery and tool schemas.
+    const agents = await this.repository.listActiveAgents();
     const commonTools: ToolDefinition[] = [
       {
         name: 'read_available_messages',
@@ -206,6 +219,8 @@ export class AgentCommunicationToolService {
       return invalidInput(parsed.error);
     }
 
+    // Reads remain capped at the horizon captured before model execution; tool
+    // calls cannot smuggle messages that arrived during this wake into context.
     const [events, agents] = await Promise.all([
       this.repository.listEventsVisibleToAgent(
         this.agent.id,
@@ -267,7 +282,7 @@ export class AgentCommunicationToolService {
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
-    const target = (await this.repository.listAgents())
+    const target = (await this.repository.listActiveAgents())
       .find((candidate) => candidate.id === parsed.data.target_agent_id);
     if (!target) {
       return { ok: false, error: 'The requested agent does not exist.' };
@@ -310,6 +325,8 @@ export class AgentCommunicationToolService {
   }
 
   private async reportFinding(input: unknown): Promise<ToolResult> {
+    // Reporting is a privilege of the local user's representative, independent
+    // of whether another participant is also a real assisted human.
     if (!this.canReportFinding()) {
       return {
         ok: false,
@@ -326,6 +343,8 @@ export class AgentCommunicationToolService {
     if (sourceFailure) {
       return sourceFailure;
     }
+    // Provenance must be both visible and peer-authored. This proves the network
+    // path that produced a finding, not the truth of the underlying message.
     const visibleSources = await this.repository.readVisibleEventsBySequence(
       this.agent.id,
       sourceEventIds,
@@ -395,10 +414,12 @@ export class AgentCommunicationToolService {
   }
 
   private canReportFinding(): boolean {
-    return this.participant.kind === 'human';
+    return this.agent.id === USER_AGENT_ID;
   }
 
   private reserveMutation(): number | ToolResult {
+    // Reserve before writing so every accepted action gets a stable ordinal for
+    // idempotency and a model cannot exceed the host-enforced wake budget.
     if (this.mutations >= 2) {
       return {
         ok: false,
@@ -420,6 +441,8 @@ export class AgentCommunicationToolService {
     if (!sourceEventIds.length) {
       return undefined;
     }
+    // Reject future events first, then verify ordinary mailbox visibility. Both
+    // checks are required because a sequence can exist yet be outside this wake.
     const laterEvents = sourceEventIds.filter(
       (sequence) => sequence > this.horizonSequence,
     );
@@ -448,6 +471,8 @@ export class AgentCommunicationToolService {
   private async validateThreadContribution(
     sourceEventIds: number[],
   ): Promise<ToolResult | undefined> {
+    // The repository follows persisted provenance to the causal root; prompt
+    // instructions alone cannot stop an agent-to-agent reply loop reliably.
     const alreadyContributed = await this.repository
       .hasAgentContributedToCausalThread(
         this.agent.id,

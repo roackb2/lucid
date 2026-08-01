@@ -172,6 +172,107 @@ describe('representative-agent heartbeat service', () => {
     expect(runner.wakeIds[1]).toBe(runner.wakeIds[0]);
   });
 
+  it('reconciles one participant lifecycle without pausing the network', async () => {
+    const { workspace } = await startServices(new CountingHeartbeatRunner());
+    const createdSnapshot = await workspace.createAssistedParticipant({
+      displayName: 'Avery',
+      privateContext:
+        'I can share personal observations about small local music events.',
+      contextApproved: true,
+    });
+    const createdAgent = createdSnapshot.agents.find(
+      (agent) => agent.participant.displayName === 'Avery',
+    );
+
+    expect(createdAgent).toBeDefined();
+    expect(createdSnapshot.backgroundChecks).toMatchObject({
+      enabled: true,
+      tasks: expect.arrayContaining([
+        expect.objectContaining({
+          agentId: createdAgent!.id,
+          enabled: true,
+        }),
+      ]),
+    });
+    expect(createdSnapshot.backgroundChecks.tasks).toHaveLength(4);
+
+    const disabledSnapshot = await workspace.setParticipantEnabled(
+      createdAgent!.participant.id,
+      false,
+    );
+    expect(disabledSnapshot.backgroundChecks.enabled).toBe(true);
+    expect(disabledSnapshot.agents.find(
+      (agent) => agent.id === createdAgent!.id,
+    )?.participant.status).toBe('disabled');
+    expect(disabledSnapshot.backgroundChecks.tasks.find(
+      (task) => task.agentId === createdAgent!.id,
+    )?.enabled).toBe(false);
+
+    const enabledSnapshot = await workspace.setParticipantEnabled(
+      createdAgent!.participant.id,
+      true,
+    );
+    expect(enabledSnapshot.backgroundChecks.tasks.find(
+      (task) => task.agentId === createdAgent!.id,
+    )?.enabled).toBe(true);
+
+    const retiredSnapshot = await workspace.retireParticipant(
+      createdAgent!.participant.id,
+    );
+    expect(retiredSnapshot.backgroundChecks.enabled).toBe(true);
+    expect(retiredSnapshot.agents.find(
+      (agent) => agent.id === createdAgent!.id,
+    )?.participant.status).toBe('retired');
+    expect(retiredSnapshot.backgroundChecks.tasks.map(({ agentId }) => agentId))
+      .not.toContain(createdAgent!.id);
+  });
+
+  it('does not recover an unrelated task that is still running', async () => {
+    const runner = new InterruptThenCompleteHeartbeatRunner(repository);
+    const { workspace } = await startServices(runner);
+    await workspace.saveInterest(
+      'Keep this wake active while another participant joins.',
+    );
+    await vi.waitFor(async () => {
+      expect((await repository.requireUserAgent()).status).toBe('running');
+    }, { interval: 10, timeout: 5_000 });
+
+    const snapshot = await workspace.createAssistedParticipant({
+      displayName: 'Avery',
+      privateContext: 'I approved one small piece of test context.',
+      contextApproved: true,
+    });
+
+    expect((await repository.requireUserAgent()).status).toBe('running');
+    expect(snapshot.backgroundChecks.running).toBe(true);
+    expect(snapshot.backgroundChecks.tasks.find(
+      (task) => task.agentId === USER_AGENT_ID,
+    )?.status).toBe('running');
+
+    await workspace.setBackgroundChecksEnabled(false);
+  });
+
+  it('resets dynamic participants and tasks to the default network', async () => {
+    const { workspace } = await startServices(new CountingHeartbeatRunner());
+    const created = await workspace.createAssistedParticipant({
+      displayName: 'Avery',
+      privateContext: 'Temporary context for reset verification.',
+      contextApproved: true,
+    });
+    expect(created.agents).toHaveLength(4);
+    expect(created.backgroundChecks.tasks).toHaveLength(4);
+
+    const reset = await workspace.resetWorkspace();
+
+    expect(reset.agents.map(({ name }) => name)).toEqual([
+      'Lucid',
+      'Music maker agent',
+      'Product research agent',
+    ]);
+    expect(reset.backgroundChecks.tasks).toHaveLength(3);
+    expect(reset.backgroundChecks.enabled).toBe(true);
+  });
+
   it('recovers both a Heddle task and its claimed mailbox wake after restart', async () => {
     const initialHeartbeat = await createHeartbeat(
       new CountingHeartbeatRunner(),

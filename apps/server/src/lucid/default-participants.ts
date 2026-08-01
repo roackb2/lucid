@@ -5,7 +5,7 @@ export const USER_AGENT_ID = 'user-agent';
 
 type DefaultParticipant = Pick<
   Participant,
-  'id' | 'kind' | 'displayName' | 'privateContext'
+  'id' | 'kind' | 'status' | 'displayName' | 'privateContext'
 >;
 
 type DefaultAgent = Pick<
@@ -24,6 +24,7 @@ export const DEFAULT_PARTICIPANTS = [
   {
     id: LOCAL_USER_ID,
     kind: 'human',
+    status: 'active',
     displayName: 'You',
     privateContext:
       'This is the local user. Their saved interest and later corrections arrive as private discovery events. Do not invent background about them.',
@@ -31,6 +32,7 @@ export const DEFAULT_PARTICIPANTS = [
   {
     id: 'sample-music-maker',
     kind: 'synthetic',
+    status: 'active',
     displayName: 'Sample music maker',
     privateContext: [
       'This is simulated test data, not an external fact or a real person.',
@@ -42,6 +44,7 @@ export const DEFAULT_PARTICIPANTS = [
   {
     id: 'sample-product-researcher',
     kind: 'synthetic',
+    status: 'active',
     displayName: 'Sample product researcher',
     privateContext: [
       'This is simulated test data, not an external fact or a real person.',

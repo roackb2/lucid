@@ -9,9 +9,10 @@ visibility, or finding rules in React.
 The primary path is:
 
 1. save or edit an ordinary-language interest;
-2. see whether background checks are enabled and when agents last woke;
-3. optionally request an immediate check;
-4. read specific findings and leave private feedback.
+2. add a knowingly assisted real participant or manage the available fixtures;
+3. see whether background checks are enabled and when agents last woke;
+4. optionally request an immediate check;
+5. read specific findings and leave private feedback.
 
 The default interface describes product outcomes. Heddle task status, agent
 identity, event visibility, and causal delivery remain available in the
@@ -23,6 +24,7 @@ collapsed technical activity panel for inspection.
 | --- | --- |
 | `interest-composer.tsx` | Create, edit, save, and manually re-check an interest |
 | `background-checks.tsx` | Present scheduler state and pause/resume controls |
+| `participant-network.tsx` | Add, pause, resume, and retire participant sources with explicit provenance |
 | `findings-feed.tsx` | Present waiting, checking, paused, and finding states |
 | `finding-card.tsx` | Show one finding, causal messages, and private feedback |
 | `activity-panel.tsx` | Folded technical inspection surface |
@@ -36,6 +38,8 @@ collapsed technical activity panel for inspection.
   composition hook.
 - Successful mutations replace the cached workspace with the server-returned
   snapshot.
+- Assisted intake never renders private context after submission. Participant
+  cards expose only kind, lifecycle status, and the consent timestamp.
 - Polling is faster only while a representative task is running.
 - Components receive server projections; they must not infer unread delivery,
   fabricate no-match results, or schedule work locally.

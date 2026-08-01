@@ -1,3 +1,11 @@
+/**
+ * SQLite/Drizzle implementation of Lucid's durable discovery-state boundary.
+ *
+ * Besides persistence, this adapter owns the atomic invariants that depend on
+ * storage: participant-agent lifecycle changes, append-only mailbox ordering,
+ * visibility floors, fixed wake claims, cursor advancement, and idempotent
+ * events. Scheduling, model execution, and HTTP concerns do not belong here.
+ */
 import { randomUUID } from 'node:crypto';
 import dayjs from 'dayjs';
 import {
@@ -17,21 +25,26 @@ import {
   LOCAL_USER_ID,
   USER_AGENT_ID,
 } from '../lucid/default-participants.js';
+import { createAssistedAgentProfile } from '../lucid/assisted-participant-profile.js';
 import type {
   AppendDiscoveryEventInput,
   DiscoveryRepository,
   DiscoveryRepositorySnapshot,
+  ParticipantWithAgent,
 } from '../lucid/discovery-repository.js';
 import {
   agentStatusSchema,
   discoveryEventKindSchema,
   participantKindSchema,
+  participantStatusSchema,
   type Agent,
   type AgentWakeContext,
+  type CreateAssistedParticipantInput,
   type DiscoveryEvent,
   type DiscoveryWorkspace,
   type FindingView,
   type Participant,
+  type ParticipantStatus,
   type ParticipantView,
 } from '../lucid/discovery-types.js';
 import {
@@ -67,17 +80,31 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     this.createWorkspace();
   }
 
-  async reset(): Promise<void> {
+  async reset(options: { backgroundChecksEnabled: boolean }): Promise<void> {
     this.database.client.transaction(() => {
       this.database.orm.delete(discoveryWorkspaces).run();
       this.database.client
         .prepare("DELETE FROM sqlite_sequence WHERE name = 'discovery_events'")
         .run();
-      this.insertWorkspace();
+      this.insertWorkspace(options.backgroundChecksEnabled);
     })();
   }
 
   async readWorkspace(): Promise<DiscoveryWorkspace> {
+    return this.requireWorkspace();
+  }
+
+  async setBackgroundChecksEnabled(
+    enabled: boolean,
+  ): Promise<DiscoveryWorkspace> {
+    this.database.orm
+      .update(discoveryWorkspaces)
+      .set({
+        backgroundChecksEnabled: enabled,
+        updatedAt: dayjs().toISOString(),
+      })
+      .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
+      .run();
     return this.requireWorkspace();
   }
 
@@ -100,6 +127,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       }
       const {
         instructions: _instructions,
+        mailboxFloorSequence: _mailboxFloorSequence,
         lastSeenSequence: _lastSeenSequence,
         activeWakeId: _activeWakeId,
         activeWakeNumber: _activeWakeNumber,
@@ -157,6 +185,21 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .map(toAgent);
   }
 
+  async listActiveAgents(): Promise<Agent[]> {
+    const [participantList, agentList] = await Promise.all([
+      this.listParticipants(),
+      this.listAgents(),
+    ]);
+    const activeParticipantIds = new Set(
+      participantList
+        .filter((participant) => participant.status === 'active')
+        .map((participant) => participant.id),
+    );
+    return agentList.filter(
+      (agent) => activeParticipantIds.has(agent.participantId),
+    );
+  }
+
   async requireParticipant(id: string): Promise<Participant> {
     const row = this.database.orm
       .select()
@@ -187,8 +230,340 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     return toAgent(row);
   }
 
+  async requireAgentByParticipantId(participantId: string): Promise<Agent> {
+    const row = this.database.orm
+      .select()
+      .from(representativeAgents)
+      .where(and(
+        eq(representativeAgents.workspaceId, WORKSPACE_ID),
+        eq(representativeAgents.participantId, participantId),
+      ))
+      .get();
+    if (!row) {
+      throw new Error(
+        `Representative agent not found for participant: ${participantId}`,
+      );
+    }
+    return toAgent(row);
+  }
+
   async requireUserAgent(): Promise<Agent> {
     return await this.requireAgent(USER_AGENT_ID);
+  }
+
+  async createAssistedParticipant(
+    input: CreateAssistedParticipantInput,
+  ): Promise<ParticipantWithAgent> {
+    // Validate and normalize operator input before opening the transaction so
+    // failed consent or size checks cannot leave partial identity records.
+    const displayName = input.displayName.trim();
+    const privateContext = input.privateContext.trim();
+    if (!input.contextApproved) {
+      throw new Error(
+        'Confirm that the participant knowingly allowed this context to be used.',
+      );
+    }
+    if (!displayName || displayName.length > 80) {
+      throw new Error('Participant name must contain 1 to 80 characters.');
+    }
+    if (!privateContext || privateContext.length > 4_000) {
+      throw new Error('Participant context must contain 1 to 4,000 characters.');
+    }
+
+    const now = dayjs().toISOString();
+    const participantId = `participant_${randomUUID()}`;
+    const agentId = `agent_${randomUUID()}`;
+
+    return this.database.orm.transaction((transaction) => {
+      const workspace = transaction
+        .select()
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
+        .get();
+      if (!workspace) {
+        throw new Error('Discovery workspace is missing.');
+      }
+      const lastAgent = transaction
+        .select({ sortOrder: representativeAgents.sortOrder })
+        .from(representativeAgents)
+        .where(eq(representativeAgents.workspaceId, WORKSPACE_ID))
+        .orderBy(desc(representativeAgents.sortOrder))
+        .get();
+      const latestEvent = transaction
+        .select({ sequence: discoveryEvents.sequence })
+        .from(discoveryEvents)
+        .where(eq(discoveryEvents.workspaceId, WORKSPACE_ID))
+        .orderBy(desc(discoveryEvents.sequence))
+        .get();
+      // Participant, representative, initial mailbox floor, and audit event are
+      // one unit. The current tail prevents a new source from reading old mail.
+      const profile = createAssistedAgentProfile({
+        id: agentId,
+        participantId,
+        displayName,
+        sortOrder: (lastAgent?.sortOrder ?? 0) + 1,
+      });
+      const participantRow = transaction
+        .insert(participants)
+        .values({
+          id: participantId,
+          workspaceId: WORKSPACE_ID,
+          kind: 'human',
+          status: 'active',
+          displayName,
+          privateContext,
+          contextConsentAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get();
+      const agentRow = transaction
+        .insert(representativeAgents)
+        .values({
+          ...profile,
+          workspaceId: WORKSPACE_ID,
+          status: 'idle',
+          runCount: 0,
+          mailboxFloorSequence: latestEvent?.sequence ?? 0,
+          lastSeenSequence: latestEvent?.sequence ?? 0,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get();
+      transaction.insert(discoveryEvents).values({
+        id: `event_${randomUUID()}`,
+        workspaceId: WORKSPACE_ID,
+        wakeNumber: workspace.currentWake,
+        kind: 'participant_added',
+        targetAgentId: agentId,
+        targetParticipantId: participantId,
+        title: `${displayName} joins as an assisted participant`,
+        content:
+          'The operator recorded approved private context and created one representative agent. The context itself is not included in this event.',
+        metadata: {
+          visibility: 'operator',
+          participantId,
+          agentId,
+          participantKind: 'human',
+          contextConsentAt: now,
+        },
+        createdAt: now,
+      }).run();
+
+      return {
+        participant: toParticipant(participantRow),
+        agent: toAgent(agentRow),
+      };
+    });
+  }
+
+  async setParticipantStatus(
+    participantId: string,
+    status: Extract<ParticipantStatus, 'active' | 'disabled'>,
+  ): Promise<ParticipantWithAgent> {
+    this.assertManageableParticipant(participantId);
+    const now = dayjs().toISOString();
+
+    return this.database.orm.transaction((transaction) => {
+      const workspace = transaction
+        .select()
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
+        .get();
+      if (!workspace) {
+        throw new Error('Discovery workspace is missing.');
+      }
+      const participantRow = transaction
+        .select()
+        .from(participants)
+        .where(and(
+          eq(participants.workspaceId, WORKSPACE_ID),
+          eq(participants.id, participantId),
+        ))
+        .get();
+      if (!participantRow) {
+        throw new Error(`Participant not found: ${participantId}`);
+      }
+      const participant = toParticipant(participantRow);
+      if (participant.status === 'retired') {
+        throw new Error('A retired participant cannot be re-enabled.');
+      }
+      const agentRow = transaction
+        .select()
+        .from(representativeAgents)
+        .where(eq(representativeAgents.participantId, participantId))
+        .get();
+      if (!agentRow) {
+        throw new Error(
+          `Representative agent not found for participant: ${participantId}`,
+        );
+      }
+      if (participant.status === status) {
+        return { participant, agent: toAgent(agentRow) };
+      }
+
+      // Resuming accepts only messages created after this transaction. Pausing
+      // preserves the existing floor because task shutdown already prevents reads.
+      const latestEvent = transaction
+        .select({ sequence: discoveryEvents.sequence })
+        .from(discoveryEvents)
+        .where(eq(discoveryEvents.workspaceId, WORKSPACE_ID))
+        .orderBy(desc(discoveryEvents.sequence))
+        .get();
+      const updatedParticipantRow = transaction
+        .update(participants)
+        .set({ status, updatedAt: now })
+        .where(eq(participants.id, participantId))
+        .returning()
+        .get();
+      const updatedAgentRow = transaction
+        .update(representativeAgents)
+        .set({
+          status: 'idle',
+          mailboxFloorSequence: status === 'active'
+            ? latestEvent?.sequence ?? agentRow.mailboxFloorSequence
+            : agentRow.mailboxFloorSequence,
+          lastSeenSequence: status === 'active'
+            ? latestEvent?.sequence ?? agentRow.lastSeenSequence
+            : agentRow.lastSeenSequence,
+          activeWakeId: null,
+          activeWakeNumber: null,
+          activeWakeHorizon: null,
+          updatedAt: now,
+        })
+        .where(eq(representativeAgents.id, agentRow.id))
+        .returning()
+        .get();
+      // Persist lifecycle state and its operator audit record atomically.
+      transaction.insert(discoveryEvents).values({
+        id: `event_${randomUUID()}`,
+        workspaceId: WORKSPACE_ID,
+        wakeNumber: workspace.currentWake,
+        kind: status === 'active'
+          ? 'participant_enabled'
+          : 'participant_disabled',
+        targetAgentId: agentRow.id,
+        targetParticipantId: participantId,
+        title: `${participant.displayName} is ${status}`,
+        content: status === 'active'
+          ? 'The representative can receive new messages and run background checks again.'
+          : 'The representative is paused and will not receive messages created while disabled.',
+        metadata: {
+          visibility: 'operator',
+          participantId,
+          agentId: agentRow.id,
+          status,
+        },
+        createdAt: now,
+      }).run();
+
+      return {
+        participant: toParticipant(updatedParticipantRow),
+        agent: toAgent(updatedAgentRow),
+      };
+    });
+  }
+
+  async retireParticipant(
+    participantId: string,
+  ): Promise<ParticipantWithAgent> {
+    this.assertManageableParticipant(participantId);
+    const now = dayjs().toISOString();
+
+    return this.database.orm.transaction((transaction) => {
+      const workspace = transaction
+        .select()
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
+        .get();
+      if (!workspace) {
+        throw new Error('Discovery workspace is missing.');
+      }
+      const participantRow = transaction
+        .select()
+        .from(participants)
+        .where(and(
+          eq(participants.workspaceId, WORKSPACE_ID),
+          eq(participants.id, participantId),
+        ))
+        .get();
+      if (!participantRow) {
+        throw new Error(`Participant not found: ${participantId}`);
+      }
+      const participant = toParticipant(participantRow);
+      const agentRow = transaction
+        .select()
+        .from(representativeAgents)
+        .where(eq(representativeAgents.participantId, participantId))
+        .get();
+      if (!agentRow) {
+        throw new Error(
+          `Representative agent not found for participant: ${participantId}`,
+        );
+      }
+      if (participant.status === 'retired') {
+        return { participant, agent: toAgent(agentRow) };
+      }
+      const latestEvent = transaction
+        .select({ sequence: discoveryEvents.sequence })
+        .from(discoveryEvents)
+        .where(eq(discoveryEvents.workspaceId, WORKSPACE_ID))
+        .orderBy(desc(discoveryEvents.sequence))
+        .get();
+      // Retirement is irreversible in this workspace generation: scrub private
+      // context in the same transaction that closes the mailbox and records it.
+      const updatedParticipantRow = transaction
+        .update(participants)
+        .set({
+          status: 'retired',
+          privateContext: '',
+          updatedAt: now,
+        })
+        .where(eq(participants.id, participantId))
+        .returning()
+        .get();
+      const updatedAgentRow = transaction
+        .update(representativeAgents)
+        .set({
+          status: 'idle',
+          mailboxFloorSequence:
+            latestEvent?.sequence ?? agentRow.mailboxFloorSequence,
+          lastSeenSequence: latestEvent?.sequence ?? agentRow.lastSeenSequence,
+          activeWakeId: null,
+          activeWakeNumber: null,
+          activeWakeHorizon: null,
+          updatedAt: now,
+        })
+        .where(eq(representativeAgents.id, agentRow.id))
+        .returning()
+        .get();
+      transaction.insert(discoveryEvents).values({
+        id: `event_${randomUUID()}`,
+        workspaceId: WORKSPACE_ID,
+        wakeNumber: workspace.currentWake,
+        kind: 'participant_retired',
+        targetAgentId: agentRow.id,
+        targetParticipantId: participantId,
+        title: `${participant.displayName} is retired`,
+        content:
+          'Private context was removed from future use. Historical message attribution remains available for the operator audit trail.',
+        metadata: {
+          visibility: 'operator',
+          participantId,
+          agentId: agentRow.id,
+          status: 'retired',
+          privateContextRemoved: true,
+        },
+        createdAt: now,
+      }).run();
+
+      return {
+        participant: toParticipant(updatedParticipantRow),
+        agent: toAgent(updatedAgentRow),
+      };
+    });
   }
 
   async findSavedInterest(): Promise<DiscoveryEvent | undefined> {
@@ -258,12 +633,24 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     limit = 40,
     throughSequence?: number,
   ): Promise<DiscoveryEvent[]> {
+    const agent = this.findActiveAgent(agentId);
+    if (!agent) {
+      return [];
+    }
+    // The caller may request older history, but it can never bypass the join or
+    // resume floor established for this participant.
+    const visibleAfterSequence = Math.max(
+      afterSequence,
+      agent.mailboxFloorSequence,
+    );
     return this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
-        gt(discoveryEvents.sequence, afterSequence),
+        gt(discoveryEvents.sequence, visibleAfterSequence),
+        // A claimed wake passes throughSequence so concurrent arrivals remain
+        // unread for the next wake instead of changing the current model input.
         throughSequence === undefined
           ? undefined
           : lte(discoveryEvents.sequence, throughSequence),
@@ -295,7 +682,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     agentId: string,
     sequences: number[],
   ): Promise<DiscoveryEvent[]> {
-    if (!sequences.length) {
+    const agent = this.findActiveAgent(agentId);
+    if (!sequences.length || !agent) {
       return [];
     }
 
@@ -305,6 +693,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         inArray(discoveryEvents.sequence, sequences),
+        gt(discoveryEvents.sequence, agent.mailboxFloorSequence),
         or(
           eq(discoveryEvents.kind, 'shared_message'),
           and(
@@ -331,6 +720,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   ): Promise<AgentWakeContext | undefined> {
     const now = dayjs().toISOString();
 
+    // Selection, horizon assignment, agent ownership, and the audit event must
+    // commit together; otherwise two schedulers could consume different views.
     return this.database.orm.transaction((transaction) => {
       const workspaceRow = transaction
         .select()
@@ -370,7 +761,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       if (!participantRow) {
         throw new Error(`Participant not found: ${selectedAgent.participantId}`);
       }
+      if (toParticipant(participantRow).status !== 'active') {
+        return undefined;
+      }
 
+      // An interrupted/failed wake retains its identity and fixed upper bound.
+      // New mail arriving during the retry is deliberately deferred.
       const resumingWake = Boolean(
         selectedAgent.activeWakeId
         && selectedAgent.activeWakeNumber !== undefined
@@ -413,6 +809,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         .all()
         .map(toDiscoveryEvent);
       if (!visibleEvents.length) {
+        // A stale claim can become empty after cursor recovery. Clear only claim
+        // metadata; never advance the cursor when no event was consumed.
         if (selectedAgent.activeWakeId) {
           transaction
             .update(representativeAgents)
@@ -428,6 +826,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         return undefined;
       }
 
+      // Fresh claims take the current visible tail as their immutable horizon;
+      // retries reuse every identifier required for event idempotency.
       const activeWakeId = resumingWake
         ? selectedAgent.activeWakeId!
         : wakeId;
@@ -508,6 +908,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     agentId: string,
     horizonSequence: number,
   ): Promise<void> {
+    // This is the sole wake-settlement operation that consumes claimed mail.
+    // Failure and interruption leave both the cursor and active claim retryable.
     const agent = await this.requireAgent(agentId);
     this.database.orm
       .update(representativeAgents)
@@ -591,6 +993,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     input: AppendDiscoveryEventInput,
   ): Promise<DiscoveryEvent> {
     if (input.idempotencyKey) {
+      // Tool and wake retries reuse deterministic keys, so an already committed
+      // side effect is returned rather than appended a second time.
       const existing = this.database.orm
         .select()
         .from(discoveryEvents)
@@ -665,6 +1069,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   private listCausalOutboundMessages(sourceEventIds: number[]): DiscoveryEvent[] {
+    // Walk provenance backward from a finding to reveal what the user's agent
+    // disclosed while searching, without projecting unrelated network traffic.
     const visited = new Set(sourceEventIds);
     const queue = this.readEventsBySequence(sourceEventIds);
     const outboundMessages: DiscoveryEvent[] = [];
@@ -692,6 +1098,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   private findCausalRootSequences(sequences: number[]): Set<number> {
+    // Causal roots let the host enforce one contribution per user-initiated
+    // thread even when agents cite intermediate direct or shared messages.
     const roots = new Set<number>();
     const visited = new Set<number>();
     const queue = [...sequences];
@@ -779,7 +1187,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     })();
   }
 
-  private insertWorkspace(): void {
+  private insertWorkspace(backgroundChecksEnabled = true): void {
     const now = dayjs().toISOString();
     const versionId = randomUUID();
 
@@ -787,6 +1195,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       id: WORKSPACE_ID,
       versionId,
       currentWake: 0,
+      backgroundChecksEnabled,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -804,6 +1213,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         workspaceId: WORKSPACE_ID,
         status: 'idle',
         runCount: 0,
+        mailboxFloorSequence: 0,
         lastSeenSequence: 0,
         createdAt: now,
         updatedAt: now,
@@ -867,6 +1277,33 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       }).run();
     });
   }
+
+  private findActiveAgent(agentId: string): Agent | undefined {
+    const row = this.database.orm
+      .select({
+        participantStatus: participants.status,
+        agent: representativeAgents,
+      })
+      .from(representativeAgents)
+      .innerJoin(
+        participants,
+        eq(participants.id, representativeAgents.participantId),
+      )
+      .where(and(
+        eq(representativeAgents.workspaceId, WORKSPACE_ID),
+        eq(representativeAgents.id, agentId),
+      ))
+      .get();
+    return row?.participantStatus === 'active'
+      ? toAgent(row.agent)
+      : undefined;
+  }
+
+  private assertManageableParticipant(participantId: string): void {
+    if (participantId === LOCAL_USER_ID) {
+      throw new Error('The local user participant cannot be disabled or retired.');
+    }
+  }
 }
 
 function toAgent(row: AgentRow): Agent {
@@ -884,6 +1321,8 @@ function toParticipant(row: ParticipantRow): Participant {
   return {
     ...row,
     kind: participantKindSchema.parse(row.kind),
+    status: participantStatusSchema.parse(row.status),
+    contextConsentAt: row.contextConsentAt ?? undefined,
   };
 }
 

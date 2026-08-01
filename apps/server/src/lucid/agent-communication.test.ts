@@ -205,6 +205,96 @@ Their saved interest and feedback are private.`);
     expect((await repository.readSnapshot()).findings).toHaveLength(1);
   });
 
+  it('keeps finding authority with the local user agent', async () => {
+    const created = await repository.createAssistedParticipant({
+      displayName: 'Avery',
+      privateContext: 'I can share personal observations about local music.',
+      contextApproved: true,
+    });
+    const tools = await new AgentCommunicationToolService(
+      repository,
+      created.agent,
+      created.participant,
+      'wake_assisted_source',
+      1,
+      Number.MAX_SAFE_INTEGER,
+    ).definitions();
+
+    expect(tools.map(({ name }) => name)).not.toContain('report_finding');
+  });
+
+  it('lets an assisted source respond through the existing mailbox tools', async () => {
+    const created = await repository.createAssistedParticipant({
+      displayName: 'Avery',
+      privateContext:
+        'I can share a specific personal observation about quiet local music.',
+      contextApproved: true,
+    });
+    const request = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      title: 'A request sent after Avery joined',
+      content: 'Does anyone know a quiet local music setting?',
+    });
+    const wake = await repository.beginAgentWake(
+      created.agent.id,
+      'wake_assisted_response',
+    );
+    expect(wake?.visibleEvents).toContainEqual(
+      expect.objectContaining({ sequence: request.sequence }),
+    );
+    const tools = new Map(
+      (await new AgentCommunicationToolService(
+        repository,
+        wake!.agent,
+        wake!.participant,
+        wake!.wakeId,
+        wake!.wakeNumber,
+        wake!.horizonSequence,
+      ).definitions()).map((tool) => [tool.name, tool]),
+    );
+
+    const response = await tools.get('post_shared_message')!.execute({
+      content:
+        'Avery has an approved personal observation connected to quiet local jazz settings.',
+      source_event_ids: [request.sequence],
+    });
+
+    expect(response.ok).toBe(true);
+    expect(
+      await repository.listEventsVisibleToAgent(USER_AGENT_ID, request.sequence),
+    ).toContainEqual(expect.objectContaining({
+      kind: 'shared_message',
+      actorAgentId: created.agent.id,
+    }));
+  });
+
+  it('removes disabled participants from direct-message targets', async () => {
+    const userAgent = await repository.requireUserAgent();
+    const user = await repository.requireParticipant(LOCAL_USER_ID);
+    await repository.setParticipantStatus(
+      'sample-product-researcher',
+      'disabled',
+    );
+    const tools = await new AgentCommunicationToolService(
+      repository,
+      userAgent,
+      user,
+      'wake_active_targets',
+      1,
+      Number.MAX_SAFE_INTEGER,
+    ).definitions();
+    const directMessage = tools.find(
+      ({ name }) => name === 'send_direct_message',
+    );
+
+    expect(
+      directMessage?.parameters.properties?.target_agent_id,
+    ).toMatchObject({
+      enum: ['sample-music-agent'],
+    });
+  });
+
   it('allows one representative contribution per causal thread', async () => {
     const interest = await repository.saveInterest(
       'Start one bounded causal thread.',

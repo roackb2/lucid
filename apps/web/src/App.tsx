@@ -10,6 +10,7 @@ import { AppHeader } from '@/components/lucid/app-header';
 import { BackgroundChecks } from '@/components/lucid/background-checks';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { InterestComposer } from '@/components/lucid/interest-composer';
+import { ParticipantNetwork } from '@/components/lucid/participant-network';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
 import type { AgentView } from '@/lib/trpc';
@@ -44,7 +45,12 @@ export default function App() {
   }
 
   const backgroundChecks = snapshot.backgroundChecks;
-  const sourceAgents = snapshot.agents.filter((agent) => !agent.isUserAgent);
+  const sourceAgents = snapshot.agents.filter(
+    (agent) => !agent.isUserAgent && agent.participant.status !== 'retired',
+  );
+  const activeSourceCount = sourceAgents.filter(
+    (agent) => agent.participant.status === 'active',
+  ).length;
 
   return (
     <div className="workspace-shell">
@@ -68,7 +74,7 @@ export default function App() {
             </div>
             <div>
               <dt>Sources</dt>
-              <dd>{sourceAgents.length}</dd>
+              <dd>{activeSourceCount}</dd>
             </div>
             <div>
               <dt>Mode</dt>
@@ -98,6 +104,28 @@ export default function App() {
               onSetEnabled={(enabled) => (
                 discovery.setBackgroundChecksEnabled.mutate(enabled)
               )}
+            />
+
+            <ParticipantNetwork
+              agents={snapshot.agents}
+              isCreating={discovery.createAssistedParticipant.isPending}
+              isUpdating={
+                discovery.setParticipantEnabled.isPending
+                || discovery.retireParticipant.isPending
+              }
+              onCreate={(input) => (
+                discovery.createAssistedParticipant.mutateAsync(input)
+              )}
+              onRetire={(participantId) => (
+                discovery.retireParticipant.mutateAsync(participantId)
+              )}
+              onSetEnabled={(participantId, enabled) => (
+                discovery.setParticipantEnabled.mutateAsync({
+                  participantId,
+                  enabled,
+                })
+              )}
+              tasks={backgroundChecks.tasks}
             />
 
             <FindingsFeed
@@ -172,6 +200,11 @@ type SourceSummaryProps = {
 };
 
 function SourceSummary({ agents }: SourceSummaryProps) {
+  const realSourceCount = agents.filter(
+    (agent) => agent.participant.kind === 'human',
+  ).length;
+  const simulatedSourceCount = agents.length - realSourceCount;
+
   return (
     <section className="sidebar-card">
       <header>
@@ -186,14 +219,23 @@ function SourceSummary({ agents }: SourceSummaryProps) {
             </span>
             <div>
               <strong>{agent.participant.displayName}</strong>
-              <small>{agent.role}</small>
+              <small>
+                {agent.role} · {agent.participant.status === 'active'
+                  ? 'active'
+                  : 'paused'}
+              </small>
             </div>
           </li>
         ))}
       </ul>
       <p className="prototype-note">
-        Both sources use simulated participant profiles. They test matching and
-        privacy boundaries; they do not provide external facts.
+        {realSourceCount
+          ? `${realSourceCount} assisted real ${
+              realSourceCount === 1 ? 'source is' : 'sources are'
+            } available alongside ${simulatedSourceCount} simulated ${
+              simulatedSourceCount === 1 ? 'fixture' : 'fixtures'
+            }.`
+          : 'Only simulated fixtures are available. Add one knowingly assisted real participant to test the intended network.'}
       </p>
     </section>
   );

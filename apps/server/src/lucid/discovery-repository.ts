@@ -1,13 +1,20 @@
+/**
+ * Storage port used by Lucid's product and heartbeat orchestration services.
+ * The vocabulary deliberately mirrors the domain so adapters can preserve its
+ * transactional mailbox and lifecycle guarantees without leaking driver types.
+ */
 import type {
   Agent,
   AgentWakeContext,
   AgentView,
+  CreateAssistedParticipantInput,
   DiscoveryEvent,
   DiscoveryEventKind,
   DiscoveryEventMetadata,
   DiscoveryWorkspace,
   FindingView,
   Participant,
+  ParticipantStatus,
   ParticipantView,
 } from './discovery-types.js';
 
@@ -33,6 +40,11 @@ export type DiscoveryRepositorySnapshot = {
   events: DiscoveryEvent[];
 };
 
+export type ParticipantWithAgent = {
+  participant: Participant;
+  agent: Agent;
+};
+
 /**
  * Storage-independent port for Lucid's delegated-discovery state.
  *
@@ -51,14 +63,25 @@ export interface DiscoveryRepository {
    * Replaces the active workspace generation. Adapters must perform the reset
    * and default-record insertion atomically.
    */
-  reset(): Promise<void>;
+  reset(options: { backgroundChecksEnabled: boolean }): Promise<void>;
   readWorkspace(): Promise<DiscoveryWorkspace>;
+  setBackgroundChecksEnabled(enabled: boolean): Promise<DiscoveryWorkspace>;
   readSnapshot(): Promise<DiscoveryRepositorySnapshot>;
   listParticipants(): Promise<Participant[]>;
   listAgents(): Promise<Agent[]>;
+  listActiveAgents(): Promise<Agent[]>;
   requireParticipant(id: string): Promise<Participant>;
   requireAgent(id: string): Promise<Agent>;
+  requireAgentByParticipantId(participantId: string): Promise<Agent>;
   requireUserAgent(): Promise<Agent>;
+  createAssistedParticipant(
+    input: CreateAssistedParticipantInput,
+  ): Promise<ParticipantWithAgent>;
+  setParticipantStatus(
+    participantId: string,
+    status: Extract<ParticipantStatus, 'active' | 'disabled'>,
+  ): Promise<ParticipantWithAgent>;
+  retireParticipant(participantId: string): Promise<ParticipantWithAgent>;
   findSavedInterest(): Promise<DiscoveryEvent | undefined>;
   saveInterest(content: string): Promise<DiscoveryEvent>;
   saveFeedback(
