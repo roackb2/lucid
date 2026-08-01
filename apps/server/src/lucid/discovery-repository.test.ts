@@ -73,6 +73,27 @@ describe('SQLite discovery repository', () => {
     ).not.toContain(interest.sequence);
   });
 
+  it('preserves the no-match status of findings from earlier versions', async () => {
+    const finding = await repository.appendEvent({
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'No relevant match found',
+      content: 'The earlier check completed without a useful match.',
+      metadata: {
+        noMatch: true,
+        sourceEventIds: [],
+      },
+    });
+
+    expect((await repository.readSnapshot()).findings).toContainEqual(
+      expect.objectContaining({
+        finding: expect.objectContaining({ sequence: finding.sequence }),
+        noMatch: true,
+      }),
+    );
+  });
+
   it('reuses a failed wake horizon and idempotency slots on retry', async () => {
     await repository.saveInterest('Find one specific participant match.');
     const firstWake = await repository.beginAgentWake(

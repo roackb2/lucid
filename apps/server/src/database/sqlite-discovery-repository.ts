@@ -256,6 +256,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     agentId: string,
     afterSequence: number,
     limit = 40,
+    throughSequence?: number,
   ): Promise<DiscoveryEvent[]> {
     return this.database.orm
       .select()
@@ -263,6 +264,9 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         gt(discoveryEvents.sequence, afterSequence),
+        throughSequence === undefined
+          ? undefined
+          : lte(discoveryEvents.sequence, throughSequence),
         or(
           and(
             eq(discoveryEvents.kind, 'shared_message'),
@@ -655,6 +659,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           sources: this.readEventsBySequence(sourceEventIds),
           outboundMessages: this.listCausalOutboundMessages(sourceEventIds),
           feedback: feedbackRow ? toDiscoveryEvent(feedbackRow) : undefined,
+          noMatch: finding.metadata.noMatch === true,
         };
       });
   }

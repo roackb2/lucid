@@ -55,6 +55,7 @@ implements RepresentativeAgentHeartbeatRunner {
       input.wake.participant,
       input.wake.wakeId,
       input.wake.wakeNumber,
+      input.wake.horizonSequence,
     ).definitions();
     const credential = RuntimeCredentialService.resolveForModel(
       this.config.model,

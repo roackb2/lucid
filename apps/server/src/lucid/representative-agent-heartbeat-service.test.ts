@@ -405,6 +405,7 @@ async function createWakeTools(
     input.wake.participant,
     input.wake.wakeId,
     input.wake.wakeNumber,
+    input.wake.horizonSequence,
   ).definitions();
 }
 

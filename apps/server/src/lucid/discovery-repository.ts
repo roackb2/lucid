@@ -69,6 +69,7 @@ export interface DiscoveryRepository {
     agentId: string,
     afterSequence: number,
     limit?: number,
+    throughSequence?: number,
   ): Promise<DiscoveryEvent[]>;
   readVisibleEventsBySequence(
     agentId: string,

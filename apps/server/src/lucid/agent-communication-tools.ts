@@ -66,6 +66,7 @@ export class AgentCommunicationToolService {
     private readonly participant: Participant,
     private readonly wakeId: string,
     private readonly wakeNumber: number,
+    private readonly horizonSequence: number,
   ) {}
 
   async definitions(): Promise<ToolDefinition[]> {
@@ -210,6 +211,7 @@ export class AgentCommunicationToolService {
         this.agent.id,
         parsed.data.after_sequence ?? this.agent.lastSeenSequence,
         parsed.data.limit,
+        this.horizonSequence,
       ),
       this.repository.listAgents(),
     ]);
@@ -417,6 +419,15 @@ export class AgentCommunicationToolService {
   ): Promise<ToolResult | undefined> {
     if (!sourceEventIds.length) {
       return undefined;
+    }
+    const laterEvents = sourceEventIds.filter(
+      (sequence) => sequence > this.horizonSequence,
+    );
+    if (laterEvents.length) {
+      return {
+        ok: false,
+        error: `Source event sequences arrived after this wake was claimed: ${laterEvents.join(', ')}`,
+      };
     }
     const visibleSequences = new Set(
       (await this.repository

@@ -636,6 +636,11 @@ button:disabled {
   border-radius: 16px;
 }
 
+.finding-card--empty {
+  border-style: dashed;
+  box-shadow: none;
+}
+
 .finding-card__header {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -652,6 +657,11 @@ button:disabled {
   border-radius: 10px;
   background: var(--green-soft);
   color: var(--green);
+}
+
+.finding-card--empty .finding-card__status {
+  background: var(--surface-muted);
+  color: var(--muted);
 }
 
 .finding-card__meta {

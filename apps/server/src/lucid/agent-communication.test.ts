@@ -126,6 +126,55 @@ Their saved interest and feedback are private.`);
     expect(overBudget.ok).toBe(false);
   });
 
+  it('keeps message reads and source references inside the claimed wake horizon', async () => {
+    const claimedMessage = await repository.appendEvent({
+      kind: 'direct_message',
+      actorAgentId: 'sample-music-agent',
+      targetAgentId: USER_AGENT_ID,
+      title: 'Message available when the wake was claimed',
+      content: 'This message belongs to the current wake.',
+    });
+    const toolsByName = new Map(
+      (await createUserTools(
+        repository,
+        'wake_fixed_horizon',
+        1,
+        claimedMessage.sequence,
+      )).map((tool) => [tool.name, tool]),
+    );
+    const laterMessage = await repository.appendEvent({
+      kind: 'direct_message',
+      actorAgentId: 'sample-product-agent',
+      targetAgentId: USER_AGENT_ID,
+      title: 'Message delivered during the model run',
+      content: 'This message must remain unread until the next wake.',
+    });
+
+    const available = await toolsByName
+      .get('read_available_messages')!
+      .execute({ after_sequence: 0 });
+    const rejected = await toolsByName.get('post_shared_message')!.execute({
+      content: 'A post-claim event cannot affect the current wake.',
+      source_event_ids: [laterMessage.sequence],
+    });
+    const accepted = await toolsByName.get('post_shared_message')!.execute({
+      content: 'The claimed event remains a valid source.',
+      source_event_ids: [claimedMessage.sequence],
+    });
+
+    expect(available).toMatchObject({
+      ok: true,
+      output: {
+        events: [{ sequence: claimedMessage.sequence }],
+      },
+    });
+    expect(rejected).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('after this wake was claimed'),
+    });
+    expect(accepted.ok).toBe(true);
+  });
+
   it('reports only peer-sourced findings and prevents source reuse', async () => {
     const peerMessage = await repository.appendEvent({
       kind: 'direct_message',
@@ -199,6 +248,7 @@ async function createUserTools(
   repository: SqliteDiscoveryRepository,
   wakeId: string,
   wakeNumber: number,
+  horizonSequence = Number.MAX_SAFE_INTEGER,
 ) {
   return await new AgentCommunicationToolService(
     repository,
@@ -206,5 +256,6 @@ async function createUserTools(
     await repository.requireParticipant(LOCAL_USER_ID),
     wakeId,
     wakeNumber,
+    horizonSequence,
   ).definitions();
 }

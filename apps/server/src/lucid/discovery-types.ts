@@ -97,6 +97,7 @@ export type FindingView = {
   sources: DiscoveryEvent[];
   outboundMessages: DiscoveryEvent[];
   feedback?: DiscoveryEvent;
+  noMatch: boolean;
 };
 
 export type AgentWakeContext = {

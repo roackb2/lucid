@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import {
   CheckCircle2,
   ChevronDown,
+  CircleSlash2,
   MessageSquareText,
   Route,
   Send,
@@ -43,14 +44,16 @@ export function FindingCard({
   };
 
   return (
-    <article className="finding-card">
+    <article className={`finding-card ${finding.noMatch ? 'finding-card--empty' : ''}`}>
       <header className="finding-card__header">
         <div className="finding-card__status" aria-hidden="true">
-          <CheckCircle2 size={18} />
+          {finding.noMatch
+            ? <CircleSlash2 size={18} />
+            : <CheckCircle2 size={18} />}
         </div>
         <div>
           <div className="finding-card__meta">
-            <span>Possible match</span>
+            <span>{finding.noMatch ? 'Completed check' : 'Possible match'}</span>
             {isLatest ? <span className="new-badge">Latest</span> : null}
             <time dateTime={finding.finding.createdAt}>
               {dayjs(finding.finding.createdAt).format('MMM D, HH:mm')}
@@ -131,7 +134,9 @@ export function FindingCard({
       ) : (
         <form className="finding-feedback" onSubmit={submitFeedback}>
           <label htmlFor={`finding-feedback-${finding.finding.sequence}`}>
-            Was this useful? Tell Lucid what it understood or missed.
+            {finding.noMatch
+              ? 'Was reporting no match the right choice?'
+              : 'Was this useful? Tell Lucid what it understood or missed.'}
           </label>
           <div>
             <textarea
