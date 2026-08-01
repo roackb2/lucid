@@ -1,3 +1,9 @@
+/**
+ * Creates the system-owned representative profile for an assisted participant.
+ * The operator supplies identity and private context elsewhere; this module owns
+ * the safe purpose, instructions, and presentation defaults that must not become
+ * operator-authored executable prompts.
+ */
 import type { Agent } from './discovery-types.js';
 
 const ASSISTED_AGENT_COLORS = [

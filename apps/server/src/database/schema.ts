@@ -1,3 +1,9 @@
+/**
+ * Relational persistence model for one local Lucid discovery workspace.
+ * Participants own private context, representatives own durable mailbox/wake
+ * cursors, and immutable discovery events are the communication and audit log.
+ * The schema records provenance and delivery state, not truth or value scores.
+ */
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { DiscoveryEventMetadata } from '../lucid/discovery-types.js';
 

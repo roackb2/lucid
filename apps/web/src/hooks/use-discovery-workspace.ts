@@ -1,3 +1,8 @@
+/**
+ * Client-side synchronization boundary for the discovery workspace snapshot.
+ * Every mutation returns and installs the server's complete authoritative view;
+ * this hook owns polling cadence and notifications, not optimistic domain state.
+ */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -13,6 +18,8 @@ export function useDiscoveryWorkspace() {
   const snapshot = useQuery({
     queryKey: SNAPSHOT_KEY,
     queryFn: () => lucidClient.discovery.snapshot.query(),
+    // Poll quickly only while an agent is running so task completion becomes
+    // visible without imposing the same request rate on an idle workspace.
     refetchInterval: (query) => (
       query.state.data?.backgroundChecks.running ? 700 : 4_000
     ),

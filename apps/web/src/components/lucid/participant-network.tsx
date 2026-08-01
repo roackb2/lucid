@@ -1,3 +1,9 @@
+/**
+ * Operator UI for participant intake and lifecycle controls.
+ * It gathers explicit context approval and renders server-owned state, while
+ * all consent validation, mailbox cutoffs, task changes, and context scrubbing
+ * remain enforced by the backend.
+ */
 import * as Dialog from '@radix-ui/react-dialog';
 import dayjs from 'dayjs';
 import {

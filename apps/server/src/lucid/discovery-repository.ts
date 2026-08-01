@@ -1,3 +1,8 @@
+/**
+ * Storage port used by Lucid's product and heartbeat orchestration services.
+ * The vocabulary deliberately mirrors the domain so adapters can preserve its
+ * transactional mailbox and lifecycle guarantees without leaking driver types.
+ */
 import type {
   Agent,
   AgentWakeContext,

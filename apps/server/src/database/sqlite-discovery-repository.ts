@@ -1,3 +1,11 @@
+/**
+ * SQLite/Drizzle implementation of Lucid's durable discovery-state boundary.
+ *
+ * Besides persistence, this adapter owns the atomic invariants that depend on
+ * storage: participant-agent lifecycle changes, append-only mailbox ordering,
+ * visibility floors, fixed wake claims, cursor advancement, and idempotent
+ * events. Scheduling, model execution, and HTTP concerns do not belong here.
+ */
 import { randomUUID } from 'node:crypto';
 import dayjs from 'dayjs';
 import {
@@ -246,6 +254,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   async createAssistedParticipant(
     input: CreateAssistedParticipantInput,
   ): Promise<ParticipantWithAgent> {
+    // Validate and normalize operator input before opening the transaction so
+    // failed consent or size checks cannot leave partial identity records.
     const displayName = input.displayName.trim();
     const privateContext = input.privateContext.trim();
     if (!input.contextApproved) {
@@ -285,6 +295,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         .where(eq(discoveryEvents.workspaceId, WORKSPACE_ID))
         .orderBy(desc(discoveryEvents.sequence))
         .get();
+      // Participant, representative, initial mailbox floor, and audit event are
+      // one unit. The current tail prevents a new source from reading old mail.
       const profile = createAssistedAgentProfile({
         id: agentId,
         participantId,
@@ -392,6 +404,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         return { participant, agent: toAgent(agentRow) };
       }
 
+      // Resuming accepts only messages created after this transaction. Pausing
+      // preserves the existing floor because task shutdown already prevents reads.
       const latestEvent = transaction
         .select({ sequence: discoveryEvents.sequence })
         .from(discoveryEvents)
@@ -422,6 +436,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         .where(eq(representativeAgents.id, agentRow.id))
         .returning()
         .get();
+      // Persist lifecycle state and its operator audit record atomically.
       transaction.insert(discoveryEvents).values({
         id: `event_${randomUUID()}`,
         workspaceId: WORKSPACE_ID,
@@ -497,6 +512,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         .where(eq(discoveryEvents.workspaceId, WORKSPACE_ID))
         .orderBy(desc(discoveryEvents.sequence))
         .get();
+      // Retirement is irreversible in this workspace generation: scrub private
+      // context in the same transaction that closes the mailbox and records it.
       const updatedParticipantRow = transaction
         .update(participants)
         .set({
@@ -620,6 +637,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     if (!agent) {
       return [];
     }
+    // The caller may request older history, but it can never bypass the join or
+    // resume floor established for this participant.
     const visibleAfterSequence = Math.max(
       afterSequence,
       agent.mailboxFloorSequence,
@@ -630,6 +649,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         gt(discoveryEvents.sequence, visibleAfterSequence),
+        // A claimed wake passes throughSequence so concurrent arrivals remain
+        // unread for the next wake instead of changing the current model input.
         throughSequence === undefined
           ? undefined
           : lte(discoveryEvents.sequence, throughSequence),
@@ -699,6 +720,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   ): Promise<AgentWakeContext | undefined> {
     const now = dayjs().toISOString();
 
+    // Selection, horizon assignment, agent ownership, and the audit event must
+    // commit together; otherwise two schedulers could consume different views.
     return this.database.orm.transaction((transaction) => {
       const workspaceRow = transaction
         .select()
@@ -742,6 +765,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         return undefined;
       }
 
+      // An interrupted/failed wake retains its identity and fixed upper bound.
+      // New mail arriving during the retry is deliberately deferred.
       const resumingWake = Boolean(
         selectedAgent.activeWakeId
         && selectedAgent.activeWakeNumber !== undefined
@@ -784,6 +809,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         .all()
         .map(toDiscoveryEvent);
       if (!visibleEvents.length) {
+        // A stale claim can become empty after cursor recovery. Clear only claim
+        // metadata; never advance the cursor when no event was consumed.
         if (selectedAgent.activeWakeId) {
           transaction
             .update(representativeAgents)
@@ -799,6 +826,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         return undefined;
       }
 
+      // Fresh claims take the current visible tail as their immutable horizon;
+      // retries reuse every identifier required for event idempotency.
       const activeWakeId = resumingWake
         ? selectedAgent.activeWakeId!
         : wakeId;
@@ -879,6 +908,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     agentId: string,
     horizonSequence: number,
   ): Promise<void> {
+    // This is the sole wake-settlement operation that consumes claimed mail.
+    // Failure and interruption leave both the cursor and active claim retryable.
     const agent = await this.requireAgent(agentId);
     this.database.orm
       .update(representativeAgents)
@@ -962,6 +993,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     input: AppendDiscoveryEventInput,
   ): Promise<DiscoveryEvent> {
     if (input.idempotencyKey) {
+      // Tool and wake retries reuse deterministic keys, so an already committed
+      // side effect is returned rather than appended a second time.
       const existing = this.database.orm
         .select()
         .from(discoveryEvents)
@@ -1036,6 +1069,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   private listCausalOutboundMessages(sourceEventIds: number[]): DiscoveryEvent[] {
+    // Walk provenance backward from a finding to reveal what the user's agent
+    // disclosed while searching, without projecting unrelated network traffic.
     const visited = new Set(sourceEventIds);
     const queue = this.readEventsBySequence(sourceEventIds);
     const outboundMessages: DiscoveryEvent[] = [];
@@ -1063,6 +1098,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   private findCausalRootSequences(sequences: number[]): Set<number> {
+    // Causal roots let the host enforce one contribution per user-initiated
+    // thread even when agents cite intermediate direct or shared messages.
     const roots = new Set<number>();
     const visited = new Set<number>();
     const queue = [...sequences];

@@ -1,3 +1,9 @@
+/**
+ * Presents participant context and Lucid behavior guidance to a representative.
+ * These prompts help the model choose useful actions but are not a security or
+ * reliability boundary; communication tools and the repository enforce every
+ * visibility, causality, action-budget, and cursor invariant described here.
+ */
 import type {
   Agent,
   DiscoveryEvent,
@@ -28,6 +34,8 @@ export function buildRepresentativeAgentInstructions(
   agent: Agent,
   participant: Participant,
 ): string {
+  // Local-user privileges follow representative identity. `human` also includes
+  // assisted sources, which must never inherit the user's private capabilities.
   const privacyRules = agent.id === USER_AGENT_ID
     ? `You represent the real local user.
 Their saved interest and feedback are private. Share only the smallest useful abstraction, never a verbatim private message unless it is necessary.`
@@ -81,6 +89,8 @@ export function buildAgentWakePrompt(
     ? visibleEvents.map(formatDiscoveryEvent).join('\n')
     : '(No unread shared messages, direct messages, or user input.)';
 
+  // This role split guides model behavior only; AgentCommunicationToolService
+  // independently limits which tools each representative can execute.
   const responsibility = agent.id === USER_AGENT_ID
     ? `When an unread interest_saved event appears, share a minimal request that represents it.
 When an unread check_requested event appears, it starts a new causal thread even if the saved interest text is unchanged. You must post a fresh minimal shared request citing that check event.

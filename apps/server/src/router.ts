@@ -1,3 +1,8 @@
+/**
+ * tRPC transport boundary for the discovery workspace.
+ * It validates wire input and maps expected user errors to transport errors;
+ * sequencing and compensation remain in DiscoveryWorkspaceService.
+ */
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {

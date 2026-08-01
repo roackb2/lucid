@@ -1,3 +1,11 @@
+/**
+ * Adapts Lucid's participant and mailbox lifecycle to Heddle heartbeat tasks.
+ *
+ * The repository remains authoritative for who may run and which events a wake
+ * may consume. Heddle owns durable scheduling and execution. This module keeps
+ * the two aligned and prevents shutdown, pause, or retry from losing mailbox
+ * work; it does not decide whether message content is useful.
+ */
 import { randomUUID } from 'node:crypto';
 import dayjs from 'dayjs';
 import {
@@ -61,6 +69,8 @@ export class RepresentativeAgentHeartbeatService {
   async initialize(): Promise<void> {
     const workspace = await this.repository.readWorkspace();
     this.paused = !workspace.backgroundChecksEnabled;
+    // A process exit can leave file-backed Heddle tasks marked running. Startup
+    // is the only reconciliation pass allowed to recover those interrupted tasks.
     await this.ensureAgentTasks({ recoverInterrupted: true });
   }
 
@@ -83,6 +93,8 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   async stop(): Promise<void> {
+    // Reject and abort work first, then wait for every runner and deferred
+    // trigger to settle before the server closes the repository underneath them.
     this.acceptingRuns = false;
     this.schedulerController?.abort();
     this.abortActiveWakes();
@@ -149,6 +161,8 @@ export class RepresentativeAgentHeartbeatService {
       await this.tasks.triggerTaskRun(task.id);
       return;
     }
+    // Heddle cannot trigger a task already running. Coalesce repeated requests
+    // into one follow-up check after the current task has persisted its result.
     this.scheduleTriggerAfterCurrentRun(agentId);
   }
 
@@ -162,6 +176,8 @@ export class RepresentativeAgentHeartbeatService {
 
   async setEnabled(enabled: boolean): Promise<BackgroundChecksView> {
     if (!enabled) {
+      // Settle in-flight claims before persisting the global pause so no wake
+      // can complete across the user's pause boundary.
       await this.pauseRunningTasks();
     }
     await this.repository.setBackgroundChecksEnabled(enabled);
@@ -177,6 +193,8 @@ export class RepresentativeAgentHeartbeatService {
   async resetWorkspace(): Promise<void> {
     const wasEnabled = (await this.repository.readWorkspace())
       .backgroundChecksEnabled;
+    // Reset crosses file-backed Heddle state and SQLite. Quiesce first, remove
+    // old-generation tasks, replace product state, then recreate desired tasks.
     await this.pauseRunningTasks();
     await this.deleteManagedTasks();
     await this.repository.reset({ backgroundChecksEnabled: wasEnabled });
@@ -207,6 +225,8 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   async disableAgentTask(agentId: string): Promise<void> {
+    // Cancellation is cooperative: stop the domain runner, await any deferred
+    // retrigger, then wait for Heddle to finish its outer task-state write.
     const activeWake = this.activeWakes.get(agentId);
     activeWake?.controller.abort();
     await activeWake?.settled;
@@ -225,6 +245,8 @@ export class RepresentativeAgentHeartbeatService {
   private async ensureAgentTasks(
     options: { recoverInterrupted?: boolean } = {},
   ): Promise<void> {
+    // Domain participant state is authoritative; Heddle tasks are a derived,
+    // durable execution projection that this method reconciles toward it.
     const [workspace, participants, agents, existingTasks] = await Promise.all([
       this.repository.readWorkspace(),
       this.repository.listParticipants(),
@@ -239,6 +261,8 @@ export class RepresentativeAgentHeartbeatService {
     );
     const agentIds = new Set(managedAgents.map((agent) => agent.id));
 
+    // Remove orphaned tasks and tasks from an earlier reset generation before
+    // creating replacements, preventing stale agents from running old mailboxes.
     for (const task of existingTasks) {
       const agentId = agentIdFromTask(task.id);
       if (
@@ -253,6 +277,8 @@ export class RepresentativeAgentHeartbeatService {
     const currentTasks = new Map(
       (await this.listManagedTasks()).map((task) => [task.id, task]),
     );
+    // Create missing tasks and refresh runtime/schedule configuration without
+    // changing the blocked state Heddle uses for operator-visible failures.
     for (const agent of managedAgents) {
       const participant = participantById.get(agent.participantId);
       if (!participant) {
@@ -281,6 +307,7 @@ export class RepresentativeAgentHeartbeatService {
       }
 
       if (existing.state?.status === 'running' && !options.recoverInterrupted) {
+        // A live run owns its persisted task record until Heddle settles it.
         continue;
       }
 
@@ -349,11 +376,15 @@ export class RepresentativeAgentHeartbeatService {
     let claimedWake = false;
 
     try {
+      // The repository atomically fixes the mailbox horizon and persists the
+      // claim. Retries reuse that same wake identity and cannot observe newer mail.
       const wake = await this.repository.beginAgentWake(
         agentId,
         proposedWakeId,
       );
       if (!wake) {
+        // Scheduled heartbeats with no mail are healthy idle runs and avoid an
+        // unnecessary model call while still producing a Heddle run record.
         return createIdleHeartbeatResult(
           task,
           checkpoint,
@@ -382,6 +413,8 @@ export class RepresentativeAgentHeartbeatService {
         || !this.acceptingRuns
         || this.paused
       ) {
+        // Interruption releases execution ownership but deliberately preserves
+        // the claimed horizon and unread cursor for the next retry.
         await this.repository.interruptAgentWake(agentId);
         return createIdleHeartbeatResult(
           task,
@@ -394,11 +427,15 @@ export class RepresentativeAgentHeartbeatService {
         result.state.outcome !== 'done'
         || result.decision === 'escalate'
       ) {
+        // Failed or escalated runs remain unread; only a completed domain wake
+        // may advance the representative's mailbox cursor.
         await this.repository.failAgentWake(agentId);
         claimedWake = false;
         return result;
       }
 
+      // Record completion idempotently before advancing the cursor. A retry can
+      // safely find the same event if the process stops between these writes.
       await this.repository.appendEvent({
         wakeNumber: wake.wakeNumber,
         kind: 'agent_wake_completed',
@@ -420,6 +457,8 @@ export class RepresentativeAgentHeartbeatService {
         agentId,
         wake.horizonSequence,
       );
+      // Newly emitted direct/shared messages accelerate recipients through the
+      // same durable scheduler path instead of invoking agents recursively.
       await this.triggerAgentsWithUnreadEvents();
       return result;
     } catch (error) {
