@@ -8,6 +8,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import dayjs from 'dayjs';
 import {
   Bot,
+  CircleAlert,
   CirclePause,
   CirclePlay,
   Plus,
@@ -23,38 +24,81 @@ import {
   useState,
 } from 'react';
 import { Button } from '@/components/ui/button';
+import { ParticipantContextDialog } from './participant-context-dialog';
 import type {
   AgentView,
+  AssistedParticipantContext,
   CreateAssistedParticipantInput,
   DiscoverySnapshot,
+  UpdateAssistedParticipantContextInput,
 } from '@/lib/trpc';
 
 type ParticipantNetworkProps = {
   agents: AgentView[];
   tasks: DiscoverySnapshot['backgroundChecks']['tasks'];
   isCreating: boolean;
+  isPausingSimulated: boolean;
+  isUpdatingContext: boolean;
   isUpdating: boolean;
   onCreate(input: CreateAssistedParticipantInput): Promise<unknown>;
+  onLoadContext(participantId: string): Promise<AssistedParticipantContext>;
+  onPauseSimulated(): Promise<unknown>;
   onRetire(participantId: string): Promise<unknown>;
   onSetEnabled(participantId: string, enabled: boolean): Promise<unknown>;
+  onUpdateContext(
+    input: UpdateAssistedParticipantContextInput,
+  ): Promise<unknown>;
 };
 
 export function ParticipantNetwork({
   agents,
   tasks,
   isCreating,
+  isPausingSimulated,
+  isUpdatingContext,
   isUpdating,
   onCreate,
+  onLoadContext,
+  onPauseSimulated,
   onRetire,
   onSetEnabled,
+  onUpdateContext,
 }: ParticipantNetworkProps) {
+  const [contextReview, setContextReview] = useState<{
+    agent: AgentView;
+    context?: AssistedParticipantContext;
+  }>();
   const sourceAgents = agents.filter(
     (agent) => !agent.isUserAgent && agent.participant.status !== 'retired',
   );
   const taskByAgentId = new Map(tasks.map((task) => [task.agentId, task]));
+  const activeRealSources = sourceAgents.filter((agent) => (
+    agent.participant.kind === 'human'
+    && agent.participant.status === 'active'
+  ));
+  const activeSimulatedSources = sourceAgents.filter((agent) => (
+    agent.participant.kind === 'synthetic'
+    && agent.participant.status === 'active'
+  ));
+
+  const openContextReview = async (agent: AgentView) => {
+    setContextReview({ agent });
+    try {
+      const context = await onLoadContext(agent.participant.id);
+      setContextReview((current) => (
+        current?.agent.id === agent.id ? { agent, context } : current
+      ));
+    } catch {
+      setContextReview(undefined);
+    }
+  };
 
   return (
-    <section className="participant-network" aria-labelledby="participant-network-title">
+    <section
+      className="participant-network"
+      aria-labelledby="participant-network-title"
+      id="sources"
+    >
       <header className="participant-network__header">
         <span className="participant-network__icon" aria-hidden="true">
           <Users size={19} />
@@ -80,7 +124,12 @@ export function ParticipantNetwork({
           {sourceAgents.map((agent) => {
             const active = agent.participant.status === 'active';
             const task = taskByAgentId.get(agent.id);
-            const pending = isCreating || isUpdating;
+            const pending = (
+              isCreating
+              || isUpdating
+              || isPausingSimulated
+              || isUpdatingContext
+            );
             return (
               <li key={agent.id}>
                 <span
@@ -125,6 +174,19 @@ export function ParticipantNetwork({
                   </small>
                 </div>
                 <div className="participant-list__actions">
+                  {agent.participant.kind === 'human' ? (
+                    <Button
+                      disabled={pending || isUpdatingContext}
+                      onClick={() => {
+                        void openContextReview(agent);
+                      }}
+                      size="small"
+                      variant="ghost"
+                    >
+                      <ShieldCheck size={14} />
+                      Review context
+                    </Button>
+                  ) : null}
                   <Button
                     disabled={pending}
                     onClick={() => onSetEnabled(agent.participant.id, !active)}
@@ -153,11 +215,46 @@ export function ParticipantNetwork({
         </div>
       )}
 
+      {activeRealSources.length > 0 && activeSimulatedSources.length > 0 ? (
+        <div className="participant-network__mix-warning">
+          <CircleAlert size={18} aria-hidden="true" />
+          <div>
+            <strong>Real and simulated sources are mixed</strong>
+            <p>
+              Pause the fixtures before judging a real-person result, so sample
+              messages cannot be mistaken for evidence from your participant.
+            </p>
+          </div>
+          <Button
+            disabled={isPausingSimulated || isUpdating}
+            onClick={() => {
+              void onPauseSimulated();
+            }}
+            size="small"
+            variant="secondary"
+          >
+            <CirclePause size={14} />
+            {isPausingSimulated ? 'Pausing…' : 'Pause simulated sources'}
+          </Button>
+        </div>
+      ) : null}
+
       <footer className="participant-network__note">
         Pausing a source stops its task and skips messages sent while paused.
-        Retiring it permanently removes private context while preserving
-        non-sensitive historical attribution.
+        Withdrawing a real source or retiring a fixture permanently removes
+        private context while preserving non-sensitive historical attribution.
       </footer>
+
+      {contextReview ? (
+        <ParticipantContextDialog
+          agent={contextReview.agent}
+          context={contextReview.context}
+          isUpdating={isUpdatingContext}
+          key={`${contextReview.agent.id}:${contextReview.context?.contextConsentAt ?? 'loading'}`}
+          onClose={() => setContextReview(undefined)}
+          onUpdate={onUpdateContext}
+        />
+      ) : null}
     </section>
   );
 }
@@ -220,11 +317,12 @@ function AddParticipantDialog({
           <p className="section-label">Assisted participant intake</p>
           <Dialog.Title>Add one real source</Dialog.Title>
           <Dialog.Description>
-            You are operating this participant’s agent. Record only context
-            they understand and have agreed may be used to find relevant
-            connections inside this local experiment. Lucid stores it in the
-            local SQLite database; private means scoped from other agents and
-            the UI, not encrypted at rest.
+            You are operating this participant’s agent. The full text stays in
+            local SQLite and is shown only to their representative and during
+            explicit operator review. Their agent may share or paraphrase the
+            smallest relevant detail to other agents. Those messages remain
+            inspectable in Lucid. They can later review, replace, or withdraw
+            this context. This storage is not encrypted at rest.
           </Dialog.Description>
 
           <form className="participant-form" onSubmit={handleSubmit}>
@@ -264,8 +362,8 @@ function AddParticipantDialog({
               />
               <span>
                 <ShieldCheck size={16} />
-                This person knowingly approved this context for the Lucid
-                experiment.
+                This person reviewed this text and approved their agent using
+                it and sharing minimal relevant details inside this experiment.
               </span>
             </label>
 
@@ -300,6 +398,26 @@ function RetireParticipantDialog({
 }: RetireParticipantDialogProps) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const isAssistedParticipant = agent.participant.kind === 'human';
+  const actionCopy = isAssistedParticipant
+    ? {
+        label: 'Consent withdrawal',
+        title: `Withdraw ${agent.participant.displayName} from Lucid?`,
+        description:
+          'Their agent will stop, their approved private context will be permanently scrubbed, and future messages will no longer reach them. Existing messages keep only the participant name so earlier findings remain understandable.',
+        trigger: 'Withdraw',
+        pending: 'Withdrawing…',
+        confirm: 'Withdraw and scrub context',
+      }
+    : {
+        label: 'Permanent participant action',
+        title: `Retire ${agent.participant.displayName}?`,
+        description:
+          'The fixture task will be removed. Existing messages keep the fixture name so earlier findings remain understandable. Resetting the entire workspace is the only way to restore it.',
+        trigger: 'Retire',
+        pending: 'Retiring…',
+        confirm: 'Retire fixture',
+      };
 
   const handleRetire = async () => {
     setPending(true);
@@ -317,12 +435,12 @@ function RetireParticipantDialog({
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
         <Button
-          aria-label={`Retire ${agent.participant.displayName}`}
           disabled={disabled}
-          size="icon"
+          size="small"
           variant="ghost"
         >
           <Trash2 size={14} />
+          {actionCopy.trigger}
         </Button>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -333,16 +451,9 @@ function RetireParticipantDialog({
               <X size={18} />
             </button>
           </Dialog.Close>
-          <p className="section-label">Permanent participant action</p>
-          <Dialog.Title>
-            Retire {agent.participant.displayName}?
-          </Dialog.Title>
-          <Dialog.Description>
-            Their background task will be removed and their private context
-            permanently scrubbed. Existing messages keep the participant name
-            so earlier findings remain understandable. Resetting the entire
-            workspace is the only way to restore a retired fixture.
-          </Dialog.Description>
+          <p className="section-label">{actionCopy.label}</p>
+          <Dialog.Title>{actionCopy.title}</Dialog.Title>
+          <Dialog.Description>{actionCopy.description}</Dialog.Description>
           <div className="dialog-actions">
             <Dialog.Close asChild>
               <Button disabled={pending} variant="secondary">
@@ -355,7 +466,7 @@ function RetireParticipantDialog({
               variant="danger"
             >
               <Trash2 size={14} />
-              {pending ? 'Retiring…' : 'Retire participant'}
+              {pending ? actionCopy.pending : actionCopy.confirm}
             </Button>
           </div>
         </Dialog.Content>

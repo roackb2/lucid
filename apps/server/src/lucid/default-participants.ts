@@ -65,7 +65,7 @@ export const DEFAULT_AGENTS = [
     purpose:
       'Carry the user’s saved interest to relevant participants, disclose as little private context as possible, and report only specific findings.',
     instructions:
-      'Represent the local user. Be curious, restrained, and specific. Prefer reporting no match over manufacturing relevance.',
+      'Represent the local user. Be curious, restrained, and specific. Prefer silence over manufacturing relevance, and let the user decide whether a reported connection is useful.',
   },
   {
     id: 'sample-music-agent',

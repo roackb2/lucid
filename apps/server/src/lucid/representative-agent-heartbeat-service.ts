@@ -227,7 +227,11 @@ export class RepresentativeAgentHeartbeatService {
     this.start();
   }
 
-  async disableAgentTask(agentId: string): Promise<void> {
+  async disableAgentTasks(agentIds: string[]): Promise<void> {
+    const requestedAgentIds = new Set(agentIds);
+    if (!requestedAgentIds.size) {
+      return;
+    }
     const shouldRestartScheduler = Boolean(this.scheduler);
 
     // Heddle 5.7 can cancel only at scheduler scope. Quiescing all active tasks
@@ -241,10 +245,11 @@ export class RepresentativeAgentHeartbeatService {
       reason: 'operator',
     });
 
-    const task = (await this.listManagedTasks()).find(
-      (candidate) => candidate.id === taskIdForAgent(agentId),
-    );
-    if (task?.enabled) {
+    const tasks = (await this.listManagedTasks()).filter((task) => {
+      const agentId = agentIdFromTask(task.id);
+      return agentId && requestedAgentIds.has(agentId) && task.enabled;
+    });
+    for (const task of tasks) {
       await this.tasks.setTaskEnabled(task.id, false);
     }
 

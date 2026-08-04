@@ -16,6 +16,7 @@ import type {
   Participant,
   ParticipantStatus,
   ParticipantView,
+  UpdateAssistedParticipantContextInput,
 } from './discovery-types.js';
 
 export type AppendDiscoveryEventInput = {
@@ -76,6 +77,9 @@ export interface DiscoveryRepository {
   requireUserAgent(): Promise<Agent>;
   createAssistedParticipant(
     input: CreateAssistedParticipantInput,
+  ): Promise<ParticipantWithAgent>;
+  updateAssistedParticipantContext(
+    input: UpdateAssistedParticipantContextInput,
   ): Promise<ParticipantWithAgent>;
   setParticipantStatus(
     participantId: string,

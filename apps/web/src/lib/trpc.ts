@@ -20,6 +20,10 @@ type RouterInputs = inferRouterInputs<AppRouter>;
 export type DiscoverySnapshot = RouterOutputs['discovery']['snapshot'];
 export type CreateAssistedParticipantInput =
   RouterInputs['discovery']['createAssistedParticipant'];
+export type UpdateAssistedParticipantContextInput =
+  RouterInputs['discovery']['updateAssistedParticipantContext'];
+export type AssistedParticipantContext =
+  RouterOutputs['discovery']['assistedParticipantContext'];
 export type DiscoveryEvent = DiscoverySnapshot['events'][number];
 export type AgentView = DiscoverySnapshot['agents'][number];
 export type FindingView = DiscoverySnapshot['findings'][number];

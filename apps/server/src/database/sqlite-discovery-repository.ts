@@ -46,6 +46,7 @@ import {
   type Participant,
   type ParticipantStatus,
   type ParticipantView,
+  type UpdateAssistedParticipantContextInput,
 } from '../lucid/discovery-types.js';
 import {
   discoveryEvents,
@@ -354,6 +355,99 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
 
       return {
         participant: toParticipant(participantRow),
+        agent: toAgent(agentRow),
+      };
+    });
+  }
+
+  async updateAssistedParticipantContext(
+    input: UpdateAssistedParticipantContextInput,
+  ): Promise<ParticipantWithAgent> {
+    this.assertManageableParticipant(input.participantId);
+    const privateContext = input.privateContext.trim();
+    if (!input.contextApproved) {
+      throw new Error(
+        'Confirm that the participant reviewed and approved the revised context.',
+      );
+    }
+    if (!privateContext || privateContext.length > 4_000) {
+      throw new Error('Participant context must contain 1 to 4,000 characters.');
+    }
+
+    const now = dayjs().toISOString();
+    return this.database.orm.transaction((transaction) => {
+      const workspace = transaction
+        .select()
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
+        .get();
+      if (!workspace) {
+        throw new Error('Discovery workspace is missing.');
+      }
+      const participantRow = transaction
+        .select()
+        .from(participants)
+        .where(and(
+          eq(participants.workspaceId, WORKSPACE_ID),
+          eq(participants.id, input.participantId),
+        ))
+        .get();
+      if (!participantRow) {
+        throw new Error(`Participant not found: ${input.participantId}`);
+      }
+      const participant = toParticipant(participantRow);
+      if (participant.kind !== 'human' || participant.status === 'retired') {
+        throw new Error(
+          'Only an active or paused assisted participant can revise context.',
+        );
+      }
+      const agentRow = transaction
+        .select()
+        .from(representativeAgents)
+        .where(eq(
+          representativeAgents.participantId,
+          input.participantId,
+        ))
+        .get();
+      if (!agentRow) {
+        throw new Error(
+          `Representative agent not found for participant: ${input.participantId}`,
+        );
+      }
+
+      // The approved text and its renewed consent timestamp change together.
+      // The audit event deliberately records only lifecycle metadata.
+      const updatedParticipantRow = transaction
+        .update(participants)
+        .set({
+          privateContext,
+          contextConsentAt: now,
+          updatedAt: now,
+        })
+        .where(eq(participants.id, input.participantId))
+        .returning()
+        .get();
+      transaction.insert(discoveryEvents).values({
+        id: `event_${randomUUID()}`,
+        workspaceId: WORKSPACE_ID,
+        wakeNumber: workspace.currentWake,
+        kind: 'participant_context_updated',
+        targetAgentId: agentRow.id,
+        targetParticipantId: input.participantId,
+        title: `${participant.displayName} approves revised context`,
+        content:
+          'The operator replaced the approved private context after renewed participant review. The context itself is not included in this event.',
+        metadata: {
+          visibility: 'operator',
+          participantId: input.participantId,
+          agentId: agentRow.id,
+          contextConsentAt: now,
+        },
+        createdAt: now,
+      }).run();
+
+      return {
+        participant: toParticipant(updatedParticipantRow),
         agent: toAgent(agentRow),
       };
     });

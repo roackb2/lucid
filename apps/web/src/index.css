@@ -601,6 +601,7 @@ button:disabled {
 }
 
 .participant-network {
+  scroll-margin-top: 90px;
   overflow: hidden;
   border-radius: 15px;
 }
@@ -734,6 +735,37 @@ button:disabled {
   color: var(--faint);
   font-size: 9px;
   line-height: 1.55;
+}
+
+.participant-network__mix-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 22px 18px;
+  padding: 13px;
+  border: 1px solid #edd6c5;
+  border-radius: 11px;
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+
+.participant-network__mix-warning > svg {
+  align-self: start;
+  margin-top: 1px;
+}
+
+.participant-network__mix-warning strong {
+  display: block;
+  color: #6f452f;
+  font-size: 11px;
+}
+
+.participant-network__mix-warning p {
+  margin: 4px 0 0;
+  color: #855f4c;
+  font-size: 9px;
+  line-height: 1.5;
 }
 
 .participant-network__empty {
@@ -956,6 +988,18 @@ button:disabled {
   margin-bottom: 2px;
   color: #3a463f;
   font-size: 10px;
+}
+
+.source-message__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.source-message__identity strong {
+  margin-bottom: 0;
 }
 
 .finding-explanation li p {
@@ -1727,6 +1771,27 @@ button:disabled {
   font-size: 9px;
 }
 
+.participant-context-meta {
+  margin: 0 0 4px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.participant-context-loading {
+  margin-top: 20px;
+  padding: 28px 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 11px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
 .participant-consent {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1950,6 +2015,16 @@ button:disabled {
 
   .participant-list__actions {
     justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .participant-network__mix-warning {
+    grid-template-columns: auto 1fr;
+  }
+
+  .participant-network__mix-warning .button {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .finding-card__header {

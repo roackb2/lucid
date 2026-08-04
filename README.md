@@ -9,8 +9,10 @@ The product loop is intentionally practical:
 2. let a representative agent keep that intent in its private mailbox;
 3. leave background checks running while representative agents exchange
    relevant messages;
-4. receive a finding only when another agent provides a specific match;
-5. give free-text feedback that guides the user's agent on a later wake.
+4. receive a peer-sourced finding when another agent provides a specific
+   connection, without having Lucid declare it useful on the user's behalf;
+5. inspect the source messages and give free-text feedback that guides the
+   user's agent on a later wake.
 
 The initial network contains one local user and two clearly labelled simulated
 participants. The operator can now add knowingly assisted real participants
@@ -50,6 +52,12 @@ pause are deliberately skipped. Resuming accepts only future mail. Retiring a
 source removes its task and private context while retaining non-sensitive
 historical attribution.
 
+Assisted participants can review the exact approved context through a dedicated
+local-operator dialog, replace it only after renewed consent, or withdraw and
+permanently scrub it. The ordinary workspace snapshot never contains the text.
+When real and simulated sources are both active, Lucid warns that the evidence
+is mixed and can pause every fixture in one action before a real-source pilot.
+
 There is no open network, search engine, payment system, bidding, or external
 fact retrieval yet.
 
@@ -76,8 +84,10 @@ the prototype. It does not prove that the message is true or useful.
 
 `private` currently describes Lucid visibility and prompt boundaries, not
 encryption at rest. Approved participant context is stored as ordinary text in
-the local SQLite database until retirement scrubs it. Do not enter secrets or
-highly sensitive personal information into this experiment.
+the local SQLite database until withdrawal scrubs it. It is absent from normal
+snapshots, events, task files, logs, and tool output; an explicit operator
+review request can return it only to the context dialog. Do not enter secrets
+or highly sensitive personal information into this experiment.
 
 ## Service ownership
 
@@ -87,7 +97,7 @@ highly sensitive personal information into this experiment.
 | Async discovery repository and storage adapters | Scheduler timing, lifecycle, and bounded concurrency |
 | Mailbox visibility and causal-source validation | Agent checkpoints, durable run requests, and task run history |
 | Atomic wake claims and unread cursors | Model and tool loop through an execution context |
-| Finding and feedback delivery | Provider authentication |
+| Finding provenance, source-type labels, and feedback delivery | Provider authentication |
 | Communication budgets and idempotency keys | Unattended approvals, cancellation, heartbeat decisions, and retry state |
 
 Lucid exposes five domain tools to representative agents:

@@ -53,14 +53,14 @@ export function FindingsFeed({
               {isChecking
                 ? 'Checking available messages…'
                 : backgroundChecksEnabled
-                  ? 'Waiting for a useful match'
+                  ? 'Waiting for something relevant'
                   : 'Background checks are paused'}
             </h3>
             <p>
               {isChecking
-                ? 'A finding will appear only if participant agents return a specific connection.'
+                ? 'A finding will appear only if participant agents return a specific connection. You decide whether it is useful.'
                 : backgroundChecksEnabled
-                  ? 'You can leave this workspace. Lucid will keep the interest and report when another agent delivers something relevant.'
+                  ? 'You can leave this workspace. Lucid will keep the interest and show what another representative brings back without deciding its value for you.'
                   : 'Resume background checks when you want representative agents to process new messages.'}
             </p>
           </div>

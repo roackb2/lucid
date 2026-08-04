@@ -246,6 +246,75 @@ describe('representative-agent heartbeat service', () => {
       .not.toContain(createdAgent!.id);
   });
 
+  it('reviews and renews assisted context without exposing it in snapshots', async () => {
+    const { workspace } = await startServices(new CountingHeartbeatRunner());
+    const created = await workspace.createAssistedParticipant({
+      displayName: 'Avery',
+      privateContext: 'Initial approved context for a supervised pilot.',
+      contextApproved: true,
+    });
+    const participant = created.agents.find(
+      (agent) => agent.participant.displayName === 'Avery',
+    )!.participant;
+
+    expect(await workspace.assistedParticipantContext(participant.id))
+      .toMatchObject({
+        id: participant.id,
+        privateContext: 'Initial approved context for a supervised pilot.',
+      });
+
+    const revisedContext =
+      'Revised context that Avery reviewed for future network messages.';
+    const updated = await workspace.updateAssistedParticipantContext({
+      participantId: participant.id,
+      privateContext: revisedContext,
+      contextApproved: true,
+    });
+
+    expect(JSON.stringify(updated)).not.toContain(revisedContext);
+    expect((await workspace.assistedParticipantContext(participant.id)))
+      .toMatchObject({ privateContext: revisedContext, status: 'active' });
+    const agent = updated.agents.find(
+      (candidate) => candidate.participant.id === participant.id,
+    )!;
+    expect(updated.backgroundChecks.tasks.find(
+      (task) => task.agentId === agent.id,
+    )?.enabled).toBe(true);
+    expect(updated.events).toContainEqual(expect.objectContaining({
+      kind: 'participant_context_updated',
+      targetParticipantId: participant.id,
+    }));
+  });
+
+  it('pauses simulated sources together without pausing a real source or the workspace', async () => {
+    const { workspace } = await startServices(new CountingHeartbeatRunner());
+    const created = await workspace.createAssistedParticipant({
+      displayName: 'Avery',
+      privateContext: 'Approved real-source context for a clean pilot.',
+      contextApproved: true,
+    });
+    const realAgent = created.agents.find(
+      (agent) => agent.participant.displayName === 'Avery',
+    )!;
+
+    const paused = await workspace.pauseSimulatedParticipants();
+    const sourceAgents = paused.agents.filter((agent) => !agent.isUserAgent);
+
+    expect(paused.backgroundChecks.enabled).toBe(true);
+    expect(sourceAgents.filter(
+      (agent) => agent.participant.kind === 'synthetic',
+    ).every((agent) => agent.participant.status === 'disabled')).toBe(true);
+    expect(sourceAgents.find((agent) => agent.id === realAgent.id))
+      .toMatchObject({ participant: { status: 'active' } });
+    expect(paused.backgroundChecks.tasks.filter(
+      (task) => ['sample-music-agent', 'sample-product-agent']
+        .includes(task.agentId),
+    ).every((task) => !task.enabled)).toBe(true);
+    expect(paused.backgroundChecks.tasks.find(
+      (task) => task.agentId === realAgent.id,
+    )?.enabled).toBe(true);
+  });
+
   it('does not recover an unrelated task that is still running', async () => {
     const runner = new InterruptThenCompleteHeartbeatRunner(repository);
     const { workspace } = await startServices(runner);
