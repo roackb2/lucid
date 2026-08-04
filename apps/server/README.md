@@ -37,18 +37,20 @@ bounded execution, and recovery predictable.
 Startup order is:
 
 1. migrate and initialize SQLite;
-2. reconcile Heddle heartbeat tasks with the current workspace generation;
-3. start the Heddle scheduler loop;
-4. accept HTTP requests.
+2. recover interrupted Heddle executions through its claim-fenced task API;
+3. reconcile heartbeat tasks with the current workspace generation;
+4. start the bounded Heddle scheduler through its lifecycle handle;
+5. accept HTTP requests.
 
 Shutdown first stops new HTTP work, then aborts and settles heartbeat
 execution, and closes SQLite last. Persistence code must remain available
 until every claimed wake has either completed or been returned to unread state.
 
 `src/lucid` owns participants, mailbox events, findings, feedback, wake claims,
-and the storage-independent `DiscoveryRepository` port. Heddle is integrated
-through `HeddleRepresentativeAgentRunner` and
-`RepresentativeAgentHeartbeatService`.
+and the storage-independent `DiscoveryRepository` port. Heddle owns provider
+credentials, unattended approval policy, execution cancellation, checkpoints,
+run requests, and task settlement. It is integrated through
+`HeddleRepresentativeAgentRunner` and `RepresentativeAgentHeartbeatService`.
 
 Read [`src/database/README.md`](src/database/README.md) before changing storage
 infrastructure. Read [`src/lucid/README.md`](src/lucid/README.md) before

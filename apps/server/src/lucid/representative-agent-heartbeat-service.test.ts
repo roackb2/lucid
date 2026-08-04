@@ -7,9 +7,11 @@ import dayjs from 'dayjs';
 import {
   AgentLoopCheckpointService,
   FileHeartbeatTaskService,
+  HeartbeatRunnerAgent,
   type AgentHeartbeatResult,
   type AgentLoopCheckpoint,
   type AgentLoopState,
+  type RunAgentHeartbeatOptions,
 } from '@roackb2/heddle/advanced';
 import {
   afterEach,
@@ -56,10 +58,14 @@ describe('representative-agent heartbeat service', () => {
     await repository.initialize();
     config = createTestConfig(stateRoot);
     heartbeats = [];
+    vi.spyOn(HeartbeatRunnerAgent, 'run').mockImplementation(
+      async (options) => createHeartbeatResult(options),
+    );
   });
 
   afterEach(async () => {
     await Promise.all(heartbeats.map((heartbeat) => heartbeat.stop()));
+    vi.restoreAllMocks();
     database.close();
     rmSync(stateRoot, { force: true, recursive: true });
   });
@@ -130,7 +136,9 @@ describe('representative-agent heartbeat service', () => {
     });
 
     await Promise.all((await taskStore.listTasks()).map(
-      (task) => taskStore.triggerTaskRun(task.id),
+      (task) => taskStore.requestTaskRun(task.id, {
+        reason: 'test-empty-mailbox',
+      }),
     ));
     await vi.waitFor(async () => {
       const snapshot = await heartbeat.snapshot();
@@ -143,6 +151,17 @@ describe('representative-agent heartbeat service', () => {
     expect((await repository.readSnapshot()).events.some(
       (event) => event.kind === 'agent_wake_started',
     )).toBe(false);
+    expect((await taskStore.listTasks()).every(
+      (task) => task.state?.result === undefined,
+    )).toBe(true);
+    const runRecords = await Promise.all(
+      (await taskStore.listTasks()).map((task) => (
+        taskStore.listRunRecords({ taskId: task.id, limit: 1 })
+      )),
+    );
+    expect(runRecords.every(
+      ([record]) => record?.record.outcome?.kind === 'skipped',
+    )).toBe(true);
   });
 
   it('pauses a running wake without consuming its unread cursor and resumes it', async () => {
@@ -420,7 +439,7 @@ class RoutingHeartbeatRunner implements RepresentativeAgentHeartbeatRunner {
       }
     }
 
-    return createHeartbeatResult(input, 'Representative action completed.');
+    return await runTestAgent(input, 'Representative action completed.');
   }
 }
 
@@ -431,7 +450,7 @@ class CountingHeartbeatRunner implements RepresentativeAgentHeartbeatRunner {
     input: RunRepresentativeAgentHeartbeatInput,
   ): Promise<AgentHeartbeatResult> {
     this.calls += 1;
-    return createHeartbeatResult(input, 'Counted one agent wake.');
+    return await runTestAgent(input, 'Counted one agent wake.');
   }
 }
 
@@ -448,8 +467,8 @@ implements RepresentativeAgentHeartbeatRunner {
     this.calls += 1;
     this.wakeIds.push(input.wake.wakeId);
     if (this.calls === 1) {
-      await waitForAbort(input.signal);
-      return createHeartbeatResult(input, 'Interrupted test wake.');
+      await waitForAbort(input.execution.signal);
+      return await runTestAgent(input, 'Interrupted test wake.');
     }
 
     const tools = new Map(
@@ -461,7 +480,7 @@ implements RepresentativeAgentHeartbeatRunner {
         reason: 'The retry consumed the preserved unread input.',
       }),
     );
-    return createHeartbeatResult(input, 'Retry completed.');
+    return await runTestAgent(input, 'Retry completed.');
   }
 }
 
@@ -492,7 +511,7 @@ implements RepresentativeAgentHeartbeatRunner {
         reason: 'Recovered the interrupted wake.',
       }),
     );
-    return createHeartbeatResult(input, 'Recovered wake completed.');
+    return await runTestAgent(input, 'Recovered wake completed.');
   }
 }
 
@@ -521,29 +540,42 @@ async function requireSuccessfulToolResult(
   }
 }
 
-function createHeartbeatResult(
+async function runTestAgent(
   input: RunRepresentativeAgentHeartbeatInput,
   summary: string,
+): Promise<AgentHeartbeatResult> {
+  return await input.execution.runAgent({
+    task: `Test ${input.wake.agent.name}`,
+    systemContext: summary,
+    includeDefaultTools: false,
+    includePlanTool: false,
+    onEvent: input.onEvent,
+  });
+}
+
+function createHeartbeatResult(
+  options: RunAgentHeartbeatOptions,
 ): AgentHeartbeatResult {
-  const previousState = readCheckpointState(input.checkpoint);
+  const previousState = readCheckpointState(options.checkpoint);
   const timestamp = dayjs().toISOString();
   const state: AgentLoopState = {
     status: 'finished',
     runId: `run_${randomUUID()}`,
-    goal: `Test ${input.wake.agent.name}`,
-    model: previousState?.model ?? 'gpt-5.4-mini',
+    goal: options.task,
+    model: previousState?.model ?? options.model ?? 'gpt-5.4-mini',
     provider: previousState?.provider ?? 'openai',
-    workspaceRoot: previousState?.workspaceRoot ?? '/tmp/lucid-test',
+    workspaceRoot:
+      previousState?.workspaceRoot ?? options.workspaceRoot ?? '/tmp/lucid-test',
     startedAt: timestamp,
     finishedAt: timestamp,
     outcome: 'done',
-    summary,
+    summary: options.systemContext ?? 'Deterministic heartbeat test completed.',
     transcript: previousState?.transcript ?? [],
     trace: [],
   };
   return {
     decision: 'pause',
-    summary,
+    summary: state.summary,
     checkpoint: AgentLoopCheckpointService.createCheckpoint(state),
     state,
   };
@@ -571,6 +603,7 @@ function createTestConfig(stateRoot: string): LucidConfig {
     maxSteps: 4,
     heartbeatIntervalMs: 60_000,
     heartbeatPollMs: 5,
+    heartbeatMaxConcurrency: 1,
     preferApiKey: false,
   };
 }

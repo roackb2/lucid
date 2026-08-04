@@ -2,21 +2,20 @@
  * Adapts Lucid's participant and mailbox lifecycle to Heddle heartbeat tasks.
  *
  * The repository remains authoritative for who may run and which events a wake
- * may consume. Heddle owns durable scheduling and execution. This module keeps
- * the two aligned and prevents shutdown, pause, or retry from losing mailbox
- * work; it does not decide whether message content is useful.
+ * may consume. Heddle owns durable scheduling, credentials, cancellation,
+ * checkpoints, and execution settlement. This module coordinates the two
+ * systems without deciding whether message content is useful.
  */
 import { randomUUID } from 'node:crypto';
 import dayjs from 'dayjs';
 import {
-  AgentLoopCheckpointService,
   FileHeartbeatTaskService,
   HeartbeatSchedulerService,
-  LlmAdapterService,
   type AgentHeartbeatResult,
-  type AgentLoopCheckpoint,
-  type AgentLoopState,
+  type HeartbeatExecutionContext,
+  type HeartbeatHandlerOutcome,
   type HeartbeatSchedulerEvent,
+  type HeartbeatSchedulerHandle,
   type HeartbeatTask,
   type HeartbeatTaskView,
 } from '@roackb2/heddle/advanced';
@@ -33,25 +32,17 @@ import type {
 
 const TASK_ID_PREFIX = 'lucid-representative-';
 
-type ActiveAgentWake = {
-  controller: AbortController;
-  settled: Promise<void>;
-  settle(): void;
-};
-
 /**
  * Hosts Lucid's representative agents as durable Heddle heartbeat tasks.
  *
- * Heddle owns task timing, checkpoints, run records, and scheduler selection.
- * This service maps tasks to Lucid agents, claims mailbox work, settles durable
- * cursors, accelerates recipients with unread mail, and coordinates shutdown.
+ * Heddle owns task timing, checkpoints, run records, scheduler selection, and
+ * provider execution. This service maps tasks to Lucid agents, claims mailbox
+ * work, settles durable cursors, and accelerates recipients with unread mail.
  */
 export class RepresentativeAgentHeartbeatService {
   private readonly tasks: FileHeartbeatTaskService;
-  private readonly activeWakes = new Map<string, ActiveAgentWake>();
-  private readonly pendingTriggerChecks = new Map<string, Promise<void>>();
-  private schedulerController?: AbortController;
-  private schedulerCompletion?: Promise<void>;
+  private scheduler?: HeartbeatSchedulerHandle;
+  private schedulerStop?: Promise<void>;
   private acceptingRuns = true;
   private paused = false;
 
@@ -69,42 +60,51 @@ export class RepresentativeAgentHeartbeatService {
   async initialize(): Promise<void> {
     const workspace = await this.repository.readWorkspace();
     this.paused = !workspace.backgroundChecksEnabled;
-    // A process exit can leave file-backed Heddle tasks marked running. Startup
-    // is the only reconciliation pass allowed to recover those interrupted tasks.
-    await this.ensureAgentTasks({ recoverInterrupted: true });
+
+    // Recover through Heddle's claim-fenced API before reconciling task
+    // configuration. The scheduler repeats this idempotent recovery at start.
+    await this.tasks.recoverInterruptedTasks({
+      ownerId: `lucid-startup:${randomUUID()}`,
+      recoveredAt: dayjs().toDate(),
+      reason: 'host-restart',
+    });
+    await this.ensureAgentTasks();
   }
 
   start(): void {
-    if (this.schedulerCompletion) {
+    if (
+      this.scheduler
+      || this.schedulerStop
+      || !this.acceptingRuns
+      || this.paused
+    ) {
       return;
     }
 
-    this.acceptingRuns = true;
-    this.schedulerController = new AbortController();
-    this.schedulerCompletion = HeartbeatSchedulerService.runLoop({
-      store: this.tasks,
-      runner: (task, checkpoint) => this.runAgentTask(task, checkpoint),
+    let handle: HeartbeatSchedulerHandle;
+    handle = HeartbeatSchedulerService.start({
+      workspaceRoot: this.config.repoRoot,
+      stateRoot: this.config.heddleStateRoot,
+      handler: (context) => this.runAgentTask(context),
+      model: this.config.model,
+      maxSteps: this.config.maxSteps,
+      preferApiKey: this.config.preferApiKey,
       pollIntervalMs: this.config.heartbeatPollMs,
-      signal: this.schedulerController.signal,
+      maxConcurrentTasks: this.config.heartbeatMaxConcurrency,
       onEvent: (event) => this.logSchedulerEvent(event),
-    }).catch((error: unknown) => {
-      this.logger.error({ error }, 'lucid.heartbeat_scheduler.failed');
+      onError: (error) => {
+        if (this.scheduler === handle) {
+          this.scheduler = undefined;
+        }
+        this.logger.error({ error }, 'lucid.heartbeat_scheduler.failed');
+      },
     });
+    this.scheduler = handle;
   }
 
   async stop(): Promise<void> {
-    // Reject and abort work first, then wait for every runner and deferred
-    // trigger to settle before the server closes the repository underneath them.
     this.acceptingRuns = false;
-    this.schedulerController?.abort();
-    this.abortActiveWakes();
-    await Promise.all([
-      this.schedulerCompletion,
-      this.waitForActiveWakes(),
-      this.waitForPendingTriggerChecks(),
-    ]);
-    this.schedulerCompletion = undefined;
-    this.schedulerController = undefined;
+    await this.stopScheduler(true);
   }
 
   async snapshot(): Promise<BackgroundChecksView> {
@@ -157,13 +157,13 @@ export class RepresentativeAgentHeartbeatService {
     if (!task.enabled || task.state?.status === 'blocked') {
       return;
     }
-    if (task.state?.status !== 'running') {
-      await this.tasks.triggerTaskRun(task.id);
-      return;
-    }
-    // Heddle cannot trigger a task already running. Coalesce repeated requests
-    // into one follow-up check after the current task has persisted its result.
-    this.scheduleTriggerAfterCurrentRun(agentId);
+
+    // Heddle persists level-triggered intent. Requests made while the task is
+    // running coalesce into one follow-up generation without host polling.
+    await this.tasks.requestTaskRun(task.id, {
+      reason: `lucid-mailbox:${agentId}`,
+    });
+    this.start();
   }
 
   async runNow(): Promise<BackgroundChecksView> {
@@ -176,8 +176,8 @@ export class RepresentativeAgentHeartbeatService {
 
   async setEnabled(enabled: boolean): Promise<BackgroundChecksView> {
     if (!enabled) {
-      // Settle in-flight claims before persisting the global pause so no wake
-      // can complete across the user's pause boundary.
+      // Heddle cancellation settles every claimed task before Lucid closes the
+      // global mailbox boundary or changes derived task configuration.
       await this.pauseRunningTasks();
     }
     await this.repository.setBackgroundChecksEnabled(enabled);
@@ -185,6 +185,7 @@ export class RepresentativeAgentHeartbeatService {
     await this.ensureAgentTasks();
     if (enabled) {
       await this.resumeBlockedActiveTasks();
+      this.start();
       await this.triggerAgentsWithUnreadEvents();
     }
     return await this.snapshot();
@@ -193,13 +194,14 @@ export class RepresentativeAgentHeartbeatService {
   async resetWorkspace(): Promise<void> {
     const wasEnabled = (await this.repository.readWorkspace())
       .backgroundChecksEnabled;
-    // Reset crosses file-backed Heddle state and SQLite. Quiesce first, remove
-    // old-generation tasks, replace product state, then recreate desired tasks.
+    // Reset crosses Heddle files and SQLite. Quiesce first, remove the old task
+    // generation, replace product state, then materialize the new generation.
     await this.pauseRunningTasks();
     await this.deleteManagedTasks();
     await this.repository.reset({ backgroundChecksEnabled: wasEnabled });
     this.paused = !wasEnabled;
     await this.ensureAgentTasks();
+    this.start();
   }
 
   async reconcileAgentTasks(): Promise<void> {
@@ -222,29 +224,36 @@ export class RepresentativeAgentHeartbeatService {
     } else if (!task.enabled) {
       await this.tasks.setTaskEnabled(task.id, true);
     }
+    this.start();
   }
 
   async disableAgentTask(agentId: string): Promise<void> {
-    // Cancellation is cooperative: stop the domain runner, await any deferred
-    // retrigger, then wait for Heddle to finish its outer task-state write.
-    const activeWake = this.activeWakes.get(agentId);
-    activeWake?.controller.abort();
-    await activeWake?.settled;
-    await this.pendingTriggerChecks.get(agentId);
+    const shouldRestartScheduler = Boolean(this.scheduler);
 
-    const taskId = taskIdForAgent(agentId);
-    await this.waitForTaskToSettle(taskId);
+    // Heddle 5.7 can cancel only at scheduler scope. Quiescing all active tasks
+    // avoids an admission race and guarantees the target no longer holds
+    // participant context before its task is disabled. A targeted framework
+    // cancellation API can replace this coarse boundary later.
+    await this.stopScheduler(true);
+    await this.tasks.recoverInterruptedTasks({
+      ownerId: `lucid-participant-change:${randomUUID()}`,
+      recoveredAt: dayjs().toDate(),
+      reason: 'operator',
+    });
+
     const task = (await this.listManagedTasks()).find(
-      (candidate) => candidate.id === taskId,
+      (candidate) => candidate.id === taskIdForAgent(agentId),
     );
     if (task?.enabled) {
       await this.tasks.setTaskEnabled(task.id, false);
     }
+
+    if (shouldRestartScheduler) {
+      this.start();
+    }
   }
 
-  private async ensureAgentTasks(
-    options: { recoverInterrupted?: boolean } = {},
-  ): Promise<void> {
+  private async ensureAgentTasks(): Promise<void> {
     // Domain participant state is authoritative; Heddle tasks are a derived,
     // durable execution projection that this method reconciles toward it.
     const [workspace, participants, agents, existingTasks] = await Promise.all([
@@ -261,8 +270,8 @@ export class RepresentativeAgentHeartbeatService {
     );
     const agentIds = new Set(managedAgents.map((agent) => agent.id));
 
-    // Remove orphaned tasks and tasks from an earlier reset generation before
-    // creating replacements, preventing stale agents from running old mailboxes.
+    // Startup recovery and participant lifecycle commands settle executions
+    // before an obsolete task can reach this deletion boundary.
     for (const task of existingTasks) {
       const agentId = agentIdFromTask(task.id);
       if (
@@ -270,15 +279,13 @@ export class RepresentativeAgentHeartbeatService {
         || !agentIds.has(agentId)
         || task.workspaceId !== workspace.versionId
       ) {
-        await this.deleteTaskIncludingInterrupted(task);
+        await this.tasks.deleteTask(task.id);
       }
     }
 
     const currentTasks = new Map(
       (await this.listManagedTasks()).map((task) => [task.id, task]),
     );
-    // Create missing tasks and refresh runtime/schedule configuration without
-    // changing the blocked state Heddle uses for operator-visible failures.
     for (const agent of managedAgents) {
       const participant = participantById.get(agent.participantId);
       if (!participant) {
@@ -306,13 +313,12 @@ export class RepresentativeAgentHeartbeatService {
         continue;
       }
 
-      if (existing.state?.status === 'running' && !options.recoverInterrupted) {
-        // A live run owns its persisted task record until Heddle settles it.
+      // A live execution owns the persisted task until Heddle settles it.
+      if (existing.state?.status === 'running') {
         continue;
       }
 
-      const interrupted = existing.state?.status === 'running';
-      const recoveredTask: HeartbeatTask = {
+      const updatedTask: HeartbeatTask = {
         ...existing,
         workspaceId: workspace.versionId,
         name: `${agent.name} background checks`,
@@ -321,9 +327,6 @@ export class RepresentativeAgentHeartbeatService {
         schedule: {
           ...existing.schedule,
           intervalMs: this.config.heartbeatIntervalMs,
-          nextRunAt: interrupted
-            ? dayjs().subtract(1, 'second').toISOString()
-            : existing.schedule.nextRunAt,
         },
         runtime: {
           ...existing.runtime,
@@ -332,73 +335,50 @@ export class RepresentativeAgentHeartbeatService {
           workspaceRoot: this.config.repoRoot,
           stateDir: this.config.heddleStateRoot,
         },
-        state: interrupted
-          ? {
-              ...existing.state,
-              status: 'waiting',
-              progress:
-                'Recovered an interrupted heartbeat after host restart.',
-              error: undefined,
-              updatedAt: dayjs().toISOString(),
-            }
-          : existing.state,
       };
-      await this.tasks.saveTask(recoveredTask);
+      await this.tasks.saveTask(updatedTask);
       if (
-        recoveredTask.enabled !== desiredEnabled
-        && !(desiredEnabled && recoveredTask.state?.status === 'blocked')
+        updatedTask.enabled !== desiredEnabled
+        && !(desiredEnabled && updatedTask.state?.status === 'blocked')
       ) {
-        await this.tasks.setTaskEnabled(recoveredTask.id, desiredEnabled);
+        await this.tasks.setTaskEnabled(updatedTask.id, desiredEnabled);
       }
     }
   }
 
   private async runAgentTask(
-    task: HeartbeatTask,
-    checkpoint: AgentLoopState | AgentLoopCheckpoint | undefined,
-  ): Promise<AgentHeartbeatResult> {
-    const agentId = agentIdFromTask(task.id);
+    execution: HeartbeatExecutionContext,
+  ): Promise<AgentHeartbeatResult | HeartbeatHandlerOutcome> {
+    const agentId = agentIdFromTask(execution.task.id);
     if (!agentId) {
-      throw new Error(`Unknown Lucid heartbeat task: ${task.id}`);
+      throw new Error(`Unknown Lucid heartbeat task: ${execution.task.id}`);
     }
     if (!this.acceptingRuns || this.paused) {
-      return createIdleHeartbeatResult(
-        task,
-        checkpoint,
-        this.config,
-        'Background checks are paused.',
-      );
+      return execution.skip({ summary: 'Background checks are paused.' });
     }
 
-    const activeWake = createActiveAgentWake();
-    this.activeWakes.set(agentId, activeWake);
     const proposedWakeId = `wake_${randomUUID()}`;
     let claimedWake = false;
 
     try {
       // The repository atomically fixes the mailbox horizon and persists the
-      // claim. Retries reuse that same wake identity and cannot observe newer mail.
+      // claim. Retries reuse that identity and cannot observe newer mail.
       const wake = await this.repository.beginAgentWake(
         agentId,
         proposedWakeId,
       );
       if (!wake) {
-        // Scheduled heartbeats with no mail are healthy idle runs and avoid an
-        // unnecessary model call while still producing a Heddle run record.
-        return createIdleHeartbeatResult(
-          task,
-          checkpoint,
-          this.config,
-          'No unread messages were available for this agent.',
-        );
+        // context.skip() records a lightweight non-agent outcome and avoids
+        // manufacturing an LLM checkpoint for a healthy empty mailbox.
+        return execution.skip({
+          summary: 'No unread messages were available for this agent.',
+        });
       }
       claimedWake = true;
 
       const result = await this.runner.run({
         wake,
-        checkpoint,
-        intervalMs: task.schedule.intervalMs,
-        signal: activeWake.controller.signal,
+        execution,
         onEvent: (event) => {
           this.logger.debug({
             agentId,
@@ -409,33 +389,26 @@ export class RepresentativeAgentHeartbeatService {
       });
 
       if (
-        activeWake.controller.signal.aborted
+        execution.signal.aborted
         || !this.acceptingRuns
         || this.paused
       ) {
-        // Interruption releases execution ownership but deliberately preserves
-        // the claimed horizon and unread cursor for the next retry.
+        // Heddle records scheduler cancellation; Lucid independently preserves
+        // the claimed horizon and unread cursor for the next domain retry.
         await this.repository.interruptAgentWake(agentId);
-        return createIdleHeartbeatResult(
-          task,
-          checkpoint,
-          this.config,
-          'Agent wake was interrupted before it consumed unread messages.',
-        );
+        return result;
       }
       if (
         result.state.outcome !== 'done'
         || result.decision === 'escalate'
       ) {
-        // Failed or escalated runs remain unread; only a completed domain wake
-        // may advance the representative's mailbox cursor.
         await this.repository.failAgentWake(agentId);
         claimedWake = false;
         return result;
       }
 
-      // Record completion idempotently before advancing the cursor. A retry can
-      // safely find the same event if the process stops between these writes.
+      // Completion is idempotent and precedes cursor advancement. A crash
+      // between the writes can replay the same wake without duplicate events.
       await this.repository.appendEvent({
         wakeNumber: wake.wakeNumber,
         kind: 'agent_wake_completed',
@@ -457,34 +430,24 @@ export class RepresentativeAgentHeartbeatService {
         agentId,
         wake.horizonSequence,
       );
-      // Newly emitted direct/shared messages accelerate recipients through the
-      // same durable scheduler path instead of invoking agents recursively.
+      // Newly emitted messages request durable follow-up generations rather
+      // than recursively invoking recipient agents.
       await this.triggerAgentsWithUnreadEvents();
       return result;
     } catch (error) {
       if (
         claimedWake
         && (
-          activeWake.controller.signal.aborted
+          execution.signal.aborted
           || !this.acceptingRuns
           || this.paused
         )
       ) {
         await this.repository.interruptAgentWake(agentId);
-        return createIdleHeartbeatResult(
-          task,
-          checkpoint,
-          this.config,
-          'Agent wake was interrupted and will retry its unread messages later.',
-        );
-      }
-      if (claimedWake) {
+      } else if (claimedWake) {
         await this.repository.failAgentWake(agentId);
       }
       throw error;
-    } finally {
-      this.activeWakes.delete(agentId);
-      activeWake.settle();
     }
   }
 
@@ -494,53 +457,22 @@ export class RepresentativeAgentHeartbeatService {
       this.listManagedTasks(),
     ]);
     const taskById = new Map(tasks.map((task) => [task.id, task]));
-
-    for (const agent of agents) {
+    const agentsWithUnreadMail = (await Promise.all(agents.map(async (agent) => {
       const task = taskById.get(taskIdForAgent(agent.id));
       if (!task?.enabled || task.state?.status === 'blocked') {
-        continue;
+        return undefined;
       }
       const unreadEvents = await this.repository.listEventsVisibleToAgent(
         agent.id,
         agent.lastSeenSequence,
         1,
       );
-      if (unreadEvents.length) {
-        await this.triggerAgent(agent.id);
-      }
-    }
-  }
+      return unreadEvents.length ? agent : undefined;
+    }))).filter((agent) => agent !== undefined);
 
-  private scheduleTriggerAfterCurrentRun(agentId: string): void {
-    if (this.pendingTriggerChecks.has(agentId)) {
-      return;
-    }
-    const pending = this.triggerAfterCurrentRun(agentId)
-      .catch((error: unknown) => {
-        this.logger.error(
-          { agentId, error },
-          'lucid.heartbeat_trigger.failed',
-        );
-      })
-      .finally(() => {
-        if (this.pendingTriggerChecks.get(agentId) === pending) {
-          this.pendingTriggerChecks.delete(agentId);
-        }
-      });
-    this.pendingTriggerChecks.set(agentId, pending);
-  }
-
-  private async triggerAfterCurrentRun(agentId: string): Promise<void> {
-    while (this.acceptingRuns && !this.paused) {
-      const task = await this.tasks.requireTask(taskIdForAgent(agentId));
-      if (task.state?.status !== 'running') {
-        if (task.enabled && task.state?.status !== 'blocked') {
-          await this.tasks.triggerTaskRun(task.id);
-        }
-        return;
-      }
-      await delay(25);
-    }
+    await Promise.all(
+      agentsWithUnreadMail.map((agent) => this.triggerAgent(agent.id)),
+    );
   }
 
   private async listManagedTasks(): Promise<HeartbeatTask[]> {
@@ -565,73 +497,39 @@ export class RepresentativeAgentHeartbeatService {
       .map((task) => this.tasks.resumeTask(task.id)));
   }
 
-  private async waitForTaskToSettle(taskId: string): Promise<void> {
-    const deadline = dayjs().add(30, 'second');
-    while (dayjs().isBefore(deadline)) {
-      const task = (await this.listManagedTasks()).find(
-        (candidate) => candidate.id === taskId,
-      );
-      if (!task || task.state?.status !== 'running') {
-        return;
-      }
-      await delay(25);
-    }
-    throw new Error(`Timed out while waiting for heartbeat task: ${taskId}`);
-  }
-
   private async deleteManagedTasks(): Promise<void> {
-    for (const task of await this.listManagedTasks()) {
-      await this.deleteTaskIncludingInterrupted(task);
-    }
-  }
-
-  private async deleteTaskIncludingInterrupted(
-    task: HeartbeatTask,
-  ): Promise<void> {
-    if (task.state?.status === 'running') {
-      await this.tasks.saveTask({
-        ...task,
-        state: {
-          ...task.state,
-          status: 'waiting',
-          progress: 'Recovered interrupted task before deleting it.',
-          updatedAt: dayjs().toISOString(),
-        },
-      });
-    }
-    await this.tasks.deleteTask(task.id);
-  }
-
-  private abortActiveWakes(): void {
-    this.activeWakes.forEach(({ controller }) => controller.abort());
-  }
-
-  private async waitForActiveWakes(): Promise<void> {
     await Promise.all(
-      [...this.activeWakes.values()].map(({ settled }) => settled),
+      (await this.listManagedTasks()).map((task) => (
+        this.tasks.deleteTask(task.id)
+      )),
     );
-  }
-
-  private async waitForPendingTriggerChecks(): Promise<void> {
-    await Promise.all([...this.pendingTriggerChecks.values()]);
   }
 
   private async pauseRunningTasks(): Promise<void> {
     this.paused = true;
-    this.abortActiveWakes();
-    await this.waitForActiveWakes();
+    await this.stopScheduler(true);
+  }
 
-    const deadline = dayjs().add(30, 'second');
-    while (dayjs().isBefore(deadline)) {
-      const tasks = await this.listManagedTasks();
-      if (tasks.every((task) => task.state?.status !== 'running')) {
-        return;
-      }
-      await delay(25);
+  private async stopScheduler(cancelRunning: boolean): Promise<void> {
+    if (this.schedulerStop) {
+      await this.schedulerStop;
+      return;
     }
-    throw new Error(
-      'Timed out while waiting for running background checks to stop.',
-    );
+    const scheduler = this.scheduler;
+    if (!scheduler) {
+      return;
+    }
+
+    this.scheduler = undefined;
+    const stopping = scheduler.stop({ cancelRunning });
+    this.schedulerStop = stopping;
+    try {
+      await stopping;
+    } finally {
+      if (this.schedulerStop === stopping) {
+        this.schedulerStop = undefined;
+      }
+    }
   }
 
   private logSchedulerEvent(event: HeartbeatSchedulerEvent): void {
@@ -678,59 +576,10 @@ function toRepresentativeAgentTaskView(
   };
 }
 
-function createActiveAgentWake(): ActiveAgentWake {
-  const controller = new AbortController();
-  let settle = () => {};
-  const settled = new Promise<void>((resolve) => {
-    settle = resolve;
-  });
-  return { controller, settled, settle };
-}
-
-function createIdleHeartbeatResult(
-  task: HeartbeatTask,
-  checkpoint: AgentLoopState | AgentLoopCheckpoint | undefined,
-  config: LucidConfig,
-  summary: string,
-): AgentHeartbeatResult {
-  const previousState = checkpoint
-    ? 'state' in checkpoint ? checkpoint.state : checkpoint
-    : undefined;
-  const timestamp = dayjs().toISOString();
-  const state: AgentLoopState = {
-    status: 'finished',
-    runId: AgentLoopCheckpointService.generateRunId(),
-    goal: task.task,
-    model: previousState?.model ?? config.model,
-    provider: previousState?.provider
-      ?? LlmAdapterService.resolveProvider({ model: config.model }),
-    workspaceRoot: previousState?.workspaceRoot ?? config.repoRoot,
-    startedAt: timestamp,
-    finishedAt: timestamp,
-    outcome: 'done',
-    summary,
-    transcript: previousState?.transcript ?? [],
-    trace: [],
-  };
-
-  return {
-    decision: 'pause',
-    summary,
-    checkpoint: AgentLoopCheckpointService.createCheckpoint(state),
-    state,
-  };
-}
-
 function earliest(values: string[]): string | undefined {
   return values.sort((left, right) => left.localeCompare(right))[0];
 }
 
 function latest(values: string[]): string | undefined {
   return values.sort((left, right) => right.localeCompare(left))[0];
-}
-
-async function delay(milliseconds: number): Promise<void> {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
 }

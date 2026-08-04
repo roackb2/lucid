@@ -10,7 +10,7 @@ concrete lifecycle.
 | --- | --- |
 | `discovery-workspace-service.ts` | Coordinates user actions across repository and heartbeat boundaries |
 | `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per agent, claims mailbox wakes, and owns scheduler lifecycle |
-| `heddle-representative-agent-runner.ts` | Executes one claimed wake with a Heddle checkpoint and Lucid tools |
+| `heddle-representative-agent-runner.ts` | Builds one claimed wake's prompt and tools, then delegates execution through Heddle's context |
 | `discovery-repository.ts` | Defines the async storage-independent domain port |
 | `agent-communication-tools.ts` | Validates bounded mailbox and finding operations |
 | `agent-prompts.ts` | Builds representative identity and readable wake prompts |
@@ -56,9 +56,11 @@ Lucid owns:
 Heddle owns:
 
 - durable task schedules, checkpoints, and run records;
-- due-task selection and the local scheduler loop;
-- model and tool execution;
-- heartbeat decisions, retry state, and provider authentication.
+- due-task selection, bounded concurrency, and the local scheduler lifecycle;
+- model and tool execution through `HeartbeatExecutionContext.runAgent()`;
+- credentials, unattended approvals, cancellation, checkpoint continuation,
+  heartbeat decisions, and retry state;
+- durable, coalesced prompt-run requests and non-agent skipped outcomes.
 
 `DiscoveryRepository` never reads Heddle files.
 `HeddleRepresentativeAgentRunner` never decides visibility or cursor
@@ -69,8 +71,9 @@ that coordinates both without merging their persistence models.
 
 1. A user action appends an ordinary-language event. Saving an interest and
    feedback targets the user's representative.
-2. The recipient's Heddle task is moved to due state. Every task also retains
-   its normal periodic schedule.
+2. Lucid requests a durable task run. Heddle coalesces repeated requests made
+   while the recipient is busy into one follow-up generation. Every task also
+   retains its normal periodic schedule.
 3. Heddle selects the task. Lucid atomically claims visible events after the
    agent's cursor and freezes the highest visible sequence as this wake's
    horizon.
@@ -85,8 +88,9 @@ that coordinates both without merging their persistence models.
 7. Agents with newly visible mail are accelerated. This produces interaction
    without a hard-coded user/source/user route.
 
-An empty scheduled task does not claim a wake or call the model. It saves a
-lightweight Heddle idle result and returns to its interval.
+An empty scheduled task does not claim a wake or call the model. Lucid returns
+`context.skip()`, so Heddle records a lightweight non-agent run without
+fabricating a model checkpoint.
 
 `Run now` appends a private `check_requested` event containing the current
 interest and accelerates unread agents. The user representative must treat the
@@ -143,14 +147,22 @@ certify truth or usefulness.
 
 Failed, interrupted, or escalated wakes keep their cursor and active wake
 fields. A retry reuses the same wake ID, number, event horizon, and action
-slots. Repository startup releases stale agent `running` status. Heartbeat
-startup changes stale Heddle tasks from `running` to `waiting` and makes them
-immediately due.
+slots. Repository startup releases stale agent `running` status. Heddle's
+claim-fenced recovery API changes stale tasks from `running` to `waiting` and
+makes them immediately due before Lucid reconciles current task configuration.
 
-Global pause, participant disable/retire, and reset first abort relevant active
-model work, then wait until Heddle has finished writing its outer task state.
-Only then are task files disabled or deleted. Shutdown aborts the scheduler and
-waits for the same ordering before SQLite closes.
+Global pause, reset, and shutdown use the awaitable Heddle scheduler handle to
+cancel active model work and wait for claim-fenced outer task settlement before
+changing SQLite or closing it. Heddle 5.7 has no targeted task-cancellation
+handle, so participant disable/retire currently quiesces the scheduler, disables
+the target after settlement, and restarts it. This can interrupt unrelated
+representatives, whose mailbox claims remain unread and retryable; replace that
+coarse boundary when Heddle exposes targeted cancellation and settlement.
+
+Independent representatives may execute concurrently, bounded by
+`LUCID_HEARTBEAT_MAX_CONCURRENCY` (default `3`). Each individual wake still
+limits tool concurrency to one because its action budget and causal writes are
+ordered.
 
 The file-backed Heddle scheduler is a single-host primitive without distributed
 leases. A hosted multi-replica version needs a durable queue or workflow
