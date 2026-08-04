@@ -35,16 +35,17 @@ flowchart LR
 ```
 
 Each representative owns one durable Heddle heartbeat task. A scheduled task
-with no unread mailbox input records a healthy idle run without calling the
-model. New mail accelerates the relevant recipient task. `Run now` appends a
-fresh private check request to the user's mailbox. The user's representative
-must turn that event into a new minimal request even when the saved interest
-text has not changed. It uses the same task network; it is not a separate
-execution path.
+with no unread mailbox input records a non-agent skipped outcome without
+calling the model or fabricating a checkpoint. New mail persists a run request;
+requests received while an agent is busy coalesce into one follow-up run. `Run
+now` appends a fresh private check request to the user's mailbox. The user's
+representative must turn that event into a new minimal request even when the
+saved interest text has not changed. It uses the same task network; it is not a
+separate execution path.
 
 The Participant network panel uses that same execution path. Adding a source
 creates a durable participant, representative, mailbox boundary, and Heddle
-task. Pausing one source does not pause the workspace; messages sent during the
+task. Pausing one source leaves the workspace enabled; messages sent during the
 pause are deliberately skipped. Resuming accepts only future mail. Retiring a
 source removes its task and private context while retaining non-sensitive
 historical attribution.
@@ -83,11 +84,11 @@ highly sensitive personal information into this experiment.
 | Lucid owns | Heddle owns |
 | --- | --- |
 | Participants and representative agents | One durable heartbeat task per agent |
-| Async discovery repository and storage adapters | Scheduler timing and due-task selection |
-| Mailbox visibility and causal-source validation | Agent checkpoints and task run history |
-| Atomic wake claims and unread cursors | Model and tool loop |
+| Async discovery repository and storage adapters | Scheduler timing, lifecycle, and bounded concurrency |
+| Mailbox visibility and causal-source validation | Agent checkpoints, durable run requests, and task run history |
+| Atomic wake claims and unread cursors | Model and tool loop through an execution context |
 | Finding and feedback delivery | Provider authentication |
-| Communication budgets and idempotency keys | Heartbeat decision and retry state |
+| Communication budgets and idempotency keys | Unattended approvals, cancellation, heartbeat decisions, and retry state |
 
 Lucid exposes five domain tools to representative agents:
 
@@ -109,7 +110,7 @@ inside a representative wake.
 | `SqliteDiscoveryRepository` | SQLite/Drizzle implementation of that contract |
 | `DiscoveryWorkspaceService` | Coordinates user workspace operations across storage and scheduling |
 | `RepresentativeAgentHeartbeatService` | Maps agents to Heddle tasks and settles mailbox wakes |
-| `HeddleRepresentativeAgentRunner` | Runs one claimed representative wake through Heddle |
+| `HeddleRepresentativeAgentRunner` | Builds one claimed wake's prompt/tools and delegates it through Heddle's execution context |
 | `AgentCommunicationToolService` | Validates and executes scoped communication operations |
 | `FindingView` | User-facing finding plus causal messages and feedback |
 
@@ -161,10 +162,11 @@ local/discovery-home/
 ```
 
 If the process stops during a wake, Lucid releases the stale agent status
-without advancing its cursor. At startup it also returns stale Heddle task
-state from `running` to `waiting`, then retries the same fixed event horizon
-and idempotency slots. Graceful shutdown aborts active wakes, waits for Heddle
-to finish its outer task-state write, and closes SQLite last.
+without advancing its cursor. At startup Heddle's claim-fenced recovery returns
+stale task state from `running` to `waiting`, then Lucid retries the same fixed
+event horizon and idempotency slots. Graceful shutdown uses Heddle's scheduler
+handle to abort active wakes, wait for outer task settlement, and close SQLite
+last.
 
 Resetting clears Lucid product data and replaces the current representative
 tasks, checkpoints, and task run history. The previous enabled or paused mode

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import heddlePackage from '@roackb2/heddle/package.json' with { type: 'json' };
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import { LUCID_MIGRATIONS_ROOT, resolveLucidConfig } from './config.js';
 import { LucidSqliteDatabase } from './database/sqlite-database.js';
@@ -13,7 +14,6 @@ import {
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
 
-const HEDDLE_VERSION = '5.6.1';
 const config = resolveLucidConfig();
 const logger = createLucidLogger(config.logLevel);
 const database = new LucidSqliteDatabase(config.databasePath);
@@ -36,7 +36,7 @@ const discoveryWorkspace = new DiscoveryWorkspaceService(
   heartbeats,
   {
     model: config.model,
-    heddleVersion: HEDDLE_VERSION,
+    heddleVersion: heddlePackage.version,
   },
 );
 

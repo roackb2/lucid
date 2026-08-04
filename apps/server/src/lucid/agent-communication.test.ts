@@ -15,7 +15,6 @@ import {
 } from './default-participants.js';
 import {
   buildAgentWakePrompt,
-  buildHeddleToolPolicyInstructions,
   buildRepresentativeAgentInstructions,
 } from './agent-prompts.js';
 
@@ -38,10 +37,9 @@ describe('representative-agent communication', () => {
     database.close();
   });
 
-  it('declares host-owned effects and the exact Heddle write root', async () => {
+  it('declares host-owned effects and domain write scope', async () => {
     const tools = await createUserTools(repository, 'wake_policy', 1);
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
-    const workspaceRoot = '/tmp/lucid-tool-policy-test';
 
     expect(
       toolsByName.get('read_available_messages')?.hostPolicy,
@@ -59,10 +57,11 @@ describe('representative-agent communication', () => {
     });
     expect(toolsByName.get('post_shared_message')?.hostPolicy).toMatchObject({
       operations: ['write'],
+      writeScope: {
+        kind: 'domain',
+        resources: ['lucid:discovery-events'],
+      },
     });
-    expect(buildHeddleToolPolicyInstructions(workspaceRoot)).toContain(
-      `targetRoots as ["${workspaceRoot}"]`,
-    );
   });
 
   it('interpolates participant context and unread events into readable prompts', async () => {

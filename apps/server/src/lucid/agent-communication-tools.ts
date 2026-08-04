@@ -61,6 +61,10 @@ const READ_DISCOVERY_STATE_POLICY = {
 const WRITE_DISCOVERY_STATE_POLICY = {
   ...READ_DISCOVERY_STATE_POLICY,
   operations: ['write'],
+  writeScope: {
+    kind: 'domain',
+    resources: ['lucid:discovery-events'],
+  },
 } satisfies ToolPolicyHostContext;
 
 /**

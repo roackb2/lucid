@@ -28,6 +28,12 @@ const environmentSchema = z.object({
     .int()
     .min(250)
     .default(1_000),
+  LUCID_HEARTBEAT_MAX_CONCURRENCY: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(16)
+    .default(3),
   LUCID_PREFER_API_KEY: z.enum(['true', 'false']).default('false'),
 });
 
@@ -46,6 +52,7 @@ export type LucidConfig = {
   maxSteps: number;
   heartbeatIntervalMs: number;
   heartbeatPollMs: number;
+  heartbeatMaxConcurrency: number;
   preferApiKey: boolean;
 };
 
@@ -67,6 +74,7 @@ export function resolveLucidConfig(): LucidConfig {
     maxSteps: environment.LUCID_MAX_STEPS,
     heartbeatIntervalMs: environment.LUCID_HEARTBEAT_INTERVAL_MS,
     heartbeatPollMs: environment.LUCID_HEARTBEAT_POLL_MS,
+    heartbeatMaxConcurrency: environment.LUCID_HEARTBEAT_MAX_CONCURRENCY,
     preferApiKey: environment.LUCID_PREFER_API_KEY === 'true',
   };
 }

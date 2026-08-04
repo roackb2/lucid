@@ -70,15 +70,6 @@ ${participant.privateContext}
 Use only the Lucid communication tools available in this wake. Finish with a short internal summary.`;
 }
 
-export function buildHeddleToolPolicyInstructions(workspaceRoot: string): string {
-  return `## Heddle tool policy metadata
-
-Heddle may add an optional policy object to tool calls. This is execution metadata, not Lucid product data.
-For post_shared_message, send_direct_message, report_finding, and finish_without_action, declare operations as ["write"] and targetRoots as ["${workspaceRoot}"].
-For read_available_messages, declare operations as ["read"]; targetRoots may be empty.
-Never abandon a valid Lucid communication action merely because this metadata is required.`;
-}
-
 export function buildAgentWakePrompt(
   agent: Agent,
   participant: Participant,
