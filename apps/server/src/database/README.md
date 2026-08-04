@@ -46,12 +46,16 @@ now?" and remains a private event rather than a participant field.
 The mailbox floor is distinct from the delivery cursor. The cursor records
 successfully processed mail; the floor enforces that a newly joined or resumed
 participant cannot request messages from before its current eligibility
-boundary. Retiring a participant scrubs `private_context` but keeps its row and
-representative identity for append-only historical attribution.
+boundary. Renewed participant consent replaces `private_context` and
+`context_consent_at` atomically with a text-free audit event. Retiring a
+participant scrubs `private_context` but keeps its row and representative
+identity for append-only historical attribution.
 
 SQLite does not encrypt `private_context` at rest. The field is private because
-repository projections and agent visibility exclude it from every non-owner,
-not because the database file is cryptographically protected.
+ordinary repository projections and agent visibility exclude it from every
+non-owner, not because the database file is cryptographically protected. A
+dedicated localhost operator query may retrieve one assisted participant's
+text for explicit review and is not part of the workspace snapshot.
 
 ## Relations
 

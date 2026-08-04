@@ -76,9 +76,16 @@ describe('representative-agent communication', () => {
     ).toContain(`You represent ${participant.displayName}.
 You represent the real local user.
 Their saved interest and feedback are private.`);
-    expect(
-      buildAgentWakePrompt(agent, participant, 1, [interest]),
-    ).toContain(`Unread events visible to this agent:
+    const wakePrompt = buildAgentWakePrompt(
+      agent,
+      participant,
+      1,
+      [interest],
+    );
+    expect(wakePrompt).toContain(
+      'Never declare that a finding is useful, validated, or a successful match',
+    );
+    expect(wakePrompt).toContain(`Unread events visible to this agent:
 - #${interest.sequence} [private user interest]`);
   });
 
@@ -201,7 +208,13 @@ Their saved interest and feedback are private.`);
 
     expect(first.ok).toBe(true);
     expect(duplicate.ok).toBe(false);
-    expect((await repository.readSnapshot()).findings).toHaveLength(1);
+    expect((await repository.readSnapshot()).findings).toEqual([
+      expect.objectContaining({
+        finding: expect.objectContaining({
+          title: 'New finding from your network',
+        }),
+      }),
+    ]);
   });
 
   it('keeps finding authority with the local user agent', async () => {

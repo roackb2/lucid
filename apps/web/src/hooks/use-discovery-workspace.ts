@@ -9,6 +9,7 @@ import {
   lucidClient,
   type CreateAssistedParticipantInput,
   type DiscoverySnapshot,
+  type UpdateAssistedParticipantContextInput,
 } from '@/lib/trpc';
 
 const SNAPSHOT_KEY = ['discovery', 'workspace'] as const;
@@ -95,6 +96,35 @@ export function useDiscoveryWorkspace() {
     onError: notifyError,
   });
 
+  const loadAssistedParticipantContext = useMutation({
+    mutationFn: (participantId: string) => (
+      lucidClient.discovery.assistedParticipantContext.query({ participantId })
+    ),
+    onError: notifyError,
+  });
+
+  const updateAssistedParticipantContext = useMutation({
+    mutationFn: (input: UpdateAssistedParticipantContextInput) => (
+      lucidClient.discovery.updateAssistedParticipantContext.mutate(input)
+    ),
+    onSuccess: (nextSnapshot) => {
+      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
+      toast.success('Approved context updated for future messages.');
+    },
+    onError: notifyError,
+  });
+
+  const pauseSimulatedParticipants = useMutation({
+    mutationFn: () => (
+      lucidClient.discovery.pauseSimulatedParticipants.mutate()
+    ),
+    onSuccess: (nextSnapshot) => {
+      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
+      toast.success('Simulated sources paused for the real-source pilot.');
+    },
+    onError: notifyError,
+  });
+
   const setParticipantEnabled = useMutation({
     mutationFn: (input: { participantId: string; enabled: boolean }) => (
       lucidClient.discovery.setParticipantEnabled.mutate(input)
@@ -139,6 +169,9 @@ export function useDiscoveryWorkspace() {
     runNow,
     setBackgroundChecksEnabled,
     createAssistedParticipant,
+    loadAssistedParticipantContext,
+    updateAssistedParticipantContext,
+    pauseSimulatedParticipants,
     setParticipantEnabled,
     retireParticipant,
     submitFeedback,

@@ -27,7 +27,15 @@ export function FindingCard({
   onFeedback,
 }: FindingCardProps) {
   const [feedbackDraft, setFeedbackDraft] = useState('');
+  const [explanationOpen, setExplanationOpen] = useState(isLatest);
   const agentById = new Map(agents.map((agent) => [agent.id, agent]));
+  const sourceAgents = finding.sources.flatMap((source) => {
+    const sourceAgent = source.actorAgentId
+      ? agentById.get(source.actorAgentId)
+      : undefined;
+    return sourceAgent ? [sourceAgent] : [];
+  });
+  const sourceDescription = describeSourceMix(sourceAgents);
 
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -53,13 +61,17 @@ export function FindingCard({
         </div>
         <div>
           <div className="finding-card__meta">
-            <span>{finding.noMatch ? 'Completed check' : 'Possible match'}</span>
+            <span>{finding.noMatch ? 'Completed check' : 'New finding'}</span>
             {isLatest ? <span className="new-badge">Latest</span> : null}
             <time dateTime={finding.finding.createdAt}>
               {dayjs(finding.finding.createdAt).format('MMM D, HH:mm')}
             </time>
           </div>
-          <h3>{finding.finding.title}</h3>
+          <h3>
+            {finding.noMatch
+              ? 'Earlier completed check'
+              : 'Something from your network may be relevant'}
+          </h3>
         </div>
       </header>
 
@@ -70,13 +82,19 @@ export function FindingCard({
           <Route size={13} />
           {finding.sources.length} source {finding.sources.length === 1 ? 'message' : 'messages'}
         </span>
-        <span>Sample participant data</span>
+        <span>{sourceDescription}</span>
       </div>
 
       {finding.sources.length || finding.outboundMessages.length ? (
-        <details className="finding-explanation">
+        <details
+          className="finding-explanation"
+          onToggle={(event) => {
+            setExplanationOpen(event.currentTarget.open);
+          }}
+          open={explanationOpen}
+        >
           <summary>
-            <span>Why this reached you</span>
+            <span>See source messages and what Lucid shared</span>
             <ChevronDown size={15} />
           </summary>
           <div className="finding-explanation__content">
@@ -88,12 +106,17 @@ export function FindingCard({
                     <li key={source.id}>
                       <span>#{source.sequence}</span>
                       <div>
-                        <strong>
+                        <div className="source-message__identity">
+                          <strong>
+                            {source.actorAgentId
+                              ? agentById.get(source.actorAgentId)?.name
+                                ?? 'Unknown agent'
+                              : 'System'}
+                          </strong>
                           {source.actorAgentId
-                            ? agentById.get(source.actorAgentId)?.name
-                              ?? 'Unknown agent'
-                            : 'System'}
-                        </strong>
+                            ? <SourceKindBadge agent={agentById.get(source.actorAgentId)} />
+                            : null}
+                        </div>
                         <p>{source.content}</p>
                       </div>
                     </li>
@@ -159,5 +182,43 @@ export function FindingCard({
         </form>
       )}
     </article>
+  );
+}
+
+function describeSourceMix(agents: AgentView[]): string {
+  const uniqueAgents = new Map(agents.map((agent) => [agent.id, agent]));
+  const sourceKinds = new Set(
+    [...uniqueAgents.values()].map((agent) => agent.participant.kind),
+  );
+  if (sourceKinds.has('human') && sourceKinds.has('synthetic')) {
+    return 'Mixed real and simulated sources';
+  }
+  if (sourceKinds.has('human')) {
+    return uniqueAgents.size === 1
+      ? '1 assisted real source'
+      : `${uniqueAgents.size} assisted real sources`;
+  }
+  if (sourceKinds.has('synthetic')) {
+    return uniqueAgents.size === 1
+      ? '1 simulated source'
+      : `${uniqueAgents.size} simulated sources`;
+  }
+  return 'Source type unavailable';
+}
+
+function SourceKindBadge({ agent }: { agent?: AgentView }) {
+  if (!agent) {
+    return null;
+  }
+  return (
+    <span className={
+      agent.participant.kind === 'human'
+        ? 'source-badge source-badge--real'
+        : 'source-badge'
+    }>
+      {agent.participant.kind === 'human'
+        ? 'Real · assisted'
+        : 'Simulated fixture'}
+    </span>
   );
 }

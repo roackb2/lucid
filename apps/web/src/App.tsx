@@ -3,6 +3,7 @@ import {
   CloudOff,
   Clock3,
   RefreshCw,
+  UserRound,
   Users,
 } from 'lucide-react';
 import { ActivityPanel } from '@/components/lucid/activity-panel';
@@ -60,11 +61,10 @@ export default function App() {
         <section className="workspace-intro">
           <div>
             <p className="section-label">Personal discovery workspace</p>
-            <h1>Tell Lucid what matters. Get back specific matches.</h1>
+            <h1>Tell Lucid what matters. See what your network brings back.</h1>
             <p>
-              Save an ongoing interest, let your agent compare it with
-              participant context, and use each result to make the next check
-              more relevant.
+              Save an ongoing interest, leave your representative listening,
+              and decide which peer-sourced discoveries are actually useful.
             </p>
           </div>
           <dl className="workspace-stats">
@@ -98,36 +98,6 @@ export default function App() {
               onRunNow={() => discovery.runNow.mutate()}
             />
 
-            <BackgroundChecks
-              checks={backgroundChecks}
-              isUpdating={discovery.setBackgroundChecksEnabled.isPending}
-              onSetEnabled={(enabled) => (
-                discovery.setBackgroundChecksEnabled.mutate(enabled)
-              )}
-            />
-
-            <ParticipantNetwork
-              agents={snapshot.agents}
-              isCreating={discovery.createAssistedParticipant.isPending}
-              isUpdating={
-                discovery.setParticipantEnabled.isPending
-                || discovery.retireParticipant.isPending
-              }
-              onCreate={(input) => (
-                discovery.createAssistedParticipant.mutateAsync(input)
-              )}
-              onRetire={(participantId) => (
-                discovery.retireParticipant.mutateAsync(participantId)
-              )}
-              onSetEnabled={(participantId, enabled) => (
-                discovery.setParticipantEnabled.mutateAsync({
-                  participantId,
-                  enabled,
-                })
-              )}
-              tasks={backgroundChecks.tasks}
-            />
-
             <FindingsFeed
               agents={snapshot.agents}
               backgroundChecksEnabled={backgroundChecks.enabled}
@@ -140,6 +110,58 @@ export default function App() {
                   content,
                 })
               )}
+            />
+
+            <BackgroundChecks
+              checks={backgroundChecks}
+              isUpdating={discovery.setBackgroundChecksEnabled.isPending}
+              onSetEnabled={(enabled) => (
+                discovery.setBackgroundChecksEnabled.mutate(enabled)
+              )}
+            />
+
+            <ParticipantNetwork
+              agents={snapshot.agents}
+              isCreating={discovery.createAssistedParticipant.isPending}
+              isPausingSimulated={
+                discovery.pauseSimulatedParticipants.isPending
+              }
+              isUpdating={
+                discovery.setParticipantEnabled.isPending
+                || discovery.retireParticipant.isPending
+              }
+              isUpdatingContext={
+                discovery.updateAssistedParticipantContext.isPending
+              }
+              onCreate={(input) => (
+                discovery.createAssistedParticipant.mutateAsync(input)
+              )}
+              onLoadContext={async (participantId) => {
+                try {
+                  return await discovery.loadAssistedParticipantContext
+                    .mutateAsync(participantId);
+                } finally {
+                  // The explicit review dialog owns this sensitive response;
+                  // do not retain it in React Query after handing it over.
+                  discovery.loadAssistedParticipantContext.reset();
+                }
+              }}
+              onPauseSimulated={() => (
+                discovery.pauseSimulatedParticipants.mutateAsync()
+              )}
+              onRetire={(participantId) => (
+                discovery.retireParticipant.mutateAsync(participantId)
+              )}
+              onSetEnabled={(participantId, enabled) => (
+                discovery.setParticipantEnabled.mutateAsync({
+                  participantId,
+                  enabled,
+                })
+              )}
+              onUpdateContext={(input) => (
+                discovery.updateAssistedParticipantContext.mutateAsync(input)
+              )}
+              tasks={backgroundChecks.tasks}
             />
           </div>
 
@@ -200,10 +222,17 @@ type SourceSummaryProps = {
 };
 
 function SourceSummary({ agents }: SourceSummaryProps) {
-  const realSourceCount = agents.filter(
+  const activeAgents = agents.filter(
+    (agent) => agent.participant.status === 'active',
+  );
+  const realSourceCount = activeAgents.filter(
     (agent) => agent.participant.kind === 'human',
   ).length;
-  const simulatedSourceCount = agents.length - realSourceCount;
+  const simulatedSourceCount = activeAgents.length - realSourceCount;
+  const summary = describeActiveSources(
+    realSourceCount,
+    simulatedSourceCount,
+  );
 
   return (
     <section className="sidebar-card">
@@ -215,7 +244,9 @@ function SourceSummary({ agents }: SourceSummaryProps) {
         {agents.map((agent) => (
           <li key={agent.id}>
             <span style={{ backgroundColor: agent.color }}>
-              <Bot size={14} />
+              {agent.participant.kind === 'human'
+                ? <UserRound size={14} />
+                : <Bot size={14} />}
             </span>
             <div>
               <strong>{agent.participant.displayName}</strong>
@@ -228,17 +259,26 @@ function SourceSummary({ agents }: SourceSummaryProps) {
           </li>
         ))}
       </ul>
-      <p className="prototype-note">
-        {realSourceCount
-          ? `${realSourceCount} assisted real ${
-              realSourceCount === 1 ? 'source is' : 'sources are'
-            } available alongside ${simulatedSourceCount} simulated ${
-              simulatedSourceCount === 1 ? 'fixture' : 'fixtures'
-            }.`
-          : 'Only simulated fixtures are available. Add one knowingly assisted real participant to test the intended network.'}
-      </p>
+      <p className="prototype-note">{summary}</p>
     </section>
   );
+}
+
+function describeActiveSources(
+  realSourceCount: number,
+  simulatedSourceCount: number,
+): string {
+  if (realSourceCount > 0) {
+    return `${realSourceCount} assisted real ${
+      realSourceCount === 1 ? 'source is' : 'sources are'
+    } active. ${simulatedSourceCount} simulated ${
+      simulatedSourceCount === 1 ? 'fixture is' : 'fixtures are'
+    } active.`;
+  }
+  if (simulatedSourceCount > 0) {
+    return 'Only simulated fixtures are active. Add one knowingly assisted real participant to test the intended network.';
+  }
+  return 'No sources are active. Resume a participant before asking the network.';
 }
 
 function WorkspaceLoading() {

@@ -75,6 +75,11 @@ const EVENT_PRESENTATION: Record<
     label: 'Participant added',
     visibility: 'internal',
   },
+  participant_context_updated: {
+    icon: LockKeyhole,
+    label: 'Participant context renewed',
+    visibility: 'internal',
+  },
   participant_disabled: {
     icon: Users,
     label: 'Participant paused',

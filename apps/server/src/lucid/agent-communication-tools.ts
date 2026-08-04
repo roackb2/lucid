@@ -194,7 +194,7 @@ export class AgentCommunicationToolService {
     return {
       name: 'report_finding',
       description:
-        'Report one finding to the local user. It must depend on at least one visible message authored by another agent. Sources prove delivery, not truth.',
+        'Report one specific peer-sourced connection that may matter to the local user. State what the source contributed and why it may relate, without declaring it useful, validated, or a successful match. Sources prove delivery, not truth.',
       capabilities: ['lucid.discovery.write'],
       hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
       parameters: {
@@ -383,7 +383,7 @@ export class AgentCommunicationToolService {
       targetParticipantId: LOCAL_USER_ID,
       parentSequence: sourceEventIds[0],
       idempotencyKey: this.actionIdempotencyKey(actionIndex),
-      title: 'Lucid found a possible match',
+      title: 'New finding from your network',
       content: parsed.data.content,
       metadata: {
         visibility: 'user',

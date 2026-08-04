@@ -5,11 +5,16 @@
  * tasks and owns compensation when those two systems cannot change atomically.
  * HTTP validation, database queries, and model execution stay outside it.
  */
+import pick from 'lodash/pick.js';
 import type { DiscoveryRepository } from './discovery-repository.js';
 import { USER_AGENT_ID } from './default-participants.js';
 import type {
+  Agent,
+  AssistedParticipantContextView,
   CreateAssistedParticipantInput,
   DiscoveryWorkspaceSnapshot,
+  Participant,
+  UpdateAssistedParticipantContextInput,
 } from './discovery-types.js';
 import type {
   RepresentativeAgentHeartbeatService,
@@ -128,6 +133,98 @@ export class DiscoveryWorkspaceService {
     }
   }
 
+  async assistedParticipantContext(
+    participantId: string,
+  ): Promise<AssistedParticipantContextView> {
+    const { participant } = await this.requireAssistedParticipant(
+      participantId,
+    );
+    return pick(participant, [
+      'id',
+      'displayName',
+      'privateContext',
+      'contextConsentAt',
+      'status',
+    ]);
+  }
+
+  async updateAssistedParticipantContext(
+    input: UpdateAssistedParticipantContextInput,
+  ): Promise<DiscoveryWorkspaceSnapshot> {
+    const { agent, participant } = await this.requireAssistedParticipant(
+      input.participantId,
+    );
+    const shouldResume = participant.status === 'active';
+    try {
+      // An active model may retain the old private context until settlement.
+      // Disable its task before replacing that context, then restore only the
+      // task whose authoritative participant state remains active.
+      if (shouldResume) {
+        await this.heartbeats.disableAgentTasks([agent.id]);
+      }
+      await this.repository.updateAssistedParticipantContext(input);
+      if (shouldResume) {
+        try {
+          await this.heartbeats.enableAgentTask(agent.id);
+        } catch (error) {
+          await this.repository.setParticipantStatus(
+            participant.id,
+            'disabled',
+          );
+          await this.heartbeats.reconcileAgentTasks();
+          throw error;
+        }
+      }
+      return await this.snapshot();
+    } catch (error) {
+      await this.heartbeats.reconcileAgentTasks();
+      throw new DiscoveryInputError(
+        inputErrorMessage(
+          error,
+          'Lucid could not update this participant context.',
+        ),
+      );
+    }
+  }
+
+  async pauseSimulatedParticipants(): Promise<DiscoveryWorkspaceSnapshot> {
+    const simulatedParticipants = (await this.repository.listParticipants())
+      .filter((participant) => (
+        participant.kind === 'synthetic'
+        && participant.status === 'active'
+      ));
+    if (!simulatedParticipants.length) {
+      return await this.snapshot();
+    }
+    const agents = await Promise.all(simulatedParticipants.map(
+      (participant) => this.repository.requireAgentByParticipantId(
+        participant.id,
+      ),
+    ));
+
+    try {
+      // Quiesce once and disable every fixture task before changing domain
+      // state, so a real-source pilot cannot race with one last simulated run.
+      await this.heartbeats.disableAgentTasks(agents.map(({ id }) => id));
+      for (const participant of simulatedParticipants) {
+        await this.repository.setParticipantStatus(
+          participant.id,
+          'disabled',
+        );
+      }
+      await this.heartbeats.reconcileAgentTasks();
+      return await this.snapshot();
+    } catch (error) {
+      await this.heartbeats.reconcileAgentTasks();
+      throw new DiscoveryInputError(
+        inputErrorMessage(
+          error,
+          'Lucid could not pause the simulated sources.',
+        ),
+      );
+    }
+  }
+
   async setParticipantEnabled(
     participantId: string,
     enabled: boolean,
@@ -136,7 +233,7 @@ export class DiscoveryWorkspaceService {
     try {
       if (!enabled) {
         // Quiesce execution before closing the participant's mailbox boundary.
-        await this.heartbeats.disableAgentTask(agent.id);
+        await this.heartbeats.disableAgentTasks([agent.id]);
       }
       // On resume the repository advances the mailbox floor before the task can
       // run, deliberately skipping messages produced while this source was paused.
@@ -175,7 +272,7 @@ export class DiscoveryWorkspaceService {
     try {
       // Stop and settle the representative before permanently scrubbing the
       // private context it could otherwise still hold in an active wake.
-      await this.heartbeats.disableAgentTask(agent.id);
+      await this.heartbeats.disableAgentTasks([agent.id]);
       await this.repository.retireParticipant(participantId);
       await this.heartbeats.reconcileAgentTasks();
       return await this.snapshot();
@@ -220,6 +317,25 @@ export class DiscoveryWorkspaceService {
       );
     }
     return agent;
+  }
+
+  private async requireAssistedParticipant(
+    participantId: string,
+  ): Promise<{ participant: Participant; agent: Agent }> {
+    const [participant, agent] = await Promise.all([
+      this.repository.requireParticipant(participantId),
+      this.repository.requireAgentByParticipantId(participantId),
+    ]);
+    if (
+      agent.id === USER_AGENT_ID
+      || participant.kind !== 'human'
+      || participant.status === 'retired'
+    ) {
+      throw new DiscoveryInputError(
+        'Only an active or paused assisted participant has reviewable context.',
+      );
+    }
+    return { participant, agent };
   }
 }
 

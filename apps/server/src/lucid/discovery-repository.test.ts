@@ -118,6 +118,27 @@ describe('SQLite discovery repository', () => {
       }),
     );
 
+    const revisedContext =
+      'I now want my agent to notice small listening-room events and may share that preference when directly relevant.';
+    const revised = await repository.updateAssistedParticipantContext({
+      participantId: created.participant.id,
+      privateContext: revisedContext,
+      contextApproved: true,
+    });
+    expect(revised.participant).toMatchObject({
+      privateContext: revisedContext,
+      contextConsentAt: expect.any(String),
+    });
+    expect((await repository.requireParticipant(created.participant.id)))
+      .toMatchObject({ privateContext: revisedContext });
+    const revisedSnapshot = await repository.readSnapshot();
+    expect(JSON.stringify(revisedSnapshot)).not.toContain(revisedContext);
+    expect(revisedSnapshot.events).toContainEqual(expect.objectContaining({
+      kind: 'participant_context_updated',
+      targetParticipantId: created.participant.id,
+      content: expect.not.stringContaining(revisedContext),
+    }));
+
     await repository.setParticipantStatus(created.participant.id, 'disabled');
     const disabledPeriodMessage = await repository.appendEvent({
       kind: 'shared_message',
@@ -175,6 +196,17 @@ describe('SQLite discovery repository', () => {
       }),
     );
     expect(JSON.stringify(retiredSnapshot)).not.toContain(privateContext);
+    expect(JSON.stringify(retiredSnapshot)).not.toContain(revisedContext);
+  });
+
+  it('rejects context replacement for a simulated fixture', async () => {
+    await expect(repository.updateAssistedParticipantContext({
+      participantId: 'sample-music-maker',
+      privateContext: 'Do not replace framework-owned fixture context.',
+      contextApproved: true,
+    })).rejects.toThrow(
+      'Only an active or paused assisted participant can revise context.',
+    );
   });
 
   it('preserves the no-match status of findings from earlier versions', async () => {

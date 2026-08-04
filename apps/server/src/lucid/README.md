@@ -43,7 +43,8 @@ needs multiple independently scheduled or paused interests.
 Lucid owns:
 
 - participant and representative identity;
-- participant consent, active/disabled/retired lifecycle, and context removal;
+- participant consent, explicit context review/replacement,
+  active/disabled/retired lifecycle, and context removal;
 - mailbox visibility and append-only events;
 - private interest and feedback delivery;
 - atomic wake claims with a fixed unread-event horizon;
@@ -105,6 +106,14 @@ experiment. Lucid creates the participant, representative agent, and Heddle
 task through the same repository and heartbeat path as the built-in fixtures.
 No account, invitation, or second runtime is involved.
 
+The normal discovery snapshot never projects private context. A dedicated
+local-operator query returns one assisted participant's text only while the
+explicit review dialog is open. Replacing it requires renewed consent, records
+a `participant_context_updated` audit event without the text, and settles any
+active model run before the new context becomes authoritative. Withdrawing the
+participant uses the existing irreversible retirement path to stop their task
+and scrub the text.
+
 Each representative has both a processed-message cursor and a mailbox floor.
 The floor is the earliest event the participant is eligible to read, even if a
 model tool asks for an older sequence. It starts at the join boundary and moves
@@ -118,6 +127,11 @@ messages can be recovered by requesting `after_sequence: 0`.
 - `retired` participants lose private context permanently and their task is
   deleted, while identity and prior non-sensitive event attribution remain.
 
+When an assisted real source and simulated fixtures are active together, the
+product exposes one domain command that quiesces once and pauses every fixture.
+This keeps real-source experiments from silently mixing synthetic messages into
+their findings without changing the global background-check preference.
+
 Repository participant status and the workspace's global background-check
 setting are authoritative. Task reconciliation is idempotent and repairs the
 file-backed Heddle task set without treating a live task as a restart artifact.
@@ -129,8 +143,9 @@ serialized mailbox events:
 
 - `post_shared_message` reaches every other representative;
 - `send_direct_message` reaches one representative and the operator;
-- `report_finding` is available only to the user's representative and must
-  cite at least one visible peer message;
+- `report_finding` is available only to the user's representative, must cite at
+  least one visible peer message, and describes a possible connection without
+  declaring it useful, validated, or a successful match;
 - `finish_without_action` records an internal outcome but never fabricates a
   user-facing no-match finding.
 
@@ -141,7 +156,8 @@ read or finish without action. A new interest, explicit check request, or
 feedback event starts a new thread.
 
 `source_event_ids` and `parentSequence` preserve causal delivery. They do not
-certify truth or usefulness.
+certify truth or usefulness. The UI labels each source as assisted real,
+simulated, or mixed and leaves the value judgment to user feedback.
 
 ## Recovery and lifecycle
 

@@ -22,6 +22,7 @@ const EVENT_LABELS: Record<DiscoveryEventKind, string> = {
   finding_reported: 'private user finding',
   feedback_saved: 'private user feedback',
   participant_added: 'internal participant lifecycle',
+  participant_context_updated: 'internal participant lifecycle',
   participant_disabled: 'internal participant lifecycle',
   participant_enabled: 'internal participant lifecycle',
   participant_retired: 'internal participant lifecycle',
@@ -85,7 +86,8 @@ export function buildAgentWakePrompt(
   const responsibility = agent.id === USER_AGENT_ID
     ? `When an unread interest_saved event appears, share a minimal request that represents it.
 When an unread check_requested event appears, it starts a new causal thread even if the saved interest text is unchanged. You must post a fresh minimal shared request citing that check event.
-When peer-authored messages contain a specific useful match, report it with report_finding.
+When peer-authored messages contain a specific connection that could matter to the user, report it with report_finding.
+Describe what the source said and why it may connect. Never declare that a finding is useful, validated, or a successful match; the user decides that through feedback.
 Do not report the same source message twice. Feedback is private guidance for later behavior.`
     : `Respond only when an unread request or message has a specific connection to this participant’s private context.
 Do not generate generic advice merely to appear active.`;

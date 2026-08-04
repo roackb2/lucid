@@ -17,6 +17,7 @@ export const discoveryEventKindSchema = z.enum([
   'finding_reported',
   'feedback_saved',
   'participant_added',
+  'participant_context_updated',
   'participant_disabled',
   'participant_enabled',
   'participant_retired',
@@ -59,6 +60,17 @@ export type CreateAssistedParticipantInput = {
   privateContext: string;
   contextApproved: boolean;
 };
+
+export type UpdateAssistedParticipantContextInput = {
+  participantId: string;
+  privateContext: string;
+  contextApproved: boolean;
+};
+
+export type AssistedParticipantContextView = Pick<
+  Participant,
+  'id' | 'displayName' | 'privateContext' | 'contextConsentAt' | 'status'
+>;
 
 export type Agent = {
   id: string;

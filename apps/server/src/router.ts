@@ -39,6 +39,11 @@ const participantInputSchema = z.object({
   participantId: z.string().trim().min(1),
 });
 
+const updateAssistedParticipantContextInputSchema = participantInputSchema.extend({
+  privateContext: z.string().trim().min(1).max(4_000),
+  contextApproved: z.literal(true),
+});
+
 export function createAppRouter(
   discoveryWorkspace: DiscoveryWorkspaceService,
 ) {
@@ -69,6 +74,23 @@ export function createAppRouter(
         .mutation(({ input }) => resolveDiscoveryError(
           () => discoveryWorkspace.createAssistedParticipant(input),
         )),
+      assistedParticipantContext: trpc.procedure
+        .input(participantInputSchema)
+        .query(({ input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.assistedParticipantContext(
+            input.participantId,
+          ),
+        )),
+      updateAssistedParticipantContext: trpc.procedure
+        .input(updateAssistedParticipantContextInputSchema)
+        .mutation(({ input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.updateAssistedParticipantContext(input),
+        )),
+      pauseSimulatedParticipants: trpc.procedure.mutation(
+        () => resolveDiscoveryError(
+          () => discoveryWorkspace.pauseSimulatedParticipants(),
+        ),
+      ),
       setParticipantEnabled: trpc.procedure
         .input(participantEnabledInputSchema)
         .mutation(({ input }) => resolveDiscoveryError(
