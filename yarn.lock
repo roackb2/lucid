@@ -986,10 +986,10 @@
   resolved "https://registry.npmjs.org/@radix-ui/rect/-/rect-1.1.3.tgz#5a58fbae3deefb7f8cfe6ea314287d699eb694a9"
   integrity sha512-JtyZR+mqgBibTo8xea3B6ZRmzZiM/YeVBtUkas6zMuXjAlfIFIW2FgqeM9eLyvEaYX66vr6DJMK+4U6LV0KhNw==
 
-"@roackb2/heddle@5.7.0":
-  version "5.7.0"
-  resolved "https://registry.npmjs.org/@roackb2/heddle/-/heddle-5.7.0.tgz#0f1c9a0dc9a595f00d59744756693c21e9b64f96"
-  integrity sha512-QqcBB0I7x6SfZ/DbafLYxFuc1gaVV+9vy7Ej4nvbul4LXE/Vhhs6oaFNisdTHpy782o+eXxFkR3fYXW7/9qcuQ==
+"@roackb2/heddle@5.8.0":
+  version "5.8.0"
+  resolved "https://registry.npmjs.org/@roackb2/heddle/-/heddle-5.8.0.tgz#27cb1d31c674859cc2392cbd69f9cbeab2f313dc"
+  integrity sha512-WplDClWSq/+f9dHQrSkBGdK99i8V7Mzqh7ODoCGmJfRXLsvEpjlfLwHA1W8xMlF2UKmwBInrz4BM6u5ezpkMgg==
   dependencies:
     "@anthropic-ai/sdk" "^0.54.0"
     "@fontsource-variable/inter" "^5.2.8"

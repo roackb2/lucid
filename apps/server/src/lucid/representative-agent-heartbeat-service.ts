@@ -17,6 +17,7 @@ import {
   type HeartbeatSchedulerEvent,
   type HeartbeatSchedulerHandle,
   type HeartbeatTask,
+  type HeartbeatTaskCancellationDisposition,
   type HeartbeatTaskView,
 } from '@roackb2/heddle/advanced';
 import type { LucidConfig } from '../config.js';
@@ -31,6 +32,9 @@ import type {
 } from './heddle-representative-agent-runner.js';
 
 const TASK_ID_PREFIX = 'lucid-representative-';
+const UNSAFE_CANCELLATION_DISPOSITIONS = new Set<
+  HeartbeatTaskCancellationDisposition
+>(['not-owned', 'not-found']);
 
 /**
  * Hosts Lucid's representative agents as durable Heddle heartbeat tasks.
@@ -42,7 +46,6 @@ const TASK_ID_PREFIX = 'lucid-representative-';
 export class RepresentativeAgentHeartbeatService {
   private readonly tasks: FileHeartbeatTaskService;
   private scheduler?: HeartbeatSchedulerHandle;
-  private schedulerStop?: Promise<void>;
   private acceptingRuns = true;
   private paused = false;
 
@@ -74,7 +77,6 @@ export class RepresentativeAgentHeartbeatService {
   start(): void {
     if (
       this.scheduler
-      || this.schedulerStop
       || !this.acceptingRuns
       || this.paused
     ) {
@@ -85,6 +87,7 @@ export class RepresentativeAgentHeartbeatService {
     handle = HeartbeatSchedulerService.start({
       workspaceRoot: this.config.repoRoot,
       stateRoot: this.config.heddleStateRoot,
+      store: this.tasks,
       handler: (context) => this.runAgentTask(context),
       model: this.config.model,
       maxSteps: this.config.maxSteps,
@@ -228,34 +231,59 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   async disableAgentTasks(agentIds: string[]): Promise<void> {
-    const requestedAgentIds = new Set(agentIds);
-    if (!requestedAgentIds.size) {
+    const uniqueAgentIds = [...new Set(agentIds)];
+    if (!uniqueAgentIds.length) {
       return;
     }
-    const shouldRestartScheduler = Boolean(this.scheduler);
 
-    // Heddle 5.7 can cancel only at scheduler scope. Quiescing all active tasks
-    // avoids an admission race and guarantees the target no longer holds
-    // participant context before its task is disabled. A targeted framework
-    // cancellation API can replace this coarse boundary later.
-    await this.stopScheduler(true);
-    await this.tasks.recoverInterruptedTasks({
-      ownerId: `lucid-participant-change:${randomUUID()}`,
-      recoveredAt: dayjs().toDate(),
-      reason: 'operator',
-    });
-
-    const tasks = (await this.listManagedTasks()).filter((task) => {
-      const agentId = agentIdFromTask(task.id);
-      return agentId && requestedAgentIds.has(agentId) && task.enabled;
-    });
-    for (const task of tasks) {
-      await this.tasks.setTaskEnabled(task.id, false);
+    // Resolve every target before changing anything. A missing derived task is
+    // an invariant failure, not permission to mutate participant state while a
+    // representative may still be running elsewhere.
+    const tasks = await Promise.all(uniqueAgentIds.map((agentId) => (
+      this.tasks.requireTask(taskIdForAgent(agentId))
+    )));
+    const tasksRequiringSettlement = tasks.filter((task) => (
+      task.enabled || task.state?.status === 'running'
+    ));
+    if (!tasksRequiringSettlement.length) {
+      return;
     }
 
-    if (shouldRestartScheduler) {
-      this.start();
+    const scheduler = this.scheduler;
+    if (!scheduler) {
+      const runningTask = tasksRequiringSettlement.find(
+        (task) => task.state?.status === 'running',
+      );
+      if (runningTask) {
+        throw new Error(
+          `Cannot safely disable heartbeat task ${runningTask.id}: no local scheduler handle owns its running execution.`,
+        );
+      }
+    } else {
+      // Heddle invalidates queued admission, aborts only the requested task, and
+      // awaits claim-fenced settlement. Other participant wakes keep running.
+      const results = await Promise.all(tasksRequiringSettlement.map((task) => (
+        scheduler.cancelTask(task.id, {
+          reason: 'Lucid participant lifecycle change',
+        })
+      )));
+      const unsafeResult = results.find(({ disposition }) => (
+        UNSAFE_CANCELLATION_DISPOSITIONS.has(disposition)
+      ));
+      if (unsafeResult) {
+        throw new Error(
+          `Cannot safely disable heartbeat task ${unsafeResult.taskId}: cancellation returned ${unsafeResult.disposition}.`,
+        );
+      }
     }
+
+    // Disable only after every target can no longer retain old participant
+    // context or cross the mailbox boundary being changed by the caller.
+    await Promise.all(tasksRequiringSettlement
+      .filter((task) => task.enabled)
+      .map((task) => (
+        this.tasks.setTaskEnabled(task.id, false)
+      )));
   }
 
   private async ensureAgentTasks(): Promise<void> {
@@ -516,23 +544,18 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   private async stopScheduler(cancelRunning: boolean): Promise<void> {
-    if (this.schedulerStop) {
-      await this.schedulerStop;
-      return;
-    }
     const scheduler = this.scheduler;
     if (!scheduler) {
       return;
     }
 
-    this.scheduler = undefined;
-    const stopping = scheduler.stop({ cancelRunning });
-    this.schedulerStop = stopping;
     try {
-      await stopping;
+      // Heddle owns idempotent stop settlement. Retain the handle while it is
+      // stopping so concurrent start calls cannot create a second scheduler.
+      await scheduler.stop({ cancelRunning });
     } finally {
-      if (this.schedulerStop === stopping) {
-        this.schedulerStop = undefined;
+      if (this.scheduler === scheduler) {
+        this.scheduler = undefined;
       }
     }
   }
