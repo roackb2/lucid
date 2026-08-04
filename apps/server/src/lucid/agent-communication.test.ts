@@ -12,7 +12,7 @@ import { AgentCommunicationToolService } from './agent-communication-tools.js';
 import {
   LOCAL_USER_ID,
   USER_AGENT_ID,
-} from './default-participants.js';
+} from './local-participant.js';
 import {
   buildAgentWakePrompt,
   buildRepresentativeAgentInstructions,
@@ -41,20 +41,13 @@ describe('representative-agent communication', () => {
     const tools = await createUserTools(repository, 'wake_policy', 1);
     const toolsByName = new Map(tools.map((tool) => [tool.name, tool]));
 
-    expect(
-      toolsByName.get('read_available_messages')?.hostPolicy,
-    ).toMatchObject({
-      authority: {
-        kind: 'host-tool',
-        id: 'lucid:discovery-events',
-      },
-      transport: {
-        kind: 'in-process',
-        network: false,
-      },
-      environment: 'local',
-      operations: ['read'],
-    });
+    expect(toolsByName.get('read_available_messages')?.hostPolicy)
+      .toMatchObject({
+        authority: { kind: 'host-tool', id: 'lucid:discovery-events' },
+        transport: { kind: 'in-process', network: false },
+        environment: 'local',
+        operations: ['read'],
+      });
     expect(toolsByName.get('post_shared_message')?.hostPolicy).toMatchObject({
       operations: ['write'],
       writeScope: {
@@ -64,270 +57,259 @@ describe('representative-agent communication', () => {
     });
   });
 
-  it('interpolates participant context and unread events into readable prompts', async () => {
-    const agent = await repository.requireUserAgent();
-    const participant = await repository.requireParticipant(LOCAL_USER_ID);
-    const interest = await repository.saveInterest(
-      'Find a concrete agent-native product experiment.',
+  it('interpolates generic participant context and private inputs into readable prompts', async () => {
+    const source = await registerSynthetic(repository, 'prompt-source');
+    const input = await repository.saveParticipantInput(
+      source.participant.id,
+      'A new observation belongs only to this principal.',
+      'prompt-source:input:1',
     );
 
-    expect(
-      buildRepresentativeAgentInstructions(agent, participant),
-    ).toContain(`You represent ${participant.displayName}.
-You represent the real local user.
-Their saved interest and feedback are private.`);
-    const wakePrompt = buildAgentWakePrompt(
-      agent,
-      participant,
+    expect(buildRepresentativeAgentInstructions(
+      source.agent,
+      source.participant,
+    )).toContain(`You represent ${source.participant.displayName}.
+You represent an explicitly simulated test participant, not a real person or external source.`);
+    expect(buildAgentWakePrompt(
+      source.agent,
+      source.participant,
       1,
-      [interest],
-    );
-    expect(wakePrompt).toContain(
-      'Never declare that a finding is useful, validated, or a successful match',
-    );
-    expect(wakePrompt).toContain(`Unread events visible to this agent:
-- #${interest.sequence} [private user interest]`);
+      [input],
+    )).toContain(`Unread events visible to this agent:
+- #${input.sequence} [private participant input]`);
   });
 
-  it('rejects invisible sources without spending the action budget', async () => {
-    const hidden = await repository.appendEvent({
-      kind: 'direct_message',
-      actorAgentId: 'sample-music-agent',
-      targetAgentId: 'sample-product-agent',
-      title: 'Hidden message',
-      content: 'The user agent cannot cite this.',
-    });
-    const visible = await repository.appendEvent({
-      kind: 'direct_message',
-      actorAgentId: 'sample-music-agent',
-      targetAgentId: USER_AGENT_ID,
-      title: 'Visible message',
-      content: 'The user agent can cite this.',
-    });
-    const toolsByName = new Map(
-      (await createUserTools(repository, 'wake_sources', 1))
-        .map((tool) => [tool.name, tool]),
+  it('keeps reads and source references inside the claimed wake horizon', async () => {
+    const source = await registerSynthetic(repository, 'horizon-source');
+    const claimedMessage = await peerMessage(
+      repository,
+      source.agent.id,
+      USER_AGENT_ID,
+      'Message available when the wake was claimed.',
+    );
+    const tools = toolsByName(await createUserTools(
+      repository,
+      'wake_fixed_horizon',
+      1,
+      claimedMessage.sequence,
+    ));
+    const laterMessage = await peerMessage(
+      repository,
+      source.agent.id,
+      USER_AGENT_ID,
+      'Message delivered during the model run.',
     );
 
-    const rejected = await toolsByName.get('post_shared_message')!.execute({
-      content: 'This hidden source should fail.',
-      source_event_ids: [hidden.sequence],
-    });
-    const firstAction = await toolsByName.get('post_shared_message')!.execute({
-      content: 'This visible source can be shared.',
-      source_event_ids: [visible.sequence],
-    });
-    const secondAction = await toolsByName.get('send_direct_message')!.execute({
-      target_agent_id: 'sample-product-agent',
-      content: 'A second valid communication action.',
-      source_event_ids: [visible.sequence],
-    });
-    const overBudget = await toolsByName.get('finish_without_action')!.execute({
-      reason: 'This action should exceed the budget.',
-    });
-
-    expect(rejected.ok).toBe(false);
-    expect(firstAction.ok).toBe(true);
-    expect(secondAction.ok).toBe(true);
-    expect(overBudget.ok).toBe(false);
-  });
-
-  it('keeps message reads and source references inside the claimed wake horizon', async () => {
-    const claimedMessage = await repository.appendEvent({
-      kind: 'direct_message',
-      actorAgentId: 'sample-music-agent',
-      targetAgentId: USER_AGENT_ID,
-      title: 'Message available when the wake was claimed',
-      content: 'This message belongs to the current wake.',
-    });
-    const toolsByName = new Map(
-      (await createUserTools(
-        repository,
-        'wake_fixed_horizon',
-        1,
-        claimedMessage.sequence,
-      )).map((tool) => [tool.name, tool]),
-    );
-    const laterMessage = await repository.appendEvent({
-      kind: 'direct_message',
-      actorAgentId: 'sample-product-agent',
-      targetAgentId: USER_AGENT_ID,
-      title: 'Message delivered during the model run',
-      content: 'This message must remain unread until the next wake.',
-    });
-
-    const available = await toolsByName
-      .get('read_available_messages')!
-      .execute({ after_sequence: 0 });
-    const rejected = await toolsByName.get('post_shared_message')!.execute({
-      content: 'A post-claim event cannot affect the current wake.',
-      source_event_ids: [laterMessage.sequence],
-    });
-    const accepted = await toolsByName.get('post_shared_message')!.execute({
-      content: 'The claimed event remains a valid source.',
-      source_event_ids: [claimedMessage.sequence],
-    });
-
-    expect(available).toMatchObject({
+    expect(await tools.get('read_available_messages')!.execute({
+      after_sequence: 0,
+    })).toMatchObject({
       ok: true,
-      output: {
-        events: [{ sequence: claimedMessage.sequence }],
-      },
+      output: { events: [{ sequence: claimedMessage.sequence }] },
     });
-    expect(rejected).toMatchObject({
+    expect(await tools.get('post_shared_message')!.execute({
+      content: 'A post-claim event cannot affect this wake.',
+      source_event_ids: [laterMessage.sequence],
+    })).toMatchObject({
       ok: false,
       error: expect.stringContaining('after this wake was claimed'),
     });
-    expect(accepted.ok).toBe(true);
+    expect((await tools.get('post_shared_message')!.execute({
+      content: 'The claimed event remains a valid source.',
+      source_event_ids: [claimedMessage.sequence],
+    })).ok).toBe(true);
   });
 
-  it('reports only peer-sourced findings and prevents source reuse', async () => {
-    const peerMessage = await repository.appendEvent({
-      kind: 'direct_message',
-      actorAgentId: 'sample-music-agent',
-      targetAgentId: USER_AGENT_ID,
-      title: 'Specific participant response',
-      content: 'A simulated participant has one relevant observation.',
+  it('does not let a representative cite its own shared message as inbox input', async () => {
+    const ownMessage = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      title: 'The representative’s earlier message',
+      content: 'This outbound event is not incoming mailbox evidence.',
     });
-    const firstTools = new Map(
-      (await createUserTools(repository, 'wake_finding_1', 1))
-        .map((tool) => [tool.name, tool]),
-    );
-    const first = await firstTools.get('report_finding')!.execute({
-      content: 'A simulated participant sent a specific match.',
-      source_event_ids: [peerMessage.sequence],
-    });
-    const secondTools = new Map(
-      (await createUserTools(repository, 'wake_finding_2', 2))
-        .map((tool) => [tool.name, tool]),
-    );
-    const duplicate = await secondTools.get('report_finding')!.execute({
-      content: 'The same source should not become a second finding.',
-      source_event_ids: [peerMessage.sequence],
-    });
+    const tools = toolsByName(await createUserTools(
+      repository,
+      'wake_own_source',
+      1,
+      ownMessage.sequence,
+    ));
 
-    expect(first.ok).toBe(true);
-    expect(duplicate.ok).toBe(false);
+    expect(await tools.get('read_available_messages')!.execute({
+      after_sequence: 0,
+    })).toMatchObject({ ok: true, output: { events: [] } });
+    expect((await tools.get('post_shared_message')!.execute({
+      content: 'An own-authored event cannot be cited as visible input.',
+      source_event_ids: [ownMessage.sequence],
+    })).ok).toBe(false);
+  });
+
+  it('allows direct messages only to active peers encountered in visible events', async () => {
+    const encountered = await registerSynthetic(repository, 'encountered');
+    const unknown = await registerSynthetic(repository, 'unknown');
+    const message = await peerMessage(
+      repository,
+      encountered.agent.id,
+      USER_AGENT_ID,
+      'This message introduces one peer to the local representative.',
+    );
+    const initialTools = await createUserTools(repository, 'wake_targets', 1);
+    const targetSchema = initialTools.find(
+      ({ name }) => name === 'send_direct_message',
+    )?.parameters.properties?.target_agent_id;
+
+    expect(targetSchema).toMatchObject({ enum: [encountered.agent.id] });
+    expect(JSON.stringify(targetSchema)).not.toContain(unknown.agent.id);
+
+    await repository.setParticipantStatus(
+      encountered.participant.id,
+      'disabled',
+    );
+    const disabledTools = toolsByName(await createUserTools(
+      repository,
+      'wake_disabled_target',
+      2,
+      message.sequence,
+    ));
+    expect(disabledTools.has('send_direct_message')).toBe(false);
+  });
+
+  it('does not spend the action budget when source validation rejects an action', async () => {
+    const source = await registerSynthetic(repository, 'budget-source');
+    const hidden = await repository.appendEvent({
+      kind: 'direct_message',
+      actorAgentId: source.agent.id,
+      targetAgentId: source.agent.id,
+      title: 'Hidden message',
+      content: 'The local representative cannot cite this.',
+    });
+    const visible = await peerMessage(
+      repository,
+      source.agent.id,
+      USER_AGENT_ID,
+      'The local representative can cite this.',
+    );
+    const tools = toolsByName(await createUserTools(
+      repository,
+      'wake_budget',
+      1,
+      visible.sequence,
+    ));
+
+    expect((await tools.get('post_shared_message')!.execute({
+      content: 'This hidden source should fail.',
+      source_event_ids: [hidden.sequence],
+    })).ok).toBe(false);
+    expect((await tools.get('post_shared_message')!.execute({
+      content: 'This visible source is the first action.',
+      source_event_ids: [visible.sequence],
+    })).ok).toBe(true);
+    expect((await tools.get('send_direct_message')!.execute({
+      target_agent_id: source.agent.id,
+      content: 'This direct response is the second action.',
+      source_event_ids: [visible.sequence],
+    })).ok).toBe(true);
+    expect((await tools.get('finish_without_action')!.execute({
+      reason: 'A third action exceeds the budget.',
+    })).ok).toBe(false);
+  });
+
+  it('lets every representative report findings only to its own participant', async () => {
+    const source = await registerSynthetic(repository, 'finding-owner');
+    const request = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      title: 'Network request',
+      content: 'Does anyone have a relevant observation?',
+    });
+    const tools = toolsByName(await new AgentCommunicationToolService(
+      repository,
+      source.agent,
+      source.participant,
+      'wake_source_finding',
+      1,
+      request.sequence,
+    ).definitions());
+
+    expect(tools.has('report_finding')).toBe(true);
+    expect((await tools.get('report_finding')!.execute({
+      content: 'The local participant asked about something relevant.',
+      source_event_ids: [request.sequence],
+    })).ok).toBe(true);
+    expect((await repository.readNetworkDiagnostics()).events).toContainEqual(
+      expect.objectContaining({
+        kind: 'finding_reported',
+        actorAgentId: source.agent.id,
+        targetParticipantId: source.participant.id,
+      }),
+    );
+    expect((await repository.readSnapshot()).findings).toEqual([]);
+  });
+
+  it('reports peer-sourced local findings once and preserves attribution', async () => {
+    const source = await registerSynthetic(repository, 'local-finding-source');
+    const message = await peerMessage(
+      repository,
+      source.agent.id,
+      USER_AGENT_ID,
+      'A participant supplied a specific observation.',
+    );
+    const first = toolsByName(await createUserTools(
+      repository,
+      'wake_finding_1',
+      1,
+      message.sequence,
+    ));
+    expect((await first.get('report_finding')!.execute({
+      content: 'This observation may connect to your interest.',
+      source_event_ids: [message.sequence],
+    })).ok).toBe(true);
+
+    const duplicate = toolsByName(await createUserTools(
+      repository,
+      'wake_finding_2',
+      2,
+      message.sequence,
+    ));
+    expect((await duplicate.get('report_finding')!.execute({
+      content: 'The same source must not become another finding.',
+      source_event_ids: [message.sequence],
+    })).ok).toBe(false);
     expect((await repository.readSnapshot()).findings).toEqual([
       expect.objectContaining({
-        finding: expect.objectContaining({
-          title: 'New finding from your network',
-        }),
+        finding: expect.objectContaining({ title: 'New finding for You' }),
+        sources: [expect.objectContaining({
+          attribution: expect.objectContaining({
+            participantId: source.participant.id,
+          }),
+        })],
       }),
     ]);
   });
 
-  it('keeps finding authority with the local user agent', async () => {
-    const created = await repository.createAssistedParticipant({
-      displayName: 'Avery',
-      privateContext: 'I can share personal observations about local music.',
-      contextApproved: true,
-    });
-    const tools = await new AgentCommunicationToolService(
-      repository,
-      created.agent,
-      created.participant,
-      'wake_assisted_source',
-      1,
-      Number.MAX_SAFE_INTEGER,
-    ).definitions();
-
-    expect(tools.map(({ name }) => name)).not.toContain('report_finding');
-  });
-
-  it('lets an assisted source respond through the existing mailbox tools', async () => {
-    const created = await repository.createAssistedParticipant({
-      displayName: 'Avery',
-      privateContext:
-        'I can share a specific personal observation about quiet local music.',
-      contextApproved: true,
-    });
-    const request = await repository.appendEvent({
-      kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
-      title: 'A request sent after Avery joined',
-      content: 'Does anyone know a quiet local music setting?',
-    });
-    const wake = await repository.beginAgentWake(
-      created.agent.id,
-      'wake_assisted_response',
-    );
-    expect(wake?.visibleEvents).toContainEqual(
-      expect.objectContaining({ sequence: request.sequence }),
-    );
-    const tools = new Map(
-      (await new AgentCommunicationToolService(
-        repository,
-        wake!.agent,
-        wake!.participant,
-        wake!.wakeId,
-        wake!.wakeNumber,
-        wake!.horizonSequence,
-      ).definitions()).map((tool) => [tool.name, tool]),
-    );
-
-    const response = await tools.get('post_shared_message')!.execute({
-      content:
-        'Avery has an approved personal observation connected to quiet local jazz settings.',
-      source_event_ids: [request.sequence],
-    });
-
-    expect(response.ok).toBe(true);
-    expect(
-      await repository.listEventsVisibleToAgent(USER_AGENT_ID, request.sequence),
-    ).toContainEqual(expect.objectContaining({
-      kind: 'shared_message',
-      actorAgentId: created.agent.id,
-    }));
-  });
-
-  it('removes disabled participants from direct-message targets', async () => {
-    const userAgent = await repository.requireUserAgent();
-    const user = await repository.requireParticipant(LOCAL_USER_ID);
-    await repository.setParticipantStatus(
-      'sample-product-researcher',
-      'disabled',
-    );
-    const tools = await new AgentCommunicationToolService(
-      repository,
-      userAgent,
-      user,
-      'wake_active_targets',
-      1,
-      Number.MAX_SAFE_INTEGER,
-    ).definitions();
-    const directMessage = tools.find(
-      ({ name }) => name === 'send_direct_message',
-    );
-
-    expect(
-      directMessage?.parameters.properties?.target_agent_id,
-    ).toMatchObject({
-      enum: ['sample-music-agent'],
-    });
-  });
-
-  it('allows one representative contribution per causal thread', async () => {
+  it('allows one representative contribution per principal-initiated causal thread', async () => {
     const interest = await repository.saveInterest(
       'Start one bounded causal thread.',
     );
-    const firstWake = new Map(
-      (await createUserTools(repository, 'wake_thread_1', 1))
-        .map((tool) => [tool.name, tool]),
-    );
-    const first = await firstWake.get('post_shared_message')!.execute({
+    const firstWake = toolsByName(await createUserTools(
+      repository,
+      'wake_thread_1',
+      1,
+      interest.sequence,
+    ));
+    expect((await firstWake.get('post_shared_message')!.execute({
       content: 'The first contribution is allowed.',
       source_event_ids: [interest.sequence],
-    });
+    })).ok).toBe(true);
 
-    const laterWake = new Map(
-      (await createUserTools(repository, 'wake_thread_2', 2))
-        .map((tool) => [tool.name, tool]),
-    );
-    const repeated = await laterWake.get('post_shared_message')!.execute({
-      content: 'A later wake must not extend the same thread again.',
+    const laterWake = toolsByName(await createUserTools(
+      repository,
+      'wake_thread_2',
+      2,
+      Number.MAX_SAFE_INTEGER,
+    ));
+    expect((await laterWake.get('post_shared_message')!.execute({
+      content: 'A later wake cannot extend the same thread again.',
       source_event_ids: [interest.sequence],
-    });
+    })).ok).toBe(false);
     const checkRequest = await repository.appendEvent({
       kind: 'check_requested',
       targetAgentId: USER_AGENT_ID,
@@ -335,16 +317,39 @@ Their saved interest and feedback are private.`);
       title: 'A new explicit check',
       content: 'This event starts a different causal thread.',
     });
-    const newThread = await laterWake.get('post_shared_message')!.execute({
-      content: 'A new user request allows a new contribution.',
+    expect((await laterWake.get('post_shared_message')!.execute({
+      content: 'A new request allows a new contribution.',
       source_event_ids: [checkRequest.sequence],
-    });
-
-    expect(first.ok).toBe(true);
-    expect(repeated.ok).toBe(false);
-    expect(newThread.ok).toBe(true);
+    })).ok).toBe(true);
   });
 });
+
+async function registerSynthetic(
+  repository: SqliteDiscoveryRepository,
+  key: string,
+) {
+  return await repository.registerParticipant({
+    registrationKey: `sim:test:${key}`,
+    kind: 'synthetic',
+    displayName: `Synthetic ${key}`,
+    privateContext: `Private context for ${key}.`,
+  });
+}
+
+async function peerMessage(
+  repository: SqliteDiscoveryRepository,
+  actorAgentId: string,
+  targetAgentId: string,
+  content: string,
+) {
+  return await repository.appendEvent({
+    kind: 'direct_message',
+    actorAgentId,
+    targetAgentId,
+    title: 'Participant message',
+    content,
+  });
+}
 
 async function createUserTools(
   repository: SqliteDiscoveryRepository,
@@ -360,4 +365,8 @@ async function createUserTools(
     wakeNumber,
     horizonSequence,
   ).definitions();
+}
+
+function toolsByName<T extends { name: string }>(tools: T[]): Map<string, T> {
+  return new Map(tools.map((tool) => [tool.name, tool]));
 }

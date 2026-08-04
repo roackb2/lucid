@@ -8,6 +8,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import dayjs from 'dayjs';
+import { Mutex } from 'async-mutex';
 import {
   FileHeartbeatTaskService,
   HeartbeatSchedulerService,
@@ -48,6 +49,7 @@ export class RepresentativeAgentHeartbeatService {
   private scheduler?: HeartbeatSchedulerHandle;
   private acceptingRuns = true;
   private paused = false;
+  private readonly taskMutationMutex = new Mutex();
 
   constructor(
     private readonly repository: DiscoveryRepository,
@@ -152,6 +154,23 @@ export class RepresentativeAgentHeartbeatService {
     };
   }
 
+  /** Returns only one participant representative's execution projection. */
+  async snapshotForAgent(agentId: string): Promise<BackgroundChecksView> {
+    const network = await this.snapshot();
+    const tasks = network.tasks.filter((task) => task.agentId === agentId);
+    const enabledTasks = tasks.filter((task) => task.enabled);
+    return {
+      enabled: network.enabled && enabledTasks.length > 0,
+      running: tasks.some((task) => task.status === 'running'),
+      intervalMs: network.intervalMs,
+      nextRunAt: earliest(
+        enabledTasks.flatMap((task) => task.nextRunAt ?? []),
+      ),
+      lastRunAt: latest(tasks.flatMap((task) => task.lastRunAt ?? [])),
+      tasks,
+    };
+  }
+
   async triggerAgent(agentId: string): Promise<void> {
     if (!this.acceptingRuns || this.paused) {
       return;
@@ -178,117 +197,125 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   async setEnabled(enabled: boolean): Promise<BackgroundChecksView> {
-    if (!enabled) {
-      // Heddle cancellation settles every claimed task before Lucid closes the
-      // global mailbox boundary or changes derived task configuration.
-      await this.pauseRunningTasks();
-    }
-    await this.repository.setBackgroundChecksEnabled(enabled);
-    this.paused = !enabled;
-    await this.ensureAgentTasks();
-    if (enabled) {
-      await this.resumeBlockedActiveTasks();
-      this.start();
-      await this.triggerAgentsWithUnreadEvents();
-    }
-    return await this.snapshot();
+    return await this.taskMutationMutex.runExclusive(async () => {
+      if (!enabled) {
+        // Heddle cancellation settles every claimed task before Lucid closes
+        // the global mailbox boundary or changes derived task configuration.
+        await this.pauseRunningTasks();
+      }
+      await this.repository.setBackgroundChecksEnabled(enabled);
+      this.paused = !enabled;
+      await this.ensureAgentTasks();
+      if (enabled) {
+        await this.enableActiveAgentTasks();
+        this.start();
+        await this.triggerAgentsWithUnreadEvents();
+      }
+      return await this.snapshot();
+    });
   }
 
   async resetWorkspace(): Promise<void> {
-    const wasEnabled = (await this.repository.readWorkspace())
-      .backgroundChecksEnabled;
-    // Reset crosses Heddle files and SQLite. Quiesce first, remove the old task
-    // generation, replace product state, then materialize the new generation.
-    await this.pauseRunningTasks();
-    await this.deleteManagedTasks();
-    await this.repository.reset({ backgroundChecksEnabled: wasEnabled });
-    this.paused = !wasEnabled;
-    await this.ensureAgentTasks();
-    this.start();
+    await this.taskMutationMutex.runExclusive(async () => {
+      const wasEnabled = (await this.repository.readWorkspace())
+        .backgroundChecksEnabled;
+      // Reset crosses Heddle files and SQLite. Quiesce first, remove the old
+      // task generation, replace state, then materialize the new generation.
+      await this.pauseRunningTasks();
+      await this.deleteManagedTasks();
+      await this.repository.reset({ backgroundChecksEnabled: wasEnabled });
+      this.paused = !wasEnabled;
+      await this.ensureAgentTasks();
+      this.start();
+    });
   }
 
   async reconcileAgentTasks(): Promise<void> {
-    await this.ensureAgentTasks();
+    await this.taskMutationMutex.runExclusive(
+      () => this.ensureAgentTasks(),
+    );
   }
 
   async enableAgentTask(agentId: string): Promise<void> {
-    await this.ensureAgentTasks();
-    if (this.paused) {
-      return;
-    }
-    const task = (await this.listManagedTasks()).find(
-      (candidate) => candidate.id === taskIdForAgent(agentId),
-    );
-    if (!task) {
-      throw new Error(`Heartbeat task is missing for agent: ${agentId}`);
-    }
-    if (task.state?.status === 'blocked') {
-      await this.tasks.resumeTask(task.id);
-    } else if (!task.enabled) {
-      await this.tasks.setTaskEnabled(task.id, true);
-    }
-    this.start();
+    await this.taskMutationMutex.runExclusive(async () => {
+      await this.ensureAgentTasks();
+      if (this.paused) {
+        return;
+      }
+      const task = (await this.listManagedTasks()).find(
+        (candidate) => candidate.id === taskIdForAgent(agentId),
+      );
+      if (!task) {
+        throw new Error(`Heartbeat task is missing for agent: ${agentId}`);
+      }
+      if (task.state?.status === 'blocked') {
+        await this.tasks.resumeTask(task.id);
+      } else if (!task.enabled) {
+        await this.tasks.setTaskEnabled(task.id, true);
+      }
+      this.start();
+    });
   }
 
   async disableAgentTasks(agentIds: string[]): Promise<void> {
-    const uniqueAgentIds = [...new Set(agentIds)];
-    if (!uniqueAgentIds.length) {
-      return;
-    }
-
-    // Resolve every target before changing anything. A missing derived task is
-    // an invariant failure, not permission to mutate participant state while a
-    // representative may still be running elsewhere.
-    const tasks = await Promise.all(uniqueAgentIds.map((agentId) => (
-      this.tasks.requireTask(taskIdForAgent(agentId))
-    )));
-    const tasksRequiringSettlement = tasks.filter((task) => (
-      task.enabled || task.state?.status === 'running'
-    ));
-    if (!tasksRequiringSettlement.length) {
-      return;
-    }
-
-    const scheduler = this.scheduler;
-    if (!scheduler) {
-      const runningTask = tasksRequiringSettlement.find(
-        (task) => task.state?.status === 'running',
-      );
-      if (runningTask) {
-        throw new Error(
-          `Cannot safely disable heartbeat task ${runningTask.id}: no local scheduler handle owns its running execution.`,
-        );
+    await this.taskMutationMutex.runExclusive(async () => {
+      const uniqueAgentIds = [...new Set(agentIds)];
+      if (!uniqueAgentIds.length) {
+        return;
       }
-    } else {
-      // Heddle invalidates queued admission, aborts only the requested task, and
-      // awaits claim-fenced settlement. Other participant wakes keep running.
-      const results = await Promise.all(tasksRequiringSettlement.map((task) => (
-        scheduler.cancelTask(task.id, {
-          reason: 'Lucid participant lifecycle change',
-        })
+
+      // Resolve every target before changing anything. A missing derived task
+      // is an invariant failure, not permission to mutate participant state.
+      const tasks = await Promise.all(uniqueAgentIds.map((agentId) => (
+        this.tasks.requireTask(taskIdForAgent(agentId))
       )));
-      const unsafeResult = results.find(({ disposition }) => (
-        UNSAFE_CANCELLATION_DISPOSITIONS.has(disposition)
+      const tasksRequiringSettlement = tasks.filter((task) => (
+        task.enabled || task.state?.status === 'running'
       ));
-      if (unsafeResult) {
-        throw new Error(
-          `Cannot safely disable heartbeat task ${unsafeResult.taskId}: cancellation returned ${unsafeResult.disposition}.`,
-        );
+      if (!tasksRequiringSettlement.length) {
+        return;
       }
-    }
 
-    // Disable only after every target can no longer retain old participant
-    // context or cross the mailbox boundary being changed by the caller.
-    await Promise.all(tasksRequiringSettlement
-      .filter((task) => task.enabled)
-      .map((task) => (
-        this.tasks.setTaskEnabled(task.id, false)
-      )));
+      const scheduler = this.scheduler;
+      if (!scheduler) {
+        const runningTask = tasksRequiringSettlement.find(
+          (task) => task.state?.status === 'running',
+        );
+        if (runningTask) {
+          throw new Error(
+            `Cannot safely disable heartbeat task ${runningTask.id}: no local scheduler handle owns its running execution.`,
+          );
+        }
+      } else {
+        // Heddle invalidates queued admission, aborts only the requested task,
+        // and awaits settlement. Other participant wakes keep running.
+        const results = await Promise.all(tasksRequiringSettlement.map((task) => (
+          scheduler.cancelTask(task.id, {
+            reason: 'Lucid participant lifecycle change',
+          })
+        )));
+        const unsafeResult = results.find(({ disposition }) => (
+          UNSAFE_CANCELLATION_DISPOSITIONS.has(disposition)
+        ));
+        if (unsafeResult) {
+          throw new Error(
+            `Cannot safely disable heartbeat task ${unsafeResult.taskId}: cancellation returned ${unsafeResult.disposition}.`,
+          );
+        }
+      }
+
+      // Disable only after every target can no longer retain old participant
+      // context or cross the boundary being changed by the caller.
+      await Promise.all(tasksRequiringSettlement
+        .filter((task) => task.enabled)
+        .map((task) => this.tasks.setTaskEnabled(task.id, false)));
+    });
   }
 
   private async ensureAgentTasks(): Promise<void> {
-    // Domain participant state is authoritative; Heddle tasks are a derived,
-    // durable execution projection that this method reconciles toward it.
+    // Domain participant state owns network availability. For active
+    // participants, the existing Heddle task retains its durable personal
+    // listening preference across host restarts and unrelated reconciliation.
     const [workspace, participants, agents, existingTasks] = await Promise.all([
       this.repository.readWorkspace(),
       this.repository.listParticipants(),
@@ -324,10 +351,11 @@ export class RepresentativeAgentHeartbeatService {
       if (!participant) {
         throw new Error(`Participant not found for agent: ${agent.id}`);
       }
-      const desiredEnabled = workspace.backgroundChecksEnabled
-        && participant.status === 'active';
       const taskId = taskIdForAgent(agent.id);
       const existing = currentTasks.get(taskId);
+      const desiredEnabled = workspace.backgroundChecksEnabled
+        && participant.status === 'active'
+        && (existing?.enabled ?? true);
       if (!existing) {
         await this.tasks.createTask({
           id: taskId,
@@ -514,7 +542,7 @@ export class RepresentativeAgentHeartbeatService {
     );
   }
 
-  private async resumeBlockedActiveTasks(): Promise<void> {
+  private async enableActiveAgentTasks(): Promise<void> {
     const [agents, tasks] = await Promise.all([
       this.repository.listActiveAgents(),
       this.listManagedTasks(),
@@ -524,10 +552,15 @@ export class RepresentativeAgentHeartbeatService {
       .filter((task) => {
         const agentId = agentIdFromTask(task.id);
         return agentId
-          && activeAgentIds.has(agentId)
-          && task.state?.status === 'blocked';
+          && activeAgentIds.has(agentId);
       })
-      .map((task) => this.tasks.resumeTask(task.id)));
+      .map(async (task) => {
+        if (task.state?.status === 'blocked') {
+          await this.tasks.resumeTask(task.id);
+        } else if (!task.enabled) {
+          await this.tasks.setTaskEnabled(task.id, true);
+        }
+      }));
   }
 
   private async deleteManagedTasks(): Promise<void> {

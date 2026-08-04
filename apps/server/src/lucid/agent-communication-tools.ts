@@ -13,10 +13,6 @@ import type {
   ToolPolicyHostContext,
   ToolResult,
 } from '@roackb2/heddle';
-import {
-  LOCAL_USER_ID,
-  USER_AGENT_ID,
-} from './default-participants.js';
 import type { DiscoveryRepository } from './discovery-repository.js';
 import type {
   Agent,
@@ -74,6 +70,7 @@ const WRITE_DISCOVERY_STATE_POLICY = {
  */
 export class AgentCommunicationToolService {
   private mutations = 0;
+  private addressableAgentIds = new Set<string>();
 
   constructor(
     private readonly repository: DiscoveryRepository,
@@ -85,14 +82,33 @@ export class AgentCommunicationToolService {
   ) {}
 
   async definitions(): Promise<ToolDefinition[]> {
-    // Only currently active representatives are addressable. The participant
-    // lifecycle therefore constrains both discovery and tool schemas.
-    const agents = await this.repository.listActiveAgents();
+    // A representative discovers peers from delivered messages, never from a
+    // global directory. Shared messages provide the initial introduction.
+    const [activeAgents, visibleEvents] = await Promise.all([
+      this.repository.listActiveAgents(),
+      this.repository.listEventsVisibleToAgent(
+        this.agent.id,
+        0,
+        1_000,
+        this.horizonSequence,
+      ),
+    ]);
+    const encounteredAgentIds = new Set(visibleEvents.flatMap((event) => (
+      event.actorAgentId && event.actorAgentId !== this.agent.id
+        ? [event.actorAgentId]
+        : []
+    )));
+    const addressableAgents = activeAgents.filter(
+      (candidate) => encounteredAgentIds.has(candidate.id),
+    );
+    this.addressableAgentIds = new Set(
+      addressableAgents.map(({ id }) => id),
+    );
     const commonTools: ToolDefinition[] = [
       {
         name: 'read_available_messages',
         description:
-          'Read shared messages, direct messages, and user input visible to this agent after an event sequence.',
+          'Read shared messages, direct messages, and private principal input visible to this agent after an event sequence.',
         concurrency: 'parallel-safe',
         capabilities: ['lucid.discovery.read'],
         hostPolicy: READ_DISCOVERY_STATE_POLICY,
@@ -139,7 +155,7 @@ export class AgentCommunicationToolService {
         },
         execute: async (input) => this.postSharedMessage(input),
       },
-      {
+      ...(addressableAgents.length ? [{
         name: 'send_direct_message',
         description:
           'Send one private message to another representative agent.',
@@ -150,9 +166,7 @@ export class AgentCommunicationToolService {
           properties: {
             target_agent_id: {
               type: 'string',
-              enum: agents
-                .filter((candidate) => candidate.id !== this.agent.id)
-                .map((candidate) => candidate.id),
+              enum: addressableAgents.map((candidate) => candidate.id),
             },
             content: { type: 'string', minLength: 1, maxLength: 700 },
             source_event_ids: {
@@ -166,7 +180,7 @@ export class AgentCommunicationToolService {
           additionalProperties: false,
         },
         execute: async (input) => this.sendDirectMessage(input),
-      },
+      } satisfies ToolDefinition] : []),
       {
         name: 'finish_without_action',
         description:
@@ -185,16 +199,14 @@ export class AgentCommunicationToolService {
       },
     ];
 
-    return this.canReportFinding()
-      ? [...commonTools, this.createReportFindingTool()]
-      : commonTools;
+    return [...commonTools, this.createReportFindingTool()];
   }
 
   private createReportFindingTool(): ToolDefinition {
     return {
       name: 'report_finding',
       description:
-        'Report one specific peer-sourced connection that may matter to the local user. State what the source contributed and why it may relate, without declaring it useful, validated, or a successful match. Sources prove delivery, not truth.',
+        'Report one specific peer-sourced connection privately to this agent’s participant. State what the source contributed and why it may relate, without declaring it useful, validated, or a successful match. Sources prove delivery, not truth.',
       capabilities: ['lucid.discovery.write'],
       hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
       parameters: {
@@ -286,6 +298,13 @@ export class AgentCommunicationToolService {
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
+    if (!this.addressableAgentIds.has(parsed.data.target_agent_id)) {
+      return {
+        ok: false,
+        error:
+          'Direct messages can be sent only to a peer encountered through a visible message.',
+      };
+    }
     const target = (await this.repository.listActiveAgents())
       .find((candidate) => candidate.id === parsed.data.target_agent_id);
     if (!target) {
@@ -329,15 +348,6 @@ export class AgentCommunicationToolService {
   }
 
   private async reportFinding(input: unknown): Promise<ToolResult> {
-    // Reporting is a privilege of the local user's representative, independent
-    // of whether another participant is also a real assisted human.
-    if (!this.canReportFinding()) {
-      return {
-        ok: false,
-        error: 'Only the local user’s representative agent can report findings.',
-      };
-    }
-
     const parsed = findingInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
@@ -365,7 +375,10 @@ export class AgentCommunicationToolService {
           'A finding must cite at least one visible shared or direct message from another agent.',
       };
     }
-    if (await this.repository.hasFindingUsingAnySource(sourceEventIds)) {
+    if (await this.repository.hasParticipantFindingUsingAnySource(
+      this.participant.id,
+      sourceEventIds,
+    )) {
       return {
         ok: false,
         error: 'A finding already used one or more of these source messages.',
@@ -380,10 +393,10 @@ export class AgentCommunicationToolService {
       wakeNumber: this.wakeNumber,
       kind: 'finding_reported',
       actorAgentId: this.agent.id,
-      targetParticipantId: LOCAL_USER_ID,
+      targetParticipantId: this.participant.id,
       parentSequence: sourceEventIds[0],
       idempotencyKey: this.actionIdempotencyKey(actionIndex),
-      title: 'New finding from your network',
+      title: `New finding for ${this.participant.displayName}`,
       content: parsed.data.content,
       metadata: {
         visibility: 'user',
@@ -415,10 +428,6 @@ export class AgentCommunicationToolService {
         wakeId: this.wakeId,
       },
     }));
-  }
-
-  private canReportFinding(): boolean {
-    return this.agent.id === USER_AGENT_ID;
   }
 
   private reserveMutation(): number | ToolResult {

@@ -1,5 +1,5 @@
 import { createTRPCClient, httpBatchLink } from '@trpc/client';
-import type { inferRouterInputs, inferRouterOutputs } from '@trpc/server';
+import type { inferRouterOutputs } from '@trpc/server';
 import superjson from 'superjson';
 import type { AppRouter } from '@lucid/server/router';
 
@@ -15,15 +15,6 @@ export const lucidClient = createTRPCClient<AppRouter>({
 });
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
-type RouterInputs = inferRouterInputs<AppRouter>;
 
 export type DiscoverySnapshot = RouterOutputs['discovery']['snapshot'];
-export type CreateAssistedParticipantInput =
-  RouterInputs['discovery']['createAssistedParticipant'];
-export type UpdateAssistedParticipantContextInput =
-  RouterInputs['discovery']['updateAssistedParticipantContext'];
-export type AssistedParticipantContext =
-  RouterOutputs['discovery']['assistedParticipantContext'];
-export type DiscoveryEvent = DiscoverySnapshot['events'][number];
-export type AgentView = DiscoverySnapshot['agents'][number];
 export type FindingView = DiscoverySnapshot['findings'][number];

@@ -1,15 +1,13 @@
 /**
- * Client-side synchronization boundary for the discovery workspace snapshot.
- * Every mutation returns and installs the server's complete authoritative view;
- * this hook owns polling cadence and notifications, not optimistic domain state.
+ * Client synchronization boundary for the participant-scoped workspace.
+ * Mutations install the server's authoritative projection; this hook owns
+ * polling and notifications, not optimistic domain state or network admin.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   lucidClient,
-  type CreateAssistedParticipantInput,
   type DiscoverySnapshot,
-  type UpdateAssistedParticipantContextInput,
 } from '@/lib/trpc';
 
 const SNAPSHOT_KEY = ['discovery', 'workspace'] as const;
@@ -19,24 +17,24 @@ export function useDiscoveryWorkspace() {
   const snapshot = useQuery({
     queryKey: SNAPSHOT_KEY,
     queryFn: () => lucidClient.discovery.snapshot.query(),
-    // Poll quickly only while an agent is running so task completion becomes
-    // visible without imposing the same request rate on an idle workspace.
+    // Poll quickly only while this participant's representative is running.
     refetchInterval: (query) => (
       query.state.data?.backgroundChecks.running ? 700 : 4_000
     ),
     retry: 2,
   });
 
+  const installSnapshot = (nextSnapshot: DiscoverySnapshot) => {
+    queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
+  };
+
   const saveInterest = useMutation({
     mutationFn: (content: string) => (
       lucidClient.discovery.saveInterest.mutate({ content })
     ),
     onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData<DiscoverySnapshot>(
-        SNAPSHOT_KEY,
-        nextSnapshot,
-      );
-      toast.success('Interest saved. Lucid will check it in the background.');
+      installSnapshot(nextSnapshot);
+      toast.success('Interest saved. Your representative is listening.');
     },
     onError: notifyError,
   });
@@ -44,10 +42,7 @@ export function useDiscoveryWorkspace() {
   const runNow = useMutation({
     mutationFn: () => lucidClient.discovery.runNow.mutate(),
     onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData<DiscoverySnapshot>(
-        SNAPSHOT_KEY,
-        nextSnapshot,
-      );
+      installSnapshot(nextSnapshot);
       toast.message('A fresh check has been queued.');
     },
     onError: notifyError,
@@ -58,14 +53,11 @@ export function useDiscoveryWorkspace() {
       lucidClient.discovery.setBackgroundChecksEnabled.mutate({ enabled })
     ),
     onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData<DiscoverySnapshot>(
-        SNAPSHOT_KEY,
-        nextSnapshot,
-      );
+      installSnapshot(nextSnapshot);
       toast.message(
         nextSnapshot.backgroundChecks.enabled
-          ? 'Background checks resumed.'
-          : 'Background checks paused.',
+          ? 'Your representative resumed listening.'
+          : 'Your representative paused.',
       );
     },
     onError: notifyError,
@@ -76,89 +68,8 @@ export function useDiscoveryWorkspace() {
       lucidClient.discovery.submitFeedback.mutate(input)
     ),
     onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData<DiscoverySnapshot>(
-        SNAPSHOT_KEY,
-        nextSnapshot,
-      );
-      toast.success('Feedback saved for Lucid’s next wake.');
-    },
-    onError: notifyError,
-  });
-
-  const createAssistedParticipant = useMutation({
-    mutationFn: (input: CreateAssistedParticipantInput) => (
-      lucidClient.discovery.createAssistedParticipant.mutate(input)
-    ),
-    onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
-      toast.success('Participant added. Their representative is now scheduled.');
-    },
-    onError: notifyError,
-  });
-
-  const loadAssistedParticipantContext = useMutation({
-    mutationFn: (participantId: string) => (
-      lucidClient.discovery.assistedParticipantContext.query({ participantId })
-    ),
-    onError: notifyError,
-  });
-
-  const updateAssistedParticipantContext = useMutation({
-    mutationFn: (input: UpdateAssistedParticipantContextInput) => (
-      lucidClient.discovery.updateAssistedParticipantContext.mutate(input)
-    ),
-    onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
-      toast.success('Approved context updated for future messages.');
-    },
-    onError: notifyError,
-  });
-
-  const pauseSimulatedParticipants = useMutation({
-    mutationFn: () => (
-      lucidClient.discovery.pauseSimulatedParticipants.mutate()
-    ),
-    onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
-      toast.success('Simulated sources paused for the real-source pilot.');
-    },
-    onError: notifyError,
-  });
-
-  const setParticipantEnabled = useMutation({
-    mutationFn: (input: { participantId: string; enabled: boolean }) => (
-      lucidClient.discovery.setParticipantEnabled.mutate(input)
-    ),
-    onSuccess: (nextSnapshot, input) => {
-      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
-      toast.message(
-        input.enabled
-          ? 'Participant resumed. Only new messages will be delivered.'
-          : 'Participant paused. New messages will be skipped.',
-      );
-    },
-    onError: notifyError,
-  });
-
-  const retireParticipant = useMutation({
-    mutationFn: (participantId: string) => (
-      lucidClient.discovery.retireParticipant.mutate({ participantId })
-    ),
-    onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData<DiscoverySnapshot>(SNAPSHOT_KEY, nextSnapshot);
-      toast.success('Participant retired and private context removed.');
-    },
-    onError: notifyError,
-  });
-
-  const resetWorkspace = useMutation({
-    mutationFn: () => lucidClient.discovery.resetWorkspace.mutate(),
-    onSuccess: (nextSnapshot) => {
-      queryClient.setQueryData<DiscoverySnapshot>(
-        SNAPSHOT_KEY,
-        nextSnapshot,
-      );
-      toast.success('Discovery workspace reset.');
+      installSnapshot(nextSnapshot);
+      toast.success('Feedback saved for your representative’s next wake.');
     },
     onError: notifyError,
   });
@@ -168,14 +79,7 @@ export function useDiscoveryWorkspace() {
     saveInterest,
     runNow,
     setBackgroundChecksEnabled,
-    createAssistedParticipant,
-    loadAssistedParticipantContext,
-    updateAssistedParticipantContext,
-    pauseSimulatedParticipants,
-    setParticipantEnabled,
-    retireParticipant,
     submitFeedback,
-    resetWorkspace,
   };
 }
 

@@ -9,18 +9,18 @@ import {
 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import type { AgentView, FindingView } from '@/lib/trpc';
+import type { FindingView } from '@/lib/trpc';
 
 type FindingCardProps = {
-  agents: AgentView[];
   finding: FindingView;
   isLatest: boolean;
   isSubmitting: boolean;
   onFeedback(findingSequence: number, content: string): Promise<unknown>;
 };
 
+type FindingSource = FindingView['sources'][number];
+
 export function FindingCard({
-  agents,
   finding,
   isLatest,
   isSubmitting,
@@ -28,14 +28,7 @@ export function FindingCard({
 }: FindingCardProps) {
   const [feedbackDraft, setFeedbackDraft] = useState('');
   const [explanationOpen, setExplanationOpen] = useState(isLatest);
-  const agentById = new Map(agents.map((agent) => [agent.id, agent]));
-  const sourceAgents = finding.sources.flatMap((source) => {
-    const sourceAgent = source.actorAgentId
-      ? agentById.get(source.actorAgentId)
-      : undefined;
-    return sourceAgent ? [sourceAgent] : [];
-  });
-  const sourceDescription = describeSourceMix(sourceAgents);
+  const sourceDescription = describeSourceMix(finding.sources);
 
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -69,7 +62,7 @@ export function FindingCard({
           </div>
           <h3>
             {finding.noMatch
-              ? 'Earlier completed check'
+              ? 'No relevant message surfaced in this check'
               : 'Something from your network may be relevant'}
           </h3>
         </div>
@@ -88,13 +81,11 @@ export function FindingCard({
       {finding.sources.length || finding.outboundMessages.length ? (
         <details
           className="finding-explanation"
-          onToggle={(event) => {
-            setExplanationOpen(event.currentTarget.open);
-          }}
+          onToggle={(event) => setExplanationOpen(event.currentTarget.open)}
           open={explanationOpen}
         >
           <summary>
-            <span>See source messages and what Lucid shared</span>
+            <span>See source messages and what your agent shared</span>
             <ChevronDown size={15} />
           </summary>
           <div className="finding-explanation__content">
@@ -102,22 +93,19 @@ export function FindingCard({
               <section>
                 <h4>Messages that caused this finding</h4>
                 <ol>
-                  {finding.sources.map((source) => (
-                    <li key={source.id}>
-                      <span>#{source.sequence}</span>
+                  {finding.sources.map(({ message, attribution }) => (
+                    <li key={message.id}>
+                      <span>#{message.sequence}</span>
                       <div>
                         <div className="source-message__identity">
                           <strong>
-                            {source.actorAgentId
-                              ? agentById.get(source.actorAgentId)?.name
-                                ?? 'Unknown agent'
-                              : 'System'}
+                            {attribution?.participantDisplayName
+                              ?? attribution?.agentName
+                              ?? 'Network participant'}
                           </strong>
-                          {source.actorAgentId
-                            ? <SourceKindBadge agent={agentById.get(source.actorAgentId)} />
-                            : null}
+                          <SourceKindBadge source={{ message, attribution }} />
                         </div>
-                        <p>{source.content}</p>
+                        <p>{message.content}</p>
                       </div>
                     </li>
                   ))}
@@ -126,7 +114,7 @@ export function FindingCard({
             ) : null}
             {finding.outboundMessages.length ? (
               <section>
-                <h4>What Lucid shared while looking</h4>
+                <h4>What your representative shared while looking</h4>
                 <ul>
                   {finding.outboundMessages.map((message) => (
                     <li key={message.id}>
@@ -152,21 +140,21 @@ export function FindingCard({
             <strong>Your feedback</strong>
           </div>
           <p>{finding.feedback.content}</p>
-          <small>Lucid will receive this during its next wake.</small>
+          <small>Your representative receives this during its next wake.</small>
         </section>
       ) : (
         <form className="finding-feedback" onSubmit={submitFeedback}>
           <label htmlFor={`finding-feedback-${finding.finding.sequence}`}>
             {finding.noMatch
               ? 'Was reporting no match the right choice?'
-              : 'Was this useful? Tell Lucid what it understood or missed.'}
+              : 'Was this useful? Tell your representative what it understood or missed.'}
           </label>
           <div>
             <textarea
               id={`finding-feedback-${finding.finding.sequence}`}
               maxLength={1_600}
               onChange={(event) => setFeedbackDraft(event.target.value)}
-              placeholder="Feedback remains private to your agent..."
+              placeholder="Feedback remains private to your representative..."
               rows={3}
               value={feedbackDraft}
             />
@@ -185,40 +173,42 @@ export function FindingCard({
   );
 }
 
-function describeSourceMix(agents: AgentView[]): string {
-  const uniqueAgents = new Map(agents.map((agent) => [agent.id, agent]));
+function describeSourceMix(sources: FindingSource[]): string {
+  const participants = new Map(sources.flatMap(({ attribution }) => (
+    attribution ? [[attribution.participantId, attribution] as const] : []
+  )));
   const sourceKinds = new Set(
-    [...uniqueAgents.values()].map((agent) => agent.participant.kind),
+    [...participants.values()].map(({ participantKind }) => participantKind),
   );
+
   if (sourceKinds.has('human') && sourceKinds.has('synthetic')) {
-    return 'Mixed real and simulated sources';
+    return 'Human and synthetic participants';
   }
   if (sourceKinds.has('human')) {
-    return uniqueAgents.size === 1
-      ? '1 assisted real source'
-      : `${uniqueAgents.size} assisted real sources`;
+    return participants.size === 1
+      ? '1 human participant'
+      : `${participants.size} human participants`;
   }
   if (sourceKinds.has('synthetic')) {
-    return uniqueAgents.size === 1
-      ? '1 simulated source'
-      : `${uniqueAgents.size} simulated sources`;
+    return participants.size === 1
+      ? '1 synthetic participant'
+      : `${participants.size} synthetic participants`;
   }
-  return 'Source type unavailable';
+  return sources.length ? 'Network source' : 'No source message';
 }
 
-function SourceKindBadge({ agent }: { agent?: AgentView }) {
-  if (!agent) {
+function SourceKindBadge({ source }: { source: FindingSource }) {
+  const kind = source.attribution?.participantKind;
+  if (!kind) {
     return null;
   }
   return (
     <span className={
-      agent.participant.kind === 'human'
+      kind === 'human'
         ? 'source-badge source-badge--real'
         : 'source-badge'
     }>
-      {agent.participant.kind === 'human'
-        ? 'Real · assisted'
-        : 'Simulated fixture'}
+      {kind === 'human' ? 'Human participant' : 'Synthetic participant'}
     </span>
   );
 }

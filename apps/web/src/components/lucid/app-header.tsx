@@ -1,4 +1,4 @@
-import { Activity, Search, Users } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type { DiscoverySnapshot } from '@/lib/trpc';
 
 type AppHeaderProps = {
@@ -22,8 +22,6 @@ export function AppHeader({ snapshot }: AppHeaderProps) {
       <nav className="app-nav" aria-label="Workspace sections">
         <a href="#interest"><Search size={15} /> Interest</a>
         <a href="#findings">Findings</a>
-        <a href="#sources"><Users size={15} /> Sources</a>
-        <a href="#activity"><Activity size={15} /> Activity</a>
       </nav>
 
       <div
@@ -32,10 +30,10 @@ export function AppHeader({ snapshot }: AppHeaderProps) {
       >
         <span />
         {isRunning
-          ? 'Checking messages'
+          ? 'Your agent is checking'
           : isEnabled
-            ? 'Background checks on'
-            : 'Checks paused'}
+            ? 'Your agent is listening'
+            : 'Your agent is paused'}
       </div>
     </header>
   );
