@@ -203,8 +203,8 @@ export class DiscoveryWorkspaceService {
     ));
 
     try {
-      // Quiesce once and disable every fixture task before changing domain
-      // state, so a real-source pilot cannot race with one last simulated run.
+      // Settle and disable every fixture task before changing domain state.
+      // Heddle targets only these representatives, so real sources keep running.
       await this.heartbeats.disableAgentTasks(agents.map(({ id }) => id));
       for (const participant of simulatedParticipants) {
         await this.repository.setParticipantStatus(

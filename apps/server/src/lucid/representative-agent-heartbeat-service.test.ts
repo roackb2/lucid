@@ -246,6 +246,73 @@ describe('representative-agent heartbeat service', () => {
       .not.toContain(createdAgent!.id);
   });
 
+  it('cancels one participant without aborting a running peer', async () => {
+    config.heartbeatMaxConcurrency = 2;
+    const runner = new CoordinatedHeartbeatRunner();
+    const { heartbeat, workspace } = await startServices(runner);
+    const targetAgentId = 'sample-music-agent';
+    const targetParticipantId = 'sample-music-maker';
+    const peerAgentId = 'sample-product-agent';
+    const targetCursor = (await repository.requireAgent(targetAgentId))
+      .lastSeenSequence;
+
+    await Promise.all([
+      repository.appendEvent({
+        kind: 'direct_message',
+        actorAgentId: USER_AGENT_ID,
+        targetAgentId,
+        targetParticipantId,
+        title: 'Test message for the participant being paused',
+        content: 'Keep this message unread when its representative is cancelled.',
+      }),
+      repository.appendEvent({
+        kind: 'direct_message',
+        actorAgentId: USER_AGENT_ID,
+        targetAgentId: peerAgentId,
+        targetParticipantId: 'sample-product-researcher',
+        title: 'Test message for the running peer',
+        content: 'Keep this representative running during targeted cancellation.',
+      }),
+    ]);
+    await Promise.all([
+      heartbeat.triggerAgent(targetAgentId),
+      heartbeat.triggerAgent(peerAgentId),
+    ]);
+    await vi.waitFor(async () => {
+      expect(runner.signalFor(targetAgentId)).toBeDefined();
+      expect(runner.signalFor(peerAgentId)).toBeDefined();
+      expect((await repository.requireAgent(targetAgentId)).status)
+        .toBe('running');
+      expect((await repository.requireAgent(peerAgentId)).status)
+        .toBe('running');
+    }, { interval: 10, timeout: 5_000 });
+
+    const disabled = await workspace.setParticipantEnabled(
+      targetParticipantId,
+      false,
+    );
+
+    expect(runner.signalFor(targetAgentId)?.aborted).toBe(true);
+    expect(runner.signalFor(peerAgentId)?.aborted).toBe(false);
+    expect((await repository.requireAgent(targetAgentId)).lastSeenSequence)
+      .toBe(targetCursor);
+    expect((await repository.requireAgent(peerAgentId)).status)
+      .toBe('running');
+    expect(disabled.backgroundChecks.running).toBe(true);
+    expect(disabled.backgroundChecks.tasks.find(
+      (task) => task.agentId === targetAgentId,
+    )?.enabled).toBe(false);
+    expect(disabled.backgroundChecks.tasks.find(
+      (task) => task.agentId === peerAgentId,
+    )).toMatchObject({ enabled: true, status: 'running' });
+
+    runner.release(peerAgentId);
+    await vi.waitFor(async () => {
+      expect((await repository.requireAgent(peerAgentId)).status).toBe('idle');
+      expect((await heartbeat.snapshot()).running).toBe(false);
+    }, { interval: 10, timeout: 5_000 });
+  });
+
   it('reviews and renews assisted context without exposing it in snapshots', async () => {
     const { workspace } = await startServices(new CountingHeartbeatRunner());
     const created = await workspace.createAssistedParticipant({
@@ -550,6 +617,41 @@ implements RepresentativeAgentHeartbeatRunner {
       }),
     );
     return await runTestAgent(input, 'Retry completed.');
+  }
+}
+
+class CoordinatedHeartbeatRunner
+implements RepresentativeAgentHeartbeatRunner {
+  private readonly signals = new Map<string, AbortSignal>();
+  private readonly releases = new Map<string, () => void>();
+
+  async run(
+    input: RunRepresentativeAgentHeartbeatInput,
+  ): Promise<AgentHeartbeatResult> {
+    const agentId = input.wake.agent.id;
+    this.signals.set(agentId, input.execution.signal);
+    await new Promise<void>((resolve) => {
+      const release = () => {
+        input.execution.signal.removeEventListener('abort', release);
+        this.releases.delete(agentId);
+        resolve();
+      };
+      this.releases.set(agentId, release);
+      input.execution.signal.addEventListener('abort', release, { once: true });
+    });
+    return await runTestAgent(input, `Finished coordinated wake for ${agentId}.`);
+  }
+
+  signalFor(agentId: string): AbortSignal | undefined {
+    return this.signals.get(agentId);
+  }
+
+  release(agentId: string): void {
+    const release = this.releases.get(agentId);
+    if (!release) {
+      throw new Error(`No coordinated heartbeat is waiting for ${agentId}.`);
+    }
+    release();
   }
 }
 

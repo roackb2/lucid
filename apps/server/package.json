@@ -19,7 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@roackb2/heddle": "5.7.0",
+    "@roackb2/heddle": "5.8.0",
     "@trpc/server": "11.16.0",
     "better-sqlite3": "^12.4.1",
     "dayjs": "^1.11.20",

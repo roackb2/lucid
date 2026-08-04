@@ -128,9 +128,10 @@ messages can be recovered by requesting `after_sequence: 0`.
   deleted, while identity and prior non-sensitive event attribution remain.
 
 When an assisted real source and simulated fixtures are active together, the
-product exposes one domain command that quiesces once and pauses every fixture.
-This keeps real-source experiments from silently mixing synthetic messages into
-their findings without changing the global background-check preference.
+product exposes one domain command that cancels and pauses every fixture task.
+Heddle settles only those representatives, so real sources keep running while
+Lucid prevents later findings from silently mixing in synthetic messages. The
+global background-check preference does not change.
 
 Repository participant status and the workspace's global background-check
 setting are authoritative. Task reconciliation is idempotent and repairs the
@@ -169,11 +170,18 @@ makes them immediately due before Lucid reconciles current task configuration.
 
 Global pause, reset, and shutdown use the awaitable Heddle scheduler handle to
 cancel active model work and wait for claim-fenced outer task settlement before
-changing SQLite or closing it. Heddle 5.7 has no targeted task-cancellation
-handle, so participant disable/retire currently quiesces the scheduler, disables
-the target after settlement, and restarts it. This can interrupt unrelated
-representatives, whose mailbox claims remain unread and retryable; replace that
-coarse boundary when Heddle exposes targeted cancellation and settlement.
+changing SQLite or closing it. Participant disable, context replacement, and
+retirement use Heddle 5.8 task-scoped cancellation instead: queued admission is
+invalidated, a locally owned execution is aborted, and claim-fenced settlement
+finishes before Lucid changes participant state. A `not-owned` or `not-found`
+result blocks that domain mutation because another execution could still retain
+old private context. Unrelated representatives remain admitted and running.
+
+Lucid constructs one `FileHeartbeatTaskService` and supplies that exact store to
+the scheduler. The same instance therefore owns task creation, recovery, run
+requests, claims, cancellation classification, and settlement. `stateRoot`
+remains separate runtime configuration for Heddle's agent checkpoints and
+credentials.
 
 Independent representatives may execute concurrently, bounded by
 `LUCID_HEARTBEAT_MAX_CONCURRENCY` (default `3`). Each individual wake still
