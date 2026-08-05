@@ -40,6 +40,13 @@ scheduler.
 - `discovery_events` is the append-only product and mailbox history. It has a
   nullable unique idempotency key for retry-safe agent side effects.
 
+The representative working note is also stored as an immutable discovery
+event (`representative_note_updated`) rather than a mutable profile column.
+The latest event is the current projection; older revisions remain inspectable.
+Each revision records the claimed source horizon and uses one wake-stable
+idempotency key. Queries for agent execution are bounded by event sequence so a
+retry cannot observe its own post-horizon writes as new starting context.
+
 A participant answers "whose context and intent does this agent represent?"
 A saved interest answers "what does the local user want the agent to notice
 now?" and remains a private event rather than a participant field.

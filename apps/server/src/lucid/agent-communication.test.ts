@@ -55,6 +55,13 @@ describe('representative-agent communication', () => {
         resources: ['lucid:discovery-events'],
       },
     });
+    expect(toolsByName.get('update_working_note')?.hostPolicy).toMatchObject({
+      operations: ['write'],
+      writeScope: {
+        kind: 'domain',
+        resources: ['lucid:discovery-events'],
+      },
+    });
   });
 
   it('interpolates generic participant context and private inputs into readable prompts', async () => {
@@ -75,8 +82,73 @@ You represent an explicitly simulated test participant, not a real person or ext
       source.participant,
       1,
       [input],
+      {
+        principalInputs: [input],
+        findings: [],
+      },
     )).toContain(`Unread events visible to this agent:
 - #${input.sequence} [private participant input]`);
+  });
+
+  it('places prior findings, feedback, and the working note before unread events', async () => {
+    const source = await registerSynthetic(repository, 'prompt-history-source');
+    const interest = await repository.saveInterest(
+      'Find concrete examples of agents preserving unfinished work.',
+    );
+    const sourceMessage = await peerMessage(
+      repository,
+      source.agent.id,
+      USER_AGENT_ID,
+      'One team kept abandoned drafts to compare later decisions.',
+    );
+    const finding = await repository.appendEvent({
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'New finding for You',
+      content: 'Abandoned drafts may preserve useful decision context.',
+      metadata: { sourceEventIds: [sourceMessage.sequence] },
+    });
+    const feedback = await repository.saveFeedback(
+      LOCAL_USER_ID,
+      finding.sequence,
+      'Only report this direction again with a named workflow.',
+    );
+    const note = await repository.appendEvent({
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Lucid updates its private working note',
+      content: 'Require a named workflow for future draft-retention findings.',
+    });
+    const laterMessage = await peerMessage(
+      repository,
+      source.agent.id,
+      USER_AGENT_ID,
+      'Another participant also keeps rough drafts.',
+    );
+    const context = await repository.readRepresentativeWorkingContext(
+      USER_AGENT_ID,
+      laterMessage.sequence,
+    );
+    const prompt = buildAgentWakePrompt(
+      await repository.requireUserAgent(),
+      await repository.requireParticipant(LOCAL_USER_ID),
+      2,
+      [laterMessage],
+      context,
+    );
+
+    expect(prompt).toContain(`Current principal input:\n- #${interest.sequence}`);
+    expect(prompt).toContain(`Private working note:\n#${note.sequence}: Require a named workflow`);
+    expect(prompt).toContain(`Finding #${finding.sequence}: Abandoned drafts may preserve useful decision context.`);
+    expect(prompt).toContain(`Participant feedback: #${feedback.sequence}: Only report this direction again with a named workflow.`);
+    expect(prompt).toContain('A different source is not automatically a new finding');
+    expect(prompt).toContain('Do not use report_finding as a reply.');
+    expect(prompt).toContain('report_finding never replies to the source agent.');
+    expect(prompt.indexOf('Ongoing assignment context:'))
+      .toBeLessThan(prompt.indexOf('Unread events visible to this agent:'));
   });
 
   it('keeps reads and source references inside the claimed wake horizon', async () => {
@@ -194,6 +266,12 @@ You represent an explicitly simulated test participant, not a real person or ext
       visible.sequence,
     ));
 
+    expect((await tools.get('update_working_note')!.execute({
+      content: 'Remember the concrete visible source for later comparison.',
+    })).ok).toBe(true);
+    expect((await tools.get('update_working_note')!.execute({
+      content: 'A second note replacement in one wake must fail.',
+    })).ok).toBe(false);
     expect((await tools.get('post_shared_message')!.execute({
       content: 'This hidden source should fail.',
       source_event_ids: [hidden.sequence],
@@ -210,6 +288,13 @@ You represent an explicitly simulated test participant, not a real person or ext
     expect((await tools.get('finish_without_action')!.execute({
       reason: 'A third action exceeds the budget.',
     })).ok).toBe(false);
+    expect((await repository.readSnapshot()).workingNote).toMatchObject({
+      content: 'Remember the concrete visible source for later comparison.',
+      metadata: expect.objectContaining({
+        throughSequence: visible.sequence,
+        derived: true,
+      }),
+    });
   });
 
   it('lets every representative report findings only to its own participant', async () => {

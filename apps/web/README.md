@@ -11,8 +11,9 @@ The primary path is:
 1. save or edit an ordinary-language interest;
 2. see whether this participant's representative is listening or working;
 3. optionally request an immediate check;
-4. read participant-scoped findings and their causal messages;
-5. leave private free-text feedback.
+4. inspect the representative's revisable working understanding;
+5. read participant-scoped findings and their causal messages; and
+6. leave private free-text feedback that carries into later checks.
 
 The app intentionally does not render a global participant directory, event
 log, task list, reset control, or participant administration. Those are
@@ -24,6 +25,7 @@ router, not features of a participant's social-network experience.
 | Component | Responsibility |
 | --- | --- |
 | `interest-composer.tsx` | Create, edit, save, and manually re-check one interest |
+| `representative-progress.tsx` | Present the latest private working note as revisable interpretation rather than fact |
 | `background-checks.tsx` | Present and control this representative's durable listening state |
 | `findings-feed.tsx` | Present waiting, checking, paused, and finding states |
 | `finding-card.tsx` | Show one finding, source attribution, causal messages, and private feedback |

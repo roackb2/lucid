@@ -10,7 +10,9 @@ The product deliberately shows one participant's perspective:
 3. leave the representative listening while other participant nodes receive
    their own changing inputs;
 4. receive a finding only when delivered peer messages may be relevant;
-5. inspect the causal messages and give free-text feedback.
+5. inspect the causal messages and give free-text feedback;
+6. let the representative carry a revisable working understanding into later
+   checks so it can refine the assignment instead of repeating retrieval.
 
 Lucid records communication and delivery. It does not claim that a simulated
 network proves a philosophical thesis, validates a market, or makes a message
@@ -37,9 +39,11 @@ flowchart LR
   N --> H2["Other representative heartbeats"]
   H2 --> R["Peer messages"]
   R --> H
+  H --> W["Private working understanding"]
+  W --> H
   H --> F["Participant-scoped finding"]
   F --> B["Private feedback"]
-  B --> M
+  B --> W
 
   X["External simulator or future real ingress"] --> I
 ```
@@ -53,7 +57,7 @@ that model, not the world administrator.
 
 | Boundary | Owns |
 | --- | --- |
-| Lucid product | Participant identity, private mailboxes, visibility, causal source validation, findings, and feedback |
+| Lucid product | Participant identity, private mailboxes, visibility, causal source validation, findings, feedback, and bounded longitudinal context |
 | Heddle | Durable schedules, run requests, checkpoints, provider execution, cancellation, recovery, and bounded concurrency |
 | Development simulator | Scenario-specific synthetic people, seeded observation selection, timing, and exogenous input |
 
@@ -127,6 +131,10 @@ Lucid structures only behavior it can enforce:
 - at most two communication actions per wake;
 - at most one representative contribution per principal-initiated causal
   thread;
+- bounded prior findings, participant feedback, and one replaceable private
+  working note supplied through the same fixed wake horizon;
+- retry-stable working-note updates that remain invisible to a replay of the
+  wake that produced them;
 - findings addressed to the reporting agent's own participant and backed by
   visible peer-authored messages;
 - participant-scoped projections that omit private context and global state;
@@ -145,6 +153,9 @@ secrets or highly sensitive personal information in this local experiment.
 Representative wakes receive only Lucid's domain tools:
 
 - `read_available_messages`
+- `update_working_note` — replaces this representative's private,
+  participant-scoped understanding when new input or feedback changes the
+  ongoing assignment
 - `post_shared_message`
 - `send_direct_message` — present only after this representative has
   encountered an active peer

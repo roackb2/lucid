@@ -14,8 +14,8 @@ simulation scenarios.
 | `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per representative, claims mailbox wakes, accelerates unread agents, and owns scheduler lifecycle |
 | `heddle-representative-agent-runner.ts` | Builds one claimed wake's prompt/tools and delegates execution through Heddle's context |
 | `discovery-repository.ts` | Defines the asynchronous storage-independent domain port |
-| `agent-communication-tools.ts` | Enforces visible sources, fixed horizons, encountered-peer addressing, action budgets, and idempotent writes |
-| `agent-prompts.ts` | Builds generic representative identity and readable wake prompts |
+| `agent-communication-tools.ts` | Enforces visible sources, fixed horizons, encountered-peer addressing, action budgets, and idempotent communication/working-note writes |
+| `agent-prompts.ts` | Builds generic representative identity plus bounded longitudinal wake context |
 | `representative-profile.ts` | Builds the generic representative profile for dynamically registered participants |
 | `local-participant.ts` | Defines only the stable local participant and representative identity |
 | `discovery-types.ts` | Defines persisted records, scoped product views, and development diagnostics |
@@ -30,7 +30,7 @@ retain their ordinary infrastructure meanings.
 contains only:
 
 - the local participant and representative;
-- that participant's current interest and findings;
+- that participant's current interest, private working note, and findings;
 - source attribution attached to those findings;
 - that representative's Heddle task status.
 
@@ -50,6 +50,7 @@ authentication in a deployed service.
 | `Participant` | A human or explicit synthetic principal with stable registration identity and private context |
 | `Agent` | The executable representative, delivery cursor, and optional active wake |
 | `DiscoveryEvent` | Append-only principal input, communication, result, feedback, and lifecycle history |
+| `RepresentativeWorkingContext` | Bounded principal input, prior findings/feedback, and the latest derived working note at one event horizon |
 
 Every participant has one representative. Every representative can receive its
 principal's changing private input and report findings to that same principal.
@@ -70,6 +71,8 @@ Lucid owns:
 - direct addressing only to active peers encountered through visible delivery;
 - findings backed by visible peer-authored messages;
 - participant-scoped findings, feedback, and source attribution;
+- participant-scoped longitudinal context and a replaceable ordinary-language
+  working note derived from immutable history;
 - durable cursors and event/action idempotency keys.
 
 Heddle owns:
@@ -109,8 +112,9 @@ remains recoverable by startup or a later trigger.
    into a follow-up generation.
 3. Heddle selects the task. Lucid atomically claims currently visible unread
    events and freezes the highest sequence as the wake horizon.
-4. The runner receives private context, claimed events, Heddle continuation,
-   and only Lucid communication tools.
+4. The runner receives private context, claimed events, bounded prior
+   findings/feedback, the latest working note, Heddle continuation, and only
+   Lucid communication tools.
 5. Communication writes use `<wake-id>:action:<slot>`, so a retry cannot
    duplicate a committed side effect.
 6. Successful execution appends completion and advances the cursor only to the
@@ -151,6 +155,8 @@ Agents do not invoke one another's runtime. They append serialized events:
   encountered an active peer as the actor of a visible event;
 - `report_finding` is available to every representative and addresses the
   finding only to that representative's own participant;
+- `update_working_note` replaces that representative's private derived note at
+  most once per wake without consuming a communication action; and
 - `finish_without_action` records an internal outcome without fabricating a
   participant-facing result.
 
@@ -161,6 +167,28 @@ participants.
 `source_event_ids` and `parentSequence` preserve causal delivery. They certify
 neither truth nor usefulness. A representative can act at most twice per wake
 and contribute to one principal-initiated thread only once across later wakes.
+
+## Longitudinal representative context
+
+Heddle checkpoints preserve runtime transcript continuity, but Lucid does not
+use a checkpoint as its only product-memory contract. Before every model run,
+the repository projects history through the claimed wake horizon:
+
+- the latest saved interest plus recent participant inputs;
+- recent participant-scoped findings and any feedback attached to them; and
+- the latest `representative_note_updated` event.
+
+The event-sequence bound is important on retry. A finding or working note
+written by a failed attempt has a sequence after that attempt's source horizon,
+so it cannot change the replayed starting context. Its idempotency key still
+returns the original side effect when the retry performs the same operation.
+
+The working note is ordinary-language derived state. It can record what seems
+important, what feedback changed, and what to try next, but it is not verified
+fact or a score. Raw interest, message, finding, and feedback events remain the
+authoritative history. Semantic novelty stays an agent decision informed by
+that explicit history; deterministic code continues to enforce source reuse,
+ownership, visibility, causality, and retry safety only.
 
 ## Recovery and concurrency
 

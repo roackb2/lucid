@@ -8,6 +8,7 @@ import { AppHeader } from '@/components/lucid/app-header';
 import { BackgroundChecks } from '@/components/lucid/background-checks';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { InterestComposer } from '@/components/lucid/interest-composer';
+import { RepresentativeProgress } from '@/components/lucid/representative-progress';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
 
@@ -50,10 +51,10 @@ export default function App() {
         <section className="workspace-intro">
           <div>
             <p className="section-label">Your discovery workspace</p>
-            <h1>Tell your representative what matters. Let the network answer.</h1>
+            <h1>Give your representative an ongoing assignment.</h1>
             <p>
-              Save an ongoing interest, leave your representative listening,
-              and decide which discoveries from other participants are useful.
+              It keeps your interest, earlier findings, and feedback in view
+              while listening for something genuinely new from the network.
             </p>
           </div>
           <dl className="workspace-stats">
@@ -86,6 +87,8 @@ export default function App() {
               )}
               onRunNow={() => discovery.runNow.mutate()}
             />
+
+            <RepresentativeProgress workingNote={snapshot.workingNote} />
 
             <FindingsFeed
               backgroundChecksEnabled={backgroundChecks.enabled}
@@ -143,6 +146,10 @@ function HowChecksWork() {
         <li>
           <span>3</span>
           <p><strong>You receive a finding.</strong> You see the messages that caused it and decide its value.</p>
+        </li>
+        <li>
+          <span>4</span>
+          <p><strong>Your feedback carries forward.</strong> Your representative updates its working understanding for later checks.</p>
         </li>
       </ol>
       <p className="prototype-note">

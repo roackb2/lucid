@@ -37,6 +37,9 @@ const findingInputSchema = z.object({
   content: z.string().trim().min(1).max(1_200),
   source_event_ids: z.array(z.number().int().positive()).min(1).max(8),
 });
+const workingNoteInputSchema = z.object({
+  content: z.string().trim().min(1).max(2_400),
+});
 const noActionInputSchema = z.object({
   reason: z.string().trim().min(1).max(500),
 });
@@ -70,6 +73,7 @@ const WRITE_DISCOVERY_STATE_POLICY = {
  */
 export class AgentCommunicationToolService {
   private mutations = 0;
+  private workingNoteUpdated = false;
   private addressableAgentIds = new Set<string>();
 
   constructor(
@@ -132,9 +136,25 @@ export class AgentCommunicationToolService {
         execute: async (input) => this.readAvailableMessages(input),
       },
       {
+        name: 'update_working_note',
+        description:
+          'Replace this representative’s private working note when new participant input, feedback, or a concrete finding changes the ongoing assignment. Preserve what matters, what to avoid, and what to try next in ordinary language. The note is an interpretation, not verified fact.',
+        capabilities: ['lucid.discovery.write'],
+        hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
+        parameters: {
+          type: 'object',
+          properties: {
+            content: { type: 'string', minLength: 1, maxLength: 2_400 },
+          },
+          required: ['content'],
+          additionalProperties: false,
+        },
+        execute: async (input) => this.updateWorkingNote(input),
+      },
+      {
         name: 'post_shared_message',
         description:
-          'Send a concise message to every representative agent. Disclose only the user or participant context needed to find a match.',
+          'Send a concise message to every representative agent. Use this to publish a request or answer a peer request from this participant’s context. Disclose only the detail needed for the connection.',
         capabilities: ['lucid.discovery.write'],
         hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
         parameters: {
@@ -158,7 +178,7 @@ export class AgentCommunicationToolService {
       ...(addressableAgents.length ? [{
         name: 'send_direct_message',
         description:
-          'Send one private message to another representative agent.',
+          'Send one private reply to an encountered representative when this participant’s context provides a specific answer or follow-up.',
         capabilities: ['lucid.discovery.write'],
         hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
         parameters: {
@@ -206,7 +226,7 @@ export class AgentCommunicationToolService {
     return {
       name: 'report_finding',
       description:
-        'Report one specific peer-sourced connection privately to this agent’s participant. State what the source contributed and why it may relate, without declaring it useful, validated, or a successful match. Sources prove delivery, not truth.',
+        'Deliver one specific peer-sourced connection privately to this agent’s own participant. This does not reply to the source agent. State what the source contributed and why it may relate, without declaring it useful, validated, or a successful match. Sources prove delivery, not truth.',
       capabilities: ['lucid.discovery.write'],
       hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
       parameters: {
@@ -254,6 +274,41 @@ export class AgentCommunicationToolService {
         events: events.map((event) => projectEvent(event, agentById)),
       },
     };
+  }
+
+  private async updateWorkingNote(input: unknown): Promise<ToolResult> {
+    const parsed = workingNoteInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return invalidInput(parsed.error);
+    }
+    if (this.workingNoteUpdated) {
+      return {
+        ok: false,
+        error: 'The private working note can be replaced only once per wake.',
+      };
+    }
+
+    // This internal state update has its own retry-stable key and does not
+    // consume the two-action communication budget. Its horizon metadata lets
+    // later readers distinguish the derived note from raw source events.
+    const event = await this.repository.appendEvent({
+      wakeNumber: this.wakeNumber,
+      kind: 'representative_note_updated',
+      actorAgentId: this.agent.id,
+      targetAgentId: this.agent.id,
+      targetParticipantId: this.participant.id,
+      idempotencyKey: `${this.wakeId}:working-note`,
+      title: `${this.agent.name} updates its private working note`,
+      content: parsed.data.content,
+      metadata: {
+        visibility: 'participant-and-agent',
+        wakeId: this.wakeId,
+        throughSequence: this.horizonSequence,
+        derived: true,
+      },
+    });
+    this.workingNoteUpdated = true;
+    return eventResult(event);
   }
 
   private async postSharedMessage(input: unknown): Promise<ToolResult> {

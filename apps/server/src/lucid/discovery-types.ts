@@ -17,6 +17,7 @@ export const discoveryEventKindSchema = z.enum([
   'direct_message',
   'finding_reported',
   'feedback_saved',
+  'representative_note_updated',
   'participant_added',
   'participant_disabled',
   'participant_enabled',
@@ -139,12 +140,24 @@ export type FindingSourceView = {
   };
 };
 
+/**
+ * Bounded Lucid-owned history supplied to one representative on every wake.
+ * Raw events remain authoritative; the working note is the representative's
+ * replaceable interpretation of that history, not verified participant data.
+ */
+export type RepresentativeWorkingContext = {
+  principalInputs: DiscoveryEvent[];
+  findings: FindingView[];
+  workingNote?: DiscoveryEvent;
+};
+
 export type AgentWakeContext = {
   agent: Agent;
   participant: Participant;
   wakeId: string;
   wakeNumber: number;
   visibleEvents: DiscoveryEvent[];
+  workingContext: RepresentativeWorkingContext;
   horizonSequence: number;
 };
 
@@ -183,6 +196,7 @@ export type DiscoveryWorkspaceSnapshot = {
   user: ParticipantView;
   representative: AgentView;
   interest?: DiscoveryEvent;
+  workingNote?: DiscoveryEvent;
   findings: FindingView[];
   backgroundChecks: BackgroundChecksView;
   runtime: {
