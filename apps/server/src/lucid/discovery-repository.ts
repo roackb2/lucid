@@ -12,6 +12,7 @@ import type {
   DiscoveryEventMetadata,
   DiscoveryWorkspace,
   FindingView,
+  NetworkActivityView,
   Participant,
   ParticipantStatus,
   ParticipantView,
@@ -38,6 +39,7 @@ export type DiscoveryRepositorySnapshot = {
   representative: AgentView;
   interest?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
+  networkActivity?: NetworkActivityView;
   findings: FindingView[];
 };
 
@@ -143,6 +145,10 @@ export interface DiscoveryRepository {
   hasParticipantFindingUsingAnySource(
     participantId: string,
     sourceEventIds: number[],
+  ): Promise<boolean>;
+  hasAgentSharedMessageUsingSource(
+    agentId: string,
+    sourceEventId: number,
   ): Promise<boolean>;
   hasAgentContributedToCausalThread(
     agentId: string,

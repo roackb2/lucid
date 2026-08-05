@@ -31,6 +31,7 @@ contains only:
 
 - the local participant and representative;
 - that participant's current interest, private working note, and findings;
+- that representative's latest shared request plus aggregate reply timing;
 - source attribution attached to those findings;
 - that representative's Heddle task status.
 
@@ -73,6 +74,8 @@ Lucid owns:
 - participant-scoped findings, feedback, and source attribution;
 - participant-scoped longitudinal context and a replaceable ordinary-language
   working note derived from immutable history;
+- successful assignment settlement only after the representative publishes a
+  shared request citing every unread interest/check trigger;
 - durable cursors and event/action idempotency keys.
 
 Heddle owns:
@@ -117,9 +120,11 @@ remains recoverable by startup or a later trigger.
    Lucid communication tools.
 5. Communication writes use `<wake-id>:action:<slot>`, so a retry cannot
    duplicate a committed side effect.
-6. Successful execution appends completion and advances the cursor only to the
+6. An interest/check wake is rejected unless a shared request cites its trigger.
+   The failed wake keeps its horizon and retry-stable side effects.
+7. Successful execution appends completion and advances the cursor only to the
    original horizon. Later mail remains unread.
-7. Newly addressed representatives receive durable run requests.
+8. Newly addressed representatives receive durable run requests.
 
 An empty due task calls `context.skip()` before model execution. It creates a
 lightweight Heddle run record but no model checkpoint and no Lucid wake.
@@ -163,6 +168,11 @@ Agents do not invoke one another's runtime. They append serialized events:
 Shared communication provides initial discovery without exposing a directory.
 Direct addressing can narrow later communication but cannot enumerate unknown
 participants.
+
+The participant-facing `networkActivity` projection shows only the latest
+trigger, the request that this participant's own representative published, and
+aggregate reply timing/count. It does not expose unrelated message content or
+the global network. Counts indicate delivered messages, not truth or value.
 
 `source_event_ids` and `parentSequence` preserve causal delivery. They certify
 neither truth nor usefulness. A representative can act at most twice per wake

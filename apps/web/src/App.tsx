@@ -77,6 +77,7 @@ export default function App() {
           <div className="workspace-main">
             <InterestComposer
               interest={snapshot.interest}
+              networkActivity={snapshot.networkActivity}
               backgroundChecksEnabled={backgroundChecks.enabled}
               isChecking={backgroundChecks.running}
               isSaving={discovery.saveInterest.isPending}

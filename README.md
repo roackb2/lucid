@@ -7,11 +7,12 @@ The product deliberately shows one participant's perspective:
 
 1. describe an ongoing interest in ordinary language;
 2. let one representative keep that intent in a private mailbox;
-3. leave the representative listening while other participant nodes receive
+3. inspect the privacy-minimized request the representative actually shared;
+4. leave the representative listening while other participant nodes receive
    their own changing inputs;
-4. receive a finding only when delivered peer messages may be relevant;
-5. inspect the causal messages and give free-text feedback;
-6. let the representative carry a revisable working understanding into later
+5. receive a finding only when delivered peer messages may be relevant;
+6. inspect the causal messages and give free-text feedback;
+7. let the representative carry a revisable working understanding into later
    checks so it can refine the assignment instead of repeating retrieval.
 
 Lucid records communication and delivery. It does not claim that a simulated
@@ -103,6 +104,19 @@ invocation creates a new run ID so cron executions produce new inputs. Stable
 registration keys mean rerunning the same seed reuses the same participant
 nodes rather than duplicating them.
 
+Add one free-form participant without editing the fixed scenarios:
+
+```bash
+yarn participant:submit \
+  --registration-key local:operator \
+  --display-name "Agent operator" \
+  --private-context "I operate long-running local agents." \
+  --input "One concrete observation for my representative to consider."
+```
+
+This remains loopback-only development tooling. Human context additionally
+requires `--kind human --context-approved`.
+
 ## Product and development APIs
 
 The `discovery` tRPC router is participant-scoped. It exposes the local saved
@@ -135,6 +149,8 @@ Lucid structures only behavior it can enforce:
   working note supplied through the same fixed wake horizon;
 - retry-stable working-note updates that remain invisible to a replay of the
   wake that produced them;
+- interest/check wakes cannot settle successfully until the representative has
+  published a shared request citing each new assignment trigger;
 - findings addressed to the reporting agent's own participant and backed by
   visible peer-authored messages;
 - participant-scoped projections that omit private context and global state;

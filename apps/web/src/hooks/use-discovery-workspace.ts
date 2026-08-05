@@ -34,7 +34,9 @@ export function useDiscoveryWorkspace() {
     ),
     onSuccess: (nextSnapshot) => {
       installSnapshot(nextSnapshot);
-      toast.success('Interest saved. Your representative is listening.');
+      toast.success(
+        'Interest saved. Your representative is preparing a network request.',
+      );
     },
     onError: notifyError,
   });
