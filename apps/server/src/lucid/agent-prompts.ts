@@ -23,6 +23,7 @@ const EVENT_LABELS: Record<DiscoveryEventKind, string> = {
   direct_message: 'private agent message',
   finding_reported: 'private user finding',
   feedback_saved: 'private user feedback',
+  guidance_saved: 'private participant guidance',
   representative_note_updated: 'private representative working note',
   participant_added: 'internal participant lifecycle',
   participant_disabled: 'internal participant lifecycle',
@@ -97,8 +98,9 @@ export function buildAgentWakePrompt(
   const responsibility = `Review the ongoing assignment context before acting. A different source is not automatically a new finding: report only a concrete addition relative to prior findings and feedback.
 ${requiredRequestInstruction}
 When an unread interest_saved event appears, you must post a minimal shared request that represents it, reply to and cite that interest event, and revise the working note for the changed assignment.
-When an unread check_requested event appears, it starts a new request thread even if the saved interest text is unchanged. Its content puts the current working direction and latest feedback before the original assignment. Treat those recent constraints as the current search target. The content of post_shared_message must preserve the concrete constraints that distinguish the requested next result; a paraphrase of only the original broad assignment does not satisfy the check.
+When an unread check_requested event appears, it starts a new request thread even if the saved interest text is unchanged. Its content puts the current working direction and latest guidance before the original assignment. Treat those recent constraints as the current search target. The content of post_shared_message must preserve the concrete constraints that distinguish the requested next result; a paraphrase of only the original broad assignment does not satisfy the check.
 The host rejects assignment and check wakes that finish without their required shared request. Never use finish_without_action for those events.
+When an unread guidance_saved event appears, first use update_working_note. Rewrite the note as one coherent current interpretation: the newest explicit participant guidance supersedes incompatible older assumptions, so do not retain both as contradictory rules. Direct guidance changes private working direction but does not by itself require a public network message. The host rejects the wake if it finishes without the revised note.
 When an unread participant_input event appears, decide whether it contains a request, observation, offer, or interest worth sharing in minimal form.
 Keep the direction of value explicit:
 - Prioritize answering a matching peer request from this participant's own private context, principal input, or working note before consuming another representative's response as a finding. Reply with post_shared_message or send_direct_message, set reply_to_event_id to that request, and cite only events whose information you actually use. Do not use report_finding as a reply.
@@ -107,7 +109,7 @@ Keep the direction of value explicit:
 - When a peer-authored message itself contains a specific connection that could matter to this participant, use report_finding to deliver it privately to this participant. report_finding never replies to the source agent.
 Describe what the source said and why it may connect. Never declare that a finding is useful, validated, or a successful match; the participant decides that through feedback.
 When several currently available messages support the same new connection, prefer one finding citing all relevant sources. When a later message merely repeats a prior finding, remain silent; report a follow-up only when you can state its concrete increment.
-When feedback or new principal input changes your understanding, use update_working_note once to preserve what matters, what to avoid, and what to try next in ordinary language. After reporting a finding, preserve what was reported as a pending lead awaiting participant feedback; do not treat it as accepted learning. Do not rewrite an unchanged note merely to appear active.
+When feedback, direct guidance, or new principal input changes your understanding, use update_working_note once to preserve what matters, what to avoid, and what to try next in ordinary language. After reporting a finding, preserve what was reported as a pending lead awaiting participant feedback; do not treat it as accepted learning. Do not rewrite an unchanged note merely to appear active.
 Respond to another representative only when its message has a specific connection to this participant's context or private input.
 Do not report the same source message twice or generate generic advice merely to appear active. Feedback is private guidance for later behavior.`;
 

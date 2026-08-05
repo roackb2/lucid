@@ -80,6 +80,7 @@ export class AgentCommunicationToolService {
   private workingNoteUpdated = false;
   private addressableAgentIds = new Set<string>();
   private pendingRequiredRequestSourceIds = new Set<number>();
+  private pendingRequiredWorkingNoteSourceIds = new Set<number>();
 
   constructor(
     private readonly repository: DiscoveryRepository,
@@ -89,6 +90,7 @@ export class AgentCommunicationToolService {
     private readonly wakeNumber: number,
     private readonly horizonSequence: number,
     private readonly requiredRequestSourceIds: number[] = [],
+    private readonly requiredWorkingNoteSourceIds: number[] = [],
   ) {}
 
   async definitions(): Promise<ToolDefinition[]> {
@@ -99,6 +101,7 @@ export class AgentCommunicationToolService {
       visibleEvents,
       persistedMutations,
       satisfiedSources,
+      satisfiedWorkingNoteSources,
     ] = await Promise.all([
       this.repository.listActiveAgents(),
       this.repository.listEventsVisibleToAgent(
@@ -120,12 +123,27 @@ export class AgentCommunicationToolService {
           ),
         }),
       )),
+      Promise.all(uniq(this.requiredWorkingNoteSourceIds).map(
+        async (sequence) => ({
+          sequence,
+          satisfied: await this.repository.hasAgentUpdatedWorkingNoteThrough(
+            this.agent.id,
+            sequence,
+          ),
+        }),
+      )),
     ]);
-    // A retry creates a new tool-service instance. Rehydrate both the action
-    // ordinal and the mandatory-request state before exposing any write tool.
+    // A retry creates a new tool-service instance. Rehydrate the action
+    // ordinal plus both mandatory durable prerequisites before exposing any
+    // write tool.
     this.mutations = persistedMutations;
     this.pendingRequiredRequestSourceIds = new Set(
       satisfiedSources
+        .filter(({ satisfied }) => !satisfied)
+        .map(({ sequence }) => sequence),
+    );
+    this.pendingRequiredWorkingNoteSourceIds = new Set(
+      satisfiedWorkingNoteSources
         .filter(({ satisfied }) => !satisfied)
         .map(({ sequence }) => sequence),
     );
@@ -358,6 +376,7 @@ export class AgentCommunicationToolService {
       },
     });
     this.workingNoteUpdated = true;
+    this.pendingRequiredWorkingNoteSourceIds.clear();
     return eventResult(event);
   }
 
@@ -365,6 +384,10 @@ export class AgentCommunicationToolService {
     const parsed = sharedMessageInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
+    }
+    const workingNoteFailure = this.requireWorkingNoteFirst();
+    if (workingNoteFailure) {
+      return workingNoteFailure;
     }
     const sourceEventIds = uniq(parsed.data.source_event_ids);
     const prerequisiteFailure = this.validateRequiredRequestSources(
@@ -428,6 +451,10 @@ export class AgentCommunicationToolService {
     const parsed = directMessageInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
+    }
+    const workingNoteFailure = this.requireWorkingNoteFirst();
+    if (workingNoteFailure) {
+      return workingNoteFailure;
     }
     const prerequisiteFailure = this.requireNetworkRequestFirst();
     if (prerequisiteFailure) {
@@ -512,6 +539,10 @@ export class AgentCommunicationToolService {
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
+    const workingNoteFailure = this.requireWorkingNoteFirst();
+    if (workingNoteFailure) {
+      return workingNoteFailure;
+    }
     const prerequisiteFailure = this.requireNetworkRequestFirst();
     if (prerequisiteFailure) {
       return prerequisiteFailure;
@@ -581,6 +612,10 @@ export class AgentCommunicationToolService {
     const parsed = noActionInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
+    }
+    const workingNoteFailure = this.requireWorkingNoteFirst();
+    if (workingNoteFailure) {
+      return workingNoteFailure;
     }
     const prerequisiteFailure = this.requireNetworkRequestFirst();
     if (prerequisiteFailure) {
@@ -668,6 +703,21 @@ export class AgentCommunicationToolService {
     return this.pendingRequiredRequestSourceIds.size
       ? this.requiredNetworkRequestError()
       : undefined;
+  }
+
+  private requireWorkingNoteFirst(): ToolResult | undefined {
+    if (!this.pendingRequiredWorkingNoteSourceIds.size) {
+      return undefined;
+    }
+    const sourceReferences = [...this.pendingRequiredWorkingNoteSourceIds]
+      .sort((left, right) => left - right)
+      .map((sequence) => `#${sequence}`)
+      .join(', ');
+    return {
+      ok: false,
+      error:
+        `First use update_working_note to incorporate the participant guidance at ${sourceReferences}. Replace incompatible older assumptions instead of appending contradictory rules. Other actions remain unavailable until the revised note is recorded.`,
+    };
   }
 
   private requiredNetworkRequestError(): ToolResult {

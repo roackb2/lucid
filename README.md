@@ -13,9 +13,11 @@ The product deliberately shows one participant's perspective:
 5. receive a finding only when delivered peer messages may be relevant;
 6. inspect the request, responses, and originating contributions, then give
    free-text feedback;
-7. let the representative carry a revisable working understanding into later
-   checks so it can refine the assignment instead of repeating retrieval; and
-8. compare the latest feedback with the later private note, disclosed request,
+7. inspect that revisable working understanding and correct or refine it in
+   ordinary language without posting the correction to the network;
+8. let the representative rewrite its understanding before it can finish that
+   guidance wake; and
+9. compare the latest guidance with the later private note, disclosed request,
    and resulting finding or continued silence.
 
 Lucid records communication and delivery. It does not claim that a simulated
@@ -48,6 +50,8 @@ flowchart LR
   H --> F["Participant-scoped finding"]
   F --> B["Private feedback"]
   B --> W
+  W --> G["Direct private guidance"]
+  G --> W
 
   X["External simulator or future real ingress"] --> I
 ```
@@ -61,7 +65,7 @@ that model, not the world administrator.
 
 | Boundary | Owns |
 | --- | --- |
-| Lucid product | Participant identity, private mailboxes, visibility, reply routing, content provenance, findings, feedback, and bounded longitudinal context |
+| Lucid product | Participant identity, private mailboxes, visibility, reply routing, content provenance, findings, guidance, and bounded longitudinal context |
 | Heddle | Durable schedules, run requests, checkpoints, provider execution, cancellation, recovery, and bounded concurrency |
 | Development simulator | Scenario-specific synthetic people, seeded observation selection, timing, and exogenous input |
 

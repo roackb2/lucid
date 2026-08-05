@@ -149,6 +149,9 @@ You represent an explicitly simulated test participant, not a real person or ext
     expect(prompt).toContain('Never send a message merely to announce');
     expect(prompt).toContain('pending lead awaiting participant feedback');
     expect(prompt).toContain(
+      'newest explicit participant guidance supersedes incompatible older assumptions',
+    );
+    expect(prompt).toContain(
       'a paraphrase of only the original broad assignment does not satisfy the check',
     );
     expect(prompt).toContain('Do not use report_finding as a reply.');
@@ -359,6 +362,58 @@ You represent an explicitly simulated test participant, not a real person or ext
       content: 'A peer described a related research-handoff experiment.',
       source_event_ids: [peer.sequence],
     })).ok).toBe(true);
+  });
+
+  it('requires direct guidance to revise the working note before any action', async () => {
+    await repository.saveInterest(
+      'Find early signals about durable personal agents.',
+    );
+    const guidance = await repository.saveGuidance(
+      'Weak signals are useful again, but label them clearly.',
+    );
+    const tools = toolsByName(await createUserTools(
+      repository,
+      'wake_required_guidance_note',
+      3,
+      guidance.sequence,
+      [],
+      [guidance.sequence],
+    ));
+
+    expect(await tools.get('finish_without_action')!.execute({
+      reason: 'Try to finish before revising the note.',
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('update_working_note'),
+    });
+    expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: guidance.sequence,
+      content: 'Try to communicate before revising the note.',
+      source_event_ids: [guidance.sequence],
+    })).ok).toBe(false);
+    expect((await tools.get('update_working_note')!.execute({
+      content:
+        'Accept clearly labeled weak signals; an exact production mechanism is no longer required.',
+    })).ok).toBe(true);
+    expect((await tools.get('finish_without_action')!.execute({
+      reason: 'The private direction changed; no public message is needed yet.',
+    })).ok).toBe(true);
+
+    const retryTools = toolsByName(await createUserTools(
+      repository,
+      'wake_required_guidance_note',
+      3,
+      guidance.sequence,
+      [],
+      [guidance.sequence],
+    ));
+    expect((await retryTools.get('finish_without_action')!.execute({
+      reason: 'The durable revised note satisfies this retried wake.',
+    })).ok).toBe(true);
+    expect(await repository.hasAgentUpdatedWorkingNoteThrough(
+      USER_AGENT_ID,
+      guidance.sequence,
+    )).toBe(true);
   });
 
   it('reconstructs retry budgets and gives invalid legacy wakes one repair slot', async () => {
@@ -659,6 +714,7 @@ async function createUserTools(
   wakeNumber: number,
   horizonSequence = Number.MAX_SAFE_INTEGER,
   requiredRequestSourceIds: number[] = [],
+  requiredWorkingNoteSourceIds: number[] = [],
 ) {
   return await new AgentCommunicationToolService(
     repository,
@@ -668,6 +724,7 @@ async function createUserTools(
     wakeNumber,
     horizonSequence,
     requiredRequestSourceIds,
+    requiredWorkingNoteSourceIds,
   ).definitions();
 }
 

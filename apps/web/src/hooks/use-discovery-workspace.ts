@@ -85,6 +85,19 @@ export function useDiscoveryWorkspace() {
     onError: notifyError,
   });
 
+  const submitGuidance = useMutation({
+    mutationFn: (content: string) => (
+      lucidClient.discovery.submitGuidance.mutate({ content })
+    ),
+    onSuccess: (nextSnapshot) => {
+      installSnapshot(nextSnapshot);
+      toast.success(
+        'Guidance saved. Your representative is revising its working direction.',
+      );
+    },
+    onError: notifyError,
+  });
+
   return {
     snapshot,
     saveInterest,
@@ -92,6 +105,7 @@ export function useDiscoveryWorkspace() {
     retryCurrentWake,
     setBackgroundChecksEnabled,
     submitFeedback,
+    submitGuidance,
   };
 }
 

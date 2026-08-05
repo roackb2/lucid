@@ -15,10 +15,13 @@ The primary path is:
    needs a retry;
 4. optionally request an immediate check, or retry the same failed wake without
    creating another request thread;
-5. inspect the representative's revisable working understanding;
+5. inspect the representative's revisable working understanding and privately
+   correct or refine it without editing the agent-authored note directly;
 6. read findings for the current assignment separately from earlier work, with
    ambient-network and request-response delivery paths distinguished; and
-7. leave private free-text feedback that carries into later checks.
+7. leave private free-text feedback that carries into later checks; and
+8. trace the latest feedback or direct guidance through the revised note,
+   subsequent request, and later finding or continued silence.
 
 The app intentionally does not render a global participant directory, event
 log, task list, reset control, or participant administration. Those are
@@ -30,7 +33,8 @@ router, not features of a participant's social-network experience.
 | Component | Responsibility |
 | --- | --- |
 | `interest-composer.tsx` | Create/edit one interest, show its delivered request or failed wake, and choose between a new check and retrying current work |
-| `representative-progress.tsx` | Present the latest private working note as revisable interpretation rather than fact |
+| `representative-progress.tsx` | Present the latest private working note and collect ordinary-language corrections without mutating it directly |
+| `guidance-follow-through.tsx` | Trace the latest direct guidance or finding feedback through durable later work |
 | `background-checks.tsx` | Present and control this representative's durable listening state |
 | `findings-feed.tsx` | Separate current-assignment findings from collapsible earlier-assignment history |
 | `finding-card.tsx` | Show one finding, ambient/request origin, source attribution, causal messages, and private feedback |

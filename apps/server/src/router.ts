@@ -23,6 +23,10 @@ const feedbackInputSchema = z.object({
   content: z.string().trim().min(1).max(1_600),
 });
 
+const guidanceInputSchema = z.object({
+  content: z.string().trim().min(1).max(1_600),
+});
+
 const backgroundChecksInputSchema = z.object({
   enabled: z.boolean(),
 });
@@ -104,6 +108,11 @@ export function createAppRouter(
             input.findingSequence,
             input.content,
           ),
+        )),
+      submitGuidance: trpc.procedure
+        .input(guidanceInputSchema)
+        .mutation(({ input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.submitGuidance(input.content),
         )),
     }),
     development: trpc.router({

@@ -302,7 +302,7 @@ button:disabled {
 
 .interest-card,
 .representative-note-card,
-.feedback-follow-through-card,
+.guidance-follow-through-card,
 .finding-card,
 .sidebar-card,
 .background-checks {
@@ -322,7 +322,7 @@ button:disabled {
   border-radius: 18px;
 }
 
-.feedback-follow-through-card {
+.guidance-follow-through-card {
   overflow: hidden;
   border-radius: 18px;
 }
@@ -346,6 +346,76 @@ button:disabled {
 .representative-note small {
   display: block;
   margin-top: 11px;
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.representative-note footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 11px;
+}
+
+.representative-note footer small {
+  margin-top: 0;
+}
+
+.guidance-form {
+  margin: -8px 26px 24px 78px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.guidance-form label {
+  display: block;
+  color: #3f4b45;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.guidance-form > p {
+  margin: 5px 0 12px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.guidance-form textarea {
+  width: 100%;
+  min-height: 92px;
+  padding: 11px 12px;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fcfdfc;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.guidance-form textarea:focus {
+  border-color: rgba(23, 107, 91, 0.65);
+  outline: 0;
+  box-shadow: 0 0 0 4px rgba(23, 107, 91, 0.08);
+}
+
+.guidance-form > footer,
+.guidance-form > footer > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guidance-form > footer {
+  justify-content: space-between;
+  margin-top: 11px;
+}
+
+.guidance-form > footer > span {
   color: var(--faint);
   font-size: 9px;
 }
@@ -1429,6 +1499,21 @@ button:disabled {
 
   .representative-note {
     margin: 0 18px 20px;
+  }
+
+  .representative-note footer,
+  .guidance-form > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .guidance-form {
+    margin: -5px 18px 20px;
+  }
+
+  .guidance-form > footer > div,
+  .guidance-form .button {
+    width: 100%;
   }
 
   .follow-through-steps {

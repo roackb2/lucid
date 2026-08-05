@@ -440,6 +440,81 @@ describe('SQLite discovery repository', () => {
     });
   });
 
+  it('keeps direct guidance private and traces the representative revision', async () => {
+    const peer = await registerSynthetic(repository, 'guidance-peer');
+    const interest = await repository.saveInterest(
+      'Find early signals about durable personal agents.',
+    );
+    const priorNote = await repository.appendEvent({
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Lucid updates its private working note',
+      content: 'Require an exact production mechanism before reporting.',
+      metadata: { throughSequence: interest.sequence, derived: true },
+    });
+    const guidance = await repository.saveGuidance(
+      'Weak signals are useful again, but label them clearly.',
+    );
+
+    expect(await repository.listEventsVisibleToAgent(
+      USER_AGENT_ID,
+      interest.sequence,
+    )).toContainEqual(expect.objectContaining({
+      sequence: guidance.sequence,
+      kind: 'guidance_saved',
+    }));
+    expect(await repository.listEventsVisibleToAgent(
+      peer.agent.id,
+      0,
+    )).not.toContainEqual(expect.objectContaining({
+      sequence: guidance.sequence,
+    }));
+    expect((await repository.readRepresentativeWorkingContext(
+      USER_AGENT_ID,
+      guidance.sequence,
+    )).principalInputs).toContainEqual(expect.objectContaining({
+      sequence: guidance.sequence,
+      content: guidance.content,
+    }));
+    expect((await repository.readSnapshot()).guidanceFollowThrough)
+      .toMatchObject({
+        guidance: { sequence: guidance.sequence },
+        priorWorkingNote: { sequence: priorNote.sequence },
+        workingNote: undefined,
+      });
+    expect(await repository.hasAgentUpdatedWorkingNoteThrough(
+      USER_AGENT_ID,
+      guidance.sequence,
+    )).toBe(false);
+
+    const revisedNote = await repository.appendEvent({
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Lucid updates its private working note',
+      content:
+        'Accept weak signals when they are clearly labeled; an exact production mechanism is no longer required.',
+      metadata: { throughSequence: guidance.sequence, derived: true },
+    });
+
+    expect(await repository.hasAgentUpdatedWorkingNoteThrough(
+      USER_AGENT_ID,
+      guidance.sequence,
+    )).toBe(true);
+    expect((await repository.readSnapshot()).guidanceFollowThrough)
+      .toMatchObject({
+        guidance: { sequence: guidance.sequence },
+        priorWorkingNote: { sequence: priorNote.sequence },
+        workingNote: {
+          sequence: revisedNote.sequence,
+          content: revisedNote.content,
+        },
+      });
+  });
+
   it('projects persisted follow-through after the latest feedback', async () => {
     const source = await registerSynthetic(repository, 'follow-through-source');
     await repository.saveInterest(
@@ -466,9 +541,9 @@ describe('SQLite discovery repository', () => {
       'Only continue with a before-and-after decision and named mechanism.',
     );
 
-    expect((await repository.readSnapshot()).feedbackFollowThrough)
+    expect((await repository.readSnapshot()).guidanceFollowThrough)
       .toMatchObject({
-        feedback: { sequence: feedback.sequence },
+        guidance: { sequence: feedback.sequence },
         sourceFinding: { sequence: firstFinding.sequence },
       });
 
@@ -487,7 +562,7 @@ describe('SQLite discovery repository', () => {
       targetParticipantId: LOCAL_USER_ID,
       title: 'You ask Lucid to check now',
       content: 'Continue with the participant feedback.',
-      metadata: { latestFeedbackSequence: feedback.sequence },
+      metadata: { latestGuidanceSequence: feedback.sequence },
     });
     const request = await repository.appendEvent({
       kind: 'shared_message',
@@ -522,9 +597,9 @@ describe('SQLite discovery repository', () => {
       metadata: { sourceEventIds: [response.sequence] },
     });
 
-    expect((await repository.readSnapshot()).feedbackFollowThrough)
+    expect((await repository.readSnapshot()).guidanceFollowThrough)
       .toMatchObject({
-        feedback: { sequence: feedback.sequence, content: feedback.content },
+        guidance: { sequence: feedback.sequence, content: feedback.content },
         sourceFinding: { sequence: firstFinding.sequence },
         workingNote: { sequence: note.sequence, content: note.content },
         request: { sequence: request.sequence, content: request.content },
@@ -542,7 +617,7 @@ describe('SQLite discovery repository', () => {
       targetParticipantId: LOCAL_USER_ID,
       title: 'You ask Lucid to check again',
       content: 'Apply the same feedback to a more precise request.',
-      metadata: { latestFeedbackSequence: feedback.sequence },
+      metadata: { latestGuidanceSequence: feedback.sequence },
     });
     const laterRequest = await repository.appendEvent({
       kind: 'shared_message',
@@ -572,7 +647,7 @@ describe('SQLite discovery repository', () => {
       metadata: { sourceEventIds: [laterResponse.sequence] },
     });
 
-    expect((await repository.readSnapshot()).feedbackFollowThrough)
+    expect((await repository.readSnapshot()).guidanceFollowThrough)
       .toMatchObject({
         request: {
           sequence: laterRequest.sequence,
