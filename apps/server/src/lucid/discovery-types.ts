@@ -7,6 +7,11 @@ export const participantStatusSchema = z.enum([
   'retired',
 ]);
 export const agentStatusSchema = z.enum(['idle', 'running', 'error']);
+export const networkMessageRoleSchema = z.enum([
+  'request',
+  'response',
+  'contribution',
+]);
 export const discoveryEventKindSchema = z.enum([
   'workspace_created',
   'interest_saved',
@@ -30,6 +35,7 @@ export const discoveryEventKindSchema = z.enum([
 export type ParticipantKind = z.infer<typeof participantKindSchema>;
 export type ParticipantStatus = z.infer<typeof participantStatusSchema>;
 export type AgentStatus = z.infer<typeof agentStatusSchema>;
+export type NetworkMessageRole = z.infer<typeof networkMessageRoleSchema>;
 export type DiscoveryEventKind = z.infer<typeof discoveryEventKindSchema>;
 export type DiscoveryEventMetadata = Record<string, unknown>;
 
@@ -113,7 +119,12 @@ export type DiscoveryEvent = {
   actorAgentId?: string;
   targetAgentId?: string;
   targetParticipantId?: string;
-  parentSequence?: number;
+  /**
+   * The event this event answers or continues. Content provenance remains in
+   * metadata.sourceEventIds so conversation routing cannot masquerade as an
+   * independent information source.
+   */
+  replyToSequence?: number;
   idempotencyKey?: string;
   title: string;
   content: string;
@@ -123,7 +134,13 @@ export type DiscoveryEvent = {
 
 export type FindingView = {
   finding: DiscoveryEvent;
+  /** Messages the representative cited when it reported the finding. */
   sources: FindingSourceView[];
+  /**
+   * Earliest peer-authored messages in the cited provenance graph. Relays are
+   * deliberately excluded so propagation is not presented as corroboration.
+   */
+  originatingSources: FindingSourceView[];
   outboundMessages: DiscoveryEvent[];
   feedback?: DiscoveryEvent;
   noMatch: boolean;
@@ -150,7 +167,12 @@ export type FindingSourceView = {
 export type NetworkActivityView = {
   assignment: DiscoveryEvent;
   request?: DiscoveryEvent;
+  /** All delivered first-hop messages answering the current request. */
   responseCount: number;
+  /** Unique peer-authored provenance roots behind those messages. */
+  originatingResponseCount: number;
+  /** Unique participants who authored those provenance roots. */
+  originatingParticipantCount: number;
   latestResponseAt?: string;
 };
 

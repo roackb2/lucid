@@ -692,7 +692,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'feedback_saved'),
-        eq(discoveryEvents.parentSequence, findingSequence),
+        eq(discoveryEvents.replyToSequence, findingSequence),
       ))
       .get();
     if (existing) {
@@ -703,7 +703,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       kind: 'feedback_saved',
       targetAgentId: (await this.requireAgentByParticipantId(participantId)).id,
       targetParticipantId: participantId,
-      parentSequence: finding.sequence,
+      replyToSequence: finding.sequence,
       title: 'You explain how this finding should affect future checks',
       content,
       metadata: {
@@ -807,6 +807,28 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             eq(discoveryEvents.targetAgentId, agentId),
           ),
         ),
+      ))
+      .orderBy(asc(discoveryEvents.sequence))
+      .all()
+      .map(toDiscoveryEvent);
+  }
+
+  async readEvent(sequence: number): Promise<DiscoveryEvent | undefined> {
+    return this.readEventsBySequence([sequence])[0];
+  }
+
+  async listAgentWakeCommunicationEvents(
+    agentId: string,
+    wakeNumber: number,
+  ): Promise<DiscoveryEvent[]> {
+    return this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.actorAgentId, agentId),
+        eq(discoveryEvents.wakeNumber, wakeNumber),
+        inArray(discoveryEvents.kind, ['shared_message', 'direct_message']),
       ))
       .orderBy(asc(discoveryEvents.sequence))
       .all()
@@ -1088,16 +1110,23 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .run();
   }
 
-  async hasParticipantFindingUsingAnySource(
+  async hasParticipantFindingUsingAnyOrigin(
     participantId: string,
     sourceEventIds: number[],
   ): Promise<boolean> {
     if (!sourceEventIds.length) {
       return false;
     }
-    const requested = new Set(sourceEventIds);
+    const reporter = await this.requireAgentByParticipantId(participantId);
+    const requested = new Set(
+      this.findOriginatingPeerMessages(sourceEventIds, reporter.id)
+        .map(({ sequence }) => sequence),
+    );
+    if (!requested.size) {
+      return false;
+    }
     return this.database.orm
-      .select({ metadata: discoveryEvents.metadata })
+      .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
@@ -1105,18 +1134,22 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.targetParticipantId, participantId),
       ))
       .all()
-      .some(({ metadata }) => (
-        readSequenceIds(metadata?.sourceEventIds)
-          .some((sequence) => requested.has(sequence))
-      ));
+      .map(toDiscoveryEvent)
+      .some((finding) => this.findOriginatingPeerMessages(
+        readSequenceIds(finding.metadata.sourceEventIds),
+        reporter.id,
+      ).some(({ sequence }) => requested.has(sequence)));
   }
 
-  async hasAgentSharedMessageUsingSource(
+  async hasAgentPublishedRequestForTrigger(
     agentId: string,
-    sourceEventId: number,
+    triggerSequence: number,
   ): Promise<boolean> {
     return this.database.orm
-      .select({ metadata: discoveryEvents.metadata })
+      .select({
+        replyToSequence: discoveryEvents.replyToSequence,
+        metadata: discoveryEvents.metadata,
+      })
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
@@ -1124,9 +1157,9 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.actorAgentId, agentId),
       ))
       .all()
-      .some(({ metadata }) => (
-        readSequenceIds(metadata?.sourceEventIds)
-          .includes(sourceEventId)
+      .some(({ replyToSequence, metadata }) => (
+        replyToSequence === triggerSequence
+        || readSequenceIds(metadata?.sourceEventIds).includes(triggerSequence)
       ));
   }
 
@@ -1152,13 +1185,13 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .length;
   }
 
-  async hasAgentContributedToCausalThread(
+  async hasAgentContributedToRequestThread(
     agentId: string,
-    sourceEventIds: number[],
+    replyToSequence: number,
     currentWakeId: string,
   ): Promise<boolean> {
-    const sourceRoots = this.findCausalRootSequences(sourceEventIds);
-    if (!sourceRoots.size) {
+    const requestRoot = this.findReplyThreadRoot(replyToSequence);
+    if (!requestRoot) {
       return false;
     }
 
@@ -1176,8 +1209,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .all()
       .map(toDiscoveryEvent)
       .filter((event) => event.metadata.wakeId !== currentWakeId)
-      .some((event) => [...this.findCausalRootSequences([event.sequence])]
-        .some((root) => sourceRoots.has(root)));
+      .some((event) => this.findReplyThreadRoot(event.sequence) === requestRoot);
   }
 
   async appendEvent(
@@ -1210,7 +1242,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         actorAgentId: input.actorAgentId,
         targetAgentId: input.targetAgentId,
         targetParticipantId: input.targetParticipantId,
-        parentSequence: input.parentSequence,
+        replyToSequence: input.replyToSequence,
         idempotencyKey: input.idempotencyKey,
         title: input.title,
         content: input.content,
@@ -1299,7 +1331,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .map(toDiscoveryEvent)
       .map((finding) => {
         const sourceEventIds = readSequenceIds(finding.metadata.sourceEventIds);
-        const outboundMessages = this.listCausalOutboundMessages(
+        const originatingSources = this.findOriginatingPeerMessages(
+          sourceEventIds,
+          finding.actorAgentId,
+        );
+        const outboundMessages = this.listRequestThreadOutboundMessages(
           sourceEventIds,
           finding.actorAgentId,
         );
@@ -1320,7 +1356,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           .where(and(
             eq(discoveryEvents.workspaceId, WORKSPACE_ID),
             eq(discoveryEvents.kind, 'feedback_saved'),
-            eq(discoveryEvents.parentSequence, finding.sequence),
+            eq(discoveryEvents.replyToSequence, finding.sequence),
             lte(discoveryEvents.sequence, throughSequence),
           ))
           .orderBy(desc(discoveryEvents.sequence))
@@ -1329,6 +1365,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         return {
           finding,
           sources: this.readEventsBySequence(sourceEventIds)
+            .map((source) => this.toFindingSourceView(source)),
+          originatingSources: originatingSources
             .map((source) => this.toFindingSourceView(source)),
           outboundMessages,
           feedback: feedbackRow ? toDiscoveryEvent(feedbackRow) : undefined,
@@ -1388,12 +1426,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .orderBy(desc(discoveryEvents.sequence))
       .all()
       .map(toDiscoveryEvent)
-      .find((event) => (
-        readSequenceIds(event.metadata.sourceEventIds)
-          .includes(requestTrigger.sequence)
-      ));
+      .find((event) => event.replyToSequence === requestTrigger.sequence);
     if (!request) {
-      return { assignment, responseCount: 0 };
+      return {
+        assignment,
+        responseCount: 0,
+        originatingResponseCount: 0,
+        originatingParticipantCount: 0,
+      };
     }
 
     const responses = this.database.orm
@@ -1404,19 +1444,27 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         inArray(discoveryEvents.kind, ['shared_message', 'direct_message']),
         ne(discoveryEvents.actorAgentId, agentId),
         gt(discoveryEvents.sequence, request.sequence),
+        eq(discoveryEvents.replyToSequence, request.sequence),
       ))
       .orderBy(asc(discoveryEvents.sequence))
       .all()
-      .map(toDiscoveryEvent)
-      .filter((event) => (
-        readSequenceIds(event.metadata.sourceEventIds)
-          .includes(request.sequence)
-      ));
+      .map(toDiscoveryEvent);
+    const originatingResponses = uniqueEvents(responses.flatMap((response) => (
+      this.findOriginatingPeerMessages([response.sequence], agentId)
+    )));
+    const originatingParticipantIds = new Set(originatingResponses.flatMap(
+      (response) => {
+        const attribution = this.toFindingSourceView(response).attribution;
+        return attribution ? [attribution.participantId] : [];
+      },
+    ));
 
     return {
       assignment,
       request,
       responseCount: responses.length,
+      originatingResponseCount: originatingResponses.length,
+      originatingParticipantCount: originatingParticipantIds.size,
       latestResponseAt: responses.at(-1)?.createdAt,
     };
   }
@@ -1454,12 +1502,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     };
   }
 
-  private listCausalOutboundMessages(
+  private listRequestThreadOutboundMessages(
     sourceEventIds: number[],
     reporterAgentId?: string,
   ): DiscoveryEvent[] {
-    // Walk provenance backward from a finding to reveal what its representative
-    // disclosed without projecting unrelated network traffic.
+    // Walk the reply thread backward from a finding source to reveal what its
+    // representative disclosed. Content provenance is intentionally separate.
     const visited = new Set(sourceEventIds);
     const queue = this.readEventsBySequence(sourceEventIds);
     const outboundMessages: DiscoveryEvent[] = [];
@@ -1474,10 +1522,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         outboundMessages.push(event);
       }
 
-      const ancestorIds = [
-        ...readSequenceIds(event.metadata.sourceEventIds),
-        ...(event.parentSequence ? [event.parentSequence] : []),
-      ].filter((sequence) => !visited.has(sequence));
+      const ancestorIds = event.replyToSequence
+        && !visited.has(event.replyToSequence)
+        ? [event.replyToSequence]
+        : [];
       ancestorIds.forEach((sequence) => visited.add(sequence));
       queue.push(...this.readEventsBySequence(ancestorIds));
     }
@@ -1487,36 +1535,85 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     );
   }
 
-  private findCausalRootSequences(sequences: number[]): Set<number> {
-    // Causal roots let the host enforce one contribution per user-initiated
-    // thread even when agents cite intermediate direct or shared messages.
-    const roots = new Set<number>();
+  private findReplyThreadRoot(sequence: number): number | undefined {
     const visited = new Set<number>();
-    const queue = [...sequences];
+    let currentSequence: number | undefined = sequence;
+    let latestResolved: number | undefined;
 
-    while (queue.length) {
-      const sequence = queue.shift()!;
-      if (visited.has(sequence)) {
-        continue;
-      }
-      visited.add(sequence);
-
-      const event = this.readEventsBySequence([sequence])[0];
+    while (currentSequence && !visited.has(currentSequence)) {
+      visited.add(currentSequence);
+      const event: DiscoveryEvent | undefined = this.readEventsBySequence(
+        [currentSequence],
+      )[0];
       if (!event) {
-        continue;
+        return latestResolved;
       }
-      const ancestors = [
-        ...readSequenceIds(event.metadata.sourceEventIds),
-        ...(event.parentSequence ? [event.parentSequence] : []),
-      ];
-      if (!ancestors.length) {
-        roots.add(event.sequence);
-        continue;
-      }
-      queue.push(...ancestors);
+      latestResolved = event.sequence;
+      currentSequence = event.replyToSequence;
     }
 
-    return roots;
+    return latestResolved;
+  }
+
+  /**
+   * Resolves the earliest peer-authored messages behind cited content. A relay
+   * with upstream peer provenance therefore contributes no additional origin.
+   */
+  private findOriginatingPeerMessages(
+    sourceEventIds: number[],
+    reporterAgentId?: string,
+  ): DiscoveryEvent[] {
+    const memo = new Map<number, DiscoveryEvent[]>();
+    const visiting = new Set<number>();
+
+    const resolve = (sequence: number): DiscoveryEvent[] => {
+      const cached = memo.get(sequence);
+      if (cached) {
+        return cached;
+      }
+      if (visiting.has(sequence)) {
+        return [];
+      }
+      visiting.add(sequence);
+      const event = this.readEventsBySequence([sequence])[0];
+      if (!event) {
+        visiting.delete(sequence);
+        memo.set(sequence, []);
+        return [];
+      }
+      const sourceEvents = this.readEventsBySequence(
+        readSequenceIds(event.metadata.sourceEventIds),
+      );
+      const upstream = uniqueEvents(sourceEvents.flatMap(({ sequence }) => (
+        resolve(sequence)
+      )));
+      const isPeerMessage = Boolean(
+        event.actorAgentId
+        && event.actorAgentId !== reporterAgentId
+        && ['shared_message', 'direct_message'].includes(event.kind),
+      );
+      const hasParticipantOwnedSource = sourceEvents.some((source) => (
+        source.targetAgentId === event.actorAgentId
+        && [
+          'interest_saved',
+          'participant_input',
+          'check_requested',
+          'feedback_saved',
+          'representative_note_updated',
+        ].includes(source.kind)
+      ));
+      const originatesContent = isPeerMessage
+        && (!upstream.length || hasParticipantOwnedSource);
+      const origins = uniqueEvents([
+        ...upstream,
+        ...(originatesContent ? [event] : []),
+      ]);
+      visiting.delete(sequence);
+      memo.set(sequence, origins);
+      return origins;
+    };
+
+    return uniqueEvents(sourceEventIds.flatMap(resolve));
   }
 
   private readEventsBySequence(sequences: number[]): DiscoveryEvent[] {
@@ -1759,10 +1856,15 @@ function toDiscoveryEvent(row: DiscoveryEventRow): DiscoveryEvent {
     actorAgentId: row.actorAgentId ?? undefined,
     targetAgentId: row.targetAgentId ?? undefined,
     targetParticipantId: row.targetParticipantId ?? undefined,
-    parentSequence: row.parentSequence ?? undefined,
+    replyToSequence: row.replyToSequence ?? undefined,
     idempotencyKey: row.idempotencyKey ?? undefined,
     metadata: row.metadata ?? {},
   };
+}
+
+function uniqueEvents(events: DiscoveryEvent[]): DiscoveryEvent[] {
+  return [...new Map(events.map((event) => [event.sequence, event])).values()]
+    .sort((left, right) => left.sequence - right.sequence);
 }
 
 function toDiscoveryWorkspace(

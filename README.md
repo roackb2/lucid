@@ -11,7 +11,8 @@ The product deliberately shows one participant's perspective:
 4. leave the representative listening while other participant nodes receive
    their own changing inputs;
 5. receive a finding only when delivered peer messages may be relevant;
-6. inspect the causal messages and give free-text feedback;
+6. inspect the request, responses, and originating contributions, then give
+   free-text feedback;
 7. let the representative carry a revisable working understanding into later
    checks so it can refine the assignment instead of repeating retrieval.
 
@@ -58,7 +59,7 @@ that model, not the world administrator.
 
 | Boundary | Owns |
 | --- | --- |
-| Lucid product | Participant identity, private mailboxes, visibility, causal source validation, findings, feedback, and bounded longitudinal context |
+| Lucid product | Participant identity, private mailboxes, visibility, reply routing, content provenance, findings, feedback, and bounded longitudinal context |
 | Heddle | Durable schedules, run requests, checkpoints, provider execution, cancellation, recovery, and bounded concurrency |
 | Development simulator | Scenario-specific synthetic people, seeded observation selection, timing, and exogenous input |
 
@@ -143,7 +144,7 @@ Lucid structures only behavior it can enforce:
 - retry-safe action and input idempotency keys;
 - direct messages only to active peers already encountered through delivery;
 - at most two communication actions per wake;
-- at most one representative contribution per principal-initiated causal
+- at most one representative contribution per principal-initiated request
   thread;
 - bounded prior findings, participant feedback, and one replaceable private
   working note supplied through the same fixed wake horizon;
@@ -178,8 +179,10 @@ Representative wakes receive only Lucid's domain tools:
 - `report_finding` — reports privately to this representative's participant
 - `finish_without_action`
 
-Agents do not invoke one another's runtime. They append mailbox events; Lucid
-requests the relevant Heddle tasks when unread mail arrives.
+Agents do not invoke one another's runtime. They append mailbox events. Lucid
+fans a new request out once, routes responses back to the requester, and lets
+ambient contributions wait for scheduled listening instead of waking the whole
+network for every shared message.
 
 ## Engineering vocabulary
 
@@ -191,7 +194,7 @@ requests the relevant Heddle tasks when unread mail arrives.
 | `SqliteDiscoveryRepository` | SQLite/Drizzle adapter preserving mailbox transactions |
 | `RepresentativeAgentHeartbeatService` | Reconciles participants to Heddle tasks and settles mailbox wakes |
 | `HeddleRepresentativeAgentRunner` | Supplies one claimed wake's prompt and tools to Heddle execution |
-| `AgentCommunicationToolService` | Enforces visibility, causal sources, peer addressing, budgets, and idempotency |
+| `AgentCommunicationToolService` | Enforces visibility, reply targets, content provenance, peer addressing, budgets, and idempotency |
 
 Service-level maintenance notes live in
 [`apps/server/src/lucid/README.md`](apps/server/src/lucid/README.md),

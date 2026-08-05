@@ -97,10 +97,25 @@ describe('representative-agent heartbeat service', () => {
     expect(snapshot.findings[0]?.sources.every(({ attribution }) => (
       attribution && sourceIds.has(attribution.participantId)
     ))).toBe(true);
+    expect(snapshot.findings[0]?.originatingSources).toHaveLength(2);
+    expect(snapshot.networkActivity).toMatchObject({
+      responseCount: 2,
+      originatingResponseCount: 2,
+      originatingParticipantCount: 2,
+    });
     expect(runner.agentIds).toContain(USER_AGENT_ID);
     expect(runner.agentIds.some((agentId) => (
       sources.some(({ agent }) => agent.id === agentId)
     ))).toBe(true);
+    expect(runner.agentIds.filter((agentId) => agentId === USER_AGENT_ID))
+      .toHaveLength(2);
+    sources.forEach(({ agent }) => {
+      expect(runner.agentIds.filter((agentId) => agentId === agent.id))
+        .toHaveLength(1);
+    });
+    expect((await repository.readNetworkDiagnostics()).events.filter(
+      ({ kind }) => kind === 'shared_message',
+    )).toHaveLength(3);
   });
 
   it('turns participant ingress into a durable targeted wake', async () => {
@@ -291,7 +306,7 @@ describe('representative-agent heartbeat service', () => {
     await repository.appendEvent({
       kind: 'shared_message',
       actorAgentId: USER_AGENT_ID,
-      parentSequence: interest.sequence,
+      replyToSequence: interest.sequence,
       title: 'Existing request for the saved interest',
       content: 'Who has a named workflow involving unfinished work?',
       metadata: { sourceEventIds: [interest.sequence] },
@@ -537,6 +552,7 @@ class RoutingHeartbeatRunner implements RepresentativeAgentHeartbeatRunner {
         kind === 'interest_saved' || kind === 'check_requested'
       ));
       await requireSuccessfulToolResult(tools.get('post_shared_message')!.execute({
+        reply_to_event_id: request!.sequence,
         content: 'Does anyone have a specific observation connected to this request?',
         source_event_ids: request ? [request.sequence] : [],
       }));
@@ -545,6 +561,7 @@ class RoutingHeartbeatRunner implements RepresentativeAgentHeartbeatRunner {
         ({ kind }) => kind === 'shared_message',
       );
       const contribution = await tools.get('post_shared_message')!.execute({
+        reply_to_event_id: request!.sequence,
         content: `One specific observation from ${input.wake.participant.displayName}.`,
         source_event_ids: request ? [request.sequence] : [],
       });

@@ -2,7 +2,8 @@
  * Presents participant context and Lucid behavior guidance to a representative.
  * These prompts help the model choose useful actions but are not a security or
  * reliability boundary; communication tools and the repository enforce every
- * visibility, causality, action-budget, and cursor invariant described here.
+ * visibility, reply-routing, source-provenance, action-budget, and cursor
+ * invariant described here.
  */
 import type {
   Agent,
@@ -57,12 +58,14 @@ ${participant.privateContext}
 - Act as a representative for one participant, not as a universal judge of value.
 - Keep messages in ordinary language. Do not invent confidence scores, evidence packets, or market mechanics.
 - Event sequence numbers record delivery. Cite them as #12 when an action depends on an event.
-- A source reference proves where a message came from, not that its content is true.
+- reply_to_event_id identifies the request or principal event being continued. It does not claim that the reply contains independent information.
+- source_event_ids identify information used in the message. Include a peer message whenever you repeat or summarize it. Use an empty source list when the contribution comes only from this participant's supplied private context.
+- A source reference proves where content came from, not that it is true.
 - Shared messages are visible to all representative agents. Direct messages are visible only to the recipient and developer diagnostics.
 - Never claim to know information absent from visible events or private participant context.
 - Treat the working note as your changeable interpretation, not as verified fact or a substitute for the raw events shown in each wake.
 - Use no more than two communication actions in one wake.
-- Contribute to each principal-initiated causal thread at most once. Later messages in the same thread may be read, but should end without another message.
+- Contribute to each principal-initiated request thread at most once. Later messages in the same thread may be read, but should end without another message.
 - If there is no specific contribution or match, finish without action.
 
 Use only the Lucid communication tools available in this wake. Finish with a short internal summary.`;
@@ -75,31 +78,36 @@ export function buildAgentWakePrompt(
   visibleEvents: DiscoveryEvent[],
   workingContext: RepresentativeWorkingContext,
 ): string {
-  const requiredRequestReferences = visibleEvents
+  const requiredRequestSequences = visibleEvents
     .filter(({ kind }) => (
       kind === 'interest_saved' || kind === 'check_requested'
     ))
-    .map(({ sequence }) => `#${sequence}`);
+    .map(({ sequence }) => sequence);
   const visibleEventList = visibleEvents.length
     ? visibleEvents.map(formatDiscoveryEvent).join('\n')
     : '(No unread shared messages, direct messages, or user input.)';
 
-  const requiredRequestInstruction = requiredRequestReferences.length
-    ? `Your first communication action must be post_shared_message citing every required event: ${requiredRequestReferences.join(', ')}.`
+  const latestRequiredRequest = requiredRequestSequences.at(-1);
+  const requiredRequestReferences = requiredRequestSequences
+    .map((sequence) => `#${sequence}`);
+  const requiredRequestInstruction = latestRequiredRequest
+    ? `Your first communication action must be post_shared_message with reply_to_event_id #${latestRequiredRequest} and source_event_ids containing every required event: ${requiredRequestReferences.join(', ')}.`
     : 'No assignment or manual-check event requires a new shared request in this wake.';
 
   const responsibility = `Review the ongoing assignment context before acting. A different source is not automatically a new finding: report only a concrete addition relative to prior findings and feedback.
 ${requiredRequestInstruction}
-When an unread interest_saved event appears, you must post a minimal shared request that represents it, cite that interest event, and revise the working note for the changed assignment.
-When an unread check_requested event appears, it starts a new causal thread even if the saved interest text is unchanged. You must post a fresh minimal shared request citing that check event.
+When an unread interest_saved event appears, you must post a minimal shared request that represents it, reply to and cite that interest event, and revise the working note for the changed assignment.
+When an unread check_requested event appears, it starts a new request thread even if the saved interest text is unchanged. Its content includes the current working direction and latest feedback. Treat that as the current search target, post a fresh minimal shared request replying to and citing the check event, and do not merely repeat the earlier broad request.
 The host rejects assignment and check wakes that finish without their required shared request. Never use finish_without_action for those events.
 When an unread participant_input event appears, decide whether it contains a request, observation, offer, or interest worth sharing in minimal form.
 Keep the direction of value explicit:
-- When a peer request can be answered from this participant's private context, principal input, or working note, reply with post_shared_message or send_direct_message and cite the peer request. Do not use report_finding as a reply.
+- Prioritize answering a matching peer request from this participant's own private context, principal input, or working note before consuming another representative's response as a finding. Reply with post_shared_message or send_direct_message, set reply_to_event_id to that request, and cite only events whose information you actually use. Do not use report_finding as a reply.
+- If this participant has no concrete answer to a peer request, finish without action. Never send a message merely to announce that no case, match, or example is available.
+- Do not relay another representative's response as if it were this participant's independent contribution. If you summarize or repeat a peer message, cite it in source_event_ids so Lucid can preserve its true origin.
 - When a peer-authored message itself contains a specific connection that could matter to this participant, use report_finding to deliver it privately to this participant. report_finding never replies to the source agent.
 Describe what the source said and why it may connect. Never declare that a finding is useful, validated, or a successful match; the participant decides that through feedback.
 When several currently available messages support the same new connection, prefer one finding citing all relevant sources. When a later message merely repeats a prior finding, remain silent; report a follow-up only when you can state its concrete increment.
-When feedback or new principal input changes your understanding, use update_working_note once to preserve what matters, what to avoid, and what to try next in ordinary language. Do not rewrite an unchanged note merely to appear active.
+When feedback or new principal input changes your understanding, use update_working_note once to preserve what matters, what to avoid, and what to try next in ordinary language. After reporting a finding, preserve what was reported as a pending lead awaiting participant feedback; do not treat it as accepted learning. Do not rewrite an unchanged note merely to appear active.
 Respond to another representative only when its message has a specific connection to this participant's context or private input.
 Do not report the same source message twice or generate generic advice merely to appear active. Feedback is private guidance for later behavior.`;
 
@@ -130,11 +138,15 @@ function formatWorkingContext(
     ? `#${context.workingNote.sequence}: ${context.workingNote.content}`
     : '(No working note yet. Create one only when this wake establishes useful ongoing context.)';
   const findings = context.findings.length
-    ? context.findings.map(({ finding, sources, feedback }) => {
-        const sourceSequences = sources.map(({ message }) => (
+    ? context.findings.map(({
+        finding,
+        originatingSources,
+        feedback,
+      }) => {
+        const sourceSequences = originatingSources.map(({ message }) => (
           `#${message.sequence}`
         )).join(', ') || 'none';
-        return `- Finding #${finding.sequence}: ${finding.content}\n  Sources: ${sourceSequences}\n  Participant feedback: ${feedback ? `#${feedback.sequence}: ${feedback.content}` : 'none yet'}`;
+        return `- Finding #${finding.sequence}: ${finding.content}\n  Originating network contributions: ${sourceSequences}\n  Participant feedback: ${feedback ? `#${feedback.sequence}: ${feedback.content}` : 'none yet'}`;
       }).join('\n')
     : '(No prior findings.)';
 
@@ -142,5 +154,26 @@ function formatWorkingContext(
 }
 
 function formatDiscoveryEvent(event: DiscoveryEvent): string {
-  return `- #${event.sequence} [${EVENT_LABELS[event.kind]}] ${event.title}: ${event.content}`;
+  const messageRole = typeof event.metadata.messageRole === 'string'
+    ? event.metadata.messageRole
+    : undefined;
+  const label = messageRole
+    ? `${messageRole} ${EVENT_LABELS[event.kind]}`
+    : EVENT_LABELS[event.kind];
+  const reply = event.replyToSequence
+    ? `; replies to #${event.replyToSequence}`
+    : '';
+  const sourceSequences = readSourceSequences(event);
+  const sources = sourceSequences.length
+    ? `; content sources ${sourceSequences.map((sequence) => `#${sequence}`).join(', ')}`
+    : '';
+  return `- #${event.sequence} [${label}${reply}${sources}] ${event.title}: ${event.content}`;
+}
+
+function readSourceSequences(event: DiscoveryEvent): number[] {
+  return Array.isArray(event.metadata.sourceEventIds)
+    ? event.metadata.sourceEventIds.filter(
+        (sequence): sequence is number => Number.isInteger(sequence),
+      )
+    : [];
 }

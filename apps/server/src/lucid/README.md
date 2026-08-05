@@ -11,7 +11,7 @@ simulation scenarios.
 | --- | --- |
 | `discovery-workspace-service.ts` | Coordinates the local participant's saved interest, run requests, feedback, durable listening preference, and scoped snapshot |
 | `participant-network-service.ts` | Coordinates trusted participant registration/input, lifecycle, Heddle task reconciliation, reset, and development diagnostics |
-| `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per representative, claims mailbox wakes, accelerates unread agents, and owns scheduler lifecycle |
+| `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per representative, claims mailbox wakes, routes request/response run intents, and owns scheduler lifecycle |
 | `heddle-representative-agent-runner.ts` | Builds one claimed wake's prompt/tools and delegates execution through Heddle's context |
 | `discovery-repository.ts` | Defines the asynchronous storage-independent domain port |
 | `agent-communication-tools.ts` | Enforces visible sources, fixed horizons, encountered-peer addressing, action budgets, and idempotent communication/working-note writes |
@@ -32,8 +32,9 @@ contains only:
 - the local participant and representative;
 - that participant's current interest, private working note, and findings;
 - the current assignment and its representative's shared request plus
-  aggregate reply timing;
-- source attribution attached to those findings;
+  delivered-message and originating-contributor counts;
+- direct-message and collapsed originating-source attribution attached to
+  those findings;
 - that representative's Heddle task status.
 
 It never returns the global participant list, agent list, event log, private
@@ -69,7 +70,7 @@ Lucid owns:
 - atomic wake claims with one fixed unread-event horizon;
 - mailbox floors for join and lifecycle boundaries;
 - a two-action budget per wake;
-- one representative contribution per principal-initiated causal thread;
+- one representative contribution per principal-initiated request thread;
 - direct addressing only to active peers encountered through visible delivery;
 - findings backed by visible peer-authored messages;
 - participant-scoped findings, feedback, and source attribution;
@@ -113,8 +114,10 @@ remains recoverable by startup or a later trigger.
 ## Mailbox and heartbeat lifecycle
 
 1. Principal input or peer communication is appended durably.
-2. Lucid requests the recipient's Heddle task. Requests while busy coalesce
-   into a follow-up generation.
+2. Principal input requests its own representative's Heddle task. A new shared
+   request fans out once to active peers, a response requests only the agent it
+   answers, and an ambient contribution waits for normal scheduled listening.
+   Requests while a task is busy coalesce into one follow-up generation.
 3. Heddle selects the task. Lucid atomically claims currently visible unread
    events and freezes the highest sequence as the wake horizon.
 4. The runner receives private context, claimed events, bounded prior
@@ -131,16 +134,18 @@ remains recoverable by startup or a later trigger.
    exception; newly claimed wakes cannot enter that invalid state.
 8. Successful execution appends completion and advances the cursor only to the
    original horizon. Later mail remains unread.
-9. Newly addressed representatives receive durable run requests.
+9. Newly addressed representatives receive durable run requests without
+   rescanning every unread mailbox or recursively rebroadcasting responses.
 
 An empty due task calls `context.skip()` before model execution. It creates a
 lightweight Heddle run record but no model checkpoint and no Lucid wake.
 
-The local `Run now` operation appends a private `check_requested` event and uses
-the same mailbox/task path. It refuses to create a second causal root while the
-current wake is failed. `retryCurrentWake()` instead asks Heddle to continue the
-fixed checkpoint without appending new mailbox input. There is no separate
-synchronous agent route.
+The local `Run now` operation appends a private `check_requested` event that
+includes the saved assignment, current working direction, and latest feedback,
+then uses the same mailbox/task path. It refuses to create a second request
+thread while the current wake is failed. `retryCurrentWake()` instead asks
+Heddle to continue the fixed checkpoint without appending new mailbox input.
+There is no separate synchronous agent route.
 
 ## Participant and task lifecycle
 
@@ -165,7 +170,8 @@ reset/recovery, not the normal participant product control.
 
 Agents do not invoke one another's runtime. They append serialized events:
 
-- `post_shared_message` broadcasts a minimal request or contribution;
+- `post_shared_message` publishes a minimal request, response, or ambient
+  contribution. Only a root request immediately fans out to all peers;
 - `send_direct_message` appears only when the current representative has
   encountered an active peer as the actor of a visible event;
 - `report_finding` is available to every representative and addresses the
@@ -183,19 +189,23 @@ The participant-facing `networkActivity` projection remains anchored to the
 latest saved assignment. A manual check is an execution nudge and does not
 replace that assignment in the UI. Its published message does become the
 latest request shown within that assignment. The projection shows only the
-request that this participant's own representative published and aggregate reply
-timing/count. It does not expose unrelated message content or the global
-network. Counts indicate delivered messages, not truth or value.
+request that this participant's own representative published and aggregate
+reply timing/counts. It separates delivered messages from recursively resolved
+originating contributions and participants, so a relay cannot masquerade as
+corroboration. It does not expose unrelated message content or the global
+network. Counts indicate transport and provenance, not truth or value.
 
 Each participant-facing finding carries its assignment sequence and one
-delivery-path origin: `request-thread` when the causal chain includes a message
+delivery-path origin: `request-thread` when the reply chain includes a message
 the representative sent, or `ambient-network` when existing peer mail produced
 the finding. These labels explain how delivery happened; they do not score the
 finding or claim that a request caused useful information to exist.
 
-`source_event_ids` and `parentSequence` preserve causal delivery. They certify
-neither truth nor usefulness. A representative can act at most twice per wake
-and contribute to one principal-initiated thread only once across later wakes.
+`replyToSequence` preserves conversation routing; `source_event_ids` preserve
+content provenance. Findings expose both the messages cited directly and the
+earliest peer contributions behind relays. These fields certify neither truth
+nor usefulness. A representative can act at most twice per wake and contribute
+to one principal-initiated request thread only once across later wakes.
 
 ## Longitudinal representative context
 
@@ -217,7 +227,7 @@ important, what feedback changed, and what to try next, but it is not verified
 fact or a score. Raw interest, message, finding, and feedback events remain the
 authoritative history. Semantic novelty stays an agent decision informed by
 that explicit history; deterministic code continues to enforce source reuse,
-ownership, visibility, causality, and retry safety only.
+ownership, visibility, reply/source integrity, and retry safety only.
 
 ## Recovery and concurrency
 
@@ -232,7 +242,7 @@ could still retain old private context. Unrelated agents continue running.
 
 Independent representatives execute concurrently up to
 `LUCID_HEARTBEAT_MAX_CONCURRENCY`. Each wake keeps tool concurrency at one so
-causal writes and the action budget remain ordered.
+dependent writes and the action budget remain ordered.
 
 The file scheduler is single-host. PostgreSQL would not by itself provide
 distributed task claims; a hosted multi-replica design also needs a durable

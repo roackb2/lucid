@@ -28,7 +28,15 @@ export function FindingCard({
 }: FindingCardProps) {
   const [feedbackDraft, setFeedbackDraft] = useState('');
   const [explanationOpen, setExplanationOpen] = useState(isLatest);
-  const sourceDescription = describeSourceMix(finding.sources);
+  const sourceDescription = describeSourceMix(finding.originatingSources);
+  const originatingSequences = new Set(
+    finding.originatingSources.map(({ message }) => message.sequence),
+  );
+  const relayCount = finding.sources.filter(({ message }) => (
+    !originatingSequences.has(message.sequence)
+  )).length;
+  const directSourcesDiffer = relayCount > 0
+    || finding.sources.length !== finding.originatingSources.length;
 
   const submitFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -75,7 +83,7 @@ export function FindingCard({
       <div className="finding-card__chips">
         <span>
           <Route size={13} />
-          {finding.sources.length} source {finding.sources.length === 1 ? 'message' : 'messages'}
+          {finding.sources.length} delivered {finding.sources.length === 1 ? 'message' : 'messages'}
         </span>
         <span>
           {finding.origin === 'request-thread'
@@ -83,9 +91,16 @@ export function FindingCard({
             : 'Found in existing network mail'}
         </span>
         <span>{sourceDescription}</span>
+        {relayCount ? (
+          <span>
+            {relayCount} {relayCount === 1 ? 'relay' : 'relays'} preserved
+          </span>
+        ) : null}
       </div>
 
-      {finding.sources.length || finding.outboundMessages.length ? (
+      {finding.originatingSources.length
+      || finding.sources.length
+      || finding.outboundMessages.length ? (
         <details
           className="finding-explanation"
           onToggle={(event) => setExplanationOpen(event.currentTarget.open)}
@@ -100,27 +115,16 @@ export function FindingCard({
             <ChevronDown size={15} />
           </summary>
           <div className="finding-explanation__content">
-            {finding.sources.length ? (
+            {finding.originatingSources.length ? (
               <section>
-                <h4>Messages that caused this finding</h4>
-                <ol>
-                  {finding.sources.map(({ message, attribution }) => (
-                    <li key={message.id}>
-                      <span>#{message.sequence}</span>
-                      <div>
-                        <div className="source-message__identity">
-                          <strong>
-                            {attribution?.participantDisplayName
-                              ?? attribution?.agentName
-                              ?? 'Network participant'}
-                          </strong>
-                          <SourceKindBadge source={{ message, attribution }} />
-                        </div>
-                        <p>{message.content}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
+                <h4>Originating network contributions</h4>
+                <SourceMessageList sources={finding.originatingSources} />
+              </section>
+            ) : null}
+            {directSourcesDiffer && finding.sources.length ? (
+              <section>
+                <h4>Messages your representative directly used</h4>
+                <SourceMessageList sources={finding.sources} />
               </section>
             ) : null}
             {finding.outboundMessages.length ? (
@@ -137,8 +141,9 @@ export function FindingCard({
               </section>
             ) : null}
             <p className="source-caveat">
-              These event references establish the delivery path. They do not
-              verify that the message is true or useful.
+              Originating contributions collapse cited relays back to the
+              participant messages behind them. Event references establish
+              provenance and delivery, not whether content is true or useful.
             </p>
           </div>
         </details>
@@ -205,7 +210,30 @@ function describeSourceMix(sources: FindingSource[]): string {
       ? '1 synthetic participant'
       : `${participants.size} synthetic participants`;
   }
-  return sources.length ? 'Network source' : 'No source message';
+  return sources.length ? 'Network contribution' : 'No originating contribution';
+}
+
+function SourceMessageList({ sources }: { sources: FindingSource[] }) {
+  return (
+    <ol>
+      {sources.map(({ message, attribution }) => (
+        <li key={message.id}>
+          <span>#{message.sequence}</span>
+          <div>
+            <div className="source-message__identity">
+              <strong>
+                {attribution?.participantDisplayName
+                  ?? attribution?.agentName
+                  ?? 'Network participant'}
+              </strong>
+              <SourceKindBadge source={{ message, attribution }} />
+            </div>
+            <p>{message.content}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function SourceKindBadge({ source }: { source: FindingSource }) {

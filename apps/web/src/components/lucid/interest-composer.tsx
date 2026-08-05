@@ -235,12 +235,20 @@ function describeNetworkResponses(
   if (!activity.responseCount) {
     return 'Waiting for another representative to contribute something specific.';
   }
-  const messageLabel = activity.responseCount === 1 ? 'message' : 'messages';
+  const deliveredLabel = activity.responseCount === 1
+    ? 'message delivered'
+    : 'messages delivered';
+  const originLabel = activity.originatingResponseCount === 1
+    ? 'originating contribution'
+    : 'originating contributions';
+  const participantLabel = activity.originatingParticipantCount === 1
+    ? 'participant'
+    : 'participants';
   const latest = activity.latestResponseAt
     ? ` · latest ${dayjs(activity.latestResponseAt).format('MMM D, HH:mm')}`
     : '';
-  return [
-    `${activity.responseCount} network ${messageLabel} received${latest}`,
-    'your representative reviews them before reporting a finding',
-  ].join(' · ');
+  const originSummary = activity.originatingParticipantCount
+    ? `${activity.originatingParticipantCount} originating ${participantLabel} · ${activity.originatingResponseCount} ${originLabel} · `
+    : '';
+  return `${originSummary}${activity.responseCount} ${deliveredLabel}${latest} · your representative reviews them before reporting a finding`;
 }

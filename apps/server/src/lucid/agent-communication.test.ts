@@ -145,6 +145,9 @@ You represent an explicitly simulated test participant, not a real person or ext
     expect(prompt).toContain(`Finding #${finding.sequence}: Abandoned drafts may preserve useful decision context.`);
     expect(prompt).toContain(`Participant feedback: #${feedback.sequence}: Only report this direction again with a named workflow.`);
     expect(prompt).toContain('A different source is not automatically a new finding');
+    expect(prompt).toContain('Prioritize answering a matching peer request');
+    expect(prompt).toContain('Never send a message merely to announce');
+    expect(prompt).toContain('pending lead awaiting participant feedback');
     expect(prompt).toContain('Do not use report_finding as a reply.');
     expect(prompt).toContain('report_finding never replies to the source agent.');
     expect(prompt.indexOf('Ongoing assignment context:'))
@@ -179,6 +182,7 @@ You represent an explicitly simulated test participant, not a real person or ext
       output: { events: [{ sequence: claimedMessage.sequence }] },
     });
     expect(await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: laterMessage.sequence,
       content: 'A post-claim event cannot affect this wake.',
       source_event_ids: [laterMessage.sequence],
     })).toMatchObject({
@@ -186,6 +190,7 @@ You represent an explicitly simulated test participant, not a real person or ext
       error: expect.stringContaining('after this wake was claimed'),
     });
     expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: claimedMessage.sequence,
       content: 'The claimed event remains a valid source.',
       source_event_ids: [claimedMessage.sequence],
     })).ok).toBe(true);
@@ -209,6 +214,7 @@ You represent an explicitly simulated test participant, not a real person or ext
       after_sequence: 0,
     })).toMatchObject({ ok: true, output: { events: [] } });
     expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: ownMessage.sequence,
       content: 'An own-authored event cannot be cited as visible input.',
       source_event_ids: [ownMessage.sequence],
     })).ok).toBe(false);
@@ -273,15 +279,18 @@ You represent an explicitly simulated test participant, not a real person or ext
       content: 'A second note replacement in one wake must fail.',
     })).ok).toBe(false);
     expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: hidden.sequence,
       content: 'This hidden source should fail.',
       source_event_ids: [hidden.sequence],
     })).ok).toBe(false);
     expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: visible.sequence,
       content: 'This visible source is the first action.',
       source_event_ids: [visible.sequence],
     })).ok).toBe(true);
     expect((await tools.get('send_direct_message')!.execute({
       target_agent_id: source.agent.id,
+      reply_to_event_id: visible.sequence,
       content: 'This direct response is the second action.',
       source_event_ids: [visible.sequence],
     })).ok).toBe(true);
@@ -325,6 +334,7 @@ You represent an explicitly simulated test participant, not a real person or ext
     });
     expect((await tools.get('send_direct_message')!.execute({
       target_agent_id: source.agent.id,
+      reply_to_event_id: peer.sequence,
       content: 'Reply before the required request.',
       source_event_ids: [peer.sequence],
     })).ok).toBe(false);
@@ -332,11 +342,13 @@ You represent an explicitly simulated test participant, not a real person or ext
       reason: 'Stop before the required request.',
     })).ok).toBe(false);
     expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: peer.sequence,
       content: 'This cites only the peer and cannot satisfy the assignment.',
       source_event_ids: [peer.sequence],
     })).ok).toBe(false);
 
     expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: interest.sequence,
       content: 'Looking for teams using persistent representative agents.',
       source_event_ids: [interest.sequence],
     })).ok).toBe(true);
@@ -379,6 +391,7 @@ You represent an explicitly simulated test participant, not a real person or ext
       [interest.sequence],
     ));
     expect((await retryTools.get('post_shared_message')!.execute({
+      reply_to_event_id: interest.sequence,
       content: 'Looking for concrete representative-agent experiments.',
       source_event_ids: [interest.sequence],
     })).ok).toBe(true);
@@ -390,7 +403,7 @@ You represent an explicitly simulated test participant, not a real person or ext
       && ['shared_message', 'finding_reported', 'agent_wake_no_action']
         .includes(kind)
     ))).toHaveLength(3);
-    expect(await repository.hasAgentSharedMessageUsingSource(
+    expect(await repository.hasAgentPublishedRequestForTrigger(
       USER_AGENT_ID,
       interest.sequence,
     )).toBe(true);
@@ -428,8 +441,81 @@ You represent an explicitly simulated test participant, not a real person or ext
     expect((await repository.readSnapshot()).findings).toEqual([]);
   });
 
+  it('separates request replies from content provenance', async () => {
+    const source = await registerSynthetic(repository, 'reply-source');
+    const request = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: source.agent.id,
+      title: 'A peer asks for participant experience',
+      content: 'Has anyone encountered a durable support-agent workflow?',
+      metadata: { messageRole: 'request' },
+    });
+    const tools = toolsByName(await createUserTools(
+      repository,
+      'wake_reply_without_event_source',
+      1,
+      request.sequence,
+    ));
+
+    expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: request.sequence,
+      content: 'This participant has supplied a relevant private experience.',
+      source_event_ids: [],
+    })).ok).toBe(true);
+    expect((await repository.readNetworkDiagnostics()).events.at(-1))
+      .toMatchObject({
+        kind: 'shared_message',
+        replyToSequence: request.sequence,
+        metadata: {
+          messageRole: 'response',
+          sourceEventIds: [],
+        },
+      });
+  });
+
+  it('requires explicit event references in text to be declared structurally', async () => {
+    const requester = await registerSynthetic(repository, 'reference-requester');
+    const contributor = await registerSynthetic(repository, 'reference-source');
+    const request = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: requester.agent.id,
+      title: 'A peer asks for an example',
+      content: 'Does anyone have a concrete example?',
+      metadata: { messageRole: 'request' },
+    });
+    const sourceMessage = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: contributor.agent.id,
+      replyToSequence: request.sequence,
+      title: 'Another participant responds',
+      content: 'One participant supplied a concrete example.',
+      metadata: { messageRole: 'response' },
+    });
+    const tools = toolsByName(await createUserTools(
+      repository,
+      'wake_reference_integrity',
+      1,
+      sourceMessage.sequence,
+    ));
+
+    expect(await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: request.sequence,
+      content: `From #${sourceMessage.sequence}: one participant supplied an example.`,
+      source_event_ids: [request.sequence],
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining(`#${sourceMessage.sequence}`),
+    });
+    expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: request.sequence,
+      content: `From #${sourceMessage.sequence}: one participant supplied an example.`,
+      source_event_ids: [sourceMessage.sequence],
+    })).ok).toBe(true);
+  });
+
   it('reports peer-sourced local findings once and preserves attribution', async () => {
     const source = await registerSynthetic(repository, 'local-finding-source');
+    const relay = await registerSynthetic(repository, 'local-finding-relay');
     const message = await peerMessage(
       repository,
       source.agent.id,
@@ -457,6 +543,27 @@ You represent an explicitly simulated test participant, not a real person or ext
       content: 'The same source must not become another finding.',
       source_event_ids: [message.sequence],
     })).ok).toBe(false);
+    const relayedMessage = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: relay.agent.id,
+      replyToSequence: message.sequence,
+      title: 'A relayed network observation',
+      content: `From #${message.sequence}: ${message.content}`,
+      metadata: {
+        messageRole: 'response',
+        sourceEventIds: [message.sequence],
+      },
+    });
+    const relayedDuplicate = toolsByName(await createUserTools(
+      repository,
+      'wake_finding_relay',
+      3,
+      relayedMessage.sequence,
+    ));
+    expect((await relayedDuplicate.get('report_finding')!.execute({
+      content: 'A relay must not turn one contribution into a new finding.',
+      source_event_ids: [relayedMessage.sequence],
+    })).ok).toBe(false);
     expect((await repository.readSnapshot()).findings).toEqual([
       expect.objectContaining({
         finding: expect.objectContaining({ title: 'New finding for You' }),
@@ -465,13 +572,18 @@ You represent an explicitly simulated test participant, not a real person or ext
             participantId: source.participant.id,
           }),
         })],
+        originatingSources: [expect.objectContaining({
+          attribution: expect.objectContaining({
+            participantId: source.participant.id,
+          }),
+        })],
       }),
     ]);
   });
 
-  it('allows one representative contribution per principal-initiated causal thread', async () => {
+  it('allows one representative contribution per principal-initiated request thread', async () => {
     const interest = await repository.saveInterest(
-      'Start one bounded causal thread.',
+      'Start one bounded request thread.',
     );
     const firstWake = toolsByName(await createUserTools(
       repository,
@@ -480,6 +592,7 @@ You represent an explicitly simulated test participant, not a real person or ext
       interest.sequence,
     ));
     expect((await firstWake.get('post_shared_message')!.execute({
+      reply_to_event_id: interest.sequence,
       content: 'The first contribution is allowed.',
       source_event_ids: [interest.sequence],
     })).ok).toBe(true);
@@ -491,6 +604,7 @@ You represent an explicitly simulated test participant, not a real person or ext
       Number.MAX_SAFE_INTEGER,
     ));
     expect((await laterWake.get('post_shared_message')!.execute({
+      reply_to_event_id: interest.sequence,
       content: 'A later wake cannot extend the same thread again.',
       source_event_ids: [interest.sequence],
     })).ok).toBe(false);
@@ -499,9 +613,10 @@ You represent an explicitly simulated test participant, not a real person or ext
       targetAgentId: USER_AGENT_ID,
       targetParticipantId: LOCAL_USER_ID,
       title: 'A new explicit check',
-      content: 'This event starts a different causal thread.',
+      content: 'This event starts a different request thread.',
     });
     expect((await laterWake.get('post_shared_message')!.execute({
+      reply_to_event_id: checkRequest.sequence,
       content: 'A new request allows a new contribution.',
       source_event_ids: [checkRequest.sequence],
     })).ok).toBe(true);

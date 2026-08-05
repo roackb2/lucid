@@ -3,7 +3,8 @@
  *
  * The model receives ordinary-language tools, while this module enforces the
  * facts prompts cannot guarantee: mailbox visibility, the claimed event
- * horizon, causal provenance, per-wake action limits, and retry idempotency.
+ * horizon, reply routing, content provenance, per-wake action limits, and
+ * retry idempotency.
  * It records delivery and never evaluates whether a claim is true or valuable.
  */
 import uniq from 'lodash/uniq.js';
@@ -17,6 +18,7 @@ import type { DiscoveryRepository } from './discovery-repository.js';
 import type {
   Agent,
   DiscoveryEvent,
+  NetworkMessageRole,
   Participant,
 } from './discovery-types.js';
 
@@ -25,13 +27,15 @@ const readMessagesInputSchema = z.object({
   limit: z.number().int().min(1).max(30).default(15),
 });
 const sharedMessageInputSchema = z.object({
+  reply_to_event_id: z.number().int().positive(),
   content: z.string().trim().min(1).max(900),
-  source_event_ids: z.array(z.number().int().positive()).min(1).max(8),
+  source_event_ids: z.array(z.number().int().positive()).max(8),
 });
 const directMessageInputSchema = z.object({
   target_agent_id: z.string().trim().min(1),
+  reply_to_event_id: z.number().int().positive(),
   content: z.string().trim().min(1).max(700),
-  source_event_ids: z.array(z.number().int().positive()).min(1).max(8),
+  source_event_ids: z.array(z.number().int().positive()).max(8),
 });
 const findingInputSchema = z.object({
   content: z.string().trim().min(1).max(1_200),
@@ -68,8 +72,8 @@ const WRITE_DISCOVERY_STATE_POLICY = {
 
 /**
  * Grants one representative agent a bounded set of communication operations
- * for one wake. It validates visibility and causal references before
- * writing events, but never scores message truth or usefulness.
+ * for one wake. It validates visibility, reply targets, and declared content
+ * sources before writing events, but never scores message truth or usefulness.
  */
 export class AgentCommunicationToolService {
   private mutations = 0;
@@ -110,7 +114,7 @@ export class AgentCommunicationToolService {
       Promise.all(uniq(this.requiredRequestSourceIds).map(
         async (sequence) => ({
           sequence,
-          satisfied: await this.repository.hasAgentSharedMessageUsingSource(
+          satisfied: await this.repository.hasAgentPublishedRequestForTrigger(
             this.agent.id,
             sequence,
           ),
@@ -182,23 +186,29 @@ export class AgentCommunicationToolService {
       {
         name: 'post_shared_message',
         description:
-          'Send a concise message to every representative agent. Use this to publish a request or answer a peer request from this participant’s context. Disclose only the detail needed for the connection.',
+          'Publish a concise network request, substantive response, or contribution. reply_to_event_id identifies the request or principal event this message continues. source_event_ids identify the information used in the content. When answering a peer request, contribute this participant’s own context instead of relaying another representative’s answer. Never post merely to say that no match or example is available.',
         capabilities: ['lucid.discovery.write'],
         hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
         parameters: {
           type: 'object',
           properties: {
+            reply_to_event_id: {
+              type: 'integer',
+              minimum: 1,
+              description:
+                'The visible request or principal event this message directly answers or represents.',
+            },
             content: { type: 'string', minLength: 1, maxLength: 900 },
             source_event_ids: {
               type: 'array',
-              minItems: 1,
+              minItems: 0,
               maxItems: 8,
               items: { type: 'integer', minimum: 1 },
               description:
-                'Visible event sequences that caused this message and identify its causal thread.',
+                'Visible events whose information is used in the message. Include every peer message being repeated or summarized. Use an empty array when the contribution comes only from this participant’s supplied private context. These references establish provenance, not the reply thread.',
             },
           },
-          required: ['content', 'source_event_ids'],
+          required: ['reply_to_event_id', 'content', 'source_event_ids'],
           additionalProperties: false,
         },
         execute: async (input) => this.postSharedMessage(input),
@@ -216,15 +226,27 @@ export class AgentCommunicationToolService {
               type: 'string',
               enum: addressableAgents.map((candidate) => candidate.id),
             },
+            reply_to_event_id: {
+              type: 'integer',
+              minimum: 1,
+              description: 'The visible peer message this direct message answers.',
+            },
             content: { type: 'string', minLength: 1, maxLength: 700 },
             source_event_ids: {
               type: 'array',
-              minItems: 1,
+              minItems: 0,
               maxItems: 8,
               items: { type: 'integer', minimum: 1 },
+              description:
+                'Visible events whose information is used in the response. Use an empty array when the response comes only from this participant’s supplied private context.',
             },
           },
-          required: ['target_agent_id', 'content', 'source_event_ids'],
+          required: [
+            'target_agent_id',
+            'reply_to_event_id',
+            'content',
+            'source_event_ids',
+          ],
           additionalProperties: false,
         },
         execute: async (input) => this.sendDirectMessage(input),
@@ -346,6 +368,7 @@ export class AgentCommunicationToolService {
     }
     const sourceEventIds = uniq(parsed.data.source_event_ids);
     const prerequisiteFailure = this.validateRequiredRequestSources(
+      parsed.data.reply_to_event_id,
       sourceEventIds,
     );
     if (prerequisiteFailure) {
@@ -355,8 +378,22 @@ export class AgentCommunicationToolService {
     if (validationFailure) {
       return validationFailure;
     }
-    const repeatedContribution = await this.validateThreadContribution(
+    const replyToEvent = await this.validateReplyTo(
+      parsed.data.reply_to_event_id,
+    );
+    if (!replyToEvent.ok) {
+      return replyToEvent.error;
+    }
+    const referenceFailure = this.validateTextEventReferences(
+      parsed.data.content,
+      parsed.data.reply_to_event_id,
       sourceEventIds,
+    );
+    if (referenceFailure) {
+      return referenceFailure;
+    }
+    const repeatedContribution = await this.validateThreadContribution(
+      parsed.data.reply_to_event_id,
     );
     if (repeatedContribution) {
       return repeatedContribution;
@@ -370,7 +407,7 @@ export class AgentCommunicationToolService {
       wakeNumber: this.wakeNumber,
       kind: 'shared_message',
       actorAgentId: this.agent.id,
-      parentSequence: sourceEventIds[0],
+      replyToSequence: parsed.data.reply_to_event_id,
       idempotencyKey,
       title: `${this.agent.name} posts a shared message`,
       content: parsed.data.content,
@@ -378,6 +415,7 @@ export class AgentCommunicationToolService {
         visibility: 'shared',
         wakeId: this.wakeId,
         sourceEventIds,
+        messageRole: networkMessageRoleFor(replyToEvent.event),
       },
     });
     sourceEventIds.forEach((sequence) => {
@@ -416,8 +454,32 @@ export class AgentCommunicationToolService {
     if (validationFailure) {
       return validationFailure;
     }
-    const repeatedContribution = await this.validateThreadContribution(
+    const replyToEvent = await this.validateReplyTo(
+      parsed.data.reply_to_event_id,
+    );
+    if (!replyToEvent.ok) {
+      return replyToEvent.error;
+    }
+    if (
+      !['shared_message', 'direct_message'].includes(replyToEvent.event.kind)
+      || replyToEvent.event.actorAgentId !== target.id
+    ) {
+      return {
+        ok: false,
+        error:
+          'A direct message must reply to a visible message authored by its target representative.',
+      };
+    }
+    const referenceFailure = this.validateTextEventReferences(
+      parsed.data.content,
+      parsed.data.reply_to_event_id,
       sourceEventIds,
+    );
+    if (referenceFailure) {
+      return referenceFailure;
+    }
+    const repeatedContribution = await this.validateThreadContribution(
+      parsed.data.reply_to_event_id,
     );
     if (repeatedContribution) {
       return repeatedContribution;
@@ -432,7 +494,7 @@ export class AgentCommunicationToolService {
       kind: 'direct_message',
       actorAgentId: this.agent.id,
       targetAgentId: target.id,
-      parentSequence: sourceEventIds[0],
+      replyToSequence: parsed.data.reply_to_event_id,
       idempotencyKey: this.actionIdempotencyKey(actionIndex),
       title: `${this.agent.name} messages ${target.name}`,
       content: parsed.data.content,
@@ -440,6 +502,7 @@ export class AgentCommunicationToolService {
         visibility: 'target-agent',
         wakeId: this.wakeId,
         sourceEventIds,
+        messageRole: 'response',
       },
     }));
   }
@@ -457,6 +520,14 @@ export class AgentCommunicationToolService {
     const sourceFailure = await this.validateSources(sourceEventIds);
     if (sourceFailure) {
       return sourceFailure;
+    }
+    const referenceFailure = this.validateTextEventReferences(
+      parsed.data.content,
+      undefined,
+      sourceEventIds,
+    );
+    if (referenceFailure) {
+      return referenceFailure;
     }
     // Provenance must be both visible and peer-authored. This proves the network
     // path that produced a finding, not the truth of the underlying message.
@@ -476,7 +547,7 @@ export class AgentCommunicationToolService {
           'A finding must cite at least one visible shared or direct message from another agent.',
       };
     }
-    if (await this.repository.hasParticipantFindingUsingAnySource(
+    if (await this.repository.hasParticipantFindingUsingAnyOrigin(
       this.participant.id,
       sourceEventIds,
     )) {
@@ -495,7 +566,6 @@ export class AgentCommunicationToolService {
       kind: 'finding_reported',
       actorAgentId: this.agent.id,
       targetParticipantId: this.participant.id,
-      parentSequence: sourceEventIds[0],
       idempotencyKey: this.actionIdempotencyKey(actionIndex),
       title: `New finding for ${this.participant.displayName}`,
       content: parsed.data.content,
@@ -574,12 +644,23 @@ export class AgentCommunicationToolService {
   }
 
   private validateRequiredRequestSources(
+    replyToSequence: number,
     sourceEventIds: number[],
   ): ToolResult | undefined {
-    const missingSources = [...this.pendingRequiredRequestSourceIds]
+    const requiredSources = [...this.pendingRequiredRequestSourceIds]
+      .sort((left, right) => left - right);
+    const missingSources = requiredSources
       .filter((sequence) => !sourceEventIds.includes(sequence));
-    return missingSources.length
-      ? this.requiredNetworkRequestError()
+    if (missingSources.length) {
+      return this.requiredNetworkRequestError();
+    }
+    const latestRequiredSource = requiredSources.at(-1);
+    return latestRequiredSource && replyToSequence !== latestRequiredSource
+      ? {
+          ok: false,
+          error:
+            `The required network request must reply to the latest assignment or check event: #${latestRequiredSource}.`,
+        }
       : undefined;
   }
 
@@ -638,22 +719,73 @@ export class AgentCommunicationToolService {
       : undefined;
   }
 
-  private async validateThreadContribution(
+  private async validateReplyTo(
+    replyToSequence: number,
+  ): Promise<
+    | { ok: true; event: DiscoveryEvent }
+    | { ok: false; error: ToolResult }
+  > {
+    if (replyToSequence > this.horizonSequence) {
+      return {
+        ok: false,
+        error: {
+          ok: false,
+          error:
+            `Reply target arrived after this wake was claimed: ${replyToSequence}`,
+        },
+      };
+    }
+    const event = (await this.repository.readVisibleEventsBySequence(
+      this.agent.id,
+      [replyToSequence],
+    ))[0];
+    return event
+      ? { ok: true, event }
+      : {
+          ok: false,
+          error: {
+            ok: false,
+            error: `Unknown or invisible reply target: ${replyToSequence}`,
+          },
+        };
+  }
+
+  private validateTextEventReferences(
+    content: string,
+    replyToSequence: number | undefined,
     sourceEventIds: number[],
+  ): ToolResult | undefined {
+    const declaredReferences = new Set([
+      ...(replyToSequence ? [replyToSequence] : []),
+      ...sourceEventIds,
+    ]);
+    const missingReferences = readTextEventReferences(content)
+      .filter((sequence) => !declaredReferences.has(sequence));
+    return missingReferences.length
+      ? {
+          ok: false,
+          error:
+            `Message text references events that are neither the reply target nor content sources: ${missingReferences.map((sequence) => `#${sequence}`).join(', ')}`,
+        }
+      : undefined;
+  }
+
+  private async validateThreadContribution(
+    replyToSequence: number,
   ): Promise<ToolResult | undefined> {
-    // The repository follows persisted provenance to the causal root; prompt
-    // instructions alone cannot stop an agent-to-agent reply loop reliably.
+    // The repository follows the persisted reply chain to the request root;
+    // content provenance cannot accidentally merge unrelated conversations.
     const alreadyContributed = await this.repository
-      .hasAgentContributedToCausalThread(
+      .hasAgentContributedToRequestThread(
         this.agent.id,
-        sourceEventIds,
+        replyToSequence,
         this.wakeId,
       );
     return alreadyContributed
       ? {
           ok: false,
           error:
-            'This representative already communicated in the same causal thread. Finish without action unless a new user request starts a new thread.',
+            'This representative already communicated in the same request thread. Finish without action unless a new user request starts a new thread.',
         }
       : undefined;
   }
@@ -693,8 +825,33 @@ function projectEvent(
     target: event.targetAgentId
       ? agentById.get(event.targetAgentId)?.name ?? event.targetAgentId
       : undefined,
+    replyToSequence: event.replyToSequence,
     title: event.title,
     content: event.content,
     metadata: event.metadata,
   };
+}
+
+function networkMessageRoleFor(
+  replyToEvent: DiscoveryEvent,
+): NetworkMessageRole {
+  if (
+    replyToEvent.kind === 'interest_saved'
+    || replyToEvent.kind === 'check_requested'
+  ) {
+    return 'request';
+  }
+  if (
+    replyToEvent.kind === 'shared_message'
+    || replyToEvent.kind === 'direct_message'
+  ) {
+    return 'response';
+  }
+  return 'contribution';
+}
+
+function readTextEventReferences(content: string): number[] {
+  return uniq([...content.matchAll(/(?:^|[^\w])#(\d+)\b/g)]
+    .map((match) => Number(match[1]))
+    .filter(Number.isSafeInteger));
 }
