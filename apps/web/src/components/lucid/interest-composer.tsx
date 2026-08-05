@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import {
+  AlertTriangle,
   PencilLine,
   RefreshCw,
   Save,
@@ -18,8 +19,11 @@ type InterestComposerProps = {
   isChecking: boolean;
   isSaving: boolean;
   isRunningNow: boolean;
+  isRetrying: boolean;
+  failedTask?: DiscoverySnapshot['backgroundChecks']['tasks'][number];
   onSaveInterest(content: string): Promise<unknown>;
   onRunNow(): void;
+  onRetry(): void;
 };
 
 export function InterestComposer({
@@ -30,8 +34,11 @@ export function InterestComposer({
   isChecking,
   isSaving,
   isRunningNow,
+  isRetrying,
+  failedTask,
   onSaveInterest,
   onRunNow,
+  onRetry,
 }: InterestComposerProps) {
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
@@ -133,11 +140,28 @@ export function InterestComposer({
       )}
 
       {interest ? (
-        <section className="network-request-status" aria-live="polite">
+        <section className={`network-request-status ${
+          failedTask ? 'network-request-status--error' : ''
+        }`} aria-live="polite">
           <div className="network-request-status__icon" aria-hidden="true">
-            <Send size={15} />
+            {failedTask ? <AlertTriangle size={15} /> : <Send size={15} />}
           </div>
-          {networkActivity?.request ? (
+          {failedTask ? (
+            <div>
+              <strong>The current assignment did not finish</strong>
+              <p>
+                Your saved interest and unread messages are still on disk.
+                Retry continues the same work instead of creating another
+                request thread.
+              </p>
+              <small>
+                {failedTask.error ?? 'The representative wake failed.'}
+                {failedTask.nextRunAt
+                  ? ` Next automatic retry ${dayjs(failedTask.nextRunAt).format('MMM D, HH:mm')}.`
+                  : ''}
+              </small>
+            </div>
+          ) : networkActivity?.request ? (
             <div>
               <strong>
                 Asked your network {dayjs(networkActivity.request.createdAt)
@@ -168,24 +192,38 @@ export function InterestComposer({
               : 'Waiting for the first agent wake'}
           </strong>
           <p>
-            Saving changes queues a network request. Run now starts a fresh
-            request thread without changing scheduled background checks.
+            {failedTask
+              ? 'Retry repairs the current wake without adding another assignment or manual-check event.'
+              : 'Saving changes queues a network request. Run now starts a fresh request thread without changing scheduled background checks.'}
           </p>
         </div>
-        <Button
-          disabled={
-            !interest
-            || !backgroundChecksEnabled
-            || isRunningNow
-            || editing
-          }
-          onClick={onRunNow}
-        >
-          <span className={isChecking ? 'button-spinner' : ''}>
-            <RefreshCw size={15} />
-          </span>
-          {isChecking ? 'Checking…' : 'Run a check now'}
-        </Button>
+        {failedTask ? (
+          <Button
+            disabled={!backgroundChecksEnabled || isRetrying || editing}
+            onClick={onRetry}
+          >
+            <span className={isRetrying ? 'button-spinner' : ''}>
+              <RefreshCw size={15} />
+            </span>
+            {isRetrying ? 'Retrying…' : 'Retry current work'}
+          </Button>
+        ) : (
+          <Button
+            disabled={
+              !interest
+              || !backgroundChecksEnabled
+              || isChecking
+              || isRunningNow
+              || editing
+            }
+            onClick={onRunNow}
+          >
+            <span className={isChecking ? 'button-spinner' : ''}>
+              <RefreshCw size={15} />
+            </span>
+            {isChecking ? 'Checking…' : 'Run a check now'}
+          </Button>
+        )}
       </footer>
     </section>
   );

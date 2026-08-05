@@ -63,7 +63,9 @@ export function FindingCard({
           <h3>
             {finding.noMatch
               ? 'No relevant message surfaced in this check'
-              : 'Something from your network may be relevant'}
+              : finding.origin === 'request-thread'
+                ? 'A response to your request may be relevant'
+                : 'An existing network message may be relevant'}
           </h3>
         </div>
       </header>
@@ -75,6 +77,11 @@ export function FindingCard({
           <Route size={13} />
           {finding.sources.length} source {finding.sources.length === 1 ? 'message' : 'messages'}
         </span>
+        <span>
+          {finding.origin === 'request-thread'
+            ? 'Response to your request'
+            : 'Found in existing network mail'}
+        </span>
         <span>{sourceDescription}</span>
       </div>
 
@@ -85,7 +92,11 @@ export function FindingCard({
           open={explanationOpen}
         >
           <summary>
-            <span>See source messages and what your agent shared</span>
+            <span>
+              {finding.origin === 'request-thread'
+                ? 'See the request and responses behind this finding'
+                : 'See the network messages behind this finding'}
+            </span>
             <ChevronDown size={15} />
           </summary>
           <div className="finding-explanation__content">

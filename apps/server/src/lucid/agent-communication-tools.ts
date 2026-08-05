@@ -75,6 +75,7 @@ export class AgentCommunicationToolService {
   private mutations = 0;
   private workingNoteUpdated = false;
   private addressableAgentIds = new Set<string>();
+  private pendingRequiredRequestSourceIds = new Set<number>();
 
   constructor(
     private readonly repository: DiscoveryRepository,
@@ -83,12 +84,18 @@ export class AgentCommunicationToolService {
     private readonly wakeId: string,
     private readonly wakeNumber: number,
     private readonly horizonSequence: number,
+    private readonly requiredRequestSourceIds: number[] = [],
   ) {}
 
   async definitions(): Promise<ToolDefinition[]> {
     // A representative discovers peers from delivered messages, never from a
     // global directory. Shared messages provide the initial introduction.
-    const [activeAgents, visibleEvents] = await Promise.all([
+    const [
+      activeAgents,
+      visibleEvents,
+      persistedMutations,
+      satisfiedSources,
+    ] = await Promise.all([
       this.repository.listActiveAgents(),
       this.repository.listEventsVisibleToAgent(
         this.agent.id,
@@ -96,7 +103,28 @@ export class AgentCommunicationToolService {
         1_000,
         this.horizonSequence,
       ),
+      this.repository.countAgentWakeCommunicationActions(
+        this.agent.id,
+        this.wakeNumber,
+      ),
+      Promise.all(uniq(this.requiredRequestSourceIds).map(
+        async (sequence) => ({
+          sequence,
+          satisfied: await this.repository.hasAgentSharedMessageUsingSource(
+            this.agent.id,
+            sequence,
+          ),
+        }),
+      )),
     ]);
+    // A retry creates a new tool-service instance. Rehydrate both the action
+    // ordinal and the mandatory-request state before exposing any write tool.
+    this.mutations = persistedMutations;
+    this.pendingRequiredRequestSourceIds = new Set(
+      satisfiedSources
+        .filter(({ satisfied }) => !satisfied)
+        .map(({ sequence }) => sequence),
+    );
     const encounteredAgentIds = new Set(visibleEvents.flatMap((event) => (
       event.actorAgentId && event.actorAgentId !== this.agent.id
         ? [event.actorAgentId]
@@ -317,6 +345,12 @@ export class AgentCommunicationToolService {
       return invalidInput(parsed.error);
     }
     const sourceEventIds = uniq(parsed.data.source_event_ids);
+    const prerequisiteFailure = this.validateRequiredRequestSources(
+      sourceEventIds,
+    );
+    if (prerequisiteFailure) {
+      return prerequisiteFailure;
+    }
     const validationFailure = await this.validateSources(sourceEventIds);
     if (validationFailure) {
       return validationFailure;
@@ -327,17 +361,17 @@ export class AgentCommunicationToolService {
     if (repeatedContribution) {
       return repeatedContribution;
     }
-    const actionIndex = this.reserveMutation();
-    if (typeof actionIndex !== 'number') {
-      return actionIndex;
+    const idempotencyKey = this.reserveSharedMessage(sourceEventIds);
+    if (typeof idempotencyKey !== 'string') {
+      return idempotencyKey;
     }
 
-    return eventResult(await this.repository.appendEvent({
+    const event = await this.repository.appendEvent({
       wakeNumber: this.wakeNumber,
       kind: 'shared_message',
       actorAgentId: this.agent.id,
       parentSequence: sourceEventIds[0],
-      idempotencyKey: this.actionIdempotencyKey(actionIndex),
+      idempotencyKey,
       title: `${this.agent.name} posts a shared message`,
       content: parsed.data.content,
       metadata: {
@@ -345,13 +379,21 @@ export class AgentCommunicationToolService {
         wakeId: this.wakeId,
         sourceEventIds,
       },
-    }));
+    });
+    sourceEventIds.forEach((sequence) => {
+      this.pendingRequiredRequestSourceIds.delete(sequence);
+    });
+    return eventResult(event);
   }
 
   private async sendDirectMessage(input: unknown): Promise<ToolResult> {
     const parsed = directMessageInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
+    }
+    const prerequisiteFailure = this.requireNetworkRequestFirst();
+    if (prerequisiteFailure) {
+      return prerequisiteFailure;
     }
     if (!this.addressableAgentIds.has(parsed.data.target_agent_id)) {
       return {
@@ -406,6 +448,10 @@ export class AgentCommunicationToolService {
     const parsed = findingInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
+    }
+    const prerequisiteFailure = this.requireNetworkRequestFirst();
+    if (prerequisiteFailure) {
+      return prerequisiteFailure;
     }
     const sourceEventIds = uniq(parsed.data.source_event_ids);
     const sourceFailure = await this.validateSources(sourceEventIds);
@@ -466,6 +512,10 @@ export class AgentCommunicationToolService {
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
+    const prerequisiteFailure = this.requireNetworkRequestFirst();
+    if (prerequisiteFailure) {
+      return prerequisiteFailure;
+    }
     const actionIndex = this.reserveMutation();
     if (typeof actionIndex !== 'number') {
       return actionIndex;
@@ -497,6 +547,58 @@ export class AgentCommunicationToolService {
     }
     this.mutations += 1;
     return this.mutations;
+  }
+
+  private reserveSharedMessage(
+    sourceEventIds: number[],
+  ): string | ToolResult {
+    const requiredSources = [...this.pendingRequiredRequestSourceIds];
+    const satisfiesRequiredRequest = requiredSources.length > 0
+      && requiredSources.every((sequence) => sourceEventIds.includes(sequence));
+
+    if (satisfiesRequiredRequest && this.mutations >= 2) {
+      // Older Lucid versions could persist two actions before discovering that
+      // the required request was missing. Give that invalid wake one stable
+      // repair slot; new wakes cannot reach this branch because writes are now
+      // gated before they consume the ordinary two-action budget.
+      const sourceKey = requiredSources
+        .sort((left, right) => left - right)
+        .join('-');
+      return `${this.wakeId}:required-request:${sourceKey}`;
+    }
+
+    const actionIndex = this.reserveMutation();
+    return typeof actionIndex === 'number'
+      ? this.actionIdempotencyKey(actionIndex)
+      : actionIndex;
+  }
+
+  private validateRequiredRequestSources(
+    sourceEventIds: number[],
+  ): ToolResult | undefined {
+    const missingSources = [...this.pendingRequiredRequestSourceIds]
+      .filter((sequence) => !sourceEventIds.includes(sequence));
+    return missingSources.length
+      ? this.requiredNetworkRequestError()
+      : undefined;
+  }
+
+  private requireNetworkRequestFirst(): ToolResult | undefined {
+    return this.pendingRequiredRequestSourceIds.size
+      ? this.requiredNetworkRequestError()
+      : undefined;
+  }
+
+  private requiredNetworkRequestError(): ToolResult {
+    const sourceReferences = [...this.pendingRequiredRequestSourceIds]
+      .sort((left, right) => left - right)
+      .map((sequence) => `#${sequence}`)
+      .join(', ');
+    return {
+      ok: false,
+      error:
+        `First use post_shared_message and cite every required assignment or check event: ${sourceReferences}. Other communication actions remain unavailable until that network request is recorded.`,
+    };
   }
 
   private actionIdempotencyKey(actionIndex: number): string {

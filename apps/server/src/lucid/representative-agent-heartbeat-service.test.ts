@@ -220,7 +220,7 @@ describe('representative-agent heartbeat service', () => {
     expect(records[0]?.record.outcome?.kind).toBe('skipped');
   });
 
-  it('retries an assignment wake that finishes without publishing its request', async () => {
+  it('rejects finishing an assignment wake before publishing its request', async () => {
     const runner = new FinishWithoutActionHeartbeatRunner(repository);
     const { heartbeat, workspace } = await startServices(runner);
 
@@ -236,10 +236,22 @@ describe('representative-agent heartbeat service', () => {
     expect(agent.lastSeenSequence).toBe(0);
     expect(diagnostics.events.some(({ kind }) => kind === 'shared_message'))
       .toBe(false);
-    expect(diagnostics.events).toContainEqual(expect.objectContaining({
-      kind: 'agent_wake_no_action',
-      actorAgentId: USER_AGENT_ID,
-    }));
+    expect(diagnostics.events.some(({ kind }) => (
+      kind === 'agent_wake_no_action'
+    ))).toBe(false);
+    const checkCount = diagnostics.events.filter(({ kind }) => (
+      kind === 'check_requested'
+    )).length;
+    await expect(workspace.runNow()).rejects.toThrow(
+      'needs to be retried before starting another check',
+    );
+    expect((await repository.readNetworkDiagnostics()).events.filter(
+      ({ kind }) => kind === 'check_requested',
+    )).toHaveLength(checkCount);
+    await expect(workspace.retryCurrentWake()).resolves.toBeDefined();
+    expect((await repository.readNetworkDiagnostics()).events.filter(
+      ({ kind }) => kind === 'check_requested',
+    )).toHaveLength(checkCount);
   });
 
   it('supplies Lucid working history without requiring an existing Heddle checkpoint', async () => {
@@ -649,6 +661,11 @@ async function createWakeTools(
   repository: SqliteDiscoveryRepository,
   input: RunRepresentativeAgentHeartbeatInput,
 ) {
+  const requiredRequestSourceIds = input.wake.visibleEvents
+    .filter(({ kind }) => (
+      kind === 'interest_saved' || kind === 'check_requested'
+    ))
+    .map(({ sequence }) => sequence);
   return await new AgentCommunicationToolService(
     repository,
     input.wake.agent,
@@ -656,6 +673,7 @@ async function createWakeTools(
     input.wake.wakeId,
     input.wake.wakeNumber,
     input.wake.horizonSequence,
+    requiredRequestSourceIds,
   ).definitions();
 }
 

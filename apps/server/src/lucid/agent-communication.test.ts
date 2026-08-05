@@ -297,6 +297,105 @@ You represent an explicitly simulated test participant, not a real person or ext
     });
   });
 
+  it('requires the assignment request before any other communication action', async () => {
+    const source = await registerSynthetic(repository, 'required-request');
+    const interest = await repository.saveInterest(
+      'Find teams using representative agents for long-running discovery.',
+    );
+    const peer = await peerMessage(
+      repository,
+      source.agent.id,
+      USER_AGENT_ID,
+      'A team is testing persistent representatives for research handoffs.',
+    );
+    const tools = toolsByName(await createUserTools(
+      repository,
+      'wake_required_request',
+      1,
+      peer.sequence,
+      [interest.sequence],
+    ));
+
+    expect(await tools.get('report_finding')!.execute({
+      content: 'This peer message may be relevant.',
+      source_event_ids: [peer.sequence],
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining(`post_shared_message`),
+    });
+    expect((await tools.get('send_direct_message')!.execute({
+      target_agent_id: source.agent.id,
+      content: 'Reply before the required request.',
+      source_event_ids: [peer.sequence],
+    })).ok).toBe(false);
+    expect((await tools.get('finish_without_action')!.execute({
+      reason: 'Stop before the required request.',
+    })).ok).toBe(false);
+    expect((await tools.get('post_shared_message')!.execute({
+      content: 'This cites only the peer and cannot satisfy the assignment.',
+      source_event_ids: [peer.sequence],
+    })).ok).toBe(false);
+
+    expect((await tools.get('post_shared_message')!.execute({
+      content: 'Looking for teams using persistent representative agents.',
+      source_event_ids: [interest.sequence],
+    })).ok).toBe(true);
+    expect((await tools.get('report_finding')!.execute({
+      content: 'A peer described a related research-handoff experiment.',
+      source_event_ids: [peer.sequence],
+    })).ok).toBe(true);
+  });
+
+  it('reconstructs retry budgets and gives invalid legacy wakes one repair slot', async () => {
+    const source = await registerSynthetic(repository, 'retry-repair');
+    const interest = await repository.saveInterest(
+      'Find concrete long-running representative-agent experiments.',
+    );
+    const peer = await peerMessage(
+      repository,
+      source.agent.id,
+      USER_AGENT_ID,
+      'A peer has a concrete experiment to share.',
+    );
+    const legacyTools = toolsByName(await createUserTools(
+      repository,
+      'wake_legacy_repair',
+      7,
+      peer.sequence,
+    ));
+    expect((await legacyTools.get('report_finding')!.execute({
+      content: 'The old implementation reported before making its request.',
+      source_event_ids: [peer.sequence],
+    })).ok).toBe(true);
+    expect((await legacyTools.get('finish_without_action')!.execute({
+      reason: 'The old implementation also consumed its second action.',
+    })).ok).toBe(true);
+
+    const retryTools = toolsByName(await createUserTools(
+      repository,
+      'wake_legacy_repair',
+      7,
+      peer.sequence,
+      [interest.sequence],
+    ));
+    expect((await retryTools.get('post_shared_message')!.execute({
+      content: 'Looking for concrete representative-agent experiments.',
+      source_event_ids: [interest.sequence],
+    })).ok).toBe(true);
+
+    const events = (await repository.readNetworkDiagnostics()).events;
+    expect(events.filter(({ wakeNumber, actorAgentId, kind }) => (
+      wakeNumber === 7
+      && actorAgentId === USER_AGENT_ID
+      && ['shared_message', 'finding_reported', 'agent_wake_no_action']
+        .includes(kind)
+    ))).toHaveLength(3);
+    expect(await repository.hasAgentSharedMessageUsingSource(
+      USER_AGENT_ID,
+      interest.sequence,
+    )).toBe(true);
+  });
+
   it('lets every representative report findings only to its own participant', async () => {
     const source = await registerSynthetic(repository, 'finding-owner');
     const request = await repository.appendEvent({
@@ -441,6 +540,7 @@ async function createUserTools(
   wakeId: string,
   wakeNumber: number,
   horizonSequence = Number.MAX_SAFE_INTEGER,
+  requiredRequestSourceIds: number[] = [],
 ) {
   return await new AgentCommunicationToolService(
     repository,
@@ -449,6 +549,7 @@ async function createUserTools(
     wakeId,
     wakeNumber,
     horizonSequence,
+    requiredRequestSourceIds,
   ).definitions();
 }
 

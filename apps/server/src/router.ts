@@ -89,6 +89,9 @@ export function createAppRouter(
       runNow: trpc.procedure.mutation(() => resolveDiscoveryError(
         () => discoveryWorkspace.runNow(),
       )),
+      retryCurrentWake: trpc.procedure.mutation(() => resolveDiscoveryError(
+        () => discoveryWorkspace.retryCurrentWake(),
+      )),
       setBackgroundChecksEnabled: trpc.procedure
         .input(backgroundChecksInputSchema)
         .mutation(({ input }) => resolveDiscoveryError(

@@ -8,6 +8,10 @@ type AppHeaderProps = {
 export function AppHeader({ snapshot }: AppHeaderProps) {
   const isRunning = snapshot.backgroundChecks.running;
   const isEnabled = snapshot.backgroundChecks.enabled;
+  const hasFailedWake = snapshot.representative.status === 'error'
+    || snapshot.backgroundChecks.tasks.some(({ agentId, status }) => (
+      agentId === snapshot.representative.id && status === 'failed'
+    ));
 
   return (
     <header className="app-header">
@@ -25,11 +29,17 @@ export function AppHeader({ snapshot }: AppHeaderProps) {
       </nav>
 
       <div
-        className={`service-status ${isRunning ? 'service-status--running' : ''}`}
+        className={`service-status ${
+          hasFailedWake
+            ? 'service-status--error'
+            : isRunning ? 'service-status--running' : ''
+        }`}
         title={`Model: ${snapshot.runtime.model}`}
       >
         <span />
-        {isRunning
+        {hasFailedWake
+          ? 'Your agent needs attention'
+          : isRunning
           ? 'Your agent is checking'
           : isEnabled
             ? 'Your agent is listening'

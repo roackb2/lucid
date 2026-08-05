@@ -188,6 +188,15 @@ button:disabled {
   box-shadow: 0 0 0 4px rgba(211, 139, 69, 0.12);
 }
 
+.service-status--error {
+  color: #9a4e42;
+}
+
+.service-status--error > span {
+  background: #bd6657;
+  box-shadow: 0 0 0 4px rgba(189, 102, 87, 0.12);
+}
+
 @keyframes status-pulse {
   50% {
     opacity: 0.45;
@@ -529,6 +538,22 @@ button:disabled {
   font-size: 9px;
 }
 
+.network-request-status--error {
+  border-color: #e6c6be;
+  background: #fff9f7;
+}
+
+.network-request-status--error .network-request-status__icon {
+  background: #f7e4df;
+  color: #a85145;
+}
+
+.network-request-status--error small {
+  display: block;
+  color: #8b5148;
+  line-height: 1.5;
+}
+
 .check-controls {
   padding: 18px 26px;
   border-top: 1px solid var(--line);
@@ -580,6 +605,16 @@ button:disabled {
 .background-checks--running .background-checks__icon {
   background: #f7e9d9;
   color: #a26437;
+}
+
+.background-checks--error {
+  border-color: #e6c6be;
+  background: #fff9f7;
+}
+
+.background-checks--error .background-checks__icon {
+  background: #f7e4df;
+  color: #a85145;
 }
 
 .background-checks__spinner,
@@ -688,6 +723,49 @@ button:disabled {
 .findings-list {
   display: grid;
   gap: 14px;
+}
+
+.finding-history {
+  margin-top: 18px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.finding-history > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 2px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+  list-style: none;
+}
+
+.finding-history > summary::-webkit-details-marker {
+  display: none;
+}
+
+.finding-history > summary span:nth-child(2) {
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.finding-history > summary svg {
+  margin-left: auto;
+  transition: transform 160ms ease;
+}
+
+.finding-history[open] > summary svg {
+  transform: rotate(180deg);
 }
 
 .finding-card {

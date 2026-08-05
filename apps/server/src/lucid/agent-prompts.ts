@@ -75,11 +75,21 @@ export function buildAgentWakePrompt(
   visibleEvents: DiscoveryEvent[],
   workingContext: RepresentativeWorkingContext,
 ): string {
+  const requiredRequestReferences = visibleEvents
+    .filter(({ kind }) => (
+      kind === 'interest_saved' || kind === 'check_requested'
+    ))
+    .map(({ sequence }) => `#${sequence}`);
   const visibleEventList = visibleEvents.length
     ? visibleEvents.map(formatDiscoveryEvent).join('\n')
     : '(No unread shared messages, direct messages, or user input.)';
 
+  const requiredRequestInstruction = requiredRequestReferences.length
+    ? `Your first communication action must be post_shared_message citing every required event: ${requiredRequestReferences.join(', ')}.`
+    : 'No assignment or manual-check event requires a new shared request in this wake.';
+
   const responsibility = `Review the ongoing assignment context before acting. A different source is not automatically a new finding: report only a concrete addition relative to prior findings and feedback.
+${requiredRequestInstruction}
 When an unread interest_saved event appears, you must post a minimal shared request that represents it, cite that interest event, and revise the working note for the changed assignment.
 When an unread check_requested event appears, it starts a new causal thread even if the saved interest text is unchanged. You must post a fresh minimal shared request citing that check event.
 The host rejects assignment and check wakes that finish without their required shared request. Never use finish_without_action for those events.

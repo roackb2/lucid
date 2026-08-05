@@ -127,6 +127,8 @@ export type FindingView = {
   outboundMessages: DiscoveryEvent[];
   feedback?: DiscoveryEvent;
   noMatch: boolean;
+  assignmentSequence?: number;
+  origin: 'ambient-network' | 'request-thread';
 };
 
 export type FindingSourceView = {
@@ -146,7 +148,7 @@ export type FindingSourceView = {
  * timing, never the global participant directory or unrelated messages.
  */
 export type NetworkActivityView = {
-  trigger: DiscoveryEvent;
+  assignment: DiscoveryEvent;
   request?: DiscoveryEvent;
   responseCount: number;
   latestResponseAt?: string;
