@@ -1130,6 +1130,28 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       ));
   }
 
+  async countAgentWakeCommunicationActions(
+    agentId: string,
+    wakeNumber: number,
+  ): Promise<number> {
+    return this.database.orm
+      .select({ sequence: discoveryEvents.sequence })
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.actorAgentId, agentId),
+        eq(discoveryEvents.wakeNumber, wakeNumber),
+        inArray(discoveryEvents.kind, [
+          'shared_message',
+          'direct_message',
+          'finding_reported',
+          'agent_wake_no_action',
+        ]),
+      ))
+      .all()
+      .length;
+  }
+
   async hasAgentContributedToCausalThread(
     agentId: string,
     sourceEventIds: number[],
@@ -1277,6 +1299,21 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .map(toDiscoveryEvent)
       .map((finding) => {
         const sourceEventIds = readSequenceIds(finding.metadata.sourceEventIds);
+        const outboundMessages = this.listCausalOutboundMessages(
+          sourceEventIds,
+          finding.actorAgentId,
+        );
+        const assignmentRow = this.database.orm
+          .select({ sequence: discoveryEvents.sequence })
+          .from(discoveryEvents)
+          .where(and(
+            eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+            eq(discoveryEvents.kind, 'interest_saved'),
+            eq(discoveryEvents.targetParticipantId, participantId),
+            lte(discoveryEvents.sequence, finding.sequence),
+          ))
+          .orderBy(desc(discoveryEvents.sequence))
+          .get();
         const feedbackRow = this.database.orm
           .select()
           .from(discoveryEvents)
@@ -1293,12 +1330,13 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           finding,
           sources: this.readEventsBySequence(sourceEventIds)
             .map((source) => this.toFindingSourceView(source)),
-          outboundMessages: this.listCausalOutboundMessages(
-            sourceEventIds,
-            finding.actorAgentId,
-          ),
+          outboundMessages,
           feedback: feedbackRow ? toDiscoveryEvent(feedbackRow) : undefined,
           noMatch: finding.metadata.noMatch === true,
+          assignmentSequence: assignmentRow?.sequence,
+          origin: outboundMessages.length
+            ? 'request-thread' as const
+            : 'ambient-network' as const,
         };
       });
   }
@@ -1306,21 +1344,38 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   private readNetworkActivity(
     agentId: string,
   ): NetworkActivityView | undefined {
-    const triggerRow = this.database.orm
+    const assignmentRow = this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.targetAgentId, agentId),
-        inArray(discoveryEvents.kind, ['interest_saved', 'check_requested']),
+        eq(discoveryEvents.kind, 'interest_saved'),
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .get();
-    if (!triggerRow) {
+    if (!assignmentRow) {
       return undefined;
     }
 
-    const trigger = toDiscoveryEvent(triggerRow);
+    // Manual checks are execution nudges for the current assignment, not new
+    // assignment roots. Keeping this projection anchored to the saved interest
+    // prevents “Run now” from making the product appear to forget its request.
+    const assignment = toDiscoveryEvent(assignmentRow);
+    const latestCheckRow = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'check_requested'),
+        eq(discoveryEvents.targetAgentId, agentId),
+        gt(discoveryEvents.sequence, assignment.sequence),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .get();
+    const requestTrigger = latestCheckRow
+      ? toDiscoveryEvent(latestCheckRow)
+      : assignment;
     const request = this.database.orm
       .select()
       .from(discoveryEvents)
@@ -1328,17 +1383,17 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'shared_message'),
         eq(discoveryEvents.actorAgentId, agentId),
-        gt(discoveryEvents.sequence, trigger.sequence),
+        gt(discoveryEvents.sequence, requestTrigger.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .all()
       .map(toDiscoveryEvent)
       .find((event) => (
         readSequenceIds(event.metadata.sourceEventIds)
-          .includes(trigger.sequence)
+          .includes(requestTrigger.sequence)
       ));
     if (!request) {
-      return { trigger, responseCount: 0 };
+      return { assignment, responseCount: 0 };
     }
 
     const responses = this.database.orm
@@ -1359,7 +1414,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       ));
 
     return {
-      trigger,
+      assignment,
       request,
       responseCount: responses.length,
       latestResponseAt: responses.at(-1)?.createdAt,

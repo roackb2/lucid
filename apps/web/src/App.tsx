@@ -42,6 +42,24 @@ export default function App() {
   }
 
   const backgroundChecks = snapshot.backgroundChecks;
+  const representativeTask = backgroundChecks.tasks.find(
+    ({ agentId }) => agentId === snapshot.representative.id,
+  );
+  const hasFailedWake = Boolean(
+    snapshot.representative.status === 'error'
+    || representativeTask?.status === 'failed',
+  );
+  const currentAssignmentSequence = snapshot.interest?.sequence;
+  const currentFindings = currentAssignmentSequence
+    ? snapshot.findings.filter(({ assignmentSequence }) => (
+        assignmentSequence === currentAssignmentSequence
+      ))
+    : snapshot.findings;
+  const earlierFindings = currentAssignmentSequence
+    ? snapshot.findings.filter(({ assignmentSequence }) => (
+        assignmentSequence !== currentAssignmentSequence
+      ))
+    : [];
 
   return (
     <div className="workspace-shell">
@@ -60,11 +78,15 @@ export default function App() {
           <dl className="workspace-stats">
             <div>
               <dt>Findings</dt>
-              <dd>{snapshot.findings.length}</dd>
+              <dd>{currentFindings.length}</dd>
             </div>
             <div>
               <dt>Agent</dt>
-              <dd>{backgroundChecks.running ? 'Working' : 'Ready'}</dd>
+              <dd>
+                {hasFailedWake
+                  ? 'Attention'
+                  : backgroundChecks.running ? 'Working' : 'Ready'}
+              </dd>
             </div>
             <div>
               <dt>Mode</dt>
@@ -82,18 +104,22 @@ export default function App() {
               isChecking={backgroundChecks.running}
               isSaving={discovery.saveInterest.isPending}
               isRunningNow={discovery.runNow.isPending}
+              isRetrying={discovery.retryCurrentWake.isPending}
               lastCheckedAt={backgroundChecks.lastRunAt}
+              failedTask={hasFailedWake ? representativeTask : undefined}
               onSaveInterest={(content) => (
                 discovery.saveInterest.mutateAsync(content)
               )}
               onRunNow={() => discovery.runNow.mutate()}
+              onRetry={() => discovery.retryCurrentWake.mutate()}
             />
 
             <RepresentativeProgress workingNote={snapshot.workingNote} />
 
             <FindingsFeed
               backgroundChecksEnabled={backgroundChecks.enabled}
-              findings={snapshot.findings}
+              currentFindings={currentFindings}
+              earlierFindings={earlierFindings}
               isChecking={backgroundChecks.running}
               isSubmittingFeedback={discovery.submitFeedback.isPending}
               onFeedback={(findingSequence, content) => (
@@ -106,6 +132,7 @@ export default function App() {
 
             <BackgroundChecks
               checks={backgroundChecks}
+              hasFailedWake={hasFailedWake}
               isUpdating={discovery.setBackgroundChecksEnabled.isPending}
               onSetEnabled={(enabled) => (
                 discovery.setBackgroundChecksEnabled.mutate(enabled)

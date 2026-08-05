@@ -150,6 +150,16 @@ export interface DiscoveryRepository {
     agentId: string,
     sourceEventId: number,
   ): Promise<boolean>;
+
+  /**
+   * Reconstructs the communication budget for a retried wake from durable
+   * events. Tool-service instances are process-local, so their counters must
+   * never be the authority for retry idempotency.
+   */
+  countAgentWakeCommunicationActions(
+    agentId: string,
+    wakeNumber: number,
+  ): Promise<number>;
   hasAgentContributedToCausalThread(
     agentId: string,
     sourceEventIds: number[],

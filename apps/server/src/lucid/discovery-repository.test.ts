@@ -170,8 +170,9 @@ describe('SQLite discovery repository', () => {
     });
 
     const snapshot = await repository.readSnapshot();
-    expect(snapshot.findings[0]?.sources).toEqual([
-      expect.objectContaining({
+    expect(snapshot.findings[0]).toMatchObject({
+      origin: 'ambient-network',
+      sources: [expect.objectContaining({
         message: expect.objectContaining({ sequence: sourceMessage.sequence }),
         attribution: expect.objectContaining({
           agentId: source.agent.id,
@@ -179,8 +180,9 @@ describe('SQLite discovery repository', () => {
           participantDisplayName: source.participant.displayName,
           participantKind: 'synthetic',
         }),
-      }),
-    ]);
+      })],
+    });
+    expect(snapshot.findings[0]?.assignmentSequence).toBeUndefined();
     expect(snapshot).not.toHaveProperty('agents');
     expect(snapshot).not.toHaveProperty('events');
   });
@@ -192,7 +194,7 @@ describe('SQLite discovery repository', () => {
     );
 
     expect((await repository.readSnapshot()).networkActivity).toEqual({
-      trigger: interest,
+      assignment: interest,
       responseCount: 0,
     });
 
@@ -209,7 +211,7 @@ describe('SQLite discovery repository', () => {
       interest.sequence,
     )).toBe(true);
     expect((await repository.readSnapshot()).networkActivity).toMatchObject({
-      trigger: { sequence: interest.sequence },
+      assignment: { sequence: interest.sequence },
       request: { sequence: request.sequence },
       responseCount: 0,
     });
@@ -223,10 +225,53 @@ describe('SQLite discovery repository', () => {
       content: 'One operator lost rejection rules after a process restart.',
       metadata: { sourceEventIds: [request.sequence] },
     });
+    await repository.appendEvent({
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'A response to the current assignment',
+      content: 'A peer described a specific long-running memory failure.',
+      metadata: { sourceEventIds: [response.sequence] },
+    });
     expect((await repository.readSnapshot()).networkActivity).toMatchObject({
       request: { sequence: request.sequence },
       responseCount: 1,
       latestResponseAt: response.createdAt,
+    });
+    expect((await repository.readSnapshot()).findings[0]).toMatchObject({
+      assignmentSequence: interest.sequence,
+      origin: 'request-thread',
+      outboundMessages: [expect.objectContaining({
+        sequence: request.sequence,
+      })],
+    });
+
+    const check = await repository.appendEvent({
+      kind: 'check_requested',
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Check the current assignment again',
+      content: interest.content,
+    });
+    expect((await repository.readSnapshot()).networkActivity).toMatchObject({
+      assignment: { sequence: interest.sequence },
+      responseCount: 0,
+    });
+    expect((await repository.readSnapshot()).networkActivity?.request)
+      .toBeUndefined();
+
+    const refreshedRequest = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      parentSequence: check.sequence,
+      title: 'Your representative checks the network again',
+      content: 'Who has a newer concrete example?',
+      metadata: { sourceEventIds: [check.sequence] },
+    });
+    expect((await repository.readSnapshot()).networkActivity).toMatchObject({
+      assignment: { sequence: interest.sequence },
+      request: { sequence: refreshedRequest.sequence },
+      responseCount: 0,
     });
   });
 

@@ -50,6 +50,15 @@ export function useDiscoveryWorkspace() {
     onError: notifyError,
   });
 
+  const retryCurrentWake = useMutation({
+    mutationFn: () => lucidClient.discovery.retryCurrentWake.mutate(),
+    onSuccess: (nextSnapshot) => {
+      installSnapshot(nextSnapshot);
+      toast.message('Your representative is retrying the current work.');
+    },
+    onError: notifyError,
+  });
+
   const setBackgroundChecksEnabled = useMutation({
     mutationFn: (enabled: boolean) => (
       lucidClient.discovery.setBackgroundChecksEnabled.mutate({ enabled })
@@ -80,6 +89,7 @@ export function useDiscoveryWorkspace() {
     snapshot,
     saveInterest,
     runNow,
+    retryCurrentWake,
     setBackgroundChecksEnabled,
     submitFeedback,
   };

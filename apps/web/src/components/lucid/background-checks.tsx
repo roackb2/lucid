@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import {
+  AlertTriangle,
   CalendarClock,
   History,
   LoaderCircle,
@@ -12,16 +13,23 @@ import type { DiscoverySnapshot } from '@/lib/trpc';
 
 type BackgroundChecksProps = {
   checks: DiscoverySnapshot['backgroundChecks'];
+  hasFailedWake: boolean;
   isUpdating: boolean;
   onSetEnabled(enabled: boolean): void;
 };
 
 export function BackgroundChecks({
   checks,
+  hasFailedWake,
   isUpdating,
   onSetEnabled,
 }: BackgroundChecksProps) {
-  const status = checks.running
+  const representativeTask = checks.tasks.find(({ status: taskStatus }) => (
+    taskStatus === 'failed'
+  )) ?? checks.tasks[0];
+  const status = hasFailedWake
+    ? 'Current work needs attention'
+    : checks.running
     ? 'Processing new messages'
     : checks.enabled
       ? 'Listening in the background'
@@ -30,12 +38,16 @@ export function BackgroundChecks({
   return (
     <section
       className={`background-checks ${
-        checks.running ? 'background-checks--running' : ''
+        hasFailedWake
+          ? 'background-checks--error'
+          : checks.running ? 'background-checks--running' : ''
       }`}
       aria-live="polite"
     >
       <span className="background-checks__icon" aria-hidden="true">
-        {checks.running
+        {hasFailedWake
+          ? <AlertTriangle size={18} />
+          : checks.running
           ? (
               <span className="background-checks__spinner">
                 <LoaderCircle size={18} />
@@ -49,14 +61,20 @@ export function BackgroundChecks({
           <strong>{status}</strong>
         </div>
         <p>
-          {checks.enabled
+          {hasFailedWake
+            ? representativeTask?.error
+              ?? 'The last representative wake did not complete.'
+            : checks.enabled
             ? `Your representative wakes every ${formatInterval(checks.intervalMs)}. New mailbox messages can wake it sooner.`
             : 'Your interest and findings stay saved. Resume when you want your representative to process new messages.'}
         </p>
       </div>
       <dl className="background-checks__timing">
         <div>
-          <dt><CalendarClock size={12} /> Next scheduled</dt>
+          <dt>
+            <CalendarClock size={12} />
+            {hasFailedWake ? 'Next retry' : 'Next scheduled'}
+          </dt>
           <dd>{formatTimestamp(checks.nextRunAt, checks.enabled)}</dd>
         </div>
         <div>

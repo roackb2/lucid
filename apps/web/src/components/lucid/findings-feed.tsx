@@ -1,9 +1,10 @@
-import { Inbox } from 'lucide-react';
+import { ChevronDown, Inbox } from 'lucide-react';
 import type { FindingView } from '@/lib/trpc';
 import { FindingCard } from './finding-card';
 
 type FindingsFeedProps = {
-  findings: FindingView[];
+  currentFindings: FindingView[];
+  earlierFindings: FindingView[];
   backgroundChecksEnabled: boolean;
   isChecking: boolean;
   isSubmittingFeedback: boolean;
@@ -11,7 +12,8 @@ type FindingsFeedProps = {
 };
 
 export function FindingsFeed({
-  findings,
+  currentFindings,
+  earlierFindings,
   backgroundChecksEnabled,
   isChecking,
   isSubmittingFeedback,
@@ -22,14 +24,14 @@ export function FindingsFeed({
       <header className="findings-heading">
         <div>
           <p className="section-label">Discovery inbox</p>
-          <h2>Findings</h2>
+          <h2>Current assignment</h2>
         </div>
-        <span>{findings.length}</span>
+        <span>{currentFindings.length}</span>
       </header>
 
-      {findings.length ? (
+      {currentFindings.length ? (
         <div className="findings-list">
-          {findings.map((finding, index) => (
+          {currentFindings.map((finding, index) => (
             <FindingCard
               finding={finding}
               isLatest={index === 0}
@@ -60,6 +62,27 @@ export function FindingsFeed({
           </div>
         </div>
       )}
+
+      {earlierFindings.length ? (
+        <details className="finding-history">
+          <summary>
+            <span>Earlier assignments</span>
+            <span>{earlierFindings.length}</span>
+            <ChevronDown size={15} />
+          </summary>
+          <div className="findings-list">
+            {earlierFindings.map((finding) => (
+              <FindingCard
+                finding={finding}
+                isLatest={false}
+                isSubmitting={isSubmittingFeedback}
+                key={finding.finding.id}
+                onFeedback={onFeedback}
+              />
+            ))}
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }

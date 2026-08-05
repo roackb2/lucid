@@ -42,11 +42,19 @@ export class DiscoveryWorkspaceService {
   }
 
   async runNow(): Promise<DiscoveryWorkspaceSnapshot> {
-    if (!(await this.heartbeats.snapshotForAgent(
-      (await this.repository.requireUserAgent()).id,
-    )).enabled) {
+    const userAgent = await this.repository.requireUserAgent();
+    const heartbeat = await this.heartbeats.snapshotForAgent(userAgent.id);
+    if (!heartbeat.enabled) {
       throw new DiscoveryInputError(
         'Background checks are paused. Resume them before running now.',
+      );
+    }
+    if (
+      userAgent.status === 'error'
+      || heartbeat.tasks.some(({ status }) => status === 'failed')
+    ) {
+      throw new DiscoveryInputError(
+        'The current assignment needs to be retried before starting another check.',
       );
     }
     const interest = await this.repository.findSavedInterest();
@@ -55,8 +63,6 @@ export class DiscoveryWorkspaceService {
         'Save what Lucid should look for before running a check.',
       );
     }
-
-    const userAgent = await this.repository.requireUserAgent();
     // A manual check is mailbox input, not a second execution path. Persist it
     // before triggering Heddle so a crash cannot lose the user's request.
     await this.repository.appendEvent({
@@ -80,6 +86,30 @@ export class DiscoveryWorkspaceService {
           : 'Lucid could not queue a background check.',
       );
     }
+    return await this.snapshot();
+  }
+
+  async retryCurrentWake(): Promise<DiscoveryWorkspaceSnapshot> {
+    const userAgent = await this.repository.requireUserAgent();
+    const heartbeat = await this.heartbeats.snapshotForAgent(userAgent.id);
+    if (!heartbeat.enabled) {
+      throw new DiscoveryInputError(
+        'Background checks are paused. Resume them before retrying.',
+      );
+    }
+    if (
+      userAgent.status !== 'error'
+      && heartbeat.tasks.every(({ status }) => status !== 'failed')
+    ) {
+      throw new DiscoveryInputError(
+        'There is no failed representative wake to retry.',
+      );
+    }
+
+    // Retry the fixed Heddle checkpoint directly. Appending a check_requested
+    // event here would create a second causal root and hide the original
+    // failure instead of repairing it.
+    await this.heartbeats.triggerAgent(userAgent.id);
     return await this.snapshot();
   }
 

@@ -40,6 +40,11 @@ implements RepresentativeAgentHeartbeatRunner {
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
   ): Promise<AgentHeartbeatResult> {
+    const requiredRequestSourceIds = input.wake.visibleEvents
+      .filter(({ kind }) => (
+        kind === 'interest_saved' || kind === 'check_requested'
+      ))
+      .map(({ sequence }) => sequence);
     const tools = await new AgentCommunicationToolService(
       this.repository,
       input.wake.agent,
@@ -47,6 +52,7 @@ implements RepresentativeAgentHeartbeatRunner {
       input.wake.wakeId,
       input.wake.wakeNumber,
       input.wake.horizonSequence,
+      requiredRequestSourceIds,
     ).definitions();
     return await input.execution.runAgent({
       task: buildAgentWakePrompt(

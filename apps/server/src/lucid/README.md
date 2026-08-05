@@ -31,7 +31,8 @@ contains only:
 
 - the local participant and representative;
 - that participant's current interest, private working note, and findings;
-- that representative's latest shared request plus aggregate reply timing;
+- the current assignment and its representative's shared request plus
+  aggregate reply timing;
 - source attribution attached to those findings;
 - that representative's Heddle task status.
 
@@ -76,6 +77,7 @@ Lucid owns:
   working note derived from immutable history;
 - successful assignment settlement only after the representative publishes a
   shared request citing every unread interest/check trigger;
+- request-first tool prerequisites and retry-reconstructed action budgets;
 - durable cursors and event/action idempotency keys.
 
 Heddle owns:
@@ -119,18 +121,26 @@ remains recoverable by startup or a later trigger.
    findings/feedback, the latest working note, Heddle continuation, and only
    Lucid communication tools.
 5. Communication writes use `<wake-id>:action:<slot>`, so a retry cannot
-   duplicate a committed side effect.
-6. An interest/check wake is rejected unless a shared request cites its trigger.
-   The failed wake keeps its horizon and retry-stable side effects.
-7. Successful execution appends completion and advances the cursor only to the
+   duplicate a committed side effect. The tool service reconstructs its action
+   count from persisted events instead of resetting the ordinal in memory.
+6. An interest/check wake exposes no other communication operation until a
+   shared request cites every required trigger. The final heartbeat
+   postcondition verifies the same fact before cursor advancement.
+7. A wake produced by an older version that already consumed both action slots
+   receives one deterministic required-request repair key. This is a recovery
+   exception; newly claimed wakes cannot enter that invalid state.
+8. Successful execution appends completion and advances the cursor only to the
    original horizon. Later mail remains unread.
-8. Newly addressed representatives receive durable run requests.
+9. Newly addressed representatives receive durable run requests.
 
 An empty due task calls `context.skip()` before model execution. It creates a
 lightweight Heddle run record but no model checkpoint and no Lucid wake.
 
 The local `Run now` operation appends a private `check_requested` event and uses
-the same mailbox/task path. There is no separate synchronous agent route.
+the same mailbox/task path. It refuses to create a second causal root while the
+current wake is failed. `retryCurrentWake()` instead asks Heddle to continue the
+fixed checkpoint without appending new mailbox input. There is no separate
+synchronous agent route.
 
 ## Participant and task lifecycle
 
@@ -169,10 +179,19 @@ Shared communication provides initial discovery without exposing a directory.
 Direct addressing can narrow later communication but cannot enumerate unknown
 participants.
 
-The participant-facing `networkActivity` projection shows only the latest
-trigger, the request that this participant's own representative published, and
-aggregate reply timing/count. It does not expose unrelated message content or
-the global network. Counts indicate delivered messages, not truth or value.
+The participant-facing `networkActivity` projection remains anchored to the
+latest saved assignment. A manual check is an execution nudge and does not
+replace that assignment in the UI. Its published message does become the
+latest request shown within that assignment. The projection shows only the
+request that this participant's own representative published and aggregate reply
+timing/count. It does not expose unrelated message content or the global
+network. Counts indicate delivered messages, not truth or value.
+
+Each participant-facing finding carries its assignment sequence and one
+delivery-path origin: `request-thread` when the causal chain includes a message
+the representative sent, or `ambient-network` when existing peer mail produced
+the finding. These labels explain how delivery happened; they do not score the
+finding or claim that a request caused useful information to exist.
 
 `source_event_ids` and `parentSequence` preserve causal delivery. They certify
 neither truth nor usefulness. A representative can act at most twice per wake
