@@ -11,6 +11,7 @@ import type {
   DiscoveryEventKind,
   DiscoveryEventMetadata,
   DiscoveryWorkspace,
+  FeedbackFollowThroughView,
   FindingView,
   NetworkActivityView,
   Participant,
@@ -40,6 +41,7 @@ export type DiscoveryRepositorySnapshot = {
   interest?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
   networkActivity?: NetworkActivityView;
+  feedbackFollowThrough?: FeedbackFollowThroughView;
   findings: FindingView[];
 };
 

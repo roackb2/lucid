@@ -109,6 +109,13 @@ describe('discovery workspace service', () => {
     expect(check?.content).toContain(interest.content);
     expect(check?.content).toContain(note.content);
     expect(check?.content).toContain(feedback.content);
+    expect(check?.content).toContain(
+      'do not send only another paraphrase of the original broad assignment',
+    );
+    expect(check!.content.indexOf(note.content))
+      .toBeLessThan(check!.content.indexOf(interest.content));
+    expect(check!.content.indexOf(feedback.content))
+      .toBeLessThan(check!.content.indexOf(interest.content));
     expect(triggerAgent).toHaveBeenCalledOnce();
     expect(triggerAgent).toHaveBeenCalledWith(USER_AGENT_ID);
   });

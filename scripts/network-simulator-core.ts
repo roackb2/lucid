@@ -46,6 +46,21 @@ export type SimulationEvent = {
   receipt: ParticipantInputReceipt;
 };
 
+export type LongitudinalNetworkPhase = {
+  key: string;
+  title: string;
+  purpose: string;
+  operatorInstruction: string;
+  inputs: readonly {
+    scenarioKey: string;
+    content: string;
+  }[];
+};
+
+export type LongitudinalSimulationEvent = SimulationEvent & {
+  phaseKey: string;
+};
+
 type RegisteredScenario = {
   scenario: NetworkScenario;
   participant: ParticipantRegistration;
@@ -124,6 +139,63 @@ export async function runSimulationTick(
     content,
     receipt,
   };
+}
+
+export async function runLongitudinalPhase(
+  api: NetworkSimulatorApi,
+  scenarios: readonly NetworkScenario[],
+  phase: LongitudinalNetworkPhase,
+  options: { experimentId: string },
+): Promise<LongitudinalSimulationEvent[]> {
+  const knownScenarioKeys = new Set(scenarios.map(({ key }) => key));
+  const unknownInput = phase.inputs.find(({ scenarioKey }) => (
+    !knownScenarioKeys.has(scenarioKey)
+  ));
+  if (unknownInput) {
+    throw new Error(
+      `Longitudinal phase ${phase.key} references unknown scenario: ${unknownInput.scenarioKey}`,
+    );
+  }
+
+  const registered = await registerScenarioNetwork(
+    api,
+    scenarios,
+    `learning:${options.experimentId}`,
+  );
+  const scenarioByKey = new Map(registered.map((entry) => [
+    entry.scenario.key,
+    entry,
+  ]));
+  const experimentNamespace = digest(options.experimentId).slice(0, 16);
+
+  const events: LongitudinalSimulationEvent[] = [];
+  // Episode order is observable through event sequence numbers, so each input
+  // must finish before the next one is submitted.
+  for (const input of phase.inputs) {
+    const selected = scenarioByKey.get(input.scenarioKey);
+    if (!selected) {
+      throw new Error(`Scenario was not registered: ${input.scenarioKey}`);
+    }
+    const receipt = await api.submitParticipantInput({
+      participantId: selected.participant.participantId,
+      content: input.content,
+      idempotencyKey: [
+        'lucid-learning',
+        experimentNamespace,
+        phase.key,
+        input.scenarioKey,
+        digest(input.content).slice(0, 16),
+      ].join(':'),
+    });
+    events.push({
+      phaseKey: phase.key,
+      scenarioKey: selected.scenario.key,
+      displayName: selected.scenario.displayName,
+      content: input.content,
+      receipt,
+    });
+  }
+  return events;
 }
 
 function inputKey(

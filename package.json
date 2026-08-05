@@ -13,6 +13,7 @@
     "test:simulator": "tsx --test scripts/**/*.test.ts",
     "typecheck": "yarn workspace @lucid/server typecheck && yarn workspace @lucid/web typecheck && tsc -p tsconfig.scripts.json --noEmit",
     "simulate:network": "tsx scripts/network-simulator.ts",
+    "simulate:learning": "tsx scripts/longitudinal-network-experiment.ts",
     "participant:submit": "tsx scripts/participant-input.ts",
     "server:dev": "yarn workspace @lucid/server dev",
     "server:build": "yarn workspace @lucid/server build",

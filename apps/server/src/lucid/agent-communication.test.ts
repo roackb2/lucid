@@ -148,6 +148,9 @@ You represent an explicitly simulated test participant, not a real person or ext
     expect(prompt).toContain('Prioritize answering a matching peer request');
     expect(prompt).toContain('Never send a message merely to announce');
     expect(prompt).toContain('pending lead awaiting participant feedback');
+    expect(prompt).toContain(
+      'a paraphrase of only the original broad assignment does not satisfy the check',
+    );
     expect(prompt).toContain('Do not use report_finding as a reply.');
     expect(prompt).toContain('report_finding never replies to the source agent.');
     expect(prompt.indexOf('Ongoing assignment context:'))

@@ -440,6 +440,153 @@ describe('SQLite discovery repository', () => {
     });
   });
 
+  it('projects persisted follow-through after the latest feedback', async () => {
+    const source = await registerSynthetic(repository, 'follow-through-source');
+    await repository.saveInterest(
+      'Find product decisions changed by context outside the builder workspace.',
+    );
+    const firstMessage = await repository.appendEvent({
+      kind: 'direct_message',
+      actorAgentId: source.agent.id,
+      targetAgentId: USER_AGENT_ID,
+      title: 'An initial network lead',
+      content: 'A builder changed onboarding after one outside conversation.',
+    });
+    const firstFinding = await repository.appendEvent({
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'An initial finding',
+      content: 'An outside conversation may have changed onboarding.',
+      metadata: { sourceEventIds: [firstMessage.sequence] },
+    });
+    const feedback = await repository.saveFeedback(
+      LOCAL_USER_ID,
+      firstFinding.sequence,
+      'Only continue with a before-and-after decision and named mechanism.',
+    );
+
+    expect((await repository.readSnapshot()).feedbackFollowThrough)
+      .toMatchObject({
+        feedback: { sequence: feedback.sequence },
+        sourceFinding: { sequence: firstFinding.sequence },
+      });
+
+    const note = await repository.appendEvent({
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Lucid updates its private working note',
+      content: 'Require a before-and-after decision and named mechanism.',
+      metadata: { throughSequence: feedback.sequence, derived: true },
+    });
+    const check = await repository.appendEvent({
+      kind: 'check_requested',
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'You ask Lucid to check now',
+      content: 'Continue with the participant feedback.',
+      metadata: { latestFeedbackSequence: feedback.sequence },
+    });
+    const request = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: check.sequence,
+      title: 'Your representative asks a narrower question',
+      content: 'Who has a before-and-after decision and named mechanism?',
+      metadata: { sourceEventIds: [check.sequence], messageRole: 'request' },
+    });
+    const sourceInput = await repository.saveParticipantInput(
+      source.participant.id,
+      'A team replaced persona setup with one active problem after support interviews exposed the missing handoff.',
+      'test:follow-through:result',
+    );
+    const response = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: source.agent.id,
+      replyToSequence: request.sequence,
+      title: 'A participant answers the narrower request',
+      content: sourceInput.content,
+      metadata: {
+        sourceEventIds: [sourceInput.sequence],
+        messageRole: 'response',
+      },
+    });
+    const resultingFinding = await repository.appendEvent({
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'A later finding',
+      content: 'The onboarding decision now includes a concrete mechanism.',
+      metadata: { sourceEventIds: [response.sequence] },
+    });
+
+    expect((await repository.readSnapshot()).feedbackFollowThrough)
+      .toMatchObject({
+        feedback: { sequence: feedback.sequence, content: feedback.content },
+        sourceFinding: { sequence: firstFinding.sequence },
+        workingNote: { sequence: note.sequence, content: note.content },
+        request: { sequence: request.sequence, content: request.content },
+        resultingFinding: {
+          finding: {
+            sequence: resultingFinding.sequence,
+            content: resultingFinding.content,
+          },
+        },
+      });
+
+    const laterCheck = await repository.appendEvent({
+      kind: 'check_requested',
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'You ask Lucid to check again',
+      content: 'Apply the same feedback to a more precise request.',
+      metadata: { latestFeedbackSequence: feedback.sequence },
+    });
+    const laterRequest = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: laterCheck.sequence,
+      title: 'Your representative asks a more precise question',
+      content: 'Which product decision changed, and by what mechanism?',
+      metadata: {
+        sourceEventIds: [laterCheck.sequence],
+        messageRole: 'request',
+      },
+    });
+    const laterResponse = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: source.agent.id,
+      replyToSequence: laterRequest.sequence,
+      title: 'A participant answers the more precise request',
+      content: 'A participant inbox replaced a global task dashboard.',
+      metadata: { sourceEventIds: [], messageRole: 'response' },
+    });
+    const laterFinding = await repository.appendEvent({
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'A more precise later finding',
+      content: 'The global dashboard became a participant inbox.',
+      metadata: { sourceEventIds: [laterResponse.sequence] },
+    });
+
+    expect((await repository.readSnapshot()).feedbackFollowThrough)
+      .toMatchObject({
+        request: {
+          sequence: laterRequest.sequence,
+          content: laterRequest.content,
+        },
+        resultingFinding: {
+          finding: {
+            sequence: laterFinding.sequence,
+            content: laterFinding.content,
+          },
+        },
+      });
+  });
+
   it('reuses a failed wake horizon and idempotency slots on retry', async () => {
     await repository.saveInterest('Find one specific participant match.');
     const firstWake = await repository.beginAgentWake(

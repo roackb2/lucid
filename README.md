@@ -14,7 +14,9 @@ The product deliberately shows one participant's perspective:
 6. inspect the request, responses, and originating contributions, then give
    free-text feedback;
 7. let the representative carry a revisable working understanding into later
-   checks so it can refine the assignment instead of repeating retrieval.
+   checks so it can refine the assignment instead of repeating retrieval; and
+8. compare the latest feedback with the later private note, disclosed request,
+   and resulting finding or continued silence.
 
 Lucid records communication and delivery. It does not claim that a simulated
 network proves a philosophical thesis, validates a market, or makes a message
@@ -105,6 +107,17 @@ invocation creates a new run ID so cron executions produce new inputs. Stable
 registration keys mean rerunning the same seed reuses the same participant
 nodes rather than duplicating them.
 
+For a deterministic multi-feedback-cycle experiment, advance one phase at a
+time and return to the UI between phases:
+
+```bash
+yarn simulate:learning --list
+yarn simulate:learning --experiment-id local-learning --phase setup
+```
+
+The phase runner supplies only external participant input. It never saves the
+local interest, submits feedback, runs a check, or judges a finding.
+
 Add one free-form participant without editing the fixed scenarios:
 
 ```bash
@@ -148,6 +161,8 @@ Lucid structures only behavior it can enforce:
   thread;
 - bounded prior findings, participant feedback, and one replaceable private
   working note supplied through the same fixed wake horizon;
+- a participant-scoped follow-through projection built only from persisted
+  feedback, note, request, and finding events;
 - retry-stable working-note updates that remain invisible to a replay of the
   wake that produced them;
 - interest/check wakes cannot settle successfully until the representative has

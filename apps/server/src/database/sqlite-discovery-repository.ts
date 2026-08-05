@@ -43,6 +43,7 @@ import {
   type AgentWakeContext,
   type DiscoveryEvent,
   type DiscoveryWorkspace,
+  type FeedbackFollowThroughView,
   type FindingView,
   type FindingSourceView,
   type NetworkActivityView,
@@ -131,6 +132,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       interest: await this.findSavedInterest(),
       workingNote: workingContext.workingNote,
       networkActivity: this.readNetworkActivity(representative.id),
+      feedbackFollowThrough: this.readFeedbackFollowThrough(
+        representative,
+        workingContext.findings,
+      ),
       findings: workingContext.findings,
     };
   }
@@ -1469,6 +1474,102 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     };
   }
 
+  private readFeedbackFollowThrough(
+    representative: Agent,
+    findings: FindingView[],
+  ): FeedbackFollowThroughView | undefined {
+    const currentAssignment = this.database.orm
+      .select({ sequence: discoveryEvents.sequence })
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'interest_saved'),
+        eq(discoveryEvents.targetAgentId, representative.id),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .get();
+    if (!currentAssignment) {
+      return undefined;
+    }
+
+    const source = findings
+      .filter(({ assignmentSequence, feedback }) => (
+        assignmentSequence === currentAssignment.sequence && feedback
+      ))
+      .sort((left, right) => (
+        right.feedback!.sequence - left.feedback!.sequence
+      ))
+      .at(0);
+    if (!source?.feedback) {
+      return undefined;
+    }
+
+    const feedback = source.feedback;
+    const workingNote = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'representative_note_updated'),
+        eq(discoveryEvents.actorAgentId, representative.id),
+        eq(discoveryEvents.targetParticipantId, representative.participantId),
+        gt(discoveryEvents.sequence, feedback.sequence),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .all()
+      .map(toDiscoveryEvent)
+      .find((event) => (
+        readMetadataSequence(event.metadata.throughSequence)
+        >= feedback.sequence
+      ));
+    const check = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'check_requested'),
+        eq(discoveryEvents.targetAgentId, representative.id),
+        gt(discoveryEvents.sequence, feedback.sequence),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .all()
+      .map(toDiscoveryEvent)
+      .find((event) => (
+        readMetadataSequence(event.metadata.latestFeedbackSequence)
+        === feedback.sequence
+      ));
+    const request = check
+      ? this.database.orm
+          .select()
+          .from(discoveryEvents)
+          .where(and(
+            eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+            eq(discoveryEvents.kind, 'shared_message'),
+            eq(discoveryEvents.actorAgentId, representative.id),
+            eq(discoveryEvents.replyToSequence, check.sequence),
+          ))
+          .orderBy(asc(discoveryEvents.sequence))
+          .get()
+      : undefined;
+    const requestEvent = request ? toDiscoveryEvent(request) : undefined;
+    const resultingFinding = requestEvent
+      ? findings.find(({ finding, outboundMessages }) => (
+          finding.sequence > requestEvent.sequence
+          && outboundMessages.some(({ sequence }) => (
+            sequence === requestEvent.sequence
+          ))
+        ))
+      : undefined;
+
+    return {
+      feedback,
+      sourceFinding: source.finding,
+      workingNote,
+      request: requestEvent,
+      resultingFinding,
+    };
+  }
+
   private toFindingSourceView(message: DiscoveryEvent): FindingSourceView {
     if (!message.actorAgentId) {
       return { message };
@@ -1877,4 +1978,10 @@ function readSequenceIds(value: unknown): number[] {
   return Array.isArray(value)
     ? value.filter((item): item is number => Number.isInteger(item) && item > 0)
     : [];
+}
+
+function readMetadataSequence(value: unknown): number {
+  return Number.isInteger(value) && Number(value) > 0
+    ? Number(value)
+    : 0;
 }

@@ -177,6 +177,19 @@ export type NetworkActivityView = {
 };
 
 /**
+ * Participant-scoped trace of what happened after the latest feedback. Every
+ * field is an existing persisted event; the projection does not infer whether
+ * the representative understood the feedback correctly.
+ */
+export type FeedbackFollowThroughView = {
+  feedback: DiscoveryEvent;
+  sourceFinding: DiscoveryEvent;
+  workingNote?: DiscoveryEvent;
+  request?: DiscoveryEvent;
+  resultingFinding?: FindingView;
+};
+
+/**
  * Bounded Lucid-owned history supplied to one representative on every wake.
  * Raw events remain authoritative; the working note is the representative's
  * replaceable interpretation of that history, not verified participant data.
@@ -234,6 +247,7 @@ export type DiscoveryWorkspaceSnapshot = {
   interest?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
   networkActivity?: NetworkActivityView;
+  feedbackFollowThrough?: FeedbackFollowThroughView;
   findings: FindingView[];
   backgroundChecks: BackgroundChecksView;
   runtime: {

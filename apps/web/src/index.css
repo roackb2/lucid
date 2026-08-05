@@ -302,6 +302,7 @@ button:disabled {
 
 .interest-card,
 .representative-note-card,
+.feedback-follow-through-card,
 .finding-card,
 .sidebar-card,
 .background-checks {
@@ -317,6 +318,11 @@ button:disabled {
 }
 
 .representative-note-card {
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.feedback-follow-through-card {
   overflow: hidden;
   border-radius: 18px;
 }
@@ -347,6 +353,83 @@ button:disabled {
 .representative-note--empty {
   border-left-color: var(--line-strong);
   background: var(--surface-soft);
+}
+
+.follow-through-steps {
+  display: grid;
+  gap: 0;
+  margin: 0 26px 24px 78px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface-soft);
+  list-style: none;
+}
+
+.follow-through-steps > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 15px 17px;
+}
+
+.follow-through-steps > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.follow-through-step__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.follow-through-steps header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.follow-through-steps strong {
+  color: #35423c;
+  font-size: 11px;
+}
+
+.follow-through-steps time {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.follow-through-steps p,
+.follow-through-steps blockquote {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.follow-through-steps blockquote {
+  padding: 10px 12px;
+  border-left: 3px solid var(--green);
+  border-radius: 0 8px 8px 0;
+  background: var(--green-pale);
+  color: #30443a;
+}
+
+.follow-through-steps .follow-through-context {
+  color: var(--faint);
+}
+
+.follow-through-step--pending .follow-through-step__icon {
+  background: var(--surface-muted);
+  color: var(--faint);
 }
 
 .card-heading {
@@ -1346,6 +1429,16 @@ button:disabled {
 
   .representative-note {
     margin: 0 18px 20px;
+  }
+
+  .follow-through-steps {
+    margin: 0 18px 20px;
+  }
+
+  .follow-through-steps header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 
   .check-controls {
