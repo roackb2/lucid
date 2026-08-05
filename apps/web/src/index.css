@@ -489,6 +489,46 @@ button:disabled {
   opacity: 0.45;
 }
 
+.network-request-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 11px;
+  margin: 0 26px 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.network-request-status__icon {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.network-request-status strong {
+  display: block;
+  color: #35423c;
+  font-size: 11px;
+}
+
+.network-request-status p {
+  margin: 5px 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.network-request-status small {
+  color: var(--faint);
+  font-size: 9px;
+}
+
 .check-controls {
   padding: 18px 26px;
   border-top: 1px solid var(--line);

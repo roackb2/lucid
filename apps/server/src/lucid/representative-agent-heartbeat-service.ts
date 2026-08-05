@@ -468,6 +468,30 @@ export class RepresentativeAgentHeartbeatService {
         return result;
       }
 
+      const requiredRequestSourceIds = wake.visibleEvents
+        .filter(({ kind }) => (
+          kind === 'interest_saved' || kind === 'check_requested'
+        ))
+        .map(({ sequence }) => sequence);
+      if (
+        requiredRequestSourceIds.length
+        && !(await Promise.all(requiredRequestSourceIds.map(
+          (sourceEventId) => this.repository.hasAgentSharedMessageUsingSource(
+            agentId,
+            sourceEventId,
+          ),
+        ))).every(Boolean)
+      ) {
+        // Saving an assignment cannot be acknowledged as complete until the
+        // representative actually publishes a privacy-minimized request. A
+        // failed wake retains its fixed horizon and retry-stable action slots.
+        await this.repository.failAgentWake(agentId);
+        claimedWake = false;
+        throw new Error(
+          'The representative finished without sharing the required network request.',
+        );
+      }
+
       // Completion is idempotent and precedes cursor advancement. A crash
       // between the writes can replay the same wake without duplicate events.
       await this.repository.appendEvent({

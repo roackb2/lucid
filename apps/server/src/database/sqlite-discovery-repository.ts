@@ -45,6 +45,7 @@ import {
   type DiscoveryWorkspace,
   type FindingView,
   type FindingSourceView,
+  type NetworkActivityView,
   type Participant,
   type ParticipantStatus,
   type ParticipantView,
@@ -129,6 +130,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       representative: await this.toAgentView(representative, user),
       interest: await this.findSavedInterest(),
       workingNote: workingContext.workingNote,
+      networkActivity: this.readNetworkActivity(representative.id),
       findings: workingContext.findings,
     };
   }
@@ -1109,6 +1111,25 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       ));
   }
 
+  async hasAgentSharedMessageUsingSource(
+    agentId: string,
+    sourceEventId: number,
+  ): Promise<boolean> {
+    return this.database.orm
+      .select({ metadata: discoveryEvents.metadata })
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'shared_message'),
+        eq(discoveryEvents.actorAgentId, agentId),
+      ))
+      .all()
+      .some(({ metadata }) => (
+        readSequenceIds(metadata?.sourceEventIds)
+          .includes(sourceEventId)
+      ));
+  }
+
   async hasAgentContributedToCausalThread(
     agentId: string,
     sourceEventIds: number[],
@@ -1280,6 +1301,69 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           noMatch: finding.metadata.noMatch === true,
         };
       });
+  }
+
+  private readNetworkActivity(
+    agentId: string,
+  ): NetworkActivityView | undefined {
+    const triggerRow = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.targetAgentId, agentId),
+        inArray(discoveryEvents.kind, ['interest_saved', 'check_requested']),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .get();
+    if (!triggerRow) {
+      return undefined;
+    }
+
+    const trigger = toDiscoveryEvent(triggerRow);
+    const request = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'shared_message'),
+        eq(discoveryEvents.actorAgentId, agentId),
+        gt(discoveryEvents.sequence, trigger.sequence),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .all()
+      .map(toDiscoveryEvent)
+      .find((event) => (
+        readSequenceIds(event.metadata.sourceEventIds)
+          .includes(trigger.sequence)
+      ));
+    if (!request) {
+      return { trigger, responseCount: 0 };
+    }
+
+    const responses = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        inArray(discoveryEvents.kind, ['shared_message', 'direct_message']),
+        ne(discoveryEvents.actorAgentId, agentId),
+        gt(discoveryEvents.sequence, request.sequence),
+      ))
+      .orderBy(asc(discoveryEvents.sequence))
+      .all()
+      .map(toDiscoveryEvent)
+      .filter((event) => (
+        readSequenceIds(event.metadata.sourceEventIds)
+          .includes(request.sequence)
+      ));
+
+    return {
+      trigger,
+      request,
+      responseCount: responses.length,
+      latestResponseAt: responses.at(-1)?.createdAt,
+    };
   }
 
   private toFindingSourceView(message: DiscoveryEvent): FindingSourceView {

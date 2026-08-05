@@ -141,6 +141,18 @@ export type FindingSourceView = {
 };
 
 /**
+ * Participant-scoped projection of the latest request lifecycle. It exposes
+ * what this participant's own representative shared and aggregate reply
+ * timing, never the global participant directory or unrelated messages.
+ */
+export type NetworkActivityView = {
+  trigger: DiscoveryEvent;
+  request?: DiscoveryEvent;
+  responseCount: number;
+  latestResponseAt?: string;
+};
+
+/**
  * Bounded Lucid-owned history supplied to one representative on every wake.
  * Raw events remain authoritative; the working note is the representative's
  * replaceable interpretation of that history, not verified participant data.
@@ -197,6 +209,7 @@ export type DiscoveryWorkspaceSnapshot = {
   representative: AgentView;
   interest?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
+  networkActivity?: NetworkActivityView;
   findings: FindingView[];
   backgroundChecks: BackgroundChecksView;
   runtime: {

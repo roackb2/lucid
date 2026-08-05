@@ -185,6 +185,51 @@ describe('SQLite discovery repository', () => {
     expect(snapshot).not.toHaveProperty('events');
   });
 
+  it('projects the latest participant-owned network request lifecycle', async () => {
+    const source = await registerSynthetic(repository, 'request-source');
+    const interest = await repository.saveInterest(
+      'Find a concrete example of long-running representative memory.',
+    );
+
+    expect((await repository.readSnapshot()).networkActivity).toEqual({
+      trigger: interest,
+      responseCount: 0,
+    });
+
+    const request = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      parentSequence: interest.sequence,
+      title: 'Your representative asks the network',
+      content: 'Who has observed a concrete long-running memory failure?',
+      metadata: { sourceEventIds: [interest.sequence] },
+    });
+    expect(await repository.hasAgentSharedMessageUsingSource(
+      USER_AGENT_ID,
+      interest.sequence,
+    )).toBe(true);
+    expect((await repository.readSnapshot()).networkActivity).toMatchObject({
+      trigger: { sequence: interest.sequence },
+      request: { sequence: request.sequence },
+      responseCount: 0,
+    });
+
+    const response = await repository.appendEvent({
+      kind: 'direct_message',
+      actorAgentId: source.agent.id,
+      targetAgentId: USER_AGENT_ID,
+      parentSequence: request.sequence,
+      title: 'A participant replies',
+      content: 'One operator lost rejection rules after a process restart.',
+      metadata: { sourceEventIds: [request.sequence] },
+    });
+    expect((await repository.readSnapshot()).networkActivity).toMatchObject({
+      request: { sequence: request.sequence },
+      responseCount: 1,
+      latestResponseAt: response.createdAt,
+    });
+  });
+
   it('projects participant-scoped working history at a retry-stable event horizon', async () => {
     const source = await registerSynthetic(repository, 'memory-source');
     const interest = await repository.saveInterest(

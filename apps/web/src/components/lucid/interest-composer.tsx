@@ -4,6 +4,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Send,
 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import type { DiscoverySnapshot } from '@/lib/trpc';
 
 type InterestComposerProps = {
   interest?: DiscoverySnapshot['interest'];
+  networkActivity?: DiscoverySnapshot['networkActivity'];
   lastCheckedAt?: string;
   backgroundChecksEnabled: boolean;
   isChecking: boolean;
@@ -22,6 +24,7 @@ type InterestComposerProps = {
 
 export function InterestComposer({
   interest,
+  networkActivity,
   lastCheckedAt,
   backgroundChecksEnabled,
   isChecking,
@@ -129,6 +132,34 @@ export function InterestComposer({
         </div>
       )}
 
+      {interest ? (
+        <section className="network-request-status" aria-live="polite">
+          <div className="network-request-status__icon" aria-hidden="true">
+            <Send size={15} />
+          </div>
+          {networkActivity?.request ? (
+            <div>
+              <strong>
+                Asked your network {dayjs(networkActivity.request.createdAt)
+                  .format('MMM D, HH:mm')}
+              </strong>
+              <p>{networkActivity.request.content}</p>
+              <small>
+                {describeNetworkResponses(networkActivity)}
+              </small>
+            </div>
+          ) : (
+            <div>
+              <strong>Preparing a privacy-minimized network request</strong>
+              <p>
+                Your representative has the assignment. It is not considered
+                delivered until you can see what was shared here.
+              </p>
+            </div>
+          )}
+        </section>
+      ) : null}
+
       <footer className="check-controls">
         <div>
           <strong>
@@ -137,8 +168,8 @@ export function InterestComposer({
               : 'Waiting for the first agent wake'}
           </strong>
           <p>
-            Saving changes automatically notifies your agent. Run now adds a
-            fresh request without changing the scheduled background checks.
+            Saving changes queues a network request. Run now starts a fresh
+            request thread without changing scheduled background checks.
           </p>
         </div>
         <Button
@@ -158,4 +189,20 @@ export function InterestComposer({
       </footer>
     </section>
   );
+}
+
+function describeNetworkResponses(
+  activity: NonNullable<DiscoverySnapshot['networkActivity']>,
+): string {
+  if (!activity.responseCount) {
+    return 'Waiting for another representative to contribute something specific.';
+  }
+  const messageLabel = activity.responseCount === 1 ? 'message' : 'messages';
+  const latest = activity.latestResponseAt
+    ? ` · latest ${dayjs(activity.latestResponseAt).format('MMM D, HH:mm')}`
+    : '';
+  return [
+    `${activity.responseCount} network ${messageLabel} received${latest}`,
+    'your representative reviews them before reporting a finding',
+  ].join(' · ');
 }

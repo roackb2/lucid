@@ -80,8 +80,9 @@ export function buildAgentWakePrompt(
     : '(No unread shared messages, direct messages, or user input.)';
 
   const responsibility = `Review the ongoing assignment context before acting. A different source is not automatically a new finding: report only a concrete addition relative to prior findings and feedback.
-When an unread interest_saved event appears, share a minimal request that represents it and revise the working note for the changed assignment.
+When an unread interest_saved event appears, you must post a minimal shared request that represents it, cite that interest event, and revise the working note for the changed assignment.
 When an unread check_requested event appears, it starts a new causal thread even if the saved interest text is unchanged. You must post a fresh minimal shared request citing that check event.
+The host rejects assignment and check wakes that finish without their required shared request. Never use finish_without_action for those events.
 When an unread participant_input event appears, decide whether it contains a request, observation, offer, or interest worth sharing in minimal form.
 Keep the direction of value explicit:
 - When a peer request can be answered from this participant's private context, principal input, or working note, reply with post_shared_message or send_direct_message and cite the peer request. Do not use report_finding as a reply.

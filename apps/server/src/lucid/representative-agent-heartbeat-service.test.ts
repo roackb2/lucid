@@ -174,7 +174,7 @@ describe('representative-agent heartbeat service', () => {
     )?.enabled).toBe(true);
 
     await first.heartbeat.stop();
-    const secondRunner = new CountingHeartbeatRunner();
+    const secondRunner = new RoutingHeartbeatRunner(repository);
     const secondHeartbeat = await createHeartbeat(secondRunner, true);
     const resumedWorkspace = new DiscoveryWorkspaceService(
       repository,
@@ -220,6 +220,28 @@ describe('representative-agent heartbeat service', () => {
     expect(records[0]?.record.outcome?.kind).toBe('skipped');
   });
 
+  it('retries an assignment wake that finishes without publishing its request', async () => {
+    const runner = new FinishWithoutActionHeartbeatRunner(repository);
+    const { heartbeat, workspace } = await startServices(runner);
+
+    await workspace.saveInterest(
+      'Find a concrete example of a representative learning from feedback.',
+    );
+    await vi.waitFor(async () => {
+      expect((await heartbeat.snapshot()).tasks[0]?.status).toBe('failed');
+    }, { interval: 10, timeout: 5_000 });
+
+    const agent = await repository.requireUserAgent();
+    const diagnostics = await repository.readNetworkDiagnostics();
+    expect(agent.lastSeenSequence).toBe(0);
+    expect(diagnostics.events.some(({ kind }) => kind === 'shared_message'))
+      .toBe(false);
+    expect(diagnostics.events).toContainEqual(expect.objectContaining({
+      kind: 'agent_wake_no_action',
+      actorAgentId: USER_AGENT_ID,
+    }));
+  });
+
   it('supplies Lucid working history without requiring an existing Heddle checkpoint', async () => {
     const source = await registerSynthetic(repository, 'context-source');
     const interest = await repository.saveInterest(
@@ -255,6 +277,14 @@ describe('representative-agent heartbeat service', () => {
       metadata: { throughSequence: feedback.sequence, derived: true },
     });
     await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      parentSequence: interest.sequence,
+      title: 'Existing request for the saved interest',
+      content: 'Who has a named workflow involving unfinished work?',
+      metadata: { sourceEventIds: [interest.sequence] },
+    });
+    await repository.appendEvent({
       kind: 'direct_message',
       actorAgentId: source.agent.id,
       targetAgentId: USER_AGENT_ID,
@@ -266,10 +296,12 @@ describe('representative-agent heartbeat service', () => {
     const heartbeat = await createHeartbeat(runner, true);
     await heartbeat.triggerAgent(USER_AGENT_ID);
     await vi.waitFor(() => {
-      expect(runner.wakes).toHaveLength(1);
+      expect(runner.wakes.some(({ agent }) => agent.id === USER_AGENT_ID))
+        .toBe(true);
     }, { interval: 10, timeout: 5_000 });
 
-    expect(runner.wakes[0]?.workingContext).toMatchObject({
+    const userWake = runner.wakes.find(({ agent }) => agent.id === USER_AGENT_ID);
+    expect(userWake?.workingContext).toMatchObject({
       principalInputs: [expect.objectContaining({ sequence: interest.sequence })],
       workingNote: expect.objectContaining({ sequence: note.sequence }),
       findings: [expect.objectContaining({
@@ -382,8 +414,10 @@ describe('representative-agent heartbeat service', () => {
 
   it('recovers a Heddle task and its claimed mailbox wake after restart', async () => {
     await createHeartbeat(new CountingHeartbeatRunner(), false);
-    const interest = await repository.saveInterest(
+    const principalInput = await repository.saveParticipantInput(
+      LOCAL_USER_ID,
       'Resume this exact input after a host restart.',
+      'test:restart:principal-input',
     );
     const claimed = await repository.beginAgentWake(
       USER_AGENT_ID,
@@ -409,7 +443,7 @@ describe('representative-agent heartbeat service', () => {
     await vi.waitFor(async () => {
       expect(runner.wakes).toHaveLength(1);
       expect((await repository.requireUserAgent()).lastSeenSequence)
-        .toBe(interest.sequence);
+        .toBe(principalInput.sequence);
     }, { interval: 10, timeout: 5_000 });
 
     expect(runner.wakes[0]).toMatchObject({

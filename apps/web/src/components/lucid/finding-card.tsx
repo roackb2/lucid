@@ -54,7 +54,7 @@ export function FindingCard({
         </div>
         <div>
           <div className="finding-card__meta">
-            <span>{finding.noMatch ? 'Completed check' : 'New finding'}</span>
+            <span>{finding.noMatch ? 'Completed check' : 'Finding'}</span>
             {isLatest ? <span className="new-badge">Latest</span> : null}
             <time dateTime={finding.finding.createdAt}>
               {dayjs(finding.finding.createdAt).format('MMM D, HH:mm')}
