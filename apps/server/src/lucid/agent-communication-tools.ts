@@ -186,7 +186,7 @@ export class AgentCommunicationToolService {
       {
         name: 'post_shared_message',
         description:
-          'Publish a concise network request, substantive response, or contribution. reply_to_event_id identifies the request or principal event this message continues. source_event_ids identify the information used in the content. When answering a peer request, contribute this participant’s own context instead of relaying another representative’s answer. Never post merely to say that no match or example is available.',
+          'Publish a concise network request, substantive response, or contribution. reply_to_event_id identifies the request or principal event this message continues. source_event_ids identify the information used in the content. A request representing check_requested must carry its current working constraints instead of only repeating the original interest. When answering a peer request, contribute this participant’s own context instead of relaying another representative’s answer. Never post merely to say that no match or example is available.',
         capabilities: ['lucid.discovery.write'],
         hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
         parameters: {

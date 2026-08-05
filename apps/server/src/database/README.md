@@ -49,6 +49,14 @@ Each revision records the claimed source horizon and uses one wake-stable
 idempotency key. Queries for agent execution are bounded by event sequence so a
 retry cannot observe its own post-horizon writes as new starting context.
 
+The participant-facing feedback follow-through view is another read model, not
+stored learning state. For the latest feedback on the current assignment, the
+repository selects the latest later working-note revision whose claimed horizon
+includes that feedback, the latest manual check carrying its sequence, the
+shared request replying to that check, and any finding whose reply thread
+includes that request. Missing steps remain missing; the adapter never infers
+successful understanding or usefulness.
+
 A participant answers "whose context and intent does this agent represent?"
 A saved interest answers "what does the local user want the agent to notice
 now?" and remains a private event rather than a participant field.

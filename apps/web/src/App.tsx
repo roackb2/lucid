@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { AppHeader } from '@/components/lucid/app-header';
 import { BackgroundChecks } from '@/components/lucid/background-checks';
+import { FeedbackFollowThrough } from '@/components/lucid/feedback-follow-through';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { InterestComposer } from '@/components/lucid/interest-composer';
 import { RepresentativeProgress } from '@/components/lucid/representative-progress';
@@ -115,6 +116,10 @@ export default function App() {
             />
 
             <RepresentativeProgress workingNote={snapshot.workingNote} />
+
+            <FeedbackFollowThrough
+              activity={snapshot.feedbackFollowThrough}
+            />
 
             <FindingsFeed
               backgroundChecksEnabled={backgroundChecks.enabled}

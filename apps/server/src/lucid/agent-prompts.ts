@@ -97,7 +97,7 @@ export function buildAgentWakePrompt(
   const responsibility = `Review the ongoing assignment context before acting. A different source is not automatically a new finding: report only a concrete addition relative to prior findings and feedback.
 ${requiredRequestInstruction}
 When an unread interest_saved event appears, you must post a minimal shared request that represents it, reply to and cite that interest event, and revise the working note for the changed assignment.
-When an unread check_requested event appears, it starts a new request thread even if the saved interest text is unchanged. Its content includes the current working direction and latest feedback. Treat that as the current search target, post a fresh minimal shared request replying to and citing the check event, and do not merely repeat the earlier broad request.
+When an unread check_requested event appears, it starts a new request thread even if the saved interest text is unchanged. Its content puts the current working direction and latest feedback before the original assignment. Treat those recent constraints as the current search target. The content of post_shared_message must preserve the concrete constraints that distinguish the requested next result; a paraphrase of only the original broad assignment does not satisfy the check.
 The host rejects assignment and check wakes that finish without their required shared request. Never use finish_without_action for those events.
 When an unread participant_input event appears, decide whether it contains a request, observation, offer, or interest worth sharing in minimal form.
 Keep the direction of value explicit:

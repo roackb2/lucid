@@ -24,6 +24,8 @@ participant can replace the simulator without changing Lucid's network model.
 | `network-simulator-core.ts` | Idempotent registration and seeded input orchestration against an abstract API |
 | `network-simulator.ts` | CLI parsing, tRPC adapter, continuous timing, and operator output |
 | `network-simulator-core.test.ts` | Determinism, registration reuse, and input-idempotency coverage |
+| `longitudinal-network-scenarios.ts` | Ordered development-only events for a multi-feedback-cycle product experiment |
+| `longitudinal-network-experiment.ts` | Phase CLI that advances external inputs without impersonating the local participant |
 | `participant-input.ts` | Free-form real or synthetic participant registration and input |
 
 ## Usage
@@ -66,3 +68,33 @@ yarn participant:submit \
 Use `--kind human --context-approved` only when that person explicitly approved
 the supplied private context. Reuse the registration key to keep the same
 participant identity; add `--input-key` when a caller needs retry idempotency.
+
+## Longitudinal learning experiment
+
+The ordinary simulator produces sparse independent observations. To exercise
+one ongoing assignment across several real feedback cycles, inspect the
+available deterministic phases:
+
+```bash
+yarn simulate:learning --list
+```
+
+Start the first phase:
+
+```bash
+yarn simulate:learning \
+  --experiment-id local-learning \
+  --phase setup
+```
+
+The setup phase registers participants without giving them input. Save the
+local interest after setup, wait for its request, then advance through
+`baseline`, `refinement`, and `revision`. Return to the Lucid UI between phases,
+submit your own ordinary-text feedback, and use **Run now** when the phase
+instruction asks the representative to share its revised direction. The script
+never saves the local interest, sends participant feedback, invokes **Run
+now**, or decides whether a finding is useful. Repeating the same experiment ID
+and unchanged phase input is idempotent; editing an input creates a new content
+version. Choose a new experiment ID for an independent world. Omitting
+`--phase` safely defaults to `setup` so participants join before the first
+request.

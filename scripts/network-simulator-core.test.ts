@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  runLongitudinalPhase,
   runSimulationPass,
   runSimulationTick,
+  type LongitudinalNetworkPhase,
   type NetworkSimulatorApi,
 } from './network-simulator-core.js';
 import type { NetworkScenario } from './network-scenarios.js';
@@ -69,6 +71,72 @@ test('continuous ticks choose a deterministic scenario for a seed and tick', asy
     firstFake.inputs[0]?.idempotencyKey,
     secondFake.inputs[0]?.idempotencyKey,
   );
+});
+
+test('a longitudinal phase emits only its ordered idempotent inputs', async () => {
+  const fake = createFakeApi();
+  const phase = {
+    key: 'refinement',
+    title: 'One refinement',
+    purpose: 'Exercise one later feedback cycle.',
+    operatorInstruction: 'Inspect and give feedback.',
+    inputs: [
+      { scenarioKey: 'artist', content: 'a later concrete observation' },
+      { scenarioKey: 'builder', content: 'a deliberate restatement' },
+    ],
+  } satisfies LongitudinalNetworkPhase;
+
+  const first = await runLongitudinalPhase(fake.api, scenarios, phase, {
+    experimentId: 'learning-42',
+  });
+  const second = await runLongitudinalPhase(fake.api, scenarios, phase, {
+    experimentId: 'learning-42',
+  });
+
+  assert.deepEqual(
+    first.map(({ phaseKey, scenarioKey, content }) => ({
+      phaseKey,
+      scenarioKey,
+      content,
+    })),
+    [
+      {
+        phaseKey: 'refinement',
+        scenarioKey: 'artist',
+        content: 'a later concrete observation',
+      },
+      {
+        phaseKey: 'refinement',
+        scenarioKey: 'builder',
+        content: 'a deliberate restatement',
+      },
+    ],
+  );
+  assert.deepEqual(
+    fake.inputs.slice(0, 2).map(({ idempotencyKey }) => idempotencyKey),
+    fake.inputs.slice(2).map(({ idempotencyKey }) => idempotencyKey),
+  );
+  assert.equal(second.length, first.length);
+});
+
+test('a longitudinal phase rejects an unknown participant scenario', async () => {
+  const fake = createFakeApi();
+  const phase = {
+    key: 'invalid',
+    title: 'Invalid phase',
+    purpose: 'Prove scenario references are checked.',
+    operatorInstruction: 'This phase must fail.',
+    inputs: [{ scenarioKey: 'missing', content: 'unroutable input' }],
+  } satisfies LongitudinalNetworkPhase;
+
+  await assert.rejects(
+    runLongitudinalPhase(fake.api, scenarios, phase, {
+      experimentId: 'learning-invalid',
+    }),
+    /references unknown scenario: missing/,
+  );
+  assert.equal(fake.registrations.length, 0);
+  assert.equal(fake.inputs.length, 0);
 });
 
 function createFakeApi() {

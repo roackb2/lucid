@@ -85,16 +85,17 @@ export class DiscoveryWorkspaceService {
       targetAgentId: userAgent.id,
       targetParticipantId: userAgent.participantId,
       title: 'You ask Lucid to check now',
-      content: `Continue this ongoing assignment using what the representative has learned so far.
-
-Saved assignment:
-${interest.content}
+      content: `Required change to the next network request:
+Ask using the current working direction and latest participant feedback below. Preserve the concrete constraints that distinguish a useful next result; do not send only another paraphrase of the original broad assignment.
 
 Current working direction:
 ${workingDirection}
 
 Latest participant feedback:
-${feedbackDirection}`,
+${feedbackDirection}
+
+Original saved assignment (background context only):
+${interest.content}`,
       metadata: {
         visibility: 'user-and-agent',
         source: 'user',

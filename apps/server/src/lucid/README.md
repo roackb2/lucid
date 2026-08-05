@@ -207,6 +207,14 @@ earliest peer contributions behind relays. These fields certify neither truth
 nor usefulness. A representative can act at most twice per wake and contribute
 to one principal-initiated request thread only once across later wakes.
 
+The optional `feedbackFollowThrough` projection makes the latest participant
+correction inspectable without creating a learning score. It contains only
+persisted events: the feedback and source finding, the latest later working note
+whose fixed horizon includes that feedback, the latest manual-check request
+carrying the feedback sequence, and a later finding linked through that request
+thread. Absent events are rendered as pending or quiet product state, not model
+success.
+
 ## Longitudinal representative context
 
 Heddle checkpoints preserve runtime transcript continuity, but Lucid does not
