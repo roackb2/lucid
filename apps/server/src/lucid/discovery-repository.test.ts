@@ -185,6 +185,84 @@ describe('SQLite discovery repository', () => {
     expect(snapshot).not.toHaveProperty('events');
   });
 
+  it('projects participant-scoped working history at a retry-stable event horizon', async () => {
+    const source = await registerSynthetic(repository, 'memory-source');
+    const interest = await repository.saveInterest(
+      'Find products that preserve useful unfinished work.',
+    );
+    const firstNote = await repository.appendEvent({
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Lucid updates its private working note',
+      content: 'Look for concrete examples involving unfinished work.',
+      metadata: { throughSequence: interest.sequence, derived: true },
+    });
+    const sourceMessage = await repository.appendEvent({
+      kind: 'direct_message',
+      actorAgentId: source.agent.id,
+      targetAgentId: USER_AGENT_ID,
+      title: 'A concrete network observation',
+      content: 'A prototype retained abandoned drafts for later comparison.',
+    });
+    const finding = await repository.appendEvent({
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'New finding for You',
+      content: 'Abandoned drafts may be useful comparison material.',
+      metadata: { sourceEventIds: [sourceMessage.sequence] },
+    });
+    const feedback = await repository.saveFeedback(
+      LOCAL_USER_ID,
+      finding.sequence,
+      'Useful only when the example names a real workflow.',
+    );
+    const revisedNote = await repository.appendEvent({
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Lucid updates its private working note',
+      content: 'Require a named workflow before reporting similar examples.',
+      metadata: { throughSequence: feedback.sequence, derived: true },
+    });
+
+    const beforeRevision = await repository.readRepresentativeWorkingContext(
+      USER_AGENT_ID,
+      feedback.sequence,
+    );
+    expect(beforeRevision).toMatchObject({
+      principalInputs: [expect.objectContaining({ sequence: interest.sequence })],
+      workingNote: expect.objectContaining({ sequence: firstNote.sequence }),
+      findings: [expect.objectContaining({
+        finding: expect.objectContaining({ sequence: finding.sequence }),
+        feedback: expect.objectContaining({ sequence: feedback.sequence }),
+      })],
+    });
+
+    const afterRevision = await repository.readRepresentativeWorkingContext(
+      USER_AGENT_ID,
+      revisedNote.sequence,
+    );
+    expect(afterRevision.workingNote).toMatchObject({
+      sequence: revisedNote.sequence,
+      content: 'Require a named workflow before reporting similar examples.',
+    });
+    expect((await repository.readSnapshot()).workingNote).toEqual(
+      revisedNote,
+    );
+    expect(await repository.readRepresentativeWorkingContext(
+      source.agent.id,
+      revisedNote.sequence,
+    )).toMatchObject({
+      principalInputs: [],
+      findings: [],
+      workingNote: undefined,
+    });
+  });
+
   it('reuses a failed wake horizon and idempotency slots on retry', async () => {
     await repository.saveInterest('Find one specific participant match.');
     const firstWake = await repository.beginAgentWake(
@@ -201,6 +279,17 @@ describe('SQLite discovery repository', () => {
       title: 'Original action',
       content: 'This is the first durable side effect.',
     });
+    const firstNote = await repository.appendEvent({
+      wakeNumber: firstWake!.wakeNumber,
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      idempotencyKey: `${firstWake!.wakeId}:working-note`,
+      title: 'Original working note',
+      content: 'This note was written by the first attempt.',
+      metadata: { throughSequence: firstWake!.horizonSequence },
+    });
     await repository.failAgentWake(USER_AGENT_ID);
 
     const retriedWake = await repository.beginAgentWake(
@@ -211,6 +300,7 @@ describe('SQLite discovery repository', () => {
       wakeId: firstWake!.wakeId,
       wakeNumber: firstWake!.wakeNumber,
       horizonSequence: firstWake!.horizonSequence,
+      workingContext: { workingNote: undefined },
     });
     expect(await repository.appendEvent({
       wakeNumber: retriedWake!.wakeNumber,
@@ -220,6 +310,16 @@ describe('SQLite discovery repository', () => {
       title: 'Replacement action',
       content: 'This must not create a second side effect.',
     })).toEqual(firstEvent);
+    expect(await repository.appendEvent({
+      wakeNumber: retriedWake!.wakeNumber,
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      idempotencyKey: `${retriedWake!.wakeId}:working-note`,
+      title: 'Replacement working note',
+      content: 'This retry must return the first note.',
+    })).toEqual(firstNote);
     expect((await repository.readNetworkDiagnostics()).events.filter(
       ({ kind }) => kind === 'shared_message',
     )).toHaveLength(1);

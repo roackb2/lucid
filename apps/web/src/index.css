@@ -292,6 +292,7 @@ button:disabled {
 }
 
 .interest-card,
+.representative-note-card,
 .finding-card,
 .sidebar-card,
 .background-checks {
@@ -304,6 +305,39 @@ button:disabled {
   scroll-margin-top: 90px;
   overflow: hidden;
   border-radius: 18px;
+}
+
+.representative-note-card {
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.representative-note {
+  margin: 0 26px 24px 78px;
+  padding: 16px 18px;
+  border-left: 3px solid var(--green);
+  border-radius: 0 12px 12px 0;
+  background: var(--green-pale);
+}
+
+.representative-note p {
+  margin: 0;
+  color: #30443a;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.representative-note small {
+  display: block;
+  margin-top: 11px;
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.representative-note--empty {
+  border-left-color: var(--line-strong);
+  background: var(--surface-soft);
 }
 
 .card-heading {
@@ -1190,6 +1224,10 @@ button:disabled {
 
   .saved-interest {
     margin: 0 18px 18px;
+  }
+
+  .representative-note {
+    margin: 0 18px 20px;
   }
 
   .check-controls {

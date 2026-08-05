@@ -16,6 +16,7 @@ import type {
   ParticipantStatus,
   ParticipantView,
   RegisterParticipantInput,
+  RepresentativeWorkingContext,
 } from './discovery-types.js';
 
 export type AppendDiscoveryEventInput = {
@@ -36,6 +37,7 @@ export type DiscoveryRepositorySnapshot = {
   user: ParticipantView;
   representative: AgentView;
   interest?: DiscoveryEvent;
+  workingNote?: DiscoveryEvent;
   findings: FindingView[];
 };
 
@@ -112,6 +114,16 @@ export interface DiscoveryRepository {
     agentId: string,
     sequences: number[],
   ): Promise<DiscoveryEvent[]>;
+
+  /**
+   * Returns bounded participant-owned history as it existed at one event
+   * horizon. Retry callers therefore cannot observe effects written by the
+   * wake they are replaying.
+   */
+  readRepresentativeWorkingContext(
+    agentId: string,
+    throughSequence: number,
+  ): Promise<RepresentativeWorkingContext>;
 
   /**
    * Atomically claims one agent wake and returns a fixed unread-event horizon.

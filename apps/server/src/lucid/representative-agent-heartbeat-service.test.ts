@@ -220,6 +220,65 @@ describe('representative-agent heartbeat service', () => {
     expect(records[0]?.record.outcome?.kind).toBe('skipped');
   });
 
+  it('supplies Lucid working history without requiring an existing Heddle checkpoint', async () => {
+    const source = await registerSynthetic(repository, 'context-source');
+    const interest = await repository.saveInterest(
+      'Find concrete examples of preserving unfinished work.',
+    );
+    const sourceMessage = await repository.appendEvent({
+      kind: 'direct_message',
+      actorAgentId: source.agent.id,
+      targetAgentId: USER_AGENT_ID,
+      title: 'First network example',
+      content: 'A team retained abandoned drafts for later comparison.',
+    });
+    const finding = await repository.appendEvent({
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'New finding for You',
+      content: 'Abandoned drafts may preserve decision context.',
+      metadata: { sourceEventIds: [sourceMessage.sequence] },
+    });
+    const feedback = await repository.saveFeedback(
+      LOCAL_USER_ID,
+      finding.sequence,
+      'Only continue this direction with a named workflow.',
+    );
+    const note = await repository.appendEvent({
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Lucid updates its private working note',
+      content: 'Require a named workflow before reporting this direction again.',
+      metadata: { throughSequence: feedback.sequence, derived: true },
+    });
+    await repository.appendEvent({
+      kind: 'direct_message',
+      actorAgentId: source.agent.id,
+      targetAgentId: USER_AGENT_ID,
+      title: 'Later related network message',
+      content: 'Another participant also retained rough drafts.',
+    });
+
+    const runner = new ContextCapturingHeartbeatRunner();
+    const heartbeat = await createHeartbeat(runner, true);
+    await heartbeat.triggerAgent(USER_AGENT_ID);
+    await vi.waitFor(() => {
+      expect(runner.wakes).toHaveLength(1);
+    }, { interval: 10, timeout: 5_000 });
+
+    expect(runner.wakes[0]?.workingContext).toMatchObject({
+      principalInputs: [expect.objectContaining({ sequence: interest.sequence })],
+      workingNote: expect.objectContaining({ sequence: note.sequence }),
+      findings: [expect.objectContaining({
+        finding: expect.objectContaining({ sequence: finding.sequence }),
+        feedback: expect.objectContaining({ sequence: feedback.sequence }),
+      })],
+    });
+  });
+
   it('reconciles one dynamic participant lifecycle without pausing the network', async () => {
     const { network } = await startServices(new CountingHeartbeatRunner());
     const registered = await network.registerParticipant({
@@ -462,6 +521,18 @@ class CountingHeartbeatRunner implements RepresentativeAgentHeartbeatRunner {
   ): Promise<AgentHeartbeatResult> {
     this.agentIds.push(input.wake.agent.id);
     return await runTestAgent(input, 'Counted one agent wake.');
+  }
+}
+
+class ContextCapturingHeartbeatRunner
+implements RepresentativeAgentHeartbeatRunner {
+  readonly wakes: RunRepresentativeAgentHeartbeatInput['wake'][] = [];
+
+  async run(
+    input: RunRepresentativeAgentHeartbeatInput,
+  ): Promise<AgentHeartbeatResult> {
+    this.wakes.push(input.wake);
+    return await runTestAgent(input, 'Captured one longitudinal wake.');
   }
 }
 

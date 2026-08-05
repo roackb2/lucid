@@ -54,6 +54,7 @@ implements RepresentativeAgentHeartbeatRunner {
         input.wake.participant,
         input.wake.wakeNumber,
         input.wake.visibleEvents,
+        input.wake.workingContext,
       ),
       model: this.config.model,
       reasoningEffort: 'low',

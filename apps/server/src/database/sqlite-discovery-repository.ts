@@ -49,6 +49,7 @@ import {
   type ParticipantStatus,
   type ParticipantView,
   type RegisterParticipantInput,
+  type RepresentativeWorkingContext,
 } from '../lucid/discovery-types.js';
 import {
   discoveryEvents,
@@ -61,6 +62,7 @@ import type { LucidSqliteDatabase } from './sqlite-database.js';
 const WORKSPACE_ID = 'local-discovery-workspace';
 const SNAPSHOT_EVENT_LIMIT = 220;
 const FINDING_LIMIT = 12;
+const PRINCIPAL_INPUT_LIMIT = 6;
 
 type AgentRow = typeof representativeAgents.$inferSelect;
 type DiscoveryEventRow = typeof discoveryEvents.$inferSelect;
@@ -117,12 +119,17 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       this.requireParticipant(LOCAL_USER_ID),
       this.requireUserAgent(),
     ]);
+    const workingContext = await this.readRepresentativeWorkingContext(
+      representative.id,
+      Number.MAX_SAFE_INTEGER,
+    );
     return {
       workspace,
       user: toParticipantView(user),
       representative: await this.toAgentView(representative, user),
       interest: await this.findSavedInterest(),
-      findings: this.listFindings(LOCAL_USER_ID),
+      workingNote: workingContext.workingNote,
+      findings: workingContext.findings,
     };
   }
 
@@ -804,6 +811,32 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .map(toDiscoveryEvent);
   }
 
+  async readRepresentativeWorkingContext(
+    agentId: string,
+    throughSequence: number,
+  ): Promise<RepresentativeWorkingContext> {
+    const agent = await this.requireAgent(agentId);
+    const boundedSequence = Math.max(0, throughSequence);
+
+    // This projection deliberately ignores unread cursors. Findings and
+    // feedback remain relevant after mailbox consumption, while the explicit
+    // sequence bound preserves one claimed wake's retry-stable view.
+    return {
+      principalInputs: this.listPrincipalInputs(
+        agent,
+        boundedSequence,
+      ),
+      findings: this.listFindings(
+        agent.participantId,
+        boundedSequence,
+      ),
+      workingNote: this.findWorkingNote(
+        agent,
+        boundedSequence,
+      ),
+    };
+  }
+
   async beginAgentWake(
     agentId: string,
     wakeId: string,
@@ -812,7 +845,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
 
     // Selection, horizon assignment, agent ownership, and the audit event must
     // commit together; otherwise two schedulers could consume different views.
-    return this.database.orm.transaction((transaction) => {
+    const claim = this.database.orm.transaction((transaction) => {
       const workspaceRow = transaction
         .select()
         .from(discoveryWorkspaces)
@@ -988,7 +1021,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       return {
         agent: {
           ...selectedAgent,
-          status: 'running',
+          status: 'running' as const,
           runCount: selectedAgent.runCount + 1,
           activeWakeId,
           activeWakeNumber: wakeNumber,
@@ -1003,6 +1036,17 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         horizonSequence,
       };
     });
+    if (!claim) {
+      return undefined;
+    }
+
+    return {
+      ...claim,
+      workingContext: await this.readRepresentativeWorkingContext(
+        agentId,
+        claim.horizonSequence,
+      ),
+    };
   }
 
   async completeAgentWake(
@@ -1136,7 +1180,67 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     return toDiscoveryEvent(row);
   }
 
-  private listFindings(participantId: string): FindingView[] {
+  private listPrincipalInputs(
+    agent: Agent,
+    throughSequence: number,
+  ): DiscoveryEvent[] {
+    const latestInterest = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'interest_saved'),
+        eq(discoveryEvents.targetAgentId, agent.id),
+        eq(discoveryEvents.targetParticipantId, agent.participantId),
+        lte(discoveryEvents.sequence, throughSequence),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .get();
+    const recentParticipantInputs = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'participant_input'),
+        eq(discoveryEvents.targetAgentId, agent.id),
+        eq(discoveryEvents.targetParticipantId, agent.participantId),
+        lte(discoveryEvents.sequence, throughSequence),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .limit(PRINCIPAL_INPUT_LIMIT)
+      .all()
+      .reverse();
+
+    return [
+      ...(latestInterest ? [toDiscoveryEvent(latestInterest)] : []),
+      ...recentParticipantInputs.map(toDiscoveryEvent),
+    ].sort((left, right) => left.sequence - right.sequence);
+  }
+
+  private findWorkingNote(
+    agent: Agent,
+    throughSequence: number,
+  ): DiscoveryEvent | undefined {
+    const row = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'representative_note_updated'),
+        eq(discoveryEvents.actorAgentId, agent.id),
+        eq(discoveryEvents.targetAgentId, agent.id),
+        eq(discoveryEvents.targetParticipantId, agent.participantId),
+        lte(discoveryEvents.sequence, throughSequence),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .get();
+    return row ? toDiscoveryEvent(row) : undefined;
+  }
+
+  private listFindings(
+    participantId: string,
+    throughSequence = Number.MAX_SAFE_INTEGER,
+  ): FindingView[] {
     return this.database.orm
       .select()
       .from(discoveryEvents)
@@ -1144,6 +1248,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'finding_reported'),
         eq(discoveryEvents.targetParticipantId, participantId),
+        lte(discoveryEvents.sequence, throughSequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .limit(FINDING_LIMIT)
@@ -1158,6 +1263,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             eq(discoveryEvents.workspaceId, WORKSPACE_ID),
             eq(discoveryEvents.kind, 'feedback_saved'),
             eq(discoveryEvents.parentSequence, finding.sequence),
+            lte(discoveryEvents.sequence, throughSequence),
           ))
           .orderBy(desc(discoveryEvents.sequence))
           .get();
