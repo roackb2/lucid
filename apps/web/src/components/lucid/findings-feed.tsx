@@ -1,12 +1,8 @@
 import { Inbox } from 'lucide-react';
-import type {
-  AgentView,
-  FindingView,
-} from '@/lib/trpc';
+import type { FindingView } from '@/lib/trpc';
 import { FindingCard } from './finding-card';
 
 type FindingsFeedProps = {
-  agents: AgentView[];
   findings: FindingView[];
   backgroundChecksEnabled: boolean;
   isChecking: boolean;
@@ -15,7 +11,6 @@ type FindingsFeedProps = {
 };
 
 export function FindingsFeed({
-  agents,
   findings,
   backgroundChecksEnabled,
   isChecking,
@@ -36,7 +31,6 @@ export function FindingsFeed({
         <div className="findings-list">
           {findings.map((finding, index) => (
             <FindingCard
-              agents={agents}
               finding={finding}
               isLatest={index === 0}
               isSubmitting={isSubmittingFeedback}

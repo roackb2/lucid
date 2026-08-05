@@ -1,7 +1,6 @@
 /**
- * tRPC transport boundary for the discovery workspace.
- * It validates wire input and maps expected user errors to transport errors;
- * sequencing and compensation remain in DiscoveryWorkspaceService.
+ * tRPC transport boundary for participant-scoped discovery and loopback-only
+ * development ingress. Sequencing and compensation remain in domain services.
  */
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -9,6 +8,10 @@ import {
   DiscoveryInputError,
   DiscoveryWorkspaceService,
 } from './lucid/discovery-workspace-service.js';
+import {
+  ParticipantNetworkInputError,
+  ParticipantNetworkService,
+} from './lucid/participant-network-service.js';
 import { trpc } from './trpc.js';
 
 const interestInputSchema = z.object({
@@ -24,10 +27,26 @@ const backgroundChecksInputSchema = z.object({
   enabled: z.boolean(),
 });
 
-const assistedParticipantInputSchema = z.object({
-  displayName: z.string().trim().min(1).max(80),
-  privateContext: z.string().trim().min(1).max(4_000),
-  contextApproved: z.literal(true),
+const participantRegistrationSchema = z.discriminatedUnion('kind', [
+  z.object({
+    registrationKey: z.string().trim().min(1).max(120),
+    kind: z.literal('synthetic'),
+    displayName: z.string().trim().min(1).max(80),
+    privateContext: z.string().trim().min(1).max(4_000),
+  }),
+  z.object({
+    registrationKey: z.string().trim().min(1).max(120),
+    kind: z.literal('human'),
+    displayName: z.string().trim().min(1).max(80),
+    privateContext: z.string().trim().min(1).max(4_000),
+    contextApproved: z.literal(true),
+  }),
+]);
+
+const participantInputSchema = z.object({
+  participantId: z.string().trim().min(1),
+  content: z.string().trim().min(1).max(1_600),
+  idempotencyKey: z.string().trim().min(1).max(160),
 });
 
 const participantEnabledInputSchema = z.object({
@@ -35,17 +54,23 @@ const participantEnabledInputSchema = z.object({
   enabled: z.boolean(),
 });
 
-const participantInputSchema = z.object({
+const participantIdSchema = z.object({
   participantId: z.string().trim().min(1),
 });
 
-const updateAssistedParticipantContextInputSchema = participantInputSchema.extend({
-  privateContext: z.string().trim().min(1).max(4_000),
-  contextApproved: z.literal(true),
+const loopbackProcedure = trpc.procedure.use(({ ctx, next }) => {
+  if (!isLoopbackAddress(ctx.remoteAddress)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Lucid development APIs accept loopback requests only.',
+    });
+  }
+  return next();
 });
 
 export function createAppRouter(
   discoveryWorkspace: DiscoveryWorkspaceService,
+  participantNetwork: ParticipantNetworkService,
 ) {
   return trpc.router({
     system: trpc.router({
@@ -69,41 +94,6 @@ export function createAppRouter(
         .mutation(({ input }) => resolveDiscoveryError(
           () => discoveryWorkspace.setBackgroundChecksEnabled(input.enabled),
         )),
-      createAssistedParticipant: trpc.procedure
-        .input(assistedParticipantInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.createAssistedParticipant(input),
-        )),
-      assistedParticipantContext: trpc.procedure
-        .input(participantInputSchema)
-        .query(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.assistedParticipantContext(
-            input.participantId,
-          ),
-        )),
-      updateAssistedParticipantContext: trpc.procedure
-        .input(updateAssistedParticipantContextInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.updateAssistedParticipantContext(input),
-        )),
-      pauseSimulatedParticipants: trpc.procedure.mutation(
-        () => resolveDiscoveryError(
-          () => discoveryWorkspace.pauseSimulatedParticipants(),
-        ),
-      ),
-      setParticipantEnabled: trpc.procedure
-        .input(participantEnabledInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.setParticipantEnabled(
-            input.participantId,
-            input.enabled,
-          ),
-        )),
-      retireParticipant: trpc.procedure
-        .input(participantInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.retireParticipant(input.participantId),
-        )),
       submitFeedback: trpc.procedure
         .input(feedbackInputSchema)
         .mutation(({ input }) => resolveDiscoveryError(
@@ -112,8 +102,36 @@ export function createAppRouter(
             input.content,
           ),
         )),
-      resetWorkspace: trpc.procedure.mutation(() => resolveDiscoveryError(
-        () => discoveryWorkspace.resetWorkspace(),
+    }),
+    development: trpc.router({
+      registerParticipant: loopbackProcedure
+        .input(participantRegistrationSchema)
+        .mutation(({ input }) => resolveParticipantNetworkError(
+          () => participantNetwork.registerParticipant(input),
+        )),
+      submitParticipantInput: loopbackProcedure
+        .input(participantInputSchema)
+        .mutation(({ input }) => resolveParticipantNetworkError(
+          () => participantNetwork.submitParticipantInput(input),
+        )),
+      setParticipantEnabled: loopbackProcedure
+        .input(participantEnabledInputSchema)
+        .mutation(({ input }) => resolveParticipantNetworkError(
+          () => participantNetwork.setParticipantEnabled(
+            input.participantId,
+            input.enabled,
+          ),
+        )),
+      retireParticipant: loopbackProcedure
+        .input(participantIdSchema)
+        .mutation(({ input }) => resolveParticipantNetworkError(
+          () => participantNetwork.retireParticipant(input.participantId),
+        )),
+      diagnostics: loopbackProcedure.query(() => (
+        participantNetwork.diagnostics()
+      )),
+      reset: loopbackProcedure.mutation(() => (
+        participantNetwork.reset()
       )),
     }),
   });
@@ -135,4 +153,26 @@ async function resolveDiscoveryError<T>(
     }
     throw error;
   }
+}
+
+async function resolveParticipantNetworkError<T>(
+  operation: () => T | Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof ParticipantNetworkInputError) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: error.message,
+      });
+    }
+    throw error;
+  }
+}
+
+function isLoopbackAddress(address: string | undefined): boolean {
+  return address === '127.0.0.1'
+    || address === '::1'
+    || address === '::ffff:127.0.0.1';
 }

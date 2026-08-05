@@ -20,11 +20,6 @@ type InterestComposerProps = {
   onRunNow(): void;
 };
 
-const EXAMPLE_INTERESTS = [
-  'Product ideas that become possible when agents represent different people.',
-  'People experimenting with AI music as a craft, not a content faucet.',
-] as const;
-
 export function InterestComposer({
   interest,
   lastCheckedAt,
@@ -89,20 +84,6 @@ export function InterestComposer({
             rows={6}
             value={draft}
           />
-          {!interest ? (
-            <div className="example-interests">
-              <span>Try with the available sample participants</span>
-              {EXAMPLE_INTERESTS.map((example) => (
-                <button
-                  key={example}
-                  onClick={() => setDraft(example)}
-                  type="button"
-                >
-                  {example}
-                </button>
-              ))}
-            </div>
-          ) : null}
           <footer className="interest-form__footer">
             <span>{draft.length} / 1600</span>
             <div>

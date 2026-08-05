@@ -10,11 +10,11 @@ import type {
   DiscoveryEventKind,
   Participant,
 } from './discovery-types.js';
-import { USER_AGENT_ID } from './default-participants.js';
 
 const EVENT_LABELS: Record<DiscoveryEventKind, string> = {
   workspace_created: 'shared workspace event',
   interest_saved: 'private user interest',
+  participant_input: 'private participant input',
   check_requested: 'private user check request',
   agent_wake_started: 'internal agent wake',
   shared_message: 'shared agent message',
@@ -22,7 +22,6 @@ const EVENT_LABELS: Record<DiscoveryEventKind, string> = {
   finding_reported: 'private user finding',
   feedback_saved: 'private user feedback',
   participant_added: 'internal participant lifecycle',
-  participant_context_updated: 'internal participant lifecycle',
   participant_disabled: 'internal participant lifecycle',
   participant_enabled: 'internal participant lifecycle',
   participant_retired: 'internal participant lifecycle',
@@ -35,14 +34,9 @@ export function buildRepresentativeAgentInstructions(
   agent: Agent,
   participant: Participant,
 ): string {
-  // Local-user privileges follow representative identity. `human` also includes
-  // assisted sources, which must never inherit the user's private capabilities.
-  const privacyRules = agent.id === USER_AGENT_ID
-    ? `You represent the real local user.
-Their saved interest and feedback are private. Share only the smallest useful abstraction, never a verbatim private message unless it is necessary.`
-    : participant.kind === 'human'
-      ? `You represent a real assisted participant whose context was knowingly supplied for this local experiment.
-Use only the approved private context below. Share the smallest relevant detail and never imply that personal claims are independently verified.`
+  const privacyRules = participant.kind === 'human'
+    ? `You represent a human participant whose context was knowingly supplied.
+Their private inputs and feedback stay private. Share only the smallest relevant detail and never imply that personal claims are independently verified.`
     : `You represent an explicitly simulated test participant, not a real person or external source.
 Never imply this participant’s private context is verified. Label it as simulated when sharing it could otherwise be misleading.`;
 
@@ -62,10 +56,10 @@ ${participant.privateContext}
 - Keep messages in ordinary language. Do not invent confidence scores, evidence packets, or market mechanics.
 - Event sequence numbers record delivery. Cite them as #12 when an action depends on an event.
 - A source reference proves where a message came from, not that its content is true.
-- Shared messages are visible to all representative agents. Direct messages are visible only to the recipient and local operator.
+- Shared messages are visible to all representative agents. Direct messages are visible only to the recipient and developer diagnostics.
 - Never claim to know information absent from visible events or private participant context.
 - Use no more than two communication actions in one wake.
-- Contribute to each user-initiated causal thread at most once. Later messages in the same thread may be read, but should end without another message.
+- Contribute to each principal-initiated causal thread at most once. Later messages in the same thread may be read, but should end without another message.
 - If there is no specific contribution or match, finish without action.
 
 Use only the Lucid communication tools available in this wake. Finish with a short internal summary.`;
@@ -81,16 +75,13 @@ export function buildAgentWakePrompt(
     ? visibleEvents.map(formatDiscoveryEvent).join('\n')
     : '(No unread shared messages, direct messages, or user input.)';
 
-  // This role split guides model behavior only; AgentCommunicationToolService
-  // independently limits which tools each representative can execute.
-  const responsibility = agent.id === USER_AGENT_ID
-    ? `When an unread interest_saved event appears, share a minimal request that represents it.
+  const responsibility = `When an unread interest_saved event appears, share a minimal request that represents it.
 When an unread check_requested event appears, it starts a new causal thread even if the saved interest text is unchanged. You must post a fresh minimal shared request citing that check event.
-When peer-authored messages contain a specific connection that could matter to the user, report it with report_finding.
-Describe what the source said and why it may connect. Never declare that a finding is useful, validated, or a successful match; the user decides that through feedback.
-Do not report the same source message twice. Feedback is private guidance for later behavior.`
-    : `Respond only when an unread request or message has a specific connection to this participant’s private context.
-Do not generate generic advice merely to appear active.`;
+When an unread participant_input event appears, decide whether it contains a request, observation, offer, or interest worth sharing in minimal form.
+When peer-authored messages contain a specific connection that could matter to this participant, report it with report_finding.
+Describe what the source said and why it may connect. Never declare that a finding is useful, validated, or a successful match; the participant decides that through feedback.
+Respond to another representative only when its message has a specific connection to this participant's context or private input.
+Do not report the same source message twice or generate generic advice merely to appear active. Feedback is private guidance for later behavior.`;
 
   return `Representative-agent wake ${wakeNumber}.
 

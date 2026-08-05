@@ -8,6 +8,7 @@ import { DiscoveryWorkspaceService } from './lucid/discovery-workspace-service.j
 import {
   HeddleRepresentativeAgentRunner,
 } from './lucid/heddle-representative-agent-runner.js';
+import { ParticipantNetworkService } from './lucid/participant-network-service.js';
 import {
   RepresentativeAgentHeartbeatService,
 } from './lucid/representative-agent-heartbeat-service.js';
@@ -39,11 +40,20 @@ const discoveryWorkspace = new DiscoveryWorkspaceService(
     heddleVersion: heddlePackage.version,
   },
 );
+const participantNetwork = new ParticipantNetworkService(
+  repository,
+  heartbeats,
+  {
+    model: config.model,
+    heddleVersion: heddlePackage.version,
+  },
+);
 
 const server = createHTTPServer({
-  router: createAppRouter(discoveryWorkspace),
-  createContext: () => ({
+  router: createAppRouter(discoveryWorkspace, participantNetwork),
+  createContext: ({ req }) => ({
     requestId: randomUUID(),
+    remoteAddress: req.socket.remoteAddress,
   }),
   onError: ({ ctx, error, path }) => {
     logger.error({

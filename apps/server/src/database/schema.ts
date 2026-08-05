@@ -23,6 +23,7 @@ export const participants = sqliteTable('participants', {
   workspaceId: text('workspace_id')
     .notNull()
     .references(() => discoveryWorkspaces.id, { onDelete: 'cascade' }),
+  registrationKey: text('registration_key'),
   kind: text('kind').notNull(),
   status: text('status').notNull().default('active'),
   displayName: text('display_name').notNull(),
@@ -32,6 +33,7 @@ export const participants = sqliteTable('participants', {
   updatedAt: text('updated_at').notNull(),
 }, (table) => [
   index('participants_workspace_idx').on(table.workspaceId),
+  uniqueIndex('participants_registration_key_idx').on(table.registrationKey),
 ]);
 
 export const representativeAgents = sqliteTable('representative_agents', {

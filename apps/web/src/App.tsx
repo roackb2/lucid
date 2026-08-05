@@ -1,20 +1,15 @@
 import {
-  Bot,
   CloudOff,
   Clock3,
+  Network,
   RefreshCw,
-  UserRound,
-  Users,
 } from 'lucide-react';
-import { ActivityPanel } from '@/components/lucid/activity-panel';
 import { AppHeader } from '@/components/lucid/app-header';
 import { BackgroundChecks } from '@/components/lucid/background-checks';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { InterestComposer } from '@/components/lucid/interest-composer';
-import { ParticipantNetwork } from '@/components/lucid/participant-network';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
-import type { AgentView } from '@/lib/trpc';
 
 export default function App() {
   const discovery = useDiscoveryWorkspace();
@@ -31,7 +26,7 @@ export default function App() {
         <p className="section-label">Service unavailable</p>
         <h1>Lucid cannot reach the discovery service.</h1>
         <p>
-          Start the local server and try again. Completed events and Heddle
+          Start the local server and try again. Completed findings and Heddle
           conversations remain on disk.
         </p>
         <Button
@@ -46,12 +41,6 @@ export default function App() {
   }
 
   const backgroundChecks = snapshot.backgroundChecks;
-  const sourceAgents = snapshot.agents.filter(
-    (agent) => !agent.isUserAgent && agent.participant.status !== 'retired',
-  );
-  const activeSourceCount = sourceAgents.filter(
-    (agent) => agent.participant.status === 'active',
-  ).length;
 
   return (
     <div className="workspace-shell">
@@ -60,11 +49,11 @@ export default function App() {
       <main className="workspace">
         <section className="workspace-intro">
           <div>
-            <p className="section-label">Personal discovery workspace</p>
-            <h1>Tell Lucid what matters. See what your network brings back.</h1>
+            <p className="section-label">Your discovery workspace</p>
+            <h1>Tell your representative what matters. Let the network answer.</h1>
             <p>
               Save an ongoing interest, leave your representative listening,
-              and decide which peer-sourced discoveries are actually useful.
+              and decide which discoveries from other participants are useful.
             </p>
           </div>
           <dl className="workspace-stats">
@@ -73,12 +62,12 @@ export default function App() {
               <dd>{snapshot.findings.length}</dd>
             </div>
             <div>
-              <dt>Sources</dt>
-              <dd>{activeSourceCount}</dd>
+              <dt>Agent</dt>
+              <dd>{backgroundChecks.running ? 'Working' : 'Ready'}</dd>
             </div>
             <div>
               <dt>Mode</dt>
-              <dd>{backgroundChecks.enabled ? 'Background' : 'Paused'}</dd>
+              <dd>{backgroundChecks.enabled ? 'Listening' : 'Paused'}</dd>
             </div>
           </dl>
         </section>
@@ -99,7 +88,6 @@ export default function App() {
             />
 
             <FindingsFeed
-              agents={snapshot.agents}
               backgroundChecksEnabled={backgroundChecks.enabled}
               findings={snapshot.findings}
               isChecking={backgroundChecks.running}
@@ -119,76 +107,24 @@ export default function App() {
                 discovery.setBackgroundChecksEnabled.mutate(enabled)
               )}
             />
-
-            <ParticipantNetwork
-              agents={snapshot.agents}
-              isCreating={discovery.createAssistedParticipant.isPending}
-              isPausingSimulated={
-                discovery.pauseSimulatedParticipants.isPending
-              }
-              isUpdating={
-                discovery.setParticipantEnabled.isPending
-                || discovery.retireParticipant.isPending
-              }
-              isUpdatingContext={
-                discovery.updateAssistedParticipantContext.isPending
-              }
-              onCreate={(input) => (
-                discovery.createAssistedParticipant.mutateAsync(input)
-              )}
-              onLoadContext={async (participantId) => {
-                try {
-                  return await discovery.loadAssistedParticipantContext
-                    .mutateAsync(participantId);
-                } finally {
-                  // The explicit review dialog owns this sensitive response;
-                  // do not retain it in React Query after handing it over.
-                  discovery.loadAssistedParticipantContext.reset();
-                }
-              }}
-              onPauseSimulated={() => (
-                discovery.pauseSimulatedParticipants.mutateAsync()
-              )}
-              onRetire={(participantId) => (
-                discovery.retireParticipant.mutateAsync(participantId)
-              )}
-              onSetEnabled={(participantId, enabled) => (
-                discovery.setParticipantEnabled.mutateAsync({
-                  participantId,
-                  enabled,
-                })
-              )}
-              onUpdateContext={(input) => (
-                discovery.updateAssistedParticipantContext.mutateAsync(input)
-              )}
-              tasks={backgroundChecks.tasks}
-            />
           </div>
 
           <aside className="workspace-sidebar">
-            <HowItWorks />
-            <SourceSummary agents={sourceAgents} />
+            <HowChecksWork />
+            <ParticipantPerspective />
           </aside>
         </div>
-
-        <ActivityPanel
-          agents={snapshot.agents}
-          events={snapshot.events}
-          isResetting={discovery.resetWorkspace.isPending}
-          onReset={() => discovery.resetWorkspace.mutate()}
-          tasks={backgroundChecks.tasks}
-        />
       </main>
 
       <footer className="workspace-footer">
         <span>Lucid · Heddle {snapshot.runtime.heddleVersion}</span>
-        <span>Local prototype · durable background checks · inspectable delivery</span>
+        <span>Your view · durable checks · inspectable delivery paths</span>
       </footer>
     </div>
   );
 }
 
-function HowItWorks() {
+function HowChecksWork() {
   return (
     <section className="sidebar-card">
       <header>
@@ -198,87 +134,39 @@ function HowItWorks() {
       <ol className="how-it-works">
         <li>
           <span>1</span>
-          <p><strong>You save an interest.</strong> The full text stays private to your agent.</p>
+          <p><strong>You save an interest.</strong> The full text stays private to your representative.</p>
         </li>
         <li>
           <span>2</span>
-          <p><strong>Agents wake on a schedule.</strong> New messages can wake the relevant representative sooner.</p>
+          <p><strong>Your agent wakes.</strong> It can share a request or react to newly delivered messages.</p>
         </li>
         <li>
           <span>3</span>
-          <p><strong>You receive a finding.</strong> The result includes the messages that caused it.</p>
+          <p><strong>You receive a finding.</strong> You see the messages that caused it and decide its value.</p>
         </li>
       </ol>
       <p className="prototype-note">
-        Empty wakes do not call the model. Lucid acts only when an agent has
-        unread user input or another agent’s message.
+        Empty wakes do not call the model. Your representative acts only when
+        it has unread input or another participant’s message.
       </p>
     </section>
   );
 }
 
-type SourceSummaryProps = {
-  agents: AgentView[];
-};
-
-function SourceSummary({ agents }: SourceSummaryProps) {
-  const activeAgents = agents.filter(
-    (agent) => agent.participant.status === 'active',
-  );
-  const realSourceCount = activeAgents.filter(
-    (agent) => agent.participant.kind === 'human',
-  ).length;
-  const simulatedSourceCount = activeAgents.length - realSourceCount;
-  const summary = describeActiveSources(
-    realSourceCount,
-    simulatedSourceCount,
-  );
-
+function ParticipantPerspective() {
   return (
     <section className="sidebar-card">
       <header>
-        <Users size={17} />
-        <h2>Available sources</h2>
+        <Network size={17} />
+        <h2>A participant’s view</h2>
       </header>
-      <ul className="source-list">
-        {agents.map((agent) => (
-          <li key={agent.id}>
-            <span style={{ backgroundColor: agent.color }}>
-              {agent.participant.kind === 'human'
-                ? <UserRound size={14} />
-                : <Bot size={14} />}
-            </span>
-            <div>
-              <strong>{agent.participant.displayName}</strong>
-              <small>
-                {agent.role} · {agent.participant.status === 'active'
-                  ? 'active'
-                  : 'paused'}
-              </small>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <p className="prototype-note">{summary}</p>
+      <p className="prototype-note">
+        There is no global participant directory here. Other representatives
+        become visible only when their messages contribute to one of your
+        findings.
+      </p>
     </section>
   );
-}
-
-function describeActiveSources(
-  realSourceCount: number,
-  simulatedSourceCount: number,
-): string {
-  if (realSourceCount > 0) {
-    return `${realSourceCount} assisted real ${
-      realSourceCount === 1 ? 'source is' : 'sources are'
-    } active. ${simulatedSourceCount} simulated ${
-      simulatedSourceCount === 1 ? 'fixture is' : 'fixtures are'
-    } active.`;
-  }
-  if (simulatedSourceCount > 0) {
-    return 'Only simulated fixtures are active. Add one knowingly assisted real participant to test the intended network.';
-  }
-  return 'No sources are active. Resume a participant before asking the network.';
 }
 
 function WorkspaceLoading() {
@@ -286,7 +174,7 @@ function WorkspaceLoading() {
     <main className="loading-state">
       <span className="loading-mark" aria-hidden="true">L</span>
       <p className="section-label">Opening workspace</p>
-      <h1>Loading saved interests and findings…</h1>
+      <h1>Loading your saved interest and findings…</h1>
     </main>
   );
 }

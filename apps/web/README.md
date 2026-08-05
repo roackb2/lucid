@@ -1,7 +1,7 @@
 # Lucid web workspace
 
-This app presents the user-facing delegated-discovery workspace. It depends on
-the server's typed tRPC router and does not reproduce mailbox, scheduling,
+This app is one participant-scoped product projection. It depends on the
+server's typed tRPC router and does not reproduce mailbox, scheduling,
 visibility, or finding rules in React.
 
 ## Product boundary
@@ -9,40 +9,38 @@ visibility, or finding rules in React.
 The primary path is:
 
 1. save or edit an ordinary-language interest;
-2. add a knowingly assisted real participant or manage the available fixtures;
-3. see whether background checks are enabled and when agents last woke;
-4. optionally request an immediate check;
-5. read specific findings and leave private feedback.
+2. see whether this participant's representative is listening or working;
+3. optionally request an immediate check;
+4. read participant-scoped findings and their causal messages;
+5. leave private free-text feedback.
 
-The default interface describes product outcomes. Heddle task status, agent
-identity, event visibility, and causal delivery remain available in the
-collapsed technical activity panel for inspection.
+The app intentionally does not render a global participant directory, event
+log, task list, reset control, or participant administration. Those are
+developer concerns exposed through the server's loopback-only development
+router, not features of a participant's social-network experience.
 
 ## Component responsibilities
 
 | Component | Responsibility |
 | --- | --- |
-| `interest-composer.tsx` | Create, edit, save, and manually re-check an interest |
-| `background-checks.tsx` | Present scheduler state and pause/resume controls |
-| `participant-network.tsx` | Add, pause, resume, and retire participant sources with explicit provenance |
+| `interest-composer.tsx` | Create, edit, save, and manually re-check one interest |
+| `background-checks.tsx` | Present and control this representative's durable listening state |
 | `findings-feed.tsx` | Present waiting, checking, paused, and finding states |
-| `finding-card.tsx` | Show one finding, causal messages, and private feedback |
-| `activity-panel.tsx` | Folded technical inspection surface |
-| `representative-agent-card.tsx` | Show agent and heartbeat-task status |
-| `activity-log.tsx` | Render append-only mailbox and lifecycle events |
-| `use-discovery-workspace.ts` | Own tRPC queries, mutations, cache, and polling |
+| `finding-card.tsx` | Show one finding, source attribution, causal messages, and private feedback |
+| `app-header.tsx` | Navigate the participant workspace and summarize local representative status |
+| `use-discovery-workspace.ts` | Own the scoped tRPC query, mutations, cache, polling, and notifications |
 
 ## Data and mutation rules
 
-- `src/hooks/use-discovery-workspace.ts` is the only React Query/tRPC
-  composition hook.
+- The React client consumes only `discovery.snapshot`; it never queries
+  `development.diagnostics`.
 - Successful mutations replace the cached workspace with the server-returned
-  snapshot.
-- Assisted intake never renders private context after submission. Participant
-  cards expose only kind, lifecycle status, and the consent timestamp.
-- Polling is faster only while a representative task is running.
-- Components receive server projections; they must not infer unread delivery,
-  fabricate no-match results, or schedule work locally.
+  authoritative projection.
+- Polling is faster only while this representative is running.
+- Source identity comes from attribution attached to a finding source, never
+  from a separately downloaded global agent list.
+- Components must not infer unread delivery, fabricate no-match results,
+  schedule work locally, or assign truth/value scores.
 
 Run `yarn workspace @lucid/web typecheck` and
 `yarn workspace @lucid/web build` after UI changes.

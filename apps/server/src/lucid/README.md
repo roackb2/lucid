@@ -1,199 +1,182 @@
 # Lucid delegated-discovery domain
 
-This directory owns delegated discovery for one local user across
-representative agents. It is separate from tRPC transport and from SQLite's
-concrete lifecycle.
+This directory owns participant identity, mailboxes, findings, and the bridge
+to durable representative execution. It is separate from tRPC transport,
+SQLite's concrete lifecycle, the React product projection, and development
+simulation scenarios.
 
-## File and service responsibilities
+## Service boundaries
 
 | File | Responsibility |
 | --- | --- |
-| `discovery-workspace-service.ts` | Coordinates user actions across repository and heartbeat boundaries |
-| `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per agent, claims mailbox wakes, and owns scheduler lifecycle |
-| `heddle-representative-agent-runner.ts` | Builds one claimed wake's prompt and tools, then delegates execution through Heddle's context |
-| `discovery-repository.ts` | Defines the async storage-independent domain port |
-| `agent-communication-tools.ts` | Validates bounded mailbox and finding operations |
-| `agent-prompts.ts` | Builds representative identity and readable wake prompts |
-| `assisted-participant-profile.ts` | Builds the maintained agent profile for operator-assisted real participants |
-| `default-participants.ts` | Defines the local user and explicit simulated fixtures |
-| `discovery-types.ts` | Defines persisted records and API projections |
-| `discovery-repository.test.ts` | Verifies visibility, claims, idempotency, and recovery |
-| `agent-communication.test.ts` | Verifies prompts, tool policy, sources, and action budgets |
-| `representative-agent-heartbeat-service.test.ts` | Verifies task routing, pause, restart, run-now, and empty wakes |
+| `discovery-workspace-service.ts` | Coordinates the local participant's saved interest, run requests, feedback, durable listening preference, and scoped snapshot |
+| `participant-network-service.ts` | Coordinates trusted participant registration/input, lifecycle, Heddle task reconciliation, reset, and development diagnostics |
+| `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per representative, claims mailbox wakes, accelerates unread agents, and owns scheduler lifecycle |
+| `heddle-representative-agent-runner.ts` | Builds one claimed wake's prompt/tools and delegates execution through Heddle's context |
+| `discovery-repository.ts` | Defines the asynchronous storage-independent domain port |
+| `agent-communication-tools.ts` | Enforces visible sources, fixed horizons, encountered-peer addressing, action budgets, and idempotent writes |
+| `agent-prompts.ts` | Builds generic representative identity and readable wake prompts |
+| `representative-profile.ts` | Builds the generic representative profile for dynamically registered participants |
+| `local-participant.ts` | Defines only the stable local participant and representative identity |
+| `discovery-types.ts` | Defines persisted records, scoped product views, and development diagnostics |
 
-Names should state an engineering responsibility. `Wake` is used only for one
-claimed heartbeat execution; `task`, `mailbox`, `event`, `finding`, and
-`participant` retain their ordinary infrastructure meanings.
+Names describe engineering responsibilities. `Wake` means one claimed
+heartbeat execution; `task`, `mailbox`, `event`, `finding`, and `participant`
+retain their ordinary infrastructure meanings.
+
+## Product view versus network operations
+
+`DiscoveryWorkspaceService.snapshot()` is the user-facing projection. It
+contains only:
+
+- the local participant and representative;
+- that participant's current interest and findings;
+- source attribution attached to those findings;
+- that representative's Heddle task status.
+
+It never returns the global participant list, agent list, event log, private
+context, registration keys, or unrelated task state.
+
+`ParticipantNetworkService.diagnostics()` is a world-wide developer
+projection. The tRPC layer exposes it only through the loopback-only
+`development` router. This is a local trust boundary, not a substitute for
+authentication in a deployed service.
 
 ## Domain records
 
 | Record | Meaning |
 | --- | --- |
-| `DiscoveryWorkspace` | One local product workspace and reset generation |
-| `Participant` | The human or explicit synthetic subject whose private context an agent represents |
-| `Agent` | The executable representative, status, unread cursor, and optional active wake |
-| `DiscoveryEvent` | Append-only input, communication, result, feedback, and lifecycle history |
+| `DiscoveryWorkspace` | One local network generation and global scheduler master state |
+| `Participant` | A human or explicit synthetic principal with stable registration identity and private context |
+| `Agent` | The executable representative, delivery cursor, and optional active wake |
+| `DiscoveryEvent` | Append-only principal input, communication, result, feedback, and lifecycle history |
 
-The current schema enforces one representative per participant. Interests
-remain events. Introduce a first-class interest entity only when the product
-needs multiple independently scheduled or paused interests.
+Every participant has one representative. Every representative can receive its
+principal's changing private input and report findings to that same principal.
+The current web app shows only the local participant, but the storage and
+execution model is symmetric.
 
-## Ownership boundary
+## Ownership
 
 Lucid owns:
 
-- participant and representative identity;
-- participant consent, explicit context review/replacement,
-  active/disabled/retired lifecycle, and context removal;
-- mailbox visibility and append-only events;
-- private interest and feedback delivery;
-- atomic wake claims with a fixed unread-event horizon;
-- the two-action budget for each wake;
-- one representative contribution per causal thread across later wakes;
-- finding validation against visible peer-authored messages;
-- causal projections of what the user agent shared;
-- durable cursors, mailbox eligibility floors, and action idempotency keys.
+- participant/representative identity and registration idempotency;
+- human context consent and participant lifecycle;
+- private principal input and mailbox visibility;
+- atomic wake claims with one fixed unread-event horizon;
+- mailbox floors for join and lifecycle boundaries;
+- a two-action budget per wake;
+- one representative contribution per principal-initiated causal thread;
+- direct addressing only to active peers encountered through visible delivery;
+- findings backed by visible peer-authored messages;
+- participant-scoped findings, feedback, and source attribution;
+- durable cursors and event/action idempotency keys.
 
 Heddle owns:
 
-- durable task schedules, checkpoints, and run records;
-- due-task selection, bounded concurrency, and the local scheduler lifecycle;
-- model and tool execution through `HeartbeatExecutionContext.runAgent()`;
-- credentials, unattended approvals, cancellation, checkpoint continuation,
-  heartbeat decisions, and retry state;
-- durable, coalesced prompt-run requests and non-agent skipped outcomes.
+- durable task schedules, enabled state, checkpoints, and run records;
+- due-task selection, coalesced run requests, and bounded concurrency;
+- model/tool execution through `HeartbeatExecutionContext.runAgent()`;
+- credentials, unattended approvals, cancellation, and retry state;
+- claim-fenced task settlement and interrupted-task recovery;
+- non-agent skipped outcomes for empty scheduled mailboxes.
 
-`DiscoveryRepository` never reads Heddle files.
-`HeddleRepresentativeAgentRunner` never decides visibility or cursor
-advancement. `RepresentativeAgentHeartbeatService` is the integration boundary
-that coordinates both without merging their persistence models.
+The development simulator owns scenario characters and input timing. No domain
+module imports simulator scenarios.
+
+## Registration and private input
+
+Network ingress uses a caller-provided `registrationKey`. Reusing the same key
+with the same kind, name, and private context returns the original participant;
+reusing it with a conflicting profile fails. Participant identity,
+representative identity, join mailbox floor, and a text-free audit event are
+created in one SQLite transaction.
+
+Human registration and later context replacement require explicit approval.
+Synthetic registration is explicitly labelled and requires no fictional
+consent. Private context is excluded from normal product and diagnostic
+projections.
+
+`saveParticipantInput()` appends a private `participant_input` addressed only
+to that participant's representative before requesting a Heddle run. If the
+process fails after persistence but before the run request, the unread mailbox
+remains recoverable by startup or a later trigger.
 
 ## Mailbox and heartbeat lifecycle
 
-1. A user action appends an ordinary-language event. Saving an interest and
-   feedback targets the user's representative.
-2. Lucid requests a durable task run. Heddle coalesces repeated requests made
-   while the recipient is busy into one follow-up generation. Every task also
-   retains its normal periodic schedule.
-3. Heddle selects the task. Lucid atomically claims visible events after the
-   agent's cursor and freezes the highest visible sequence as this wake's
-   horizon.
-4. The runner receives participant context, those events, its prior Heddle
-   checkpoint, and only Lucid communication tools.
-5. Communication actions append events with keys
-   `<wake-id>:action:<slot>`. A retry of the same wake cannot duplicate an
-   already persisted action.
-6. A successful Heddle result appends one completion event and advances the
-   cursor to the original horizon. Events created during execution remain
-   unread for their own recipients.
-7. Agents with newly visible mail are accelerated. This produces interaction
-   without a hard-coded user/source/user route.
+1. Principal input or peer communication is appended durably.
+2. Lucid requests the recipient's Heddle task. Requests while busy coalesce
+   into a follow-up generation.
+3. Heddle selects the task. Lucid atomically claims currently visible unread
+   events and freezes the highest sequence as the wake horizon.
+4. The runner receives private context, claimed events, Heddle continuation,
+   and only Lucid communication tools.
+5. Communication writes use `<wake-id>:action:<slot>`, so a retry cannot
+   duplicate a committed side effect.
+6. Successful execution appends completion and advances the cursor only to the
+   original horizon. Later mail remains unread.
+7. Newly addressed representatives receive durable run requests.
 
-An empty scheduled task does not claim a wake or call the model. Lucid returns
-`context.skip()`, so Heddle records a lightweight non-agent run without
-fabricating a model checkpoint.
+An empty due task calls `context.skip()` before model execution. It creates a
+lightweight Heddle run record but no model checkpoint and no Lucid wake.
 
-`Run now` appends a private `check_requested` event containing the current
-interest and accelerates unread agents. The user representative must treat the
-event as a new causal thread and issue a fresh minimal request even when the
-interest text is unchanged. It uses the same lifecycle.
+The local `Run now` operation appends a private `check_requested` event and uses
+the same mailbox/task path. There is no separate synchronous agent route.
 
-## Assisted participant lifecycle
+## Participant and task lifecycle
 
-The operator can add one real participant using ordinary-language context only
-after confirming that the person knowingly approved its use in this local
-experiment. Lucid creates the participant, representative agent, and Heddle
-task through the same repository and heartbeat path as the built-in fixtures.
-No account, invitation, or second runtime is involved.
+- `active`: the participant is routable and eligible for new mail;
+- `disabled`: task-scoped cancellation settles the representative before the
+  mailbox eligibility floor moves; messages during this period are skipped;
+- re-enable: the floor advances to the current event tail, then the task is
+  enabled for future mail;
+- `retired`: private context is scrubbed irreversibly and the derived task is
+  removed while historical attribution remains.
 
-The normal discovery snapshot never projects private context. A dedicated
-local-operator query returns one assisted participant's text only while the
-explicit review dialog is open. Replacing it requires renewed consent, records
-a `participant_context_updated` audit event without the text, and settles any
-active model run before the new context becomes authoritative. Withdrawing the
-participant uses the existing irreversible retirement path to stop their task
-and scrub the text.
+The local workspace Pause control is intentionally different: it disables only
+the local representative's durable Heddle task while leaving the participant
+active. Mail accumulates, the preference survives restart in Heddle's task
+store, and Resume enables and triggers the same task. Other participant nodes
+continue running.
 
-Each representative has both a processed-message cursor and a mailbox floor.
-The floor is the earliest event the participant is eligible to read, even if a
-model tool asks for an older sequence. It starts at the join boundary and moves
-forward when a participant is re-enabled, so neither pre-join nor paused-period
-messages can be recovered by requesting `after_sequence: 0`.
+The workspace-level background flag is an internal master switch used by
+reset/recovery, not the normal participant product control.
 
-- `active` participants receive new mail and have an enabled task when global
-  background checks are enabled;
-- `disabled` participants have no active wake, an off task, and receive no mail;
-- re-enabling advances the mailbox floor before scheduling future work;
-- `retired` participants lose private context permanently and their task is
-  deleted, while identity and prior non-sensitive event attribution remain.
+## Communication and peer discovery
 
-When an assisted real source and simulated fixtures are active together, the
-product exposes one domain command that cancels and pauses every fixture task.
-Heddle settles only those representatives, so real sources keep running while
-Lucid prevents later findings from silently mixing in synthetic messages. The
-global background-check preference does not change.
+Agents do not invoke one another's runtime. They append serialized events:
 
-Repository participant status and the workspace's global background-check
-setting are authoritative. Task reconciliation is idempotent and repairs the
-file-backed Heddle task set without treating a live task as a restart artifact.
+- `post_shared_message` broadcasts a minimal request or contribution;
+- `send_direct_message` appears only when the current representative has
+  encountered an active peer as the actor of a visible event;
+- `report_finding` is available to every representative and addresses the
+  finding only to that representative's own participant;
+- `finish_without_action` records an internal outcome without fabricating a
+  participant-facing result.
 
-## Messages and findings
+Shared communication provides initial discovery without exposing a directory.
+Direct addressing can narrow later communication but cannot enumerate unknown
+participants.
 
-Agents do not invoke one another's Heddle runtime. They communicate by appending
-serialized mailbox events:
+`source_event_ids` and `parentSequence` preserve causal delivery. They certify
+neither truth nor usefulness. A representative can act at most twice per wake
+and contribute to one principal-initiated thread only once across later wakes.
 
-- `post_shared_message` reaches every other representative;
-- `send_direct_message` reaches one representative and the operator;
-- `report_finding` is available only to the user's representative, must cite at
-  least one visible peer message, and describes a possible connection without
-  declaring it useful, validated, or a successful match;
-- `finish_without_action` records an internal outcome but never fabricates a
-  user-facing no-match finding.
+## Recovery and concurrency
 
-Shared messages may wake other sources, but they cannot produce an unbounded
-reply loop: a representative may take up to two communication actions in its
-first wake for a causal thread, then later wakes in that same thread can only
-read or finish without action. A new interest, explicit check request, or
-feedback event starts a new thread.
+Failed, interrupted, or escalated wakes keep their cursor and active claim.
+Retry reuses the same wake ID, number, horizon, and action slots. Repository
+startup releases stale agent state; Heddle claim-fenced recovery returns stale
+tasks to a runnable state before Lucid reconciles configuration.
 
-`source_event_ids` and `parentSequence` preserve causal delivery. They do not
-certify truth or usefulness. The UI labels each source as assisted real,
-simulated, or mixed and leaves the value judgment to user feedback.
+Participant disable/retire uses Heddle task-scoped cancellation. A `not-owned`
+or `not-found` cancellation blocks the domain mutation because another runtime
+could still retain old private context. Unrelated agents continue running.
 
-## Recovery and lifecycle
+Independent representatives execute concurrently up to
+`LUCID_HEARTBEAT_MAX_CONCURRENCY`. Each wake keeps tool concurrency at one so
+causal writes and the action budget remain ordered.
 
-Failed, interrupted, or escalated wakes keep their cursor and active wake
-fields. A retry reuses the same wake ID, number, event horizon, and action
-slots. Repository startup releases stale agent `running` status. Heddle's
-claim-fenced recovery API changes stale tasks from `running` to `waiting` and
-makes them immediately due before Lucid reconciles current task configuration.
-
-Global pause, reset, and shutdown use the awaitable Heddle scheduler handle to
-cancel active model work and wait for claim-fenced outer task settlement before
-changing SQLite or closing it. Participant disable, context replacement, and
-retirement use Heddle 5.8 task-scoped cancellation instead: queued admission is
-invalidated, a locally owned execution is aborted, and claim-fenced settlement
-finishes before Lucid changes participant state. A `not-owned` or `not-found`
-result blocks that domain mutation because another execution could still retain
-old private context. Unrelated representatives remain admitted and running.
-
-Lucid constructs one `FileHeartbeatTaskService` and supplies that exact store to
-the scheduler. The same instance therefore owns task creation, recovery, run
-requests, claims, cancellation classification, and settlement. `stateRoot`
-remains separate runtime configuration for Heddle's agent checkpoints and
-credentials.
-
-Independent representatives may execute concurrently, bounded by
-`LUCID_HEARTBEAT_MAX_CONCURRENCY` (default `3`). Each individual wake still
-limits tool concurrency to one because its action budget and causal writes are
-ordered.
-
-The file-backed Heddle scheduler is a single-host primitive without distributed
-leases. A hosted multi-replica version needs a durable queue or workflow
-executor; a PostgreSQL repository adapter alone is insufficient.
-
-## Simulated participants
-
-The music maker and product researcher are explicit local fixtures. Their
-private context is hidden from the user's representative but is never presented
-as a real person, external source, or product validation.
+The file scheduler is single-host. PostgreSQL would not by itself provide
+distributed task claims; a hosted multi-replica design also needs a durable
+queue or workflow executor with leased ownership.

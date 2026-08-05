@@ -7,7 +7,6 @@ import type {
   Agent,
   AgentWakeContext,
   AgentView,
-  CreateAssistedParticipantInput,
   DiscoveryEvent,
   DiscoveryEventKind,
   DiscoveryEventMetadata,
@@ -16,7 +15,7 @@ import type {
   Participant,
   ParticipantStatus,
   ParticipantView,
-  UpdateAssistedParticipantContextInput,
+  RegisterParticipantInput,
 } from './discovery-types.js';
 
 export type AppendDiscoveryEventInput = {
@@ -35,15 +34,22 @@ export type AppendDiscoveryEventInput = {
 export type DiscoveryRepositorySnapshot = {
   workspace: DiscoveryWorkspace;
   user: ParticipantView;
-  agents: AgentView[];
+  representative: AgentView;
   interest?: DiscoveryEvent;
   findings: FindingView[];
+};
+
+export type NetworkDiagnosticsRepositorySnapshot = {
+  workspace: DiscoveryWorkspace;
+  participants: ParticipantView[];
+  agents: AgentView[];
   events: DiscoveryEvent[];
 };
 
 export type ParticipantWithAgent = {
   participant: Participant;
   agent: Agent;
+  created?: boolean;
 };
 
 /**
@@ -68,6 +74,7 @@ export interface DiscoveryRepository {
   readWorkspace(): Promise<DiscoveryWorkspace>;
   setBackgroundChecksEnabled(enabled: boolean): Promise<DiscoveryWorkspace>;
   readSnapshot(): Promise<DiscoveryRepositorySnapshot>;
+  readNetworkDiagnostics(): Promise<NetworkDiagnosticsRepositorySnapshot>;
   listParticipants(): Promise<Participant[]>;
   listAgents(): Promise<Agent[]>;
   listActiveAgents(): Promise<Agent[]>;
@@ -75,11 +82,8 @@ export interface DiscoveryRepository {
   requireAgent(id: string): Promise<Agent>;
   requireAgentByParticipantId(participantId: string): Promise<Agent>;
   requireUserAgent(): Promise<Agent>;
-  createAssistedParticipant(
-    input: CreateAssistedParticipantInput,
-  ): Promise<ParticipantWithAgent>;
-  updateAssistedParticipantContext(
-    input: UpdateAssistedParticipantContextInput,
+  registerParticipant(
+    input: RegisterParticipantInput,
   ): Promise<ParticipantWithAgent>;
   setParticipantStatus(
     participantId: string,
@@ -88,7 +92,13 @@ export interface DiscoveryRepository {
   retireParticipant(participantId: string): Promise<ParticipantWithAgent>;
   findSavedInterest(): Promise<DiscoveryEvent | undefined>;
   saveInterest(content: string): Promise<DiscoveryEvent>;
+  saveParticipantInput(
+    participantId: string,
+    content: string,
+    idempotencyKey: string,
+  ): Promise<DiscoveryEvent>;
   saveFeedback(
+    participantId: string,
     findingSequence: number,
     content: string,
   ): Promise<DiscoveryEvent>;
@@ -118,7 +128,10 @@ export interface DiscoveryRepository {
   ): Promise<void>;
   failAgentWake(agentId: string): Promise<void>;
   interruptAgentWake(agentId: string): Promise<void>;
-  hasFindingUsingAnySource(sourceEventIds: number[]): Promise<boolean>;
+  hasParticipantFindingUsingAnySource(
+    participantId: string,
+    sourceEventIds: number[],
+  ): Promise<boolean>;
   hasAgentContributedToCausalThread(
     agentId: string,
     sourceEventIds: number[],

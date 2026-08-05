@@ -29,11 +29,12 @@ scheduler.
 
 ## Data ownership
 
-- `discovery_workspaces` identifies one local workspace generation, its
-  monotonic wake number, and the durable global background-check preference.
+- `discovery_workspaces` identifies one local network generation, its
+  monotonic wake number, and the internal global scheduler master state.
 - `participants` stores the human or explicit synthetic subject represented,
-  including lifecycle status, approved-context timestamp, and private
-  background visible only to its own agent.
+  including a stable nullable registration key, lifecycle status,
+  approved-context timestamp, and private background visible only to its own
+  agent.
 - `representative_agents` stores execution status, delivery cursor, mailbox
   floor, and the active wake's durable ID, number, and fixed event horizon.
 - `discovery_events` is the append-only product and mailbox history. It has a
@@ -52,10 +53,10 @@ participant scrubs `private_context` but keeps its row and representative
 identity for append-only historical attribution.
 
 SQLite does not encrypt `private_context` at rest. The field is private because
-ordinary repository projections and agent visibility exclude it from every
-non-owner, not because the database file is cryptographically protected. A
-dedicated localhost operator query may retrieve one assisted participant's
-text for explicit review and is not part of the workspace snapshot.
+ordinary product/diagnostic projections and agent visibility exclude it from
+every non-owner, not because the database file is cryptographically protected.
+Trusted ingress may replace it through the repository contract; it is never
+part of the participant-scoped workspace snapshot.
 
 ## Relations
 
@@ -72,3 +73,7 @@ discovery_events actor/target/source ──> delivery and causal references
 Workspace and participant ownership use foreign keys. Event actor, recipient,
 and causal identifiers remain append-only logical references validated by the
 repository adapter.
+
+`participants.registration_key` is unique when present. The stable local user
+uses `local-user`; dynamic callers provide their own idempotent namespace. The
+internal UUID remains the mailbox and relation identity.

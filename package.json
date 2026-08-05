@@ -1,6 +1,7 @@
 {
   "name": "lucid",
   "private": true,
+  "type": "module",
   "packageManager": "yarn@1.22.22",
   "workspaces": [
     "apps/*"
@@ -8,8 +9,10 @@
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"yarn server:dev\" \"yarn web:dev\"",
     "build": "yarn server:build && yarn web:build",
-    "test": "yarn workspace @lucid/server test",
-    "typecheck": "yarn workspace @lucid/server typecheck && yarn workspace @lucid/web typecheck",
+    "test": "yarn workspace @lucid/server test && yarn test:simulator",
+    "test:simulator": "tsx --test scripts/**/*.test.ts",
+    "typecheck": "yarn workspace @lucid/server typecheck && yarn workspace @lucid/web typecheck && tsc -p tsconfig.scripts.json --noEmit",
+    "simulate:network": "tsx scripts/network-simulator.ts",
     "server:dev": "yarn workspace @lucid/server dev",
     "server:build": "yarn workspace @lucid/server build",
     "server:start": "yarn workspace @lucid/server start",
@@ -19,6 +22,13 @@
     "web:build": "yarn workspace @lucid/web build"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "@trpc/client": "11.16.0",
+    "@types/node": "^22.13.10",
+    "@types/seedrandom": "^3.0.8",
+    "concurrently": "^9.2.1",
+    "seedrandom": "^3.0.5",
+    "superjson": "^2.2.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.9.3"
   }
 }

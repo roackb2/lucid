@@ -20,16 +20,17 @@ import {
   or,
 } from 'drizzle-orm';
 import {
-  DEFAULT_AGENTS,
-  DEFAULT_PARTICIPANTS,
+  LOCAL_PARTICIPANT,
+  LOCAL_REPRESENTATIVE,
   LOCAL_USER_ID,
   USER_AGENT_ID,
-} from '../lucid/default-participants.js';
-import { createAssistedAgentProfile } from '../lucid/assisted-participant-profile.js';
+} from '../lucid/local-participant.js';
+import { createRepresentativeProfile } from '../lucid/representative-profile.js';
 import type {
   AppendDiscoveryEventInput,
   DiscoveryRepository,
   DiscoveryRepositorySnapshot,
+  NetworkDiagnosticsRepositorySnapshot,
   ParticipantWithAgent,
 } from '../lucid/discovery-repository.js';
 import {
@@ -38,15 +39,16 @@ import {
   participantKindSchema,
   participantStatusSchema,
   type Agent,
+  type AgentView,
   type AgentWakeContext,
-  type CreateAssistedParticipantInput,
   type DiscoveryEvent,
   type DiscoveryWorkspace,
   type FindingView,
+  type FindingSourceView,
   type Participant,
   type ParticipantStatus,
   type ParticipantView,
-  type UpdateAssistedParticipantContextInput,
+  type RegisterParticipantInput,
 } from '../lucid/discovery-types.js';
 import {
   discoveryEvents,
@@ -111,8 +113,22 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
 
   async readSnapshot(): Promise<DiscoveryRepositorySnapshot> {
     const workspace = this.requireWorkspace();
-    const [user, participantList, agentList] = await Promise.all([
+    const [user, representative] = await Promise.all([
       this.requireParticipant(LOCAL_USER_ID),
+      this.requireUserAgent(),
+    ]);
+    return {
+      workspace,
+      user: toParticipantView(user),
+      representative: await this.toAgentView(representative, user),
+      interest: await this.findSavedInterest(),
+      findings: this.listFindings(LOCAL_USER_ID),
+    };
+  }
+
+  async readNetworkDiagnostics(): Promise<NetworkDiagnosticsRepositorySnapshot> {
+    const workspace = this.requireWorkspace();
+    const [participantList, agentList] = await Promise.all([
       this.listParticipants(),
       this.listAgents(),
     ]);
@@ -126,25 +142,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           `Participant ${agent.participantId} is missing for agent ${agent.id}.`,
         );
       }
-      const {
-        instructions: _instructions,
-        mailboxFloorSequence: _mailboxFloorSequence,
-        lastSeenSequence: _lastSeenSequence,
-        activeWakeId: _activeWakeId,
-        activeWakeNumber: _activeWakeNumber,
-        activeWakeHorizon: _activeWakeHorizon,
-        ...view
-      } = agent;
-      return {
-        ...view,
-        participant: toParticipantView(participant),
-        unreadCount: (await this.listEventsVisibleToAgent(
-          agent.id,
-          agent.lastSeenSequence,
-          10_000,
-        )).length,
-        isUserAgent: agent.id === USER_AGENT_ID,
-      };
+      return await this.toAgentView(agent, participant);
     }));
     const events = this.database.orm
       .select()
@@ -158,10 +156,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
 
     return {
       workspace,
-      user: toParticipantView(user),
+      participants: participantList.map(toParticipantView),
       agents,
-      interest: await this.findSavedInterest(),
-      findings: this.listFindings(),
       events,
     };
   }
@@ -252,14 +248,20 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     return await this.requireAgent(USER_AGENT_ID);
   }
 
-  async createAssistedParticipant(
-    input: CreateAssistedParticipantInput,
+  async registerParticipant(
+    input: RegisterParticipantInput,
   ): Promise<ParticipantWithAgent> {
-    // Validate and normalize operator input before opening the transaction so
-    // failed consent or size checks cannot leave partial identity records.
+    // Validate and normalize trusted ingress before opening the transaction so
+    // a malformed simulator or future client cannot leave partial identity.
+    const registrationKey = input.registrationKey.trim();
     const displayName = input.displayName.trim();
     const privateContext = input.privateContext.trim();
-    if (!input.contextApproved) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,119}$/.test(registrationKey)) {
+      throw new Error(
+        'Registration key must contain 1 to 120 letters, numbers, dots, colons, underscores, or hyphens.',
+      );
+    }
+    if (input.kind === 'human' && !input.contextApproved) {
       throw new Error(
         'Confirm that the participant knowingly allowed this context to be used.',
       );
@@ -269,6 +271,32 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     }
     if (!privateContext || privateContext.length > 4_000) {
       throw new Error('Participant context must contain 1 to 4,000 characters.');
+    }
+
+    const existingRow = this.database.orm
+      .select()
+      .from(participants)
+      .where(and(
+        eq(participants.workspaceId, WORKSPACE_ID),
+        eq(participants.registrationKey, registrationKey),
+      ))
+      .get();
+    if (existingRow) {
+      const participant = toParticipant(existingRow);
+      if (
+        participant.kind !== input.kind
+        || participant.displayName !== displayName
+        || participant.privateContext !== privateContext
+      ) {
+        throw new Error(
+          `Registration key ${registrationKey} already belongs to a different participant profile.`,
+        );
+      }
+      return {
+        participant,
+        agent: await this.requireAgentByParticipantId(participant.id),
+        created: false,
+      };
     }
 
     const now = dayjs().toISOString();
@@ -298,10 +326,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         .get();
       // Participant, representative, initial mailbox floor, and audit event are
       // one unit. The current tail prevents a new source from reading old mail.
-      const profile = createAssistedAgentProfile({
+      const profile = createRepresentativeProfile({
         id: agentId,
         participantId,
         displayName,
+        kind: input.kind,
         sortOrder: (lastAgent?.sortOrder ?? 0) + 1,
       });
       const participantRow = transaction
@@ -309,11 +338,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         .values({
           id: participantId,
           workspaceId: WORKSPACE_ID,
-          kind: 'human',
+          registrationKey,
+          kind: input.kind,
           status: 'active',
           displayName,
           privateContext,
-          contextConsentAt: now,
+          contextConsentAt: input.kind === 'human' ? now : null,
           createdAt: now,
           updatedAt: now,
         })
@@ -340,15 +370,15 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         kind: 'participant_added',
         targetAgentId: agentId,
         targetParticipantId: participantId,
-        title: `${displayName} joins as an assisted participant`,
+        title: `${displayName} joins the participant network`,
         content:
-          'The operator recorded approved private context and created one representative agent. The context itself is not included in this event.',
+          'Trusted ingress registered private context and created one representative agent. The context itself is not included in this event.',
         metadata: {
           visibility: 'operator',
           participantId,
           agentId,
-          participantKind: 'human',
-          contextConsentAt: now,
+          participantKind: input.kind,
+          contextConsentAt: input.kind === 'human' ? now : undefined,
         },
         createdAt: now,
       }).run();
@@ -356,99 +386,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       return {
         participant: toParticipant(participantRow),
         agent: toAgent(agentRow),
-      };
-    });
-  }
-
-  async updateAssistedParticipantContext(
-    input: UpdateAssistedParticipantContextInput,
-  ): Promise<ParticipantWithAgent> {
-    this.assertManageableParticipant(input.participantId);
-    const privateContext = input.privateContext.trim();
-    if (!input.contextApproved) {
-      throw new Error(
-        'Confirm that the participant reviewed and approved the revised context.',
-      );
-    }
-    if (!privateContext || privateContext.length > 4_000) {
-      throw new Error('Participant context must contain 1 to 4,000 characters.');
-    }
-
-    const now = dayjs().toISOString();
-    return this.database.orm.transaction((transaction) => {
-      const workspace = transaction
-        .select()
-        .from(discoveryWorkspaces)
-        .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
-        .get();
-      if (!workspace) {
-        throw new Error('Discovery workspace is missing.');
-      }
-      const participantRow = transaction
-        .select()
-        .from(participants)
-        .where(and(
-          eq(participants.workspaceId, WORKSPACE_ID),
-          eq(participants.id, input.participantId),
-        ))
-        .get();
-      if (!participantRow) {
-        throw new Error(`Participant not found: ${input.participantId}`);
-      }
-      const participant = toParticipant(participantRow);
-      if (participant.kind !== 'human' || participant.status === 'retired') {
-        throw new Error(
-          'Only an active or paused assisted participant can revise context.',
-        );
-      }
-      const agentRow = transaction
-        .select()
-        .from(representativeAgents)
-        .where(eq(
-          representativeAgents.participantId,
-          input.participantId,
-        ))
-        .get();
-      if (!agentRow) {
-        throw new Error(
-          `Representative agent not found for participant: ${input.participantId}`,
-        );
-      }
-
-      // The approved text and its renewed consent timestamp change together.
-      // The audit event deliberately records only lifecycle metadata.
-      const updatedParticipantRow = transaction
-        .update(participants)
-        .set({
-          privateContext,
-          contextConsentAt: now,
-          updatedAt: now,
-        })
-        .where(eq(participants.id, input.participantId))
-        .returning()
-        .get();
-      transaction.insert(discoveryEvents).values({
-        id: `event_${randomUUID()}`,
-        workspaceId: WORKSPACE_ID,
-        wakeNumber: workspace.currentWake,
-        kind: 'participant_context_updated',
-        targetAgentId: agentRow.id,
-        targetParticipantId: input.participantId,
-        title: `${participant.displayName} approves revised context`,
-        content:
-          'The operator replaced the approved private context after renewed participant review. The context itself is not included in this event.',
-        metadata: {
-          visibility: 'operator',
-          participantId: input.participantId,
-          agentId: agentRow.id,
-          contextConsentAt: now,
-        },
-        createdAt: now,
-      }).run();
-
-      return {
-        participant: toParticipant(updatedParticipantRow),
-        agent: toAgent(agentRow),
+        created: true,
       };
     });
   }
@@ -689,11 +627,56 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     });
   }
 
+  async saveParticipantInput(
+    participantId: string,
+    content: string,
+    idempotencyKey: string,
+  ): Promise<DiscoveryEvent> {
+    const participant = await this.requireParticipant(participantId);
+    if (participant.status !== 'active') {
+      throw new Error(
+        `Participant input requires an active participant: ${participantId}`,
+      );
+    }
+    const agent = await this.requireAgentByParticipantId(participantId);
+    const normalizedContent = content.trim();
+    if (!normalizedContent || normalizedContent.length > 1_600) {
+      throw new Error('Participant input must contain 1 to 1,600 characters.');
+    }
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+    if (
+      !normalizedIdempotencyKey
+      || normalizedIdempotencyKey.length > 160
+    ) {
+      throw new Error('Input idempotency key must contain 1 to 160 characters.');
+    }
+
+    return await this.appendEvent({
+      kind: 'participant_input',
+      targetAgentId: agent.id,
+      targetParticipantId: participant.id,
+      idempotencyKey: normalizedIdempotencyKey,
+      title: `${participant.displayName} provides new private input`,
+      content: normalizedContent,
+      metadata: {
+        visibility: 'participant-and-agent',
+        source: participant.kind === 'synthetic'
+          ? 'network-simulator'
+          : 'participant',
+        participantKind: participant.kind,
+      },
+    });
+  }
+
   async saveFeedback(
+    participantId: string,
     findingSequence: number,
     content: string,
   ): Promise<DiscoveryEvent> {
-    const finding = this.requireUserFinding(findingSequence);
+    const finding = this.requireParticipantFinding(
+      participantId,
+      findingSequence,
+    );
     const existing = this.database.orm
       .select({ sequence: discoveryEvents.sequence })
       .from(discoveryEvents)
@@ -709,8 +692,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
 
     return await this.appendEvent({
       kind: 'feedback_saved',
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      targetAgentId: (await this.requireAgentByParticipantId(participantId)).id,
+      targetParticipantId: participantId,
       parentSequence: finding.sequence,
       title: 'You explain how this finding should affect future checks',
       content,
@@ -760,7 +743,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           and(
             inArray(
               discoveryEvents.kind,
-              ['interest_saved', 'check_requested', 'feedback_saved'],
+              [
+                'interest_saved',
+                'participant_input',
+                'check_requested',
+                'feedback_saved',
+              ],
             ),
             eq(discoveryEvents.targetAgentId, agentId),
           ),
@@ -789,7 +777,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         inArray(discoveryEvents.sequence, sequences),
         gt(discoveryEvents.sequence, agent.mailboxFloorSequence),
         or(
-          eq(discoveryEvents.kind, 'shared_message'),
+          and(
+            eq(discoveryEvents.kind, 'shared_message'),
+            ne(discoveryEvents.actorAgentId, agentId),
+          ),
           and(
             eq(discoveryEvents.kind, 'direct_message'),
             eq(discoveryEvents.targetAgentId, agentId),
@@ -797,7 +788,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           and(
             inArray(
               discoveryEvents.kind,
-              ['interest_saved', 'check_requested', 'feedback_saved'],
+              [
+                'interest_saved',
+                'participant_input',
+                'check_requested',
+                'feedback_saved',
+              ],
             ),
             eq(discoveryEvents.targetAgentId, agentId),
           ),
@@ -869,7 +865,13 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       );
       const visibleEventConditions = [
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
-        gt(discoveryEvents.sequence, selectedAgent.lastSeenSequence),
+        gt(
+          discoveryEvents.sequence,
+          Math.max(
+            selectedAgent.lastSeenSequence,
+            selectedAgent.mailboxFloorSequence,
+          ),
+        ),
         ...(resumingWake
           ? [lte(
               discoveryEvents.sequence,
@@ -888,7 +890,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           and(
             inArray(
               discoveryEvents.kind,
-              ['interest_saved', 'check_requested', 'feedback_saved'],
+              [
+                'interest_saved',
+                'participant_input',
+                'check_requested',
+                'feedback_saved',
+              ],
             ),
             eq(discoveryEvents.targetAgentId, selectedAgent.id),
           ),
@@ -1035,7 +1042,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .run();
   }
 
-  async hasFindingUsingAnySource(sourceEventIds: number[]): Promise<boolean> {
+  async hasParticipantFindingUsingAnySource(
+    participantId: string,
+    sourceEventIds: number[],
+  ): Promise<boolean> {
     if (!sourceEventIds.length) {
       return false;
     }
@@ -1046,7 +1056,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'finding_reported'),
-        eq(discoveryEvents.targetParticipantId, LOCAL_USER_ID),
+        eq(discoveryEvents.targetParticipantId, participantId),
       ))
       .all()
       .some(({ metadata }) => (
@@ -1126,14 +1136,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     return toDiscoveryEvent(row);
   }
 
-  private listFindings(): FindingView[] {
+  private listFindings(participantId: string): FindingView[] {
     return this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'finding_reported'),
-        eq(discoveryEvents.targetParticipantId, LOCAL_USER_ID),
+        eq(discoveryEvents.targetParticipantId, participantId),
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .limit(FINDING_LIMIT)
@@ -1154,17 +1164,57 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
 
         return {
           finding,
-          sources: this.readEventsBySequence(sourceEventIds),
-          outboundMessages: this.listCausalOutboundMessages(sourceEventIds),
+          sources: this.readEventsBySequence(sourceEventIds)
+            .map((source) => this.toFindingSourceView(source)),
+          outboundMessages: this.listCausalOutboundMessages(
+            sourceEventIds,
+            finding.actorAgentId,
+          ),
           feedback: feedbackRow ? toDiscoveryEvent(feedbackRow) : undefined,
           noMatch: finding.metadata.noMatch === true,
         };
       });
   }
 
-  private listCausalOutboundMessages(sourceEventIds: number[]): DiscoveryEvent[] {
-    // Walk provenance backward from a finding to reveal what the user's agent
-    // disclosed while searching, without projecting unrelated network traffic.
+  private toFindingSourceView(message: DiscoveryEvent): FindingSourceView {
+    if (!message.actorAgentId) {
+      return { message };
+    }
+    const agentRow = this.database.orm
+      .select()
+      .from(representativeAgents)
+      .where(eq(representativeAgents.id, message.actorAgentId))
+      .get();
+    if (!agentRow) {
+      return { message };
+    }
+    const participantRow = this.database.orm
+      .select()
+      .from(participants)
+      .where(eq(participants.id, agentRow.participantId))
+      .get();
+    if (!participantRow) {
+      return { message };
+    }
+    const participant = toParticipant(participantRow);
+    return {
+      message,
+      attribution: {
+        agentId: agentRow.id,
+        agentName: agentRow.name,
+        participantId: participant.id,
+        participantDisplayName: participant.displayName,
+        participantKind: participant.kind,
+      },
+    };
+  }
+
+  private listCausalOutboundMessages(
+    sourceEventIds: number[],
+    reporterAgentId?: string,
+  ): DiscoveryEvent[] {
+    // Walk provenance backward from a finding to reveal what its representative
+    // disclosed without projecting unrelated network traffic.
     const visited = new Set(sourceEventIds);
     const queue = this.readEventsBySequence(sourceEventIds);
     const outboundMessages: DiscoveryEvent[] = [];
@@ -1172,7 +1222,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     while (queue.length) {
       const event = queue.shift()!;
       if (
-        event.actorAgentId === USER_AGENT_ID
+        reporterAgentId
+        && event.actorAgentId === reporterAgentId
         && ['shared_message', 'direct_message'].includes(event.kind)
       ) {
         outboundMessages.push(event);
@@ -1239,7 +1290,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .map(toDiscoveryEvent);
   }
 
-  private requireUserFinding(sequence: number): DiscoveryEvent {
+  private requireParticipantFinding(
+    participantId: string,
+    sequence: number,
+  ): DiscoveryEvent {
     const row = this.database.orm
       .select()
       .from(discoveryEvents)
@@ -1247,11 +1301,13 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.sequence, sequence),
         eq(discoveryEvents.kind, 'finding_reported'),
-        eq(discoveryEvents.targetParticipantId, LOCAL_USER_ID),
+        eq(discoveryEvents.targetParticipantId, participantId),
       ))
       .get();
     if (!row) {
-      throw new Error(`Finding not found for the local user: ${sequence}`);
+      throw new Error(
+        `Finding not found for participant ${participantId}: ${sequence}`,
+      );
     }
     return toDiscoveryEvent(row);
   }
@@ -1293,26 +1349,22 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       createdAt: now,
       updatedAt: now,
     }).run();
-    this.database.orm.insert(participants).values(
-      DEFAULT_PARTICIPANTS.map((participant) => ({
-        ...participant,
-        workspaceId: WORKSPACE_ID,
-        createdAt: now,
-        updatedAt: now,
-      })),
-    ).run();
-    this.database.orm.insert(representativeAgents).values(
-      DEFAULT_AGENTS.map((agent) => ({
-        ...agent,
-        workspaceId: WORKSPACE_ID,
-        status: 'idle',
-        runCount: 0,
-        mailboxFloorSequence: 0,
-        lastSeenSequence: 0,
-        createdAt: now,
-        updatedAt: now,
-      })),
-    ).run();
+    this.database.orm.insert(participants).values({
+      ...LOCAL_PARTICIPANT,
+      workspaceId: WORKSPACE_ID,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    this.database.orm.insert(representativeAgents).values({
+      ...LOCAL_REPRESENTATIVE,
+      workspaceId: WORKSPACE_ID,
+      status: 'idle',
+      runCount: 0,
+      mailboxFloorSequence: 0,
+      lastSeenSequence: 0,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
     this.database.orm.insert(discoveryEvents).values({
       id: `event_${randomUUID()}`,
       workspaceId: WORKSPACE_ID,
@@ -1320,7 +1372,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       kind: 'workspace_created',
       title: 'Discovery workspace created',
       content:
-        'The local user is represented by Lucid. Two simulated participants are available as test data; their private context is not directly visible to the user agent.',
+        'The local participant is represented by Lucid. Other participants enter through the network ingress rather than product defaults.',
       metadata: {
         versionId,
         visibility: 'shared',
@@ -1398,6 +1450,31 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       throw new Error('The local user participant cannot be disabled or retired.');
     }
   }
+
+  private async toAgentView(
+    agent: Agent,
+    participant: Participant,
+  ): Promise<AgentView> {
+    const {
+      instructions: _instructions,
+      mailboxFloorSequence: _mailboxFloorSequence,
+      lastSeenSequence: _lastSeenSequence,
+      activeWakeId: _activeWakeId,
+      activeWakeNumber: _activeWakeNumber,
+      activeWakeHorizon: _activeWakeHorizon,
+      ...view
+    } = agent;
+    return {
+      ...view,
+      participant: toParticipantView(participant),
+      unreadCount: (await this.listEventsVisibleToAgent(
+        agent.id,
+        agent.lastSeenSequence,
+        10_000,
+      )).length,
+      isUserAgent: agent.id === USER_AGENT_ID,
+    };
+  }
 }
 
 function toAgent(row: AgentRow): Agent {
@@ -1414,6 +1491,7 @@ function toAgent(row: AgentRow): Agent {
 function toParticipant(row: ParticipantRow): Participant {
   return {
     ...row,
+    registrationKey: row.registrationKey ?? undefined,
     kind: participantKindSchema.parse(row.kind),
     status: participantStatusSchema.parse(row.status),
     contextConsentAt: row.contextConsentAt ?? undefined,
@@ -1421,7 +1499,11 @@ function toParticipant(row: ParticipantRow): Participant {
 }
 
 function toParticipantView(participant: Participant): ParticipantView {
-  const { privateContext: _privateContext, ...view } = participant;
+  const {
+    privateContext: _privateContext,
+    registrationKey: _registrationKey,
+    ...view
+  } = participant;
   return view;
 }
 

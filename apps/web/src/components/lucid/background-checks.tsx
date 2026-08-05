@@ -50,8 +50,8 @@ export function BackgroundChecks({
         </div>
         <p>
           {checks.enabled
-            ? `Each representative wakes every ${formatInterval(checks.intervalMs)}. New mailbox messages can wake the right agent sooner.`
-            : 'Your interest and findings stay saved. Resume when you want agents to process new messages.'}
+            ? `Your representative wakes every ${formatInterval(checks.intervalMs)}. New mailbox messages can wake it sooner.`
+            : 'Your interest and findings stay saved. Resume when you want your representative to process new messages.'}
         </p>
       </div>
       <dl className="background-checks__timing">

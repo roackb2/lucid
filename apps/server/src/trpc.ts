@@ -3,6 +3,7 @@ import superjson from 'superjson';
 
 export type LucidRequestContext = {
   requestId: string;
+  remoteAddress?: string;
 };
 
 export const trpc = initTRPC.context<LucidRequestContext>().create({

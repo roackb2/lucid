@@ -10,6 +10,7 @@ export const agentStatusSchema = z.enum(['idle', 'running', 'error']);
 export const discoveryEventKindSchema = z.enum([
   'workspace_created',
   'interest_saved',
+  'participant_input',
   'check_requested',
   'agent_wake_started',
   'shared_message',
@@ -17,7 +18,6 @@ export const discoveryEventKindSchema = z.enum([
   'finding_reported',
   'feedback_saved',
   'participant_added',
-  'participant_context_updated',
   'participant_disabled',
   'participant_enabled',
   'participant_retired',
@@ -44,6 +44,7 @@ export type DiscoveryWorkspace = {
 export type Participant = {
   id: string;
   workspaceId: string;
+  registrationKey?: string;
   kind: ParticipantKind;
   status: ParticipantStatus;
   displayName: string;
@@ -53,24 +54,18 @@ export type Participant = {
   updatedAt: string;
 };
 
-export type ParticipantView = Omit<Participant, 'privateContext'>;
+export type ParticipantView = Omit<
+  Participant,
+  'privateContext' | 'registrationKey'
+>;
 
-export type CreateAssistedParticipantInput = {
+export type RegisterParticipantInput = {
+  registrationKey: string;
+  kind: ParticipantKind;
   displayName: string;
   privateContext: string;
-  contextApproved: boolean;
+  contextApproved?: boolean;
 };
-
-export type UpdateAssistedParticipantContextInput = {
-  participantId: string;
-  privateContext: string;
-  contextApproved: boolean;
-};
-
-export type AssistedParticipantContextView = Pick<
-  Participant,
-  'id' | 'displayName' | 'privateContext' | 'contextConsentAt' | 'status'
->;
 
 export type Agent = {
   id: string;
@@ -127,10 +122,21 @@ export type DiscoveryEvent = {
 
 export type FindingView = {
   finding: DiscoveryEvent;
-  sources: DiscoveryEvent[];
+  sources: FindingSourceView[];
   outboundMessages: DiscoveryEvent[];
   feedback?: DiscoveryEvent;
   noMatch: boolean;
+};
+
+export type FindingSourceView = {
+  message: DiscoveryEvent;
+  attribution?: {
+    agentId: string;
+    agentName: string;
+    participantId: string;
+    participantDisplayName: string;
+    participantKind: ParticipantKind;
+  };
 };
 
 export type AgentWakeContext = {
@@ -175,9 +181,20 @@ export type BackgroundChecksView = {
 export type DiscoveryWorkspaceSnapshot = {
   workspace: DiscoveryWorkspace;
   user: ParticipantView;
-  agents: AgentView[];
+  representative: AgentView;
   interest?: DiscoveryEvent;
   findings: FindingView[];
+  backgroundChecks: BackgroundChecksView;
+  runtime: {
+    model: string;
+    heddleVersion: string;
+  };
+};
+
+export type NetworkDiagnosticsSnapshot = {
+  workspace: DiscoveryWorkspace;
+  participants: ParticipantView[];
+  agents: AgentView[];
   events: DiscoveryEvent[];
   backgroundChecks: BackgroundChecksView;
   runtime: {
