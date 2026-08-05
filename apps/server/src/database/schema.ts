@@ -79,7 +79,7 @@ export const discoveryEvents = sqliteTable('discovery_events', {
   actorAgentId: text('actor_agent_id'),
   targetAgentId: text('target_agent_id'),
   targetParticipantId: text('target_participant_id'),
-  parentSequence: integer('parent_sequence'),
+  replyToSequence: integer('reply_to_sequence'),
   idempotencyKey: text('idempotency_key'),
   title: text('title').notNull(),
   content: text('content').notNull(),

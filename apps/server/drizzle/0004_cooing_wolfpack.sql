@@ -1,0 +1,1 @@
+ALTER TABLE `discovery_events` RENAME COLUMN "parent_sequence" TO "reply_to_sequence";

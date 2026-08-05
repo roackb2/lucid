@@ -63,22 +63,48 @@ export class DiscoveryWorkspaceService {
         'Save what Lucid should look for before running a check.',
       );
     }
+    const workingContext = await this.repository
+      .readRepresentativeWorkingContext(
+        userAgent.id,
+        Number.MAX_SAFE_INTEGER,
+      );
+    const latestFeedback = workingContext.findings
+      .flatMap(({ feedback }) => feedback ? [feedback] : [])
+      .sort((left, right) => right.sequence - left.sequence)
+      .at(0);
+    const workingDirection = workingContext.workingNote?.content
+      ?? 'No refined working direction has been saved yet.';
+    const feedbackDirection = latestFeedback?.content
+      ?? 'No participant feedback has been received yet.';
     // A manual check is mailbox input, not a second execution path. Persist it
-    // before triggering Heddle so a crash cannot lose the user's request.
+    // before triggering Heddle so a crash cannot lose the user's request. The
+    // request carries the representative's current learning so the next
+    // network outreach does not simply repeat the original broad assignment.
     await this.repository.appendEvent({
       kind: 'check_requested',
       targetAgentId: userAgent.id,
       targetParticipantId: userAgent.participantId,
       title: 'You ask Lucid to check now',
-      content: `Review the current saved interest and look for newly available matches:\n\n${interest.content}`,
+      content: `Continue this ongoing assignment using what the representative has learned so far.
+
+Saved assignment:
+${interest.content}
+
+Current working direction:
+${workingDirection}
+
+Latest participant feedback:
+${feedbackDirection}`,
       metadata: {
         visibility: 'user-and-agent',
         source: 'user',
         interestSequence: interest.sequence,
+        workingNoteSequence: workingContext.workingNote?.sequence,
+        latestFeedbackSequence: latestFeedback?.sequence,
       },
     });
     try {
-      await this.heartbeats.runNow();
+      await this.heartbeats.triggerAgent(userAgent.id);
     } catch (error) {
       throw new DiscoveryInputError(
         error instanceof Error
@@ -107,7 +133,7 @@ export class DiscoveryWorkspaceService {
     }
 
     // Retry the fixed Heddle checkpoint directly. Appending a check_requested
-    // event here would create a second causal root and hide the original
+    // event here would create a second request thread and hide the original
     // failure instead of repairing it.
     await this.heartbeats.triggerAgent(userAgent.id);
     return await this.snapshot();

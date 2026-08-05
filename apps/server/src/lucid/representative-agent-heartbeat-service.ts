@@ -24,9 +24,10 @@ import {
 import type { LucidConfig } from '../config.js';
 import type { LucidLogger } from '../logger.js';
 import type { DiscoveryRepository } from './discovery-repository.js';
-import type {
-  BackgroundChecksView,
-  RepresentativeAgentTaskView,
+import {
+  networkMessageRoleSchema,
+  type BackgroundChecksView,
+  type RepresentativeAgentTaskView,
 } from './discovery-types.js';
 import type {
   RepresentativeAgentHeartbeatRunner,
@@ -42,7 +43,8 @@ const UNSAFE_CANCELLATION_DISPOSITIONS = new Set<
  *
  * Heddle owns task timing, checkpoints, run records, scheduler selection, and
  * provider execution. This service maps tasks to Lucid agents, claims mailbox
- * work, settles durable cursors, and accelerates recipients with unread mail.
+ * work, settles durable cursors, and accelerates only the recipients implied
+ * by newly emitted request and response messages.
  */
 export class RepresentativeAgentHeartbeatService {
   private readonly tasks: FileHeartbeatTaskService;
@@ -186,33 +188,6 @@ export class RepresentativeAgentHeartbeatService {
       reason: `lucid-mailbox:${agentId}`,
     });
     this.start();
-  }
-
-  async runNow(): Promise<BackgroundChecksView> {
-    if (!(await this.snapshot()).enabled) {
-      throw new Error('Background checks are paused. Resume them before running now.');
-    }
-    await this.triggerAgentsWithUnreadEvents();
-    return await this.snapshot();
-  }
-
-  async setEnabled(enabled: boolean): Promise<BackgroundChecksView> {
-    return await this.taskMutationMutex.runExclusive(async () => {
-      if (!enabled) {
-        // Heddle cancellation settles every claimed task before Lucid closes
-        // the global mailbox boundary or changes derived task configuration.
-        await this.pauseRunningTasks();
-      }
-      await this.repository.setBackgroundChecksEnabled(enabled);
-      this.paused = !enabled;
-      await this.ensureAgentTasks();
-      if (enabled) {
-        await this.enableActiveAgentTasks();
-        this.start();
-        await this.triggerAgentsWithUnreadEvents();
-      }
-      return await this.snapshot();
-    });
   }
 
   async resetWorkspace(): Promise<void> {
@@ -476,7 +451,7 @@ export class RepresentativeAgentHeartbeatService {
       if (
         requiredRequestSourceIds.length
         && !(await Promise.all(requiredRequestSourceIds.map(
-          (sourceEventId) => this.repository.hasAgentSharedMessageUsingSource(
+          (sourceEventId) => this.repository.hasAgentPublishedRequestForTrigger(
             agentId,
             sourceEventId,
           ),
@@ -515,9 +490,11 @@ export class RepresentativeAgentHeartbeatService {
         agentId,
         wake.horizonSequence,
       );
-      // Newly emitted messages request durable follow-up generations rather
-      // than recursively invoking recipient agents.
-      await this.triggerAgentsWithUnreadEvents();
+      // Route only the new messages from this wake. A root request fans out
+      // once; responses return to the requester; ambient contributions wait
+      // for normal schedules. This avoids treating every shared message as a
+      // reason to wake the entire network again.
+      await this.triggerRecipientsForWake(agentId, wake.wakeNumber);
       return result;
     } catch (error) {
       if (
@@ -536,55 +513,75 @@ export class RepresentativeAgentHeartbeatService {
     }
   }
 
-  private async triggerAgentsWithUnreadEvents(): Promise<void> {
-    const [agents, tasks] = await Promise.all([
+  private async triggerRecipientsForWake(
+    sourceAgentId: string,
+    wakeNumber: number,
+  ): Promise<void> {
+    const [messages, activeAgents] = await Promise.all([
+      this.repository.listAgentWakeCommunicationEvents(
+        sourceAgentId,
+        wakeNumber,
+      ),
       this.repository.listActiveAgents(),
-      this.listManagedTasks(),
     ]);
-    const taskById = new Map(tasks.map((task) => [task.id, task]));
-    const agentsWithUnreadMail = (await Promise.all(agents.map(async (agent) => {
-      const task = taskById.get(taskIdForAgent(agent.id));
-      if (!task?.enabled || task.state?.status === 'blocked') {
-        return undefined;
-      }
-      const unreadEvents = await this.repository.listEventsVisibleToAgent(
-        agent.id,
-        agent.lastSeenSequence,
-        1,
-      );
-      return unreadEvents.length ? agent : undefined;
-    }))).filter((agent) => agent !== undefined);
+    const activeAgentIds = new Set(activeAgents.map(({ id }) => id));
+    const recipientIds = new Set<string>();
 
-    await Promise.all(
-      agentsWithUnreadMail.map((agent) => this.triggerAgent(agent.id)),
+    for (const message of messages) {
+      if (message.kind === 'direct_message') {
+        if (message.targetAgentId && activeAgentIds.has(message.targetAgentId)) {
+          recipientIds.add(message.targetAgentId);
+        }
+        continue;
+      }
+
+      const messageRole = networkMessageRoleSchema.safeParse(
+        message.metadata.messageRole,
+      ).data;
+      if (messageRole === 'request') {
+        activeAgents
+          .filter(({ id }) => id !== sourceAgentId)
+          .forEach(({ id }) => recipientIds.add(id));
+        continue;
+      }
+
+      if (
+        messageRole === 'response'
+        && message.replyToSequence
+      ) {
+        const repliedTo = await this.repository.readEvent(
+          message.replyToSequence,
+        );
+        if (
+          repliedTo?.actorAgentId
+          && repliedTo.actorAgentId !== sourceAgentId
+          && activeAgentIds.has(repliedTo.actorAgentId)
+        ) {
+          recipientIds.add(repliedTo.actorAgentId);
+        }
+      }
+    }
+
+    const recipients = [...recipientIds];
+    const results = await Promise.allSettled(
+      recipients.map((agentId) => this.triggerAgent(agentId)),
     );
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.warn({
+          error: result.reason,
+          sourceAgentId,
+          targetAgentId: recipients[index],
+          wakeNumber,
+        }, 'lucid.heartbeat_recipient_trigger.failed');
+      }
+    });
   }
 
   private async listManagedTasks(): Promise<HeartbeatTask[]> {
     return (await this.tasks.listTasks()).filter(
       (task) => task.id.startsWith(TASK_ID_PREFIX),
     );
-  }
-
-  private async enableActiveAgentTasks(): Promise<void> {
-    const [agents, tasks] = await Promise.all([
-      this.repository.listActiveAgents(),
-      this.listManagedTasks(),
-    ]);
-    const activeAgentIds = new Set(agents.map((agent) => agent.id));
-    await Promise.all(tasks
-      .filter((task) => {
-        const agentId = agentIdFromTask(task.id);
-        return agentId
-          && activeAgentIds.has(agentId);
-      })
-      .map(async (task) => {
-        if (task.state?.status === 'blocked') {
-          await this.tasks.resumeTask(task.id);
-        } else if (!task.enabled) {
-          await this.tasks.setTaskEnabled(task.id, true);
-        }
-      }));
   }
 
   private async deleteManagedTasks(): Promise<void> {

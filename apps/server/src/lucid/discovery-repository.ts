@@ -26,7 +26,7 @@ export type AppendDiscoveryEventInput = {
   actorAgentId?: string;
   targetAgentId?: string;
   targetParticipantId?: string;
-  parentSequence?: number;
+  replyToSequence?: number;
   idempotencyKey?: string;
   title: string;
   content: string;
@@ -116,6 +116,11 @@ export interface DiscoveryRepository {
     agentId: string,
     sequences: number[],
   ): Promise<DiscoveryEvent[]>;
+  readEvent(sequence: number): Promise<DiscoveryEvent | undefined>;
+  listAgentWakeCommunicationEvents(
+    agentId: string,
+    wakeNumber: number,
+  ): Promise<DiscoveryEvent[]>;
 
   /**
    * Returns bounded participant-owned history as it existed at one event
@@ -142,13 +147,13 @@ export interface DiscoveryRepository {
   ): Promise<void>;
   failAgentWake(agentId: string): Promise<void>;
   interruptAgentWake(agentId: string): Promise<void>;
-  hasParticipantFindingUsingAnySource(
+  hasParticipantFindingUsingAnyOrigin(
     participantId: string,
     sourceEventIds: number[],
   ): Promise<boolean>;
-  hasAgentSharedMessageUsingSource(
+  hasAgentPublishedRequestForTrigger(
     agentId: string,
-    sourceEventId: number,
+    triggerSequence: number,
   ): Promise<boolean>;
 
   /**
@@ -160,9 +165,9 @@ export interface DiscoveryRepository {
     agentId: string,
     wakeNumber: number,
   ): Promise<number>;
-  hasAgentContributedToCausalThread(
+  hasAgentContributedToRequestThread(
     agentId: string,
-    sourceEventIds: number[],
+    replyToSequence: number,
     currentWakeId: string,
   ): Promise<boolean>;
 

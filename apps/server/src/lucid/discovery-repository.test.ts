@@ -196,17 +196,19 @@ describe('SQLite discovery repository', () => {
     expect((await repository.readSnapshot()).networkActivity).toEqual({
       assignment: interest,
       responseCount: 0,
+      originatingResponseCount: 0,
+      originatingParticipantCount: 0,
     });
 
     const request = await repository.appendEvent({
       kind: 'shared_message',
       actorAgentId: USER_AGENT_ID,
-      parentSequence: interest.sequence,
+      replyToSequence: interest.sequence,
       title: 'Your representative asks the network',
       content: 'Who has observed a concrete long-running memory failure?',
       metadata: { sourceEventIds: [interest.sequence] },
     });
-    expect(await repository.hasAgentSharedMessageUsingSource(
+    expect(await repository.hasAgentPublishedRequestForTrigger(
       USER_AGENT_ID,
       interest.sequence,
     )).toBe(true);
@@ -220,7 +222,7 @@ describe('SQLite discovery repository', () => {
       kind: 'direct_message',
       actorAgentId: source.agent.id,
       targetAgentId: USER_AGENT_ID,
-      parentSequence: request.sequence,
+      replyToSequence: request.sequence,
       title: 'A participant replies',
       content: 'One operator lost rejection rules after a process restart.',
       metadata: { sourceEventIds: [request.sequence] },
@@ -236,6 +238,8 @@ describe('SQLite discovery repository', () => {
     expect((await repository.readSnapshot()).networkActivity).toMatchObject({
       request: { sequence: request.sequence },
       responseCount: 1,
+      originatingResponseCount: 1,
+      originatingParticipantCount: 1,
       latestResponseAt: response.createdAt,
     });
     expect((await repository.readSnapshot()).findings[0]).toMatchObject({
@@ -263,7 +267,7 @@ describe('SQLite discovery repository', () => {
     const refreshedRequest = await repository.appendEvent({
       kind: 'shared_message',
       actorAgentId: USER_AGENT_ID,
-      parentSequence: check.sequence,
+      replyToSequence: check.sequence,
       title: 'Your representative checks the network again',
       content: 'Who has a newer concrete example?',
       metadata: { sourceEventIds: [check.sequence] },
@@ -273,6 +277,89 @@ describe('SQLite discovery repository', () => {
       request: { sequence: refreshedRequest.sequence },
       responseCount: 0,
     });
+  });
+
+  it('collapses relays into their originating participant contribution', async () => {
+    const origin = await registerSynthetic(repository, 'origin');
+    const relay = await registerSynthetic(repository, 'relay');
+    const interest = await repository.saveInterest(
+      'Find a concrete operator workflow for long-running agents.',
+    );
+    const request = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: interest.sequence,
+      title: 'Your representative asks the network',
+      content: 'Who has a concrete long-running operator workflow?',
+      metadata: {
+        messageRole: 'request',
+        sourceEventIds: [interest.sequence],
+      },
+    });
+    const originInput = await repository.saveParticipantInput(
+      origin.participant.id,
+      'A support operator keeps unresolved cases across daily agent wakes.',
+      'test:origin:workflow',
+    );
+    const originResponse = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: origin.agent.id,
+      replyToSequence: request.sequence,
+      title: 'An originating participant responds',
+      content: originInput.content,
+      metadata: {
+        messageRole: 'response',
+        sourceEventIds: [originInput.sequence],
+      },
+    });
+    const relayedResponse = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: relay.agent.id,
+      replyToSequence: request.sequence,
+      title: 'Another representative relays the response',
+      content: `From #${originResponse.sequence}: ${originResponse.content}`,
+      metadata: {
+        messageRole: 'response',
+        sourceEventIds: [originResponse.sequence],
+      },
+    });
+    await repository.appendEvent({
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'A response to the current assignment',
+      content: 'A support workflow may be relevant.',
+      metadata: {
+        sourceEventIds: [originResponse.sequence, relayedResponse.sequence],
+      },
+    });
+
+    const snapshot = await repository.readSnapshot();
+    expect(snapshot.networkActivity).toMatchObject({
+      responseCount: 2,
+      originatingResponseCount: 1,
+      originatingParticipantCount: 1,
+    });
+    expect(snapshot.findings[0]).toMatchObject({
+      sources: [
+        expect.objectContaining({
+          message: expect.objectContaining({ sequence: originResponse.sequence }),
+        }),
+        expect.objectContaining({
+          message: expect.objectContaining({ sequence: relayedResponse.sequence }),
+        }),
+      ],
+      originatingSources: [expect.objectContaining({
+        message: expect.objectContaining({ sequence: originResponse.sequence }),
+        attribution: expect.objectContaining({
+          participantId: origin.participant.id,
+        }),
+      })],
+    });
+    expect(await repository.hasParticipantFindingUsingAnyOrigin(
+      LOCAL_USER_ID,
+      [relayedResponse.sequence],
+    )).toBe(true);
   });
 
   it('projects participant-scoped working history at a retry-stable event horizon', async () => {

@@ -38,7 +38,9 @@ scheduler.
 - `representative_agents` stores execution status, delivery cursor, mailbox
   floor, and the active wake's durable ID, number, and fixed event horizon.
 - `discovery_events` is the append-only product and mailbox history. It has a
-  nullable unique idempotency key for retry-safe agent side effects.
+  nullable unique idempotency key for retry-safe agent side effects and a
+  nullable `reply_to_sequence` for conversation routing. Content provenance is
+  recorded separately in `metadata.sourceEventIds`.
 
 The representative working note is also stored as an immutable discovery
 event (`representative_note_updated`) rather than a mutable profile column.
@@ -74,12 +76,16 @@ discovery_workspaces 1 ── * representative_agents
 discovery_workspaces 1 ── * discovery_events
 
 representative_agents.id   ──> logical Heddle task ID
-discovery_events actor/target/source ──> delivery and causal references
+discovery_events actor/target/reply ──> delivery and conversation references
+discovery_events metadata source IDs  ──> content provenance references
 ```
 
 Workspace and participant ownership use foreign keys. Event actor, recipient,
-and causal identifiers remain append-only logical references validated by the
-repository adapter.
+reply, and provenance identifiers remain append-only logical references
+validated by the repository adapter. A reply determines which request should
+receive a response; a source determines which earlier content was repeated or
+used. Keeping them separate prevents delivery paths from being presented as
+independent corroboration.
 
 `participants.registration_key` is unique when present. The stable local user
 uses `local-user`; dynamic callers provide their own idempotent namespace. The
