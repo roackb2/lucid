@@ -117,9 +117,11 @@ export class AgentCommunicationToolService {
       Promise.all(uniq(this.requiredRequestSourceIds).map(
         async (sequence) => ({
           sequence,
-          satisfied: await this.repository.hasAgentPublishedRequestForTrigger(
-            this.agent.id,
-            sequence,
+          satisfied: Boolean(
+            await this.repository.findAgentPublishedRequestForTrigger(
+              this.agent.id,
+              sequence,
+            ),
           ),
         }),
       )),
@@ -415,6 +417,23 @@ export class AgentCommunicationToolService {
     if (referenceFailure) {
       return referenceFailure;
     }
+
+    // A Heddle retry can regenerate the required network request after its
+    // first write committed but before the wake completed. Reuse the request
+    // associated with the durable assignment/check instead of assigning the
+    // regenerated call a new action ordinal and publishing it twice.
+    const existingRequiredRequest = this.requiredRequestSourceIds.includes(
+      parsed.data.reply_to_event_id,
+    )
+      ? await this.repository.findAgentPublishedRequestForTrigger(
+        this.agent.id,
+        parsed.data.reply_to_event_id,
+      )
+      : undefined;
+    if (existingRequiredRequest) {
+      return eventResult(existingRequiredRequest);
+    }
+
     const repeatedContribution = await this.validateThreadContribution(
       parsed.data.reply_to_event_id,
     );

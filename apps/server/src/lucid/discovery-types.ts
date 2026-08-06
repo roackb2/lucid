@@ -160,21 +160,41 @@ export type FindingSourceView = {
   };
 };
 
+export type NetworkRequestProgressPhase =
+  | 'waiting-for-network'
+  | 'messages-pending-review'
+  | 'finding-reported'
+  | 'reviewed-without-finding';
+
 /**
- * Participant-scoped projection of the latest request lifecycle. It exposes
- * what this participant's own representative shared and aggregate reply
- * timing, never the global participant directory or unrelated messages.
+ * Participant-scoped result of one disclosed network request. The phase is
+ * derived only from delivered messages, the representative's durable mailbox
+ * cursor, and linked findings; it is not a model-authored status claim.
  */
-export type NetworkActivityView = {
-  assignment: DiscoveryEvent;
-  request?: DiscoveryEvent;
-  /** All delivered first-hop messages answering the current request. */
+export type NetworkRequestProgressView = {
+  phase: NetworkRequestProgressPhase;
+  /** All delivered first-hop messages answering this request. */
   responseCount: number;
-  /** Unique peer-authored provenance roots behind those messages. */
+  /** Delivered replies beyond the representative's durable review cursor. */
+  pendingReviewCount: number;
+  /** Unique peer-authored provenance roots behind the delivered messages. */
   originatingResponseCount: number;
   /** Unique participants who authored those provenance roots. */
   originatingParticipantCount: number;
   latestResponseAt?: string;
+  /** Completion time of the wake that processed the latest delivered reply. */
+  reviewedAt?: string;
+};
+
+/**
+ * Participant-scoped projection of the latest request lifecycle. It exposes
+ * what this participant's own representative shared and aggregate reply
+ * progress, never the global participant directory or unrelated messages.
+ */
+export type NetworkActivityView = {
+  assignment: DiscoveryEvent;
+  request?: DiscoveryEvent;
+  requestProgress?: NetworkRequestProgressView;
 };
 
 /**
@@ -189,6 +209,7 @@ export type GuidanceFollowThroughView = {
   priorWorkingNote?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
   request?: DiscoveryEvent;
+  requestProgress?: NetworkRequestProgressView;
   resultingFinding?: FindingView;
 };
 

@@ -58,6 +58,15 @@ replying to that check, and any finding whose reply thread includes that
 request. Missing steps remain missing; the adapter never infers successful
 understanding or usefulness.
 
+The participant-facing request-progress view is also derived state. A response
+whose event sequence is beyond the representative's durable cursor is pending
+review. Once every delivered response is behind that cursor, the adapter checks
+whether a participant-scoped finding cites the same request thread. The result
+is either a reported finding or a completed review without one. The completion
+timestamp comes from the persisted wake whose fixed horizon covered the latest
+response; no confidence, relevance, or model-authored completion field is
+stored.
+
 Direct guidance is an immutable `guidance_saved` event. It preserves the raw
 participant instruction and references the note visible when it was entered;
 the representative produces a separate `representative_note_updated` event.

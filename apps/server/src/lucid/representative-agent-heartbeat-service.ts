@@ -451,9 +451,11 @@ export class RepresentativeAgentHeartbeatService {
       if (
         requiredRequestSourceIds.length
         && !(await Promise.all(requiredRequestSourceIds.map(
-          (sourceEventId) => this.repository.hasAgentPublishedRequestForTrigger(
-            agentId,
-            sourceEventId,
+          async (sourceEventId) => Boolean(
+            await this.repository.findAgentPublishedRequestForTrigger(
+              agentId,
+              sourceEventId,
+            ),
           ),
         ))).every(Boolean)
       ) {

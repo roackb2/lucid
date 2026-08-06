@@ -32,7 +32,8 @@ contains only:
 - the local participant and representative;
 - that participant's current interest, private working note, and findings;
 - the current assignment and its representative's shared request plus
-  delivered-message and originating-contributor counts;
+  durable delivery/review phase, delivered-message counts, and collapsed
+  originating-contributor counts;
 - direct-message and collapsed originating-source attribution attached to
   those findings;
 - that representative's Heddle task status.
@@ -123,9 +124,11 @@ remains recoverable by startup or a later trigger.
 4. The runner receives private context, claimed events, bounded prior
    findings/feedback, the latest working note, Heddle continuation, and only
    Lucid communication tools.
-5. Communication writes use `<wake-id>:action:<slot>`, so a retry cannot
-   duplicate a committed side effect. The tool service reconstructs its action
-   count from persisted events instead of resetting the ordinal in memory.
+5. Communication writes use `<wake-id>:action:<slot>`, and required network
+   requests are additionally identified by their assignment/check trigger.
+   A retry therefore reuses the committed request even if the model regenerates
+   it after a checkpoint. The tool service also reconstructs its action count
+   from persisted events instead of resetting the ordinal in memory.
 6. A direct-guidance wake exposes no communication or no-action operation
    until the representative rewrites its private working note. The final
    heartbeat postcondition verifies the same durable revision before cursor
@@ -194,7 +197,14 @@ latest saved assignment. A manual check is an execution nudge and does not
 replace that assignment in the UI. Its published message does become the
 latest request shown within that assignment. The projection shows only the
 request that this participant's own representative published and aggregate
-reply timing/counts. It separates delivered messages from recursively resolved
+reply timing/counts. Its request progress has four factual phases: waiting for
+the first network reply, delivered replies beyond the representative's durable
+cursor, a completed review with a linked finding, or a completed review without
+a linked finding. The last phase is deliberate silence, not pending work. It is
+derived from persisted delivery, wake completion, cursor and request-thread
+facts rather than an agent-authored status or relevance score.
+
+The projection separates delivered messages from recursively resolved
 originating contributions and participants, so a relay cannot masquerade as
 corroboration. It does not expose unrelated message content or the global
 network. Counts indicate transport and provenance, not truth or value.
@@ -217,8 +227,10 @@ attached to a finding or entered directly against the current working note. It
 contains only persisted events: the guidance, its source finding or prior note,
 the latest later working-note revision whose fixed horizon includes that
 guidance, the latest manual-check request carrying its sequence, and a later
-finding linked through that request thread. Absent events are rendered as
-pending or quiet product state, not model success.
+finding linked through that request thread. The same persisted request-progress
+projection distinguishes pending delivery/review from a completed review with
+no new finding. Absent events are rendered as pending or quiet product state,
+not model success.
 
 ## Longitudinal representative context
 

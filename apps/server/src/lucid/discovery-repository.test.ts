@@ -195,9 +195,6 @@ describe('SQLite discovery repository', () => {
 
     expect((await repository.readSnapshot()).networkActivity).toEqual({
       assignment: interest,
-      responseCount: 0,
-      originatingResponseCount: 0,
-      originatingParticipantCount: 0,
     });
 
     const request = await repository.appendEvent({
@@ -208,14 +205,18 @@ describe('SQLite discovery repository', () => {
       content: 'Who has observed a concrete long-running memory failure?',
       metadata: { sourceEventIds: [interest.sequence] },
     });
-    expect(await repository.hasAgentPublishedRequestForTrigger(
+    expect(await repository.findAgentPublishedRequestForTrigger(
       USER_AGENT_ID,
       interest.sequence,
-    )).toBe(true);
+    )).toMatchObject({ sequence: request.sequence });
     expect((await repository.readSnapshot()).networkActivity).toMatchObject({
       assignment: { sequence: interest.sequence },
       request: { sequence: request.sequence },
-      responseCount: 0,
+      requestProgress: {
+        phase: 'waiting-for-network',
+        responseCount: 0,
+        pendingReviewCount: 0,
+      },
     });
 
     const response = await repository.appendEvent({
@@ -227,6 +228,45 @@ describe('SQLite discovery repository', () => {
       content: 'One operator lost rejection rules after a process restart.',
       metadata: { sourceEventIds: [request.sequence] },
     });
+    expect((await repository.readSnapshot()).networkActivity).toMatchObject({
+      request: { sequence: request.sequence },
+      requestProgress: {
+        phase: 'messages-pending-review',
+        responseCount: 1,
+        pendingReviewCount: 1,
+        originatingResponseCount: 1,
+        originatingParticipantCount: 1,
+        latestResponseAt: response.createdAt,
+      },
+    });
+
+    const responseWake = await repository.beginAgentWake(
+      USER_AGENT_ID,
+      'wake_review_response',
+    );
+    expect(responseWake).toBeDefined();
+    const reviewCompletion = await repository.appendEvent({
+      wakeNumber: responseWake!.wakeNumber,
+      kind: 'agent_wake_completed',
+      actorAgentId: USER_AGENT_ID,
+      title: 'The representative completes response review',
+      content: 'The delivered response was processed.',
+      metadata: { wakeId: responseWake!.wakeId },
+    });
+    await repository.completeAgentWake(
+      USER_AGENT_ID,
+      responseWake!.horizonSequence,
+    );
+    expect((await repository.readSnapshot()).networkActivity).toMatchObject({
+      request: { sequence: request.sequence },
+      requestProgress: {
+        phase: 'reviewed-without-finding',
+        responseCount: 1,
+        pendingReviewCount: 0,
+        reviewedAt: reviewCompletion.createdAt,
+      },
+    });
+
     await repository.appendEvent({
       kind: 'finding_reported',
       actorAgentId: USER_AGENT_ID,
@@ -237,10 +277,14 @@ describe('SQLite discovery repository', () => {
     });
     expect((await repository.readSnapshot()).networkActivity).toMatchObject({
       request: { sequence: request.sequence },
-      responseCount: 1,
-      originatingResponseCount: 1,
-      originatingParticipantCount: 1,
-      latestResponseAt: response.createdAt,
+      requestProgress: {
+        phase: 'finding-reported',
+        responseCount: 1,
+        pendingReviewCount: 0,
+        originatingResponseCount: 1,
+        originatingParticipantCount: 1,
+        latestResponseAt: response.createdAt,
+      },
     });
     expect((await repository.readSnapshot()).findings[0]).toMatchObject({
       assignmentSequence: interest.sequence,
@@ -259,7 +303,6 @@ describe('SQLite discovery repository', () => {
     });
     expect((await repository.readSnapshot()).networkActivity).toMatchObject({
       assignment: { sequence: interest.sequence },
-      responseCount: 0,
     });
     expect((await repository.readSnapshot()).networkActivity?.request)
       .toBeUndefined();
@@ -275,7 +318,84 @@ describe('SQLite discovery repository', () => {
     expect((await repository.readSnapshot()).networkActivity).toMatchObject({
       assignment: { sequence: interest.sequence },
       request: { sequence: refreshedRequest.sequence },
-      responseCount: 0,
+      requestProgress: {
+        phase: 'waiting-for-network',
+        responseCount: 0,
+        pendingReviewCount: 0,
+      },
+    });
+  });
+
+  it('projects retry-era duplicate requests as one lifecycle', async () => {
+    const source = await registerSynthetic(repository, 'duplicate-request');
+    const interest = await repository.saveInterest(
+      'Find one concrete example of deliberate completed silence.',
+    );
+    const request = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: interest.sequence,
+      title: 'The canonical request',
+      content: 'Who has one concrete example?',
+      metadata: { sourceEventIds: [interest.sequence] },
+    });
+    const duplicateRequest = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: interest.sequence,
+      title: 'A retry artifact',
+      content: 'A retry regenerated the same semantic request.',
+      metadata: { sourceEventIds: [interest.sequence] },
+    });
+    const canonicalResponse = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: source.agent.id,
+      replyToSequence: request.sequence,
+      title: 'A response to the canonical request',
+      content: 'A durable mailbox marks a completed review explicitly.',
+      metadata: { sourceEventIds: [] },
+    });
+    await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: source.agent.id,
+      replyToSequence: duplicateRequest.sequence,
+      title: 'A response routed through the retry artifact',
+      content: 'A progress view separates unread delivery from reviewed silence.',
+      metadata: { sourceEventIds: [] },
+    });
+    const responseWake = await repository.beginAgentWake(
+      USER_AGENT_ID,
+      'wake_duplicate_request_review',
+    );
+    await repository.appendEvent({
+      wakeNumber: responseWake!.wakeNumber,
+      kind: 'finding_reported',
+      actorAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'A linked finding',
+      content: 'A durable mailbox makes completed silence legible.',
+      metadata: { sourceEventIds: [canonicalResponse.sequence] },
+    });
+    await repository.appendEvent({
+      wakeNumber: responseWake!.wakeNumber,
+      kind: 'agent_wake_completed',
+      actorAgentId: USER_AGENT_ID,
+      title: 'The representative completes review',
+      content: 'Every delivered response was reviewed.',
+      metadata: { wakeId: responseWake!.wakeId },
+    });
+    await repository.completeAgentWake(
+      USER_AGENT_ID,
+      responseWake!.horizonSequence,
+    );
+
+    expect((await repository.readSnapshot()).networkActivity).toMatchObject({
+      request: { sequence: request.sequence },
+      requestProgress: {
+        phase: 'finding-reported',
+        responseCount: 2,
+        pendingReviewCount: 0,
+      },
     });
   });
 
@@ -336,9 +456,11 @@ describe('SQLite discovery repository', () => {
 
     const snapshot = await repository.readSnapshot();
     expect(snapshot.networkActivity).toMatchObject({
-      responseCount: 2,
-      originatingResponseCount: 1,
-      originatingParticipantCount: 1,
+      requestProgress: {
+        responseCount: 2,
+        originatingResponseCount: 1,
+        originatingParticipantCount: 1,
+      },
     });
     expect(snapshot.findings[0]).toMatchObject({
       sources: [

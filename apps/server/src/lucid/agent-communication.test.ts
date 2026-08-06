@@ -364,6 +364,51 @@ You represent an explicitly simulated test participant, not a real person or ext
     })).ok).toBe(true);
   });
 
+  it('reuses a committed assignment request when the same wake retries', async () => {
+    const interest = await repository.saveInterest(
+      'Find concrete examples of durable representative-agent work.',
+    );
+    const firstTools = toolsByName(await createUserTools(
+      repository,
+      'wake_request_retry',
+      4,
+      interest.sequence,
+      [interest.sequence],
+    ));
+    const firstResult = await firstTools.get('post_shared_message')!.execute({
+      reply_to_event_id: interest.sequence,
+      content: 'Looking for durable representative-agent work in practice.',
+      source_event_ids: [interest.sequence],
+    });
+    expect(firstResult.ok).toBe(true);
+
+    const retryTools = toolsByName(await createUserTools(
+      repository,
+      'wake_request_retry',
+      4,
+      interest.sequence,
+      [interest.sequence],
+    ));
+    const retryResult = await retryTools.get('post_shared_message')!.execute({
+      reply_to_event_id: interest.sequence,
+      content: 'A retry regenerated this request with different wording.',
+      source_event_ids: [interest.sequence],
+    });
+
+    expect(retryResult).toEqual(firstResult);
+    expect(await repository.countAgentWakeCommunicationActions(
+      USER_AGENT_ID,
+      4,
+    )).toBe(1);
+    expect((await repository.readNetworkDiagnostics()).events.filter(
+      ({ actorAgentId, kind, replyToSequence }) => (
+        actorAgentId === USER_AGENT_ID
+        && kind === 'shared_message'
+        && replyToSequence === interest.sequence
+      ),
+    )).toHaveLength(1);
+  });
+
   it('requires direct guidance to revise the working note before any action', async () => {
     await repository.saveInterest(
       'Find early signals about durable personal agents.',
@@ -461,10 +506,10 @@ You represent an explicitly simulated test participant, not a real person or ext
       && ['shared_message', 'finding_reported', 'agent_wake_no_action']
         .includes(kind)
     ))).toHaveLength(3);
-    expect(await repository.hasAgentPublishedRequestForTrigger(
+    expect(await repository.findAgentPublishedRequestForTrigger(
       USER_AGENT_ID,
       interest.sequence,
-    )).toBe(true);
+    )).toBeDefined();
   });
 
   it('lets every representative report findings only to its own participant', async () => {

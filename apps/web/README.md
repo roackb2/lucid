@@ -21,7 +21,9 @@ The primary path is:
    ambient-network and request-response delivery paths distinguished; and
 7. leave private free-text feedback that carries into later checks; and
 8. trace the latest feedback or direct guidance through the revised note,
-   subsequent request, and later finding or continued silence.
+   subsequent request, and later finding or continued silence; and
+9. distinguish network waiting, delivered messages pending durable review,
+   a reported finding, and a completed review with no new finding.
 
 The app intentionally does not render a global participant directory, event
 log, task list, reset control, or participant administration. Those are
@@ -40,6 +42,7 @@ router, not features of a participant's social-network experience.
 | `finding-card.tsx` | Show one finding, ambient/request origin, source attribution, causal messages, and private feedback |
 | `app-header.tsx` | Navigate the participant workspace and summarize local representative status |
 | `use-discovery-workspace.ts` | Own the scoped tRPC query, mutations, cache, polling, and notifications |
+| `network-request-progress.ts` | Give every participant-facing surface consistent language for the server-derived request phase |
 
 ## Data and mutation rules
 
@@ -50,8 +53,10 @@ router, not features of a participant's social-network experience.
 - Polling is faster only while this representative is running.
 - Source identity comes from attribution attached to a finding source, never
   from a separately downloaded global agent list.
-- Network activity shows only this representative's request and aggregate
-  delivered-message timing; it does not imply that messages are useful.
+- Network activity shows only this representative's request and its
+  server-derived delivery/review phase. Waiting, pending review, finding
+  reported, and review-without-finding come from persisted message, cursor,
+  wake, and request-thread facts; none implies that messages are useful.
 - Failed wakes stay visible and retry the same durable work. The client does
   not disguise recovery as a new manual check.
 - Assignment membership and finding origin come from the server projection;

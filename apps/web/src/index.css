@@ -686,6 +686,20 @@ button:disabled {
   white-space: pre-wrap;
 }
 
+.network-request-status .network-request-status__request {
+  padding-left: 9px;
+  border-left: 2px solid var(--line-strong);
+  color: #405149;
+}
+
+.network-request-status__explanation {
+  display: block;
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
 .network-request-status small {
   color: var(--faint);
   font-size: 9px;

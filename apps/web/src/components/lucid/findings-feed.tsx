@@ -1,5 +1,9 @@
 import { ChevronDown, Inbox } from 'lucide-react';
 import type { FindingView } from '@/lib/trpc';
+import {
+  describeNetworkRequestProgress,
+  type NetworkRequestProgress,
+} from '@/lib/network-request-progress';
 import { FindingCard } from './finding-card';
 
 type FindingsFeedProps = {
@@ -8,6 +12,7 @@ type FindingsFeedProps = {
   backgroundChecksEnabled: boolean;
   isChecking: boolean;
   isSubmittingFeedback: boolean;
+  requestProgress?: NetworkRequestProgress;
   onFeedback(findingSequence: number, content: string): Promise<unknown>;
 };
 
@@ -17,8 +22,15 @@ export function FindingsFeed({
   backgroundChecksEnabled,
   isChecking,
   isSubmittingFeedback,
+  requestProgress,
   onFeedback,
 }: FindingsFeedProps) {
+  const emptyState = describeEmptyInbox({
+    backgroundChecksEnabled,
+    isChecking,
+    requestProgress,
+  });
+
   return (
     <section className="findings-section" id="findings">
       <header className="findings-heading">
@@ -45,20 +57,8 @@ export function FindingsFeed({
         <div className="findings-empty">
           <span aria-hidden="true"><Inbox size={22} /></span>
           <div>
-            <h3>
-              {isChecking
-                ? 'Checking available messages…'
-                : backgroundChecksEnabled
-                  ? 'Waiting for something relevant'
-                  : 'Background checks are paused'}
-            </h3>
-            <p>
-              {isChecking
-                ? 'A finding will appear only if participant agents return a specific connection. You decide whether it is useful.'
-                : backgroundChecksEnabled
-                  ? 'You can leave this workspace. Lucid will keep the interest and show what another representative brings back without deciding its value for you.'
-                  : 'Resume background checks when you want representative agents to process new messages.'}
-            </p>
+            <h3>{emptyState.title}</h3>
+            <p>{emptyState.description}</p>
           </div>
         </div>
       )}
@@ -85,4 +85,33 @@ export function FindingsFeed({
       ) : null}
     </section>
   );
+}
+
+function describeEmptyInbox(input: {
+  backgroundChecksEnabled: boolean;
+  isChecking: boolean;
+  requestProgress?: NetworkRequestProgress;
+}): { title: string; description: string } {
+  if (input.requestProgress) {
+    return describeNetworkRequestProgress(input.requestProgress);
+  }
+  if (input.isChecking) {
+    return {
+      title: 'Checking available messages…',
+      description:
+        'A finding will appear only if participant agents return a specific connection. You decide whether it is useful.',
+    };
+  }
+  if (!input.backgroundChecksEnabled) {
+    return {
+      title: 'Background checks are paused',
+      description:
+        'Resume background checks when you want your representative to process new messages.',
+    };
+  }
+  return {
+    title: 'Waiting for something relevant',
+    description:
+      'You can leave this workspace. Lucid will keep the interest and show what another representative brings back without deciding its value for you.',
+  };
 }
