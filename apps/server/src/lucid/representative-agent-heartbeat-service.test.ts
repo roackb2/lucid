@@ -269,6 +269,52 @@ describe('representative-agent heartbeat service', () => {
     )).toHaveLength(checkCount);
   });
 
+  it('rejects a guidance wake that does not revise the durable working note', async () => {
+    const interest = await repository.saveInterest(
+      'Find early signals about durable personal agents.',
+    );
+    const initialWake = await repository.beginAgentWake(
+      USER_AGENT_ID,
+      'wake_before_direct_guidance',
+    );
+    expect(initialWake).toBeDefined();
+    await repository.appendEvent({
+      wakeNumber: initialWake!.wakeNumber,
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: interest.sequence,
+      title: 'Initial network request',
+      content: 'Looking for early signals about durable personal agents.',
+      metadata: { sourceEventIds: [interest.sequence], messageRole: 'request' },
+    });
+    await repository.completeAgentWake(
+      USER_AGENT_ID,
+      initialWake!.horizonSequence,
+    );
+
+    const runner = new IgnoreGuidanceHeartbeatRunner(repository);
+    const { heartbeat, workspace } = await startServices(runner);
+
+    const withGuidance = await workspace.submitGuidance(
+      'Weak signals are useful again, but label them clearly.',
+    );
+    const guidance = withGuidance.guidanceFollowThrough?.guidance;
+    expect(guidance).toBeDefined();
+    await vi.waitFor(async () => {
+      expect(runner.guidanceRuns).toBe(1);
+      expect((await repository.requireUserAgent()).status).toBe('error');
+      expect((await heartbeat.snapshot()).running).toBe(false);
+    }, { interval: 10, timeout: 5_000 });
+
+    const agent = await repository.requireUserAgent();
+    expect(agent.status).toBe('error');
+    expect(agent.lastSeenSequence).toBeLessThan(guidance!.sequence);
+    expect(await repository.hasAgentUpdatedWorkingNoteThrough(
+      USER_AGENT_ID,
+      guidance!.sequence,
+    )).toBe(false);
+  });
+
   it('supplies Lucid working history without requiring an existing Heddle checkpoint', async () => {
     const source = await registerSynthetic(repository, 'context-source');
     const interest = await repository.saveInterest(
@@ -662,6 +708,41 @@ implements RepresentativeAgentHeartbeatRunner {
   }
 }
 
+class IgnoreGuidanceHeartbeatRunner
+implements RepresentativeAgentHeartbeatRunner {
+  guidanceRuns = 0;
+
+  constructor(private readonly repository: SqliteDiscoveryRepository) {}
+
+  async run(
+    input: RunRepresentativeAgentHeartbeatInput,
+  ): Promise<AgentHeartbeatResult> {
+    const guidance = input.wake.visibleEvents.find(
+      ({ kind }) => kind === 'guidance_saved',
+    );
+    if (guidance) {
+      this.guidanceRuns += 1;
+      // Deliberately bypass domain tools so this test exercises the service's
+      // defense-in-depth postcondition rather than only the tool gate.
+      return await runTestAgent(input, 'Ignored direct participant guidance.');
+    }
+
+    const interest = input.wake.visibleEvents.find(
+      ({ kind }) => kind === 'interest_saved',
+    );
+    const tools = new Map(
+      (await createWakeTools(this.repository, input))
+        .map((tool) => [tool.name, tool]),
+    );
+    await requireSuccessfulToolResult(tools.get('post_shared_message')!.execute({
+      reply_to_event_id: interest!.sequence,
+      content: 'Looking for early signals about durable personal agents.',
+      source_event_ids: [interest!.sequence],
+    }));
+    return await runTestAgent(input, 'Published the initial network request.');
+  }
+}
+
 async function registerSynthetic(
   repository: SqliteDiscoveryRepository,
   key: string,
@@ -683,6 +764,9 @@ async function createWakeTools(
       kind === 'interest_saved' || kind === 'check_requested'
     ))
     .map(({ sequence }) => sequence);
+  const requiredWorkingNoteSourceIds = input.wake.visibleEvents
+    .filter(({ kind }) => kind === 'guidance_saved')
+    .map(({ sequence }) => sequence);
   return await new AgentCommunicationToolService(
     repository,
     input.wake.agent,
@@ -691,6 +775,7 @@ async function createWakeTools(
     input.wake.wakeNumber,
     input.wake.horizonSequence,
     requiredRequestSourceIds,
+    requiredWorkingNoteSourceIds,
   ).definitions();
 }
 

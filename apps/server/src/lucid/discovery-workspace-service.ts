@@ -68,14 +68,22 @@ export class DiscoveryWorkspaceService {
         userAgent.id,
         Number.MAX_SAFE_INTEGER,
       );
-    const latestFeedback = workingContext.findings
+    const latestFindingFeedback = workingContext.findings
       .flatMap(({ feedback }) => feedback ? [feedback] : [])
+      .sort((left, right) => right.sequence - left.sequence)
+      .at(0);
+    const latestDirectGuidance = workingContext.principalInputs
+      .filter(({ kind }) => kind === 'guidance_saved')
+      .sort((left, right) => right.sequence - left.sequence)
+      .at(0);
+    const latestGuidance = [latestFindingFeedback, latestDirectGuidance]
+      .filter((event) => event !== undefined)
       .sort((left, right) => right.sequence - left.sequence)
       .at(0);
     const workingDirection = workingContext.workingNote?.content
       ?? 'No refined working direction has been saved yet.';
-    const feedbackDirection = latestFeedback?.content
-      ?? 'No participant feedback has been received yet.';
+    const guidanceDirection = latestGuidance?.content
+      ?? 'No participant guidance has been received yet.';
     // A manual check is mailbox input, not a second execution path. Persist it
     // before triggering Heddle so a crash cannot lose the user's request. The
     // request carries the representative's current learning so the next
@@ -86,13 +94,13 @@ export class DiscoveryWorkspaceService {
       targetParticipantId: userAgent.participantId,
       title: 'You ask Lucid to check now',
       content: `Required change to the next network request:
-Ask using the current working direction and latest participant feedback below. Preserve the concrete constraints that distinguish a useful next result; do not send only another paraphrase of the original broad assignment.
+Ask using the current working direction and latest participant guidance below. Preserve the concrete constraints that distinguish a useful next result; do not send only another paraphrase of the original broad assignment.
 
 Current working direction:
 ${workingDirection}
 
-Latest participant feedback:
-${feedbackDirection}
+Latest participant guidance:
+${guidanceDirection}
 
 Original saved assignment (background context only):
 ${interest.content}`,
@@ -101,7 +109,7 @@ ${interest.content}`,
         source: 'user',
         interestSequence: interest.sequence,
         workingNoteSequence: workingContext.workingNote?.sequence,
-        latestFeedbackSequence: latestFeedback?.sequence,
+        latestGuidanceSequence: latestGuidance?.sequence,
       },
     });
     try {
@@ -173,6 +181,22 @@ ${interest.content}`,
       findingSequence,
       content,
     );
+    const userAgent = await this.repository.requireUserAgent();
+    await this.heartbeats.triggerAgent(userAgent.id);
+    return await this.snapshot();
+  }
+
+  async submitGuidance(content: string): Promise<DiscoveryWorkspaceSnapshot> {
+    if (!(await this.repository.findSavedInterest())) {
+      throw new DiscoveryInputError(
+        'Save what Lucid should look for before refining its direction.',
+      );
+    }
+    // Preserve the participant's words as raw private input. The heartbeat is
+    // responsible for producing a separate agent-authored working-note
+    // revision, and cannot consume this mailbox event until that revision is
+    // durably recorded.
+    await this.repository.saveGuidance(content);
     const userAgent = await this.repository.requireUserAgent();
     await this.heartbeats.triggerAgent(userAgent.id);
     return await this.snapshot();

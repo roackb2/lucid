@@ -22,6 +22,7 @@ export const discoveryEventKindSchema = z.enum([
   'direct_message',
   'finding_reported',
   'feedback_saved',
+  'guidance_saved',
   'representative_note_updated',
   'participant_added',
   'participant_disabled',
@@ -177,13 +178,15 @@ export type NetworkActivityView = {
 };
 
 /**
- * Participant-scoped trace of what happened after the latest feedback. Every
- * field is an existing persisted event; the projection does not infer whether
- * the representative understood the feedback correctly.
+ * Participant-scoped trace of what happened after the latest guidance. The
+ * guidance may be direct or attached to a finding. Every field is an existing
+ * persisted event; the projection does not infer whether the representative
+ * understood the guidance correctly.
  */
-export type FeedbackFollowThroughView = {
-  feedback: DiscoveryEvent;
-  sourceFinding: DiscoveryEvent;
+export type GuidanceFollowThroughView = {
+  guidance: DiscoveryEvent;
+  sourceFinding?: DiscoveryEvent;
+  priorWorkingNote?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
   request?: DiscoveryEvent;
   resultingFinding?: FindingView;
@@ -247,7 +250,7 @@ export type DiscoveryWorkspaceSnapshot = {
   interest?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
   networkActivity?: NetworkActivityView;
-  feedbackFollowThrough?: FeedbackFollowThroughView;
+  guidanceFollowThrough?: GuidanceFollowThroughView;
   findings: FindingView[];
   backgroundChecks: BackgroundChecksView;
   runtime: {

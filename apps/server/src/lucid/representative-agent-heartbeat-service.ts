@@ -467,6 +467,28 @@ export class RepresentativeAgentHeartbeatService {
         );
       }
 
+      const requiredWorkingNoteSourceIds = wake.visibleEvents
+        .filter(({ kind }) => kind === 'guidance_saved')
+        .map(({ sequence }) => sequence);
+      if (
+        requiredWorkingNoteSourceIds.length
+        && !(await Promise.all(requiredWorkingNoteSourceIds.map(
+          (sourceEventId) => this.repository.hasAgentUpdatedWorkingNoteThrough(
+            agentId,
+            sourceEventId,
+          ),
+        ))).every(Boolean)
+      ) {
+        // Direct participant guidance changes the representative's durable
+        // interpretation. A model summary alone cannot acknowledge it: the
+        // revised note must exist before the mailbox cursor advances.
+        await this.repository.failAgentWake(agentId);
+        claimedWake = false;
+        throw new Error(
+          'The representative finished without revising its working note for the latest guidance.',
+        );
+      }
+
       // Completion is idempotent and precedes cursor advancement. A crash
       // between the writes can replay the same wake without duplicate events.
       await this.repository.appendEvent({

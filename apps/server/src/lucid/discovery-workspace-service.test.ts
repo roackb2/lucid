@@ -32,7 +32,7 @@ describe('discovery workspace service', () => {
 
   afterEach(() => database.close());
 
-  it('includes current learning in a manual check before triggering the representative', async () => {
+  it('uses the latest direct guidance in a manual check and triggers both wakes', async () => {
     const triggerAgent = vi.fn(async () => undefined);
     const heartbeats = {
       snapshotForAgent: async () => ({
@@ -84,7 +84,7 @@ describe('discovery workspace service', () => {
       finding.sequence,
       'Only continue when the lead names the actual handoff and recovery steps.',
     );
-    const note = await repository.appendEvent({
+    const priorNote = await repository.appendEvent({
       kind: 'representative_note_updated',
       actorAgentId: USER_AGENT_ID,
       targetAgentId: USER_AGENT_ID,
@@ -92,6 +92,21 @@ describe('discovery workspace service', () => {
       title: 'Lucid updates its private working note',
       content: 'Look for named support handoffs and recovery behavior.',
       metadata: { throughSequence: feedback.sequence, derived: true },
+    });
+    const guidanceSnapshot = await workspace.submitGuidance(
+      'Weak signals are useful again, but label them clearly.',
+    );
+    const guidance = guidanceSnapshot.guidanceFollowThrough?.guidance;
+    expect(guidance).toBeDefined();
+    const note = await repository.appendEvent({
+      kind: 'representative_note_updated',
+      actorAgentId: USER_AGENT_ID,
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Lucid updates its private working note',
+      content:
+        'Accept clearly labeled weak signals; do not require the exact mechanism.',
+      metadata: { throughSequence: guidance!.sequence, derived: true },
     });
 
     await workspace.runNow();
@@ -103,20 +118,23 @@ describe('discovery workspace service', () => {
       metadata: {
         interestSequence: interest.sequence,
         workingNoteSequence: note.sequence,
-        latestFeedbackSequence: feedback.sequence,
+        latestGuidanceSequence: guidance!.sequence,
       },
     });
     expect(check?.content).toContain(interest.content);
     expect(check?.content).toContain(note.content);
-    expect(check?.content).toContain(feedback.content);
+    expect(check?.content).toContain(guidance!.content);
+    expect(check?.content).not.toContain(feedback.content);
     expect(check?.content).toContain(
       'do not send only another paraphrase of the original broad assignment',
     );
     expect(check!.content.indexOf(note.content))
       .toBeLessThan(check!.content.indexOf(interest.content));
-    expect(check!.content.indexOf(feedback.content))
+    expect(check!.content.indexOf(guidance!.content))
       .toBeLessThan(check!.content.indexOf(interest.content));
-    expect(triggerAgent).toHaveBeenCalledOnce();
-    expect(triggerAgent).toHaveBeenCalledWith(USER_AGENT_ID);
+    expect(priorNote.content).not.toBe(note.content);
+    expect(triggerAgent).toHaveBeenCalledTimes(2);
+    expect(triggerAgent).toHaveBeenNthCalledWith(1, USER_AGENT_ID);
+    expect(triggerAgent).toHaveBeenNthCalledWith(2, USER_AGENT_ID);
   });
 });

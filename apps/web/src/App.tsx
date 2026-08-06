@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { AppHeader } from '@/components/lucid/app-header';
 import { BackgroundChecks } from '@/components/lucid/background-checks';
-import { FeedbackFollowThrough } from '@/components/lucid/feedback-follow-through';
+import { GuidanceFollowThrough } from '@/components/lucid/guidance-follow-through';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { InterestComposer } from '@/components/lucid/interest-composer';
 import { RepresentativeProgress } from '@/components/lucid/representative-progress';
@@ -72,7 +72,7 @@ export default function App() {
             <p className="section-label">Your discovery workspace</p>
             <h1>Give your representative an ongoing assignment.</h1>
             <p>
-              It keeps your interest, earlier findings, and feedback in view
+              It keeps your interest, earlier findings, and guidance in view
               while listening for something genuinely new from the network.
             </p>
           </div>
@@ -115,10 +115,16 @@ export default function App() {
               onRetry={() => discovery.retryCurrentWake.mutate()}
             />
 
-            <RepresentativeProgress workingNote={snapshot.workingNote} />
+            <RepresentativeProgress
+              isSubmittingGuidance={discovery.submitGuidance.isPending}
+              onGuidance={async (content) => {
+                await discovery.submitGuidance.mutateAsync(content);
+              }}
+              workingNote={snapshot.workingNote}
+            />
 
-            <FeedbackFollowThrough
-              activity={snapshot.feedbackFollowThrough}
+            <GuidanceFollowThrough
+              activity={snapshot.guidanceFollowThrough}
             />
 
             <FindingsFeed
@@ -182,7 +188,7 @@ function HowChecksWork() {
         </li>
         <li>
           <span>4</span>
-          <p><strong>Your feedback carries forward.</strong> Your representative updates its working understanding for later checks.</p>
+          <p><strong>Your guidance carries forward.</strong> Give feedback on a finding or directly correct its working understanding for later checks.</p>
         </li>
       </ol>
       <p className="prototype-note">

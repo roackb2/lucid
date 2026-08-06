@@ -11,7 +11,7 @@ import type {
   DiscoveryEventKind,
   DiscoveryEventMetadata,
   DiscoveryWorkspace,
-  FeedbackFollowThroughView,
+  GuidanceFollowThroughView,
   FindingView,
   NetworkActivityView,
   Participant,
@@ -41,7 +41,7 @@ export type DiscoveryRepositorySnapshot = {
   interest?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
   networkActivity?: NetworkActivityView;
-  feedbackFollowThrough?: FeedbackFollowThroughView;
+  guidanceFollowThrough?: GuidanceFollowThroughView;
   findings: FindingView[];
 };
 
@@ -108,6 +108,7 @@ export interface DiscoveryRepository {
     findingSequence: number,
     content: string,
   ): Promise<DiscoveryEvent>;
+  saveGuidance(content: string): Promise<DiscoveryEvent>;
   listEventsVisibleToAgent(
     agentId: string,
     afterSequence: number,
@@ -156,6 +157,10 @@ export interface DiscoveryRepository {
   hasAgentPublishedRequestForTrigger(
     agentId: string,
     triggerSequence: number,
+  ): Promise<boolean>;
+  hasAgentUpdatedWorkingNoteThrough(
+    agentId: string,
+    sourceSequence: number,
   ): Promise<boolean>;
 
   /**

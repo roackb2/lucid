@@ -1,5 +1,5 @@
 /**
- * Participant-facing projection of persisted events after the latest feedback.
+ * Participant-facing projection of persisted events after the latest guidance.
  * It shows observable follow-through without interpreting whether the agent
  * learned correctly or assigning a quality score.
  */
@@ -15,25 +15,25 @@ import {
 import type { ReactNode } from 'react';
 import type { DiscoverySnapshot } from '@/lib/trpc';
 
-type FeedbackFollowThroughProps = {
-  activity?: DiscoverySnapshot['feedbackFollowThrough'];
+type GuidanceFollowThroughProps = {
+  activity?: DiscoverySnapshot['guidanceFollowThrough'];
 };
 
-export function FeedbackFollowThrough({
+export function GuidanceFollowThrough({
   activity,
-}: FeedbackFollowThroughProps) {
+}: GuidanceFollowThroughProps) {
   if (!activity) {
     return null;
   }
 
   return (
-    <section className="feedback-follow-through-card">
+    <section className="guidance-follow-through-card">
       <header className="card-heading">
         <div className="card-heading__icon" aria-hidden="true">
           <GitCommitHorizontal size={18} />
         </div>
         <div>
-          <p className="section-label">Since your feedback</p>
+          <p className="section-label">Since your guidance</p>
           <h2>What changed in the representative’s work</h2>
           <p>
             These are stored events, not an AI claim that it understood you
@@ -44,16 +44,31 @@ export function FeedbackFollowThrough({
       </header>
 
       <ol className="follow-through-steps">
-        <FollowThroughStep
-          icon={<MessageSquareText size={15} />}
-          title={`You responded to finding #${activity.sourceFinding.sequence}`}
-          timestamp={activity.feedback.createdAt}
-        >
-          <p className="follow-through-context">
-            {activity.sourceFinding.content}
-          </p>
-          <blockquote>{activity.feedback.content}</blockquote>
-        </FollowThroughStep>
+        {activity.sourceFinding ? (
+          <FollowThroughStep
+            icon={<MessageSquareText size={15} />}
+            title={`You responded to finding #${activity.sourceFinding.sequence}`}
+            timestamp={activity.guidance.createdAt}
+          >
+            <p className="follow-through-context">
+              {activity.sourceFinding.content}
+            </p>
+            <blockquote>{activity.guidance.content}</blockquote>
+          </FollowThroughStep>
+        ) : (
+          <FollowThroughStep
+            icon={<MessageSquareText size={15} />}
+            title="You corrected the working direction"
+            timestamp={activity.guidance.createdAt}
+          >
+            {activity.priorWorkingNote ? (
+              <p className="follow-through-context">
+                Previous note: {activity.priorWorkingNote.content}
+              </p>
+            ) : null}
+            <blockquote>{activity.guidance.content}</blockquote>
+          </FollowThroughStep>
+        )}
 
         <FollowThroughStep
           complete={Boolean(activity.workingNote)}
@@ -65,7 +80,7 @@ export function FeedbackFollowThrough({
         >
           <p>
             {activity.workingNote?.content
-              ?? 'Your feedback is durable and remains available to the next agent wake.'}
+              ?? 'Your guidance is durable and remains available to the next agent wake.'}
           </p>
         </FollowThroughStep>
 
@@ -74,7 +89,7 @@ export function FeedbackFollowThrough({
           icon={<Send size={15} />}
           title={activity.request
             ? 'It sent a later request to the network'
-            : 'No later network request has used this feedback yet'}
+            : 'No later network request has used this guidance yet'}
           timestamp={activity.request?.createdAt}
         >
           <p>

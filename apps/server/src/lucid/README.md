@@ -126,22 +126,26 @@ remains recoverable by startup or a later trigger.
 5. Communication writes use `<wake-id>:action:<slot>`, so a retry cannot
    duplicate a committed side effect. The tool service reconstructs its action
    count from persisted events instead of resetting the ordinal in memory.
-6. An interest/check wake exposes no other communication operation until a
+6. A direct-guidance wake exposes no communication or no-action operation
+   until the representative rewrites its private working note. The final
+   heartbeat postcondition verifies the same durable revision before cursor
+   advancement.
+7. An interest/check wake exposes no other communication operation until a
    shared request cites every required trigger. The final heartbeat
    postcondition verifies the same fact before cursor advancement.
-7. A wake produced by an older version that already consumed both action slots
+8. A wake produced by an older version that already consumed both action slots
    receives one deterministic required-request repair key. This is a recovery
    exception; newly claimed wakes cannot enter that invalid state.
-8. Successful execution appends completion and advances the cursor only to the
+9. Successful execution appends completion and advances the cursor only to the
    original horizon. Later mail remains unread.
-9. Newly addressed representatives receive durable run requests without
+10. Newly addressed representatives receive durable run requests without
    rescanning every unread mailbox or recursively rebroadcasting responses.
 
 An empty due task calls `context.skip()` before model execution. It creates a
 lightweight Heddle run record but no model checkpoint and no Lucid wake.
 
 The local `Run now` operation appends a private `check_requested` event that
-includes the saved assignment, current working direction, and latest feedback,
+includes the saved assignment, current working direction, and latest guidance,
 then uses the same mailbox/task path. It refuses to create a second request
 thread while the current wake is failed. `retryCurrentWake()` instead asks
 Heddle to continue the fixed checkpoint without appending new mailbox input.
@@ -207,13 +211,14 @@ earliest peer contributions behind relays. These fields certify neither truth
 nor usefulness. A representative can act at most twice per wake and contribute
 to one principal-initiated request thread only once across later wakes.
 
-The optional `feedbackFollowThrough` projection makes the latest participant
-correction inspectable without creating a learning score. It contains only
-persisted events: the feedback and source finding, the latest later working note
-whose fixed horizon includes that feedback, the latest manual-check request
-carrying the feedback sequence, and a later finding linked through that request
-thread. Absent events are rendered as pending or quiet product state, not model
-success.
+The optional `guidanceFollowThrough` projection makes the latest participant
+correction inspectable without creating a learning score. Guidance can be
+attached to a finding or entered directly against the current working note. It
+contains only persisted events: the guidance, its source finding or prior note,
+the latest later working-note revision whose fixed horizon includes that
+guidance, the latest manual-check request carrying its sequence, and a later
+finding linked through that request thread. Absent events are rendered as
+pending or quiet product state, not model success.
 
 ## Longitudinal representative context
 
@@ -221,7 +226,7 @@ Heddle checkpoints preserve runtime transcript continuity, but Lucid does not
 use a checkpoint as its only product-memory contract. Before every model run,
 the repository projects history through the claimed wake horizon:
 
-- the latest saved interest plus recent participant inputs;
+- the latest saved interest plus recent participant inputs and direct guidance;
 - recent participant-scoped findings and any feedback attached to them; and
 - the latest `representative_note_updated` event.
 

@@ -42,8 +42,9 @@ import {
   type AgentView,
   type AgentWakeContext,
   type DiscoveryEvent,
+  type DiscoveryEventKind,
   type DiscoveryWorkspace,
-  type FeedbackFollowThroughView,
+  type GuidanceFollowThroughView,
   type FindingView,
   type FindingSourceView,
   type NetworkActivityView,
@@ -65,6 +66,13 @@ const WORKSPACE_ID = 'local-discovery-workspace';
 const SNAPSHOT_EVENT_LIMIT = 220;
 const FINDING_LIMIT = 12;
 const PRINCIPAL_INPUT_LIMIT = 6;
+const AGENT_PRINCIPAL_EVENT_KINDS: DiscoveryEventKind[] = [
+  'interest_saved',
+  'participant_input',
+  'check_requested',
+  'feedback_saved',
+  'guidance_saved',
+];
 
 type AgentRow = typeof representativeAgents.$inferSelect;
 type DiscoveryEventRow = typeof discoveryEvents.$inferSelect;
@@ -132,7 +140,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       interest: await this.findSavedInterest(),
       workingNote: workingContext.workingNote,
       networkActivity: this.readNetworkActivity(representative.id),
-      feedbackFollowThrough: this.readFeedbackFollowThrough(
+      guidanceFollowThrough: this.readGuidanceFollowThrough(
         representative,
         workingContext.findings,
       ),
@@ -718,6 +726,39 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     });
   }
 
+  async saveGuidance(content: string): Promise<DiscoveryEvent> {
+    const normalizedContent = content.trim();
+    if (!normalizedContent || normalizedContent.length > 1_600) {
+      throw new Error('Guidance must contain 1 to 1,600 characters.');
+    }
+    const [interest, representative] = await Promise.all([
+      this.findSavedInterest(),
+      this.requireUserAgent(),
+    ]);
+    if (!interest) {
+      throw new Error('Save an interest before refining the representative.');
+    }
+    const workingNote = this.findWorkingNote(
+      representative,
+      Number.MAX_SAFE_INTEGER,
+    );
+
+    return await this.appendEvent({
+      kind: 'guidance_saved',
+      targetAgentId: representative.id,
+      targetParticipantId: representative.participantId,
+      replyToSequence: workingNote?.sequence,
+      title: 'You correct or refine your representative’s direction',
+      content: normalizedContent,
+      metadata: {
+        visibility: 'user-and-agent',
+        source: 'user',
+        interestSequence: interest.sequence,
+        workingNoteSequence: workingNote?.sequence,
+      },
+    });
+  }
+
   async listEventsVisibleToAgent(
     agentId: string,
     afterSequence: number,
@@ -755,15 +796,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             eq(discoveryEvents.targetAgentId, agentId),
           ),
           and(
-            inArray(
-              discoveryEvents.kind,
-              [
-                'interest_saved',
-                'participant_input',
-                'check_requested',
-                'feedback_saved',
-              ],
-            ),
+            inArray(discoveryEvents.kind, AGENT_PRINCIPAL_EVENT_KINDS),
             eq(discoveryEvents.targetAgentId, agentId),
           ),
         ),
@@ -800,15 +833,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             eq(discoveryEvents.targetAgentId, agentId),
           ),
           and(
-            inArray(
-              discoveryEvents.kind,
-              [
-                'interest_saved',
-                'participant_input',
-                'check_requested',
-                'feedback_saved',
-              ],
-            ),
+            inArray(discoveryEvents.kind, AGENT_PRINCIPAL_EVENT_KINDS),
             eq(discoveryEvents.targetAgentId, agentId),
           ),
         ),
@@ -950,15 +975,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             eq(discoveryEvents.targetAgentId, selectedAgent.id),
           ),
           and(
-            inArray(
-              discoveryEvents.kind,
-              [
-                'interest_saved',
-                'participant_input',
-                'check_requested',
-                'feedback_saved',
-              ],
-            ),
+            inArray(discoveryEvents.kind, AGENT_PRINCIPAL_EVENT_KINDS),
             eq(discoveryEvents.targetAgentId, selectedAgent.id),
           ),
         ),
@@ -1168,6 +1185,26 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       ));
   }
 
+  async hasAgentUpdatedWorkingNoteThrough(
+    agentId: string,
+    sourceSequence: number,
+  ): Promise<boolean> {
+    return this.database.orm
+      .select({ metadata: discoveryEvents.metadata })
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'representative_note_updated'),
+        eq(discoveryEvents.actorAgentId, agentId),
+        eq(discoveryEvents.targetAgentId, agentId),
+        gt(discoveryEvents.sequence, sourceSequence),
+      ))
+      .all()
+      .some(({ metadata }) => (
+        readMetadataSequence(metadata?.throughSequence) >= sourceSequence
+      ));
+  }
+
   async countAgentWakeCommunicationActions(
     agentId: string,
     wakeNumber: number,
@@ -1281,7 +1318,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
-        eq(discoveryEvents.kind, 'participant_input'),
+        inArray(discoveryEvents.kind, [
+          'participant_input',
+          'guidance_saved',
+        ]),
         eq(discoveryEvents.targetAgentId, agent.id),
         eq(discoveryEvents.targetParticipantId, agent.participantId),
         lte(discoveryEvents.sequence, throughSequence),
@@ -1474,10 +1514,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     };
   }
 
-  private readFeedbackFollowThrough(
+  private readGuidanceFollowThrough(
     representative: Agent,
     findings: FindingView[],
-  ): FeedbackFollowThroughView | undefined {
+  ): GuidanceFollowThroughView | undefined {
     const currentAssignment = this.database.orm
       .select({ sequence: discoveryEvents.sequence })
       .from(discoveryEvents)
@@ -1492,7 +1532,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       return undefined;
     }
 
-    const source = findings
+    const feedbackSource = findings
       .filter(({ assignmentSequence, feedback }) => (
         assignmentSequence === currentAssignment.sequence && feedback
       ))
@@ -1500,11 +1540,28 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         right.feedback!.sequence - left.feedback!.sequence
       ))
       .at(0);
-    if (!source?.feedback) {
+    const directGuidanceRow = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'guidance_saved'),
+        eq(discoveryEvents.targetAgentId, representative.id),
+        gt(discoveryEvents.sequence, currentAssignment.sequence),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .get();
+    const directGuidance = directGuidanceRow
+      ? toDiscoveryEvent(directGuidanceRow)
+      : undefined;
+    const guidance = [feedbackSource?.feedback, directGuidance]
+      .filter((event): event is DiscoveryEvent => Boolean(event))
+      .sort((left, right) => right.sequence - left.sequence)
+      .at(0);
+    if (!guidance) {
       return undefined;
     }
 
-    const feedback = source.feedback;
     const workingNote = this.database.orm
       .select()
       .from(discoveryEvents)
@@ -1513,14 +1570,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.kind, 'representative_note_updated'),
         eq(discoveryEvents.actorAgentId, representative.id),
         eq(discoveryEvents.targetParticipantId, representative.participantId),
-        gt(discoveryEvents.sequence, feedback.sequence),
+        gt(discoveryEvents.sequence, guidance.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .all()
       .map(toDiscoveryEvent)
       .find((event) => (
         readMetadataSequence(event.metadata.throughSequence)
-        >= feedback.sequence
+        >= guidance.sequence
       ));
     const check = this.database.orm
       .select()
@@ -1529,14 +1586,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'check_requested'),
         eq(discoveryEvents.targetAgentId, representative.id),
-        gt(discoveryEvents.sequence, feedback.sequence),
+        gt(discoveryEvents.sequence, guidance.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .all()
       .map(toDiscoveryEvent)
       .find((event) => (
-        readMetadataSequence(event.metadata.latestFeedbackSequence)
-        === feedback.sequence
+        readMetadataSequence(event.metadata.latestGuidanceSequence)
+        === guidance.sequence
       ));
     const request = check
       ? this.database.orm
@@ -1562,8 +1619,15 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       : undefined;
 
     return {
-      feedback,
-      sourceFinding: source.finding,
+      guidance,
+      sourceFinding: guidance.kind === 'feedback_saved'
+        ? feedbackSource?.finding
+        : undefined,
+      priorWorkingNote: guidance.kind === 'guidance_saved'
+        ? this.readEventsBySequence(
+            guidance.replyToSequence ? [guidance.replyToSequence] : [],
+          )[0]
+        : undefined,
       workingNote,
       request: requestEvent,
       resultingFinding,
