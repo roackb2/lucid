@@ -1,15 +1,32 @@
 import dayjs from 'dayjs';
 import {
   AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  MessageSquareText,
   PencilLine,
   RefreshCw,
   Save,
   Search,
   Send,
 } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import type { DiscoverySnapshot } from '@/lib/trpc';
+import {
+  describeNetworkRequestProgress,
+  type NetworkRequestProgress,
+} from '@/lib/network-request-progress';
+
+const REQUEST_PROGRESS_ICONS: Record<
+  NetworkRequestProgress['phase'],
+  ReactNode
+> = {
+  'waiting-for-network': <Clock3 size={15} />,
+  'messages-pending-review': <MessageSquareText size={15} />,
+  'finding-reported': <CheckCircle2 size={15} />,
+  'reviewed-without-finding': <CheckCircle2 size={15} />,
+};
 
 type InterestComposerProps = {
   interest?: DiscoverySnapshot['interest'];
@@ -43,6 +60,10 @@ export function InterestComposer({
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
   const showEditor = !interest || editing;
+  const requestProgress = networkActivity?.requestProgress;
+  const requestProgressCopy = requestProgress
+    ? describeNetworkRequestProgress(requestProgress)
+    : undefined;
 
   const submitInterest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -144,7 +165,11 @@ export function InterestComposer({
           failedTask ? 'network-request-status--error' : ''
         }`} aria-live="polite">
           <div className="network-request-status__icon" aria-hidden="true">
-            {failedTask ? <AlertTriangle size={15} /> : <Send size={15} />}
+            {failedTask
+              ? <AlertTriangle size={15} />
+              : requestProgress
+                ? REQUEST_PROGRESS_ICONS[requestProgress.phase]
+                : <Send size={15} />}
           </div>
           {failedTask ? (
             <div>
@@ -164,12 +189,24 @@ export function InterestComposer({
           ) : networkActivity?.request ? (
             <div>
               <strong>
-                Asked your network {dayjs(networkActivity.request.createdAt)
-                  .format('MMM D, HH:mm')}
+                {requestProgressCopy?.title ?? 'Asked your network'}
               </strong>
-              <p>{networkActivity.request.content}</p>
+              <p className="network-request-status__request">
+                {networkActivity.request.content}
+              </p>
+              {requestProgressCopy ? (
+                <span className="network-request-status__explanation">
+                  {requestProgressCopy.description}
+                </span>
+              ) : null}
               <small>
-                {describeNetworkResponses(networkActivity)}
+                Shared {dayjs(networkActivity.request.createdAt)
+                  .format('MMM D, HH:mm')}
+                {requestProgressCopy ? ` · ${requestProgressCopy.detail}` : ''}
+                {requestProgress?.latestResponseAt
+                  ? ` · latest delivery ${dayjs(requestProgress.latestResponseAt)
+                      .format('MMM D, HH:mm')}`
+                  : ''}
               </small>
             </div>
           ) : (
@@ -227,28 +264,4 @@ export function InterestComposer({
       </footer>
     </section>
   );
-}
-
-function describeNetworkResponses(
-  activity: NonNullable<DiscoverySnapshot['networkActivity']>,
-): string {
-  if (!activity.responseCount) {
-    return 'Waiting for another representative to contribute something specific.';
-  }
-  const deliveredLabel = activity.responseCount === 1
-    ? 'message delivered'
-    : 'messages delivered';
-  const originLabel = activity.originatingResponseCount === 1
-    ? 'originating contribution'
-    : 'originating contributions';
-  const participantLabel = activity.originatingParticipantCount === 1
-    ? 'participant'
-    : 'participants';
-  const latest = activity.latestResponseAt
-    ? ` · latest ${dayjs(activity.latestResponseAt).format('MMM D, HH:mm')}`
-    : '';
-  const originSummary = activity.originatingParticipantCount
-    ? `${activity.originatingParticipantCount} originating ${participantLabel} · ${activity.originatingResponseCount} ${originLabel} · `
-    : '';
-  return `${originSummary}${activity.responseCount} ${deliveredLabel}${latest} · your representative reviews them before reporting a finding`;
 }

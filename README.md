@@ -18,7 +18,9 @@ The product deliberately shows one participant's perspective:
 8. let the representative rewrite its understanding before it can finish that
    guidance wake; and
 9. compare the latest guidance with the later private note, disclosed request,
-   and resulting finding or continued silence.
+   and resulting finding or continued silence; and
+10. distinguish a request still waiting for the network, delivered messages
+    pending review, and a completed review with nothing new to report.
 
 Lucid records communication and delivery. It does not claim that a simulated
 network proves a philosophical thesis, validates a market, or makes a message

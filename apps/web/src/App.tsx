@@ -133,6 +133,7 @@ export default function App() {
               earlierFindings={earlierFindings}
               isChecking={backgroundChecks.running}
               isSubmittingFeedback={discovery.submitFeedback.isPending}
+              requestProgress={snapshot.networkActivity?.requestProgress}
               onFeedback={(findingSequence, content) => (
                 discovery.submitFeedback.mutateAsync({
                   findingSequence,

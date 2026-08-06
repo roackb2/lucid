@@ -48,6 +48,8 @@ import {
   type FindingView,
   type FindingSourceView,
   type NetworkActivityView,
+  type NetworkRequestProgressPhase,
+  type NetworkRequestProgressView,
   type Participant,
   type ParticipantStatus,
   type ParticipantView,
@@ -139,7 +141,10 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       representative: await this.toAgentView(representative, user),
       interest: await this.findSavedInterest(),
       workingNote: workingContext.workingNote,
-      networkActivity: this.readNetworkActivity(representative.id),
+      networkActivity: this.readNetworkActivity(
+        representative,
+        workingContext.findings,
+      ),
       guidanceFollowThrough: this.readGuidanceFollowThrough(
         representative,
         workingContext.findings,
@@ -1163,26 +1168,22 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       ).some(({ sequence }) => requested.has(sequence)));
   }
 
-  async hasAgentPublishedRequestForTrigger(
+  async findAgentPublishedRequestForTrigger(
     agentId: string,
     triggerSequence: number,
-  ): Promise<boolean> {
-    return this.database.orm
-      .select({
-        replyToSequence: discoveryEvents.replyToSequence,
-        metadata: discoveryEvents.metadata,
-      })
+  ): Promise<DiscoveryEvent | undefined> {
+    const row = this.database.orm
+      .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'shared_message'),
         eq(discoveryEvents.actorAgentId, agentId),
+        eq(discoveryEvents.replyToSequence, triggerSequence),
       ))
-      .all()
-      .some(({ replyToSequence, metadata }) => (
-        replyToSequence === triggerSequence
-        || readSequenceIds(metadata?.sourceEventIds).includes(triggerSequence)
-      ));
+      .orderBy(asc(discoveryEvents.sequence))
+      .get();
+    return row ? toDiscoveryEvent(row) : undefined;
   }
 
   async hasAgentUpdatedWorkingNoteThrough(
@@ -1425,14 +1426,15 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   private readNetworkActivity(
-    agentId: string,
+    representative: Agent,
+    findings: FindingView[],
   ): NetworkActivityView | undefined {
     const assignmentRow = this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
-        eq(discoveryEvents.targetAgentId, agentId),
+        eq(discoveryEvents.targetAgentId, representative.id),
         eq(discoveryEvents.kind, 'interest_saved'),
       ))
       .orderBy(desc(discoveryEvents.sequence))
@@ -1451,7 +1453,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'check_requested'),
-        eq(discoveryEvents.targetAgentId, agentId),
+        eq(discoveryEvents.targetAgentId, representative.id),
         gt(discoveryEvents.sequence, assignment.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
@@ -1465,37 +1467,73 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'shared_message'),
-        eq(discoveryEvents.actorAgentId, agentId),
+        eq(discoveryEvents.actorAgentId, representative.id),
         gt(discoveryEvents.sequence, requestTrigger.sequence),
       ))
-      .orderBy(desc(discoveryEvents.sequence))
+      // The first committed request is canonical. Retry artifacts for the same
+      // trigger belong to its lifecycle and must not replace its identity.
+      .orderBy(asc(discoveryEvents.sequence))
       .all()
       .map(toDiscoveryEvent)
       .find((event) => event.replyToSequence === requestTrigger.sequence);
     if (!request) {
-      return {
-        assignment,
-        responseCount: 0,
-        originatingResponseCount: 0,
-        originatingParticipantCount: 0,
-      };
+      return { assignment };
     }
 
+    return {
+      assignment,
+      request,
+      requestProgress: this.readNetworkRequestProgress(
+        representative,
+        request,
+        findings,
+      ),
+    };
+  }
+
+  /**
+   * Projects request progress from transport and mailbox facts. A reply is
+   * pending review until the representative's successful cursor passes it;
+   * only then may absence of a linked finding become deliberate silence.
+   */
+  private readNetworkRequestProgress(
+    representative: Agent,
+    request: DiscoveryEvent,
+    findings: FindingView[],
+  ): NetworkRequestProgressView {
+    // One assignment/check defines one semantic request. Include any retry-era
+    // duplicate writes in the same lifecycle so their delivered replies and
+    // linked findings cannot produce contradictory participant-facing states.
+    const requestSequences = request.replyToSequence
+      ? this.database.orm
+          .select({ sequence: discoveryEvents.sequence })
+          .from(discoveryEvents)
+          .where(and(
+            eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+            eq(discoveryEvents.kind, 'shared_message'),
+            eq(discoveryEvents.actorAgentId, representative.id),
+            eq(discoveryEvents.replyToSequence, request.replyToSequence),
+          ))
+          .orderBy(asc(discoveryEvents.sequence))
+          .all()
+          .map(({ sequence }) => sequence)
+      : [request.sequence];
+    const requestSequenceSet = new Set(requestSequences);
     const responses = this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         inArray(discoveryEvents.kind, ['shared_message', 'direct_message']),
-        ne(discoveryEvents.actorAgentId, agentId),
+        ne(discoveryEvents.actorAgentId, representative.id),
         gt(discoveryEvents.sequence, request.sequence),
-        eq(discoveryEvents.replyToSequence, request.sequence),
+        inArray(discoveryEvents.replyToSequence, requestSequences),
       ))
       .orderBy(asc(discoveryEvents.sequence))
       .all()
       .map(toDiscoveryEvent);
     const originatingResponses = uniqueEvents(responses.flatMap((response) => (
-      this.findOriginatingPeerMessages([response.sequence], agentId)
+      this.findOriginatingPeerMessages([response.sequence], representative.id)
     )));
     const originatingParticipantIds = new Set(originatingResponses.flatMap(
       (response) => {
@@ -1504,14 +1542,73 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       },
     ));
 
-    return {
-      assignment,
-      request,
+    const pendingReviewCount = responses.filter(
+      ({ sequence }) => sequence > representative.lastSeenSequence,
+    ).length;
+    const hasLinkedFinding = findings.some(({ finding, outboundMessages }) => (
+      finding.sequence > request.sequence
+      && outboundMessages.some(({ sequence }) => (
+        requestSequenceSet.has(sequence)
+      ))
+    ));
+    const phase = resolveNetworkRequestProgressPhase({
       responseCount: responses.length,
+      pendingReviewCount,
+      hasLinkedFinding,
+    });
+
+    return {
+      phase,
+      responseCount: responses.length,
+      pendingReviewCount,
       originatingResponseCount: originatingResponses.length,
       originatingParticipantCount: originatingParticipantIds.size,
       latestResponseAt: responses.at(-1)?.createdAt,
+      reviewedAt: phase === 'finding-reported'
+        || phase === 'reviewed-without-finding'
+        ? this.findResponseReviewCompletionAt(
+            representative.id,
+            responses.at(-1)?.sequence,
+          )
+        : undefined,
     };
+  }
+
+  private findResponseReviewCompletionAt(
+    agentId: string,
+    latestResponseSequence?: number,
+  ): string | undefined {
+    if (!latestResponseSequence) {
+      return undefined;
+    }
+
+    const wakeEvents = this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.actorAgentId, agentId),
+        inArray(
+          discoveryEvents.kind,
+          ['agent_wake_started', 'agent_wake_completed'],
+        ),
+        gt(discoveryEvents.sequence, latestResponseSequence),
+      ))
+      .orderBy(asc(discoveryEvents.sequence))
+      .all()
+      .map(toDiscoveryEvent);
+    const horizonByWake = new Map(wakeEvents.flatMap((event) => (
+      event.kind === 'agent_wake_started'
+        ? [[
+            event.wakeNumber,
+            readMetadataSequence(event.metadata.horizonSequence),
+          ] as const]
+        : []
+    )));
+    return wakeEvents.find((event) => (
+      event.kind === 'agent_wake_completed'
+      && (horizonByWake.get(event.wakeNumber) ?? 0) >= latestResponseSequence
+    ))?.createdAt;
   }
 
   private readGuidanceFollowThrough(
@@ -1630,6 +1727,13 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         : undefined,
       workingNote,
       request: requestEvent,
+      requestProgress: requestEvent
+        ? this.readNetworkRequestProgress(
+            representative,
+            requestEvent,
+            findings,
+          )
+        : undefined,
       resultingFinding,
     };
   }
@@ -2025,6 +2129,23 @@ function toDiscoveryEvent(row: DiscoveryEventRow): DiscoveryEvent {
     idempotencyKey: row.idempotencyKey ?? undefined,
     metadata: row.metadata ?? {},
   };
+}
+
+function resolveNetworkRequestProgressPhase(input: {
+  responseCount: number;
+  pendingReviewCount: number;
+  hasLinkedFinding: boolean;
+}): NetworkRequestProgressPhase {
+  if (!input.responseCount) {
+    return 'waiting-for-network';
+  }
+  if (input.pendingReviewCount) {
+    return 'messages-pending-review';
+  }
+  if (input.hasLinkedFinding) {
+    return 'finding-reported';
+  }
+  return 'reviewed-without-finding';
 }
 
 function uniqueEvents(events: DiscoveryEvent[]): DiscoveryEvent[] {

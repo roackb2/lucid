@@ -154,10 +154,15 @@ export interface DiscoveryRepository {
     participantId: string,
     sourceEventIds: number[],
   ): Promise<boolean>;
-  hasAgentPublishedRequestForTrigger(
+  /**
+   * Finds the durable network request that represents one assignment/check.
+   * Returning the event lets tool retries reuse the committed side effect,
+   * rather than merely treating the request prerequisite as satisfied.
+   */
+  findAgentPublishedRequestForTrigger(
     agentId: string,
     triggerSequence: number,
-  ): Promise<boolean>;
+  ): Promise<DiscoveryEvent | undefined>;
   hasAgentUpdatedWorkingNoteThrough(
     agentId: string,
     sourceSequence: number,

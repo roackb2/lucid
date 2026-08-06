@@ -99,9 +99,13 @@ describe('representative-agent heartbeat service', () => {
     ))).toBe(true);
     expect(snapshot.findings[0]?.originatingSources).toHaveLength(2);
     expect(snapshot.networkActivity).toMatchObject({
-      responseCount: 2,
-      originatingResponseCount: 2,
-      originatingParticipantCount: 2,
+      requestProgress: {
+        phase: 'finding-reported',
+        responseCount: 2,
+        pendingReviewCount: 0,
+        originatingResponseCount: 2,
+        originatingParticipantCount: 2,
+      },
     });
     expect(runner.agentIds).toContain(USER_AGENT_ID);
     expect(runner.agentIds.some((agentId) => (

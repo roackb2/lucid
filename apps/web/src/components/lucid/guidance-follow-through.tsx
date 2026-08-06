@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { DiscoverySnapshot } from '@/lib/trpc';
+import { describeNetworkRequestProgress } from '@/lib/network-request-progress';
 
 type GuidanceFollowThroughProps = {
   activity?: DiscoverySnapshot['guidanceFollowThrough'];
@@ -25,6 +26,9 @@ export function GuidanceFollowThrough({
   if (!activity) {
     return null;
   }
+  const requestProgressCopy = activity.requestProgress
+    ? describeNetworkRequestProgress(activity.requestProgress)
+    : undefined;
 
   return (
     <section className="guidance-follow-through-card">
@@ -99,21 +103,32 @@ export function GuidanceFollowThrough({
         </FollowThroughStep>
 
         <FollowThroughStep
-          complete={Boolean(activity.resultingFinding)}
+          complete={Boolean(
+            activity.resultingFinding || requestProgressCopy?.complete,
+          )}
           icon={<CheckCircle2 size={15} />}
           title={activity.resultingFinding
             ? 'A later finding came back from that request'
-            : activity.request
-              ? 'No new finding from that request so far'
-              : 'A later result will appear here'}
-          timestamp={activity.resultingFinding?.finding.createdAt}
+            : requestProgressCopy?.title
+              ?? (activity.request
+                ? 'Waiting for request progress'
+                : 'A later result will appear here')}
+          timestamp={activity.resultingFinding?.finding.createdAt
+            ?? activity.requestProgress?.reviewedAt
+            ?? activity.requestProgress?.latestResponseAt}
         >
           <p>
             {activity.resultingFinding?.finding.content
+              ?? requestProgressCopy?.description
               ?? (activity.request
-                ? 'Lucid remains quiet until the representative reports a concrete increment.'
-                : 'This step stays pending until a revised request produces a reportable increment.')}
+                ? 'The request exists, but its delivery state is not available yet.'
+                : 'This step stays pending until the representative sends a revised request.')}
           </p>
+          {!activity.resultingFinding && requestProgressCopy ? (
+            <p className="follow-through-context">
+              {requestProgressCopy.detail}
+            </p>
+          ) : null}
         </FollowThroughStep>
       </ol>
     </section>
