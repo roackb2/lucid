@@ -9,6 +9,7 @@ import { BackgroundChecks } from '@/components/lucid/background-checks';
 import { GuidanceFollowThrough } from '@/components/lucid/guidance-follow-through';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { InterestComposer } from '@/components/lucid/interest-composer';
+import { RecentNetworkRequests } from '@/components/lucid/recent-network-requests';
 import { RepresentativeProgress } from '@/components/lucid/representative-progress';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
@@ -113,6 +114,10 @@ export default function App() {
               )}
               onRunNow={() => discovery.runNow.mutate()}
               onRetry={() => discovery.retryCurrentWake.mutate()}
+            />
+
+            <RecentNetworkRequests
+              requests={snapshot.networkActivity?.previousRequests ?? []}
             />
 
             <RepresentativeProgress

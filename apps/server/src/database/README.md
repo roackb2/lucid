@@ -67,6 +67,14 @@ timestamp comes from the persisted wake whose fixed horizon covered the latest
 response; no confidence, relevance, or model-authored completion field is
 stored.
 
+Recent network-request history is a bounded read model over the same immutable
+events, not a new table. For the latest `interest_saved` event, the adapter
+orders later `check_requested` triggers, resolves the first persisted shared
+request for each trigger, and derives its reply/finding outcome. It returns at
+most five earlier published cycles, newest first. Guidance appears only when
+its sequence was explicitly carried by that check. Scheduled wakes that did
+not publish, unrelated traffic, and requests from older interests are omitted.
+
 Direct guidance is an immutable `guidance_saved` event. It preserves the raw
 participant instruction and references the note visible when it was entered;
 the representative produces a separate `representative_note_updated` event.

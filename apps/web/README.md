@@ -23,7 +23,9 @@ The primary path is:
 8. trace the latest feedback or direct guidance through the revised note,
    subsequent request, and later finding or continued silence; and
 9. distinguish network waiting, delivered messages pending durable review,
-   a reported finding, and a completed review with no new finding.
+   a reported finding, and a completed review with no new finding; and
+10. inspect up to five earlier disclosed requests for the current interest so
+    later checks do not erase completed silence, carried guidance, or findings.
 
 The app intentionally does not render a global participant directory, event
 log, task list, reset control, or participant administration. Those are
@@ -35,6 +37,7 @@ router, not features of a participant's social-network experience.
 | Component | Responsibility |
 | --- | --- |
 | `interest-composer.tsx` | Create/edit one interest, show its delivered request or failed wake, and choose between a new check and retrying current work |
+| `recent-network-requests.tsx` | Render the server's bounded history of earlier disclosed requests and their persisted outcomes |
 | `representative-progress.tsx` | Present the latest private working note and collect ordinary-language corrections without mutating it directly |
 | `guidance-follow-through.tsx` | Trace the latest direct guidance or finding feedback through durable later work |
 | `background-checks.tsx` | Present and control this representative's durable listening state |
@@ -57,6 +60,9 @@ router, not features of a participant's social-network experience.
   server-derived delivery/review phase. Waiting, pending review, finding
   reported, and review-without-finding come from persisted message, cursor,
   wake, and request-thread facts; none implies that messages are useful.
+- Recent checks consume `networkActivity.previousRequests` directly. They show
+  only earlier requests under the current assignment, never reconstruct a
+  global event ledger or treat an empty heartbeat wake as participant work.
 - Failed wakes stay visible and retry the same durable work. The client does
   not disguise recovery as a new manual check.
 - Assignment membership and finding origin come from the server projection;
