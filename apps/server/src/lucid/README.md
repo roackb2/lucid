@@ -34,6 +34,8 @@ contains only:
 - the current assignment and its representative's shared request plus
   durable delivery/review phase, delivered-message counts, and collapsed
   originating-contributor counts;
+- up to five earlier requests published for that same assignment, each with
+  its durable phase, explicitly carried guidance, and linked findings;
 - direct-message and collapsed originating-source attribution attached to
   those findings;
 - that representative's Heddle task status.
@@ -203,6 +205,16 @@ cursor, a completed review with a linked finding, or a completed review without
 a linked finding. The last phase is deliberate silence, not pending work. It is
 derived from persisted delivery, wake completion, cursor and request-thread
 facts rather than an agent-authored status or relevance score.
+
+`networkActivity.previousRequests` preserves up to five earlier published
+request cycles under that same saved assignment, newest first. Each item is
+derived from the assignment or manual-check trigger, the first durable request
+for that trigger, its transport-derived phase, any participant guidance whose
+sequence the check explicitly carried, and findings linked through that
+request thread. A new check may become current before it publishes a request;
+the earlier history still remains visible. Empty scheduled wakes, unpublished
+failed attempts, earlier assignments, and unrelated network events are never
+included.
 
 The projection separates delivered messages from recursively resolved
 originating contributions and participants, so a relay cannot masquerade as

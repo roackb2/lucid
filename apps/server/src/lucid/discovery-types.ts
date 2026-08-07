@@ -187,6 +187,19 @@ export type NetworkRequestProgressView = {
 };
 
 /**
+ * One prior request cycle for the current participant-owned assignment.
+ * Every field is a persisted event or a transport-derived progress view;
+ * scheduled empty wakes and unrelated network activity are excluded.
+ */
+export type NetworkRequestHistoryItemView = {
+  trigger: DiscoveryEvent;
+  request: DiscoveryEvent;
+  progress: NetworkRequestProgressView;
+  guidance?: DiscoveryEvent;
+  linkedFindings: DiscoveryEvent[];
+};
+
+/**
  * Participant-scoped projection of the latest request lifecycle. It exposes
  * what this participant's own representative shared and aggregate reply
  * progress, never the global participant directory or unrelated messages.
@@ -195,6 +208,8 @@ export type NetworkActivityView = {
   assignment: DiscoveryEvent;
   request?: DiscoveryEvent;
   requestProgress?: NetworkRequestProgressView;
+  /** Most recent earlier request cycles for this same saved assignment. */
+  previousRequests: NetworkRequestHistoryItemView[];
 };
 
 /**

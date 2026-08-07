@@ -195,6 +195,7 @@ describe('SQLite discovery repository', () => {
 
     expect((await repository.readSnapshot()).networkActivity).toEqual({
       assignment: interest,
+      previousRequests: [],
     });
 
     const request = await repository.appendEvent({
@@ -303,6 +304,13 @@ describe('SQLite discovery repository', () => {
     });
     expect((await repository.readSnapshot()).networkActivity).toMatchObject({
       assignment: { sequence: interest.sequence },
+      previousRequests: [{
+        request: { sequence: request.sequence },
+        progress: { phase: 'finding-reported' },
+        linkedFindings: [expect.objectContaining({
+          content: 'A peer described a specific long-running memory failure.',
+        })],
+      }],
     });
     expect((await repository.readSnapshot()).networkActivity?.request)
       .toBeUndefined();
@@ -323,7 +331,148 @@ describe('SQLite discovery repository', () => {
         responseCount: 0,
         pendingReviewCount: 0,
       },
+      previousRequests: [{
+        request: { sequence: request.sequence },
+        progress: { phase: 'finding-reported' },
+      }],
     });
+  });
+
+  it('preserves completed silence and guidance across later request cycles', async () => {
+    const source = await registerSynthetic(repository, 'request-history');
+    const interest = await repository.saveInterest(
+      'Find durable examples of participant-controlled representative work.',
+    );
+    const firstRequest = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: interest.sequence,
+      title: 'The first request',
+      content: 'Who has a participant-controlled representative example?',
+      metadata: { sourceEventIds: [interest.sequence] },
+    });
+    await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: source.agent.id,
+      replyToSequence: firstRequest.sequence,
+      title: 'A non-qualifying response',
+      content: 'One synthetic scenario resembles that idea.',
+      metadata: { sourceEventIds: [] },
+    });
+    const responseWake = await repository.beginAgentWake(
+      USER_AGENT_ID,
+      'wake_history_silence',
+    );
+    await repository.appendEvent({
+      wakeNumber: responseWake!.wakeNumber,
+      kind: 'agent_wake_completed',
+      actorAgentId: USER_AGENT_ID,
+      title: 'Review finishes without a finding',
+      content: 'The response did not satisfy the assignment.',
+      metadata: { wakeId: responseWake!.wakeId },
+    });
+    await repository.completeAgentWake(
+      USER_AGENT_ID,
+      responseWake!.horizonSequence,
+    );
+
+    const guidance = await repository.saveGuidance(
+      'Only keep independently named examples with a participant-visible result.',
+    );
+    const guidedCheck = await repository.appendEvent({
+      kind: 'check_requested',
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Apply the newer guidance',
+      content: 'Look again using the participant correction.',
+      metadata: { latestGuidanceSequence: guidance.sequence },
+    });
+    const guidedRequest = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: guidedCheck.sequence,
+      title: 'A guidance-shaped request',
+      content: 'Who has an independently named example with a visible result?',
+      metadata: { sourceEventIds: [guidedCheck.sequence] },
+    });
+    const latestCheck = await repository.appendEvent({
+      kind: 'check_requested',
+      targetAgentId: USER_AGENT_ID,
+      targetParticipantId: LOCAL_USER_ID,
+      title: 'Start one newer check',
+      content: 'Look for a newer increment.',
+    });
+    const latestRequest = await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: latestCheck.sequence,
+      title: 'The current request',
+      content: 'Who has a newer concrete increment?',
+      metadata: { sourceEventIds: [latestCheck.sequence] },
+    });
+
+    expect((await repository.readSnapshot()).networkActivity).toMatchObject({
+      request: { sequence: latestRequest.sequence },
+      previousRequests: [
+        {
+          trigger: { sequence: guidedCheck.sequence },
+          request: { sequence: guidedRequest.sequence },
+          guidance: {
+            sequence: guidance.sequence,
+            content: guidance.content,
+          },
+          progress: { phase: 'waiting-for-network' },
+          linkedFindings: [],
+        },
+        {
+          trigger: { sequence: interest.sequence },
+          request: { sequence: firstRequest.sequence },
+          progress: {
+            phase: 'reviewed-without-finding',
+            responseCount: 1,
+            pendingReviewCount: 0,
+          },
+          linkedFindings: [],
+        },
+      ],
+    });
+  });
+
+  it('bounds previous request history to the five most recent cycles', async () => {
+    const interest = await repository.saveInterest(
+      'Track a bounded sequence of network requests.',
+    );
+    const requests = [await repository.appendEvent({
+      kind: 'shared_message',
+      actorAgentId: USER_AGENT_ID,
+      replyToSequence: interest.sequence,
+      title: 'Initial request',
+      content: 'Start the bounded history.',
+      metadata: { sourceEventIds: [interest.sequence] },
+    })];
+
+    for (let index = 1; index <= 6; index += 1) {
+      const check = await repository.appendEvent({
+        kind: 'check_requested',
+        targetAgentId: USER_AGENT_ID,
+        targetParticipantId: LOCAL_USER_ID,
+        title: `Check ${index}`,
+        content: `Look for increment ${index}.`,
+      });
+      requests.push(await repository.appendEvent({
+        kind: 'shared_message',
+        actorAgentId: USER_AGENT_ID,
+        replyToSequence: check.sequence,
+        title: `Request ${index}`,
+        content: `Who has increment ${index}?`,
+        metadata: { sourceEventIds: [check.sequence] },
+      }));
+    }
+
+    const activity = (await repository.readSnapshot()).networkActivity;
+    expect(activity?.request?.sequence).toBe(requests.at(-1)!.sequence);
+    expect(activity?.previousRequests.map(({ request }) => request.sequence))
+      .toEqual(requests.slice(1, -1).reverse().map(({ sequence }) => sequence));
   });
 
   it('projects retry-era duplicate requests as one lifecycle', async () => {

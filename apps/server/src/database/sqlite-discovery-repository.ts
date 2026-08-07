@@ -48,6 +48,7 @@ import {
   type FindingView,
   type FindingSourceView,
   type NetworkActivityView,
+  type NetworkRequestHistoryItemView,
   type NetworkRequestProgressPhase,
   type NetworkRequestProgressView,
   type Participant,
@@ -67,6 +68,7 @@ import type { LucidSqliteDatabase } from './sqlite-database.js';
 const WORKSPACE_ID = 'local-discovery-workspace';
 const SNAPSHOT_EVENT_LIMIT = 220;
 const FINDING_LIMIT = 12;
+const NETWORK_REQUEST_HISTORY_LIMIT = 5;
 const PRINCIPAL_INPUT_LIMIT = 6;
 const AGENT_PRINCIPAL_EVENT_KINDS: DiscoveryEventKind[] = [
   'interest_saved',
@@ -141,10 +143,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       representative: await this.toAgentView(representative, user),
       interest: await this.findSavedInterest(),
       workingNote: workingContext.workingNote,
-      networkActivity: this.readNetworkActivity(
-        representative,
-        workingContext.findings,
-      ),
+      networkActivity: this.readNetworkActivity(representative),
       guidanceFollowThrough: this.readGuidanceFollowThrough(
         representative,
         workingContext.findings,
@@ -1427,7 +1426,6 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
 
   private readNetworkActivity(
     representative: Agent,
-    findings: FindingView[],
   ): NetworkActivityView | undefined {
     const assignmentRow = this.database.orm
       .select()
@@ -1447,7 +1445,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     // assignment roots. Keeping this projection anchored to the saved interest
     // prevents “Run now” from making the product appear to forget its request.
     const assignment = toDiscoveryEvent(assignmentRow);
-    const latestCheckRow = this.database.orm
+    const checks = this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1457,50 +1455,117 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         gt(discoveryEvents.sequence, assignment.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
-      .get();
-    const requestTrigger = latestCheckRow
-      ? toDiscoveryEvent(latestCheckRow)
-      : assignment;
-    const request = this.database.orm
+      .all()
+      .map(toDiscoveryEvent);
+    const requestTriggers = [...checks, assignment];
+    const triggerSequences = new Set(
+      requestTriggers.map(({ sequence }) => sequence),
+    );
+    const requestByTriggerSequence = this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'shared_message'),
         eq(discoveryEvents.actorAgentId, representative.id),
-        gt(discoveryEvents.sequence, requestTrigger.sequence),
+        gt(discoveryEvents.sequence, assignment.sequence),
       ))
-      // The first committed request is canonical. Retry artifacts for the same
-      // trigger belong to its lifecycle and must not replace its identity.
       .orderBy(asc(discoveryEvents.sequence))
       .all()
       .map(toDiscoveryEvent)
-      .find((event) => event.replyToSequence === requestTrigger.sequence);
+      .reduce((byTrigger, request) => {
+        const triggerSequence = request.replyToSequence;
+        if (
+          !triggerSequence
+          || !triggerSequences.has(triggerSequence)
+          || byTrigger.has(triggerSequence)
+        ) {
+          return byTrigger;
+        }
+        byTrigger.set(triggerSequence, request);
+        return byTrigger;
+      }, new Map<number, DiscoveryEvent>());
+    const findingEvents = this.listFindingEvents(
+      representative.participantId,
+      representative.id,
+      assignment.sequence,
+    );
+    const currentTrigger = requestTriggers[0]!;
+    const request = requestByTriggerSequence.get(currentTrigger.sequence);
+    const previousRequests = requestTriggers
+      .slice(1)
+      .flatMap((trigger) => {
+        const previousRequest = requestByTriggerSequence.get(trigger.sequence);
+        return previousRequest
+          ? [this.toNetworkRequestHistoryItem(
+              representative,
+              trigger,
+              previousRequest,
+              findingEvents,
+            )]
+          : [];
+      })
+      .slice(0, NETWORK_REQUEST_HISTORY_LIMIT);
     if (!request) {
-      return { assignment };
+      return { assignment, previousRequests };
     }
 
     return {
       assignment,
       request,
-      requestProgress: this.readNetworkRequestProgress(
+      requestProgress: this.readNetworkRequestOutcome(
         representative,
         request,
-        findings,
-      ),
+        findingEvents,
+      ).progress,
+      previousRequests,
     };
   }
 
   /**
-   * Projects request progress from transport and mailbox facts. A reply is
+   * Builds one bounded participant history item without exposing the global
+   * event ledger. Guidance is included only when the check explicitly carried
+   * that participant-authored event into its request.
+   */
+  private toNetworkRequestHistoryItem(
+    representative: Agent,
+    trigger: DiscoveryEvent,
+    request: DiscoveryEvent,
+    findingEvents: DiscoveryEvent[],
+  ): NetworkRequestHistoryItemView {
+    const outcome = this.readNetworkRequestOutcome(
+      representative,
+      request,
+      findingEvents,
+    );
+    const guidanceSequence = readMetadataSequence(
+      trigger.metadata.latestGuidanceSequence,
+    );
+
+    return {
+      trigger,
+      request,
+      progress: outcome.progress,
+      guidance: guidanceSequence
+        ? this.readEventsBySequence([guidanceSequence])[0]
+        : undefined,
+      linkedFindings: outcome.linkedFindings,
+    };
+  }
+
+  /**
+   * Projects one request outcome from transport and mailbox facts. A reply is
    * pending review until the representative's successful cursor passes it;
    * only then may absence of a linked finding become deliberate silence.
    */
-  private readNetworkRequestProgress(
+  private readNetworkRequestOutcome(
     representative: Agent,
     request: DiscoveryEvent,
-    findings: FindingView[],
-  ): NetworkRequestProgressView {
+    findingEvents: DiscoveryEvent[],
+  ): {
+    progress: NetworkRequestProgressView;
+    linkedFindings: DiscoveryEvent[];
+  } {
     // One assignment/check defines one semantic request. Include any retry-era
     // duplicate writes in the same lifecycle so their delivered replies and
     // linked findings cannot produce contradictory participant-facing states.
@@ -1545,33 +1610,57 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     const pendingReviewCount = responses.filter(
       ({ sequence }) => sequence > representative.lastSeenSequence,
     ).length;
-    const hasLinkedFinding = findings.some(({ finding, outboundMessages }) => (
+    const linkedFindings = findingEvents.filter((finding) => (
       finding.sequence > request.sequence
-      && outboundMessages.some(({ sequence }) => (
-        requestSequenceSet.has(sequence)
-      ))
+      && this.listRequestThreadOutboundMessages(
+        readSequenceIds(finding.metadata.sourceEventIds),
+        representative.id,
+      ).some(({ sequence }) => requestSequenceSet.has(sequence))
     ));
     const phase = resolveNetworkRequestProgressPhase({
       responseCount: responses.length,
       pendingReviewCount,
-      hasLinkedFinding,
+      hasLinkedFinding: linkedFindings.length > 0,
     });
 
     return {
-      phase,
-      responseCount: responses.length,
-      pendingReviewCount,
-      originatingResponseCount: originatingResponses.length,
-      originatingParticipantCount: originatingParticipantIds.size,
-      latestResponseAt: responses.at(-1)?.createdAt,
-      reviewedAt: phase === 'finding-reported'
-        || phase === 'reviewed-without-finding'
-        ? this.findResponseReviewCompletionAt(
-            representative.id,
-            responses.at(-1)?.sequence,
-          )
-        : undefined,
+      progress: {
+        phase,
+        responseCount: responses.length,
+        pendingReviewCount,
+        originatingResponseCount: originatingResponses.length,
+        originatingParticipantCount: originatingParticipantIds.size,
+        latestResponseAt: responses.at(-1)?.createdAt,
+        reviewedAt: phase === 'finding-reported'
+          || phase === 'reviewed-without-finding'
+          ? this.findResponseReviewCompletionAt(
+              representative.id,
+              responses.at(-1)?.sequence,
+            )
+          : undefined,
+      },
+      linkedFindings,
     };
+  }
+
+  private listFindingEvents(
+    participantId: string,
+    agentId: string,
+    afterSequence: number,
+  ): DiscoveryEvent[] {
+    return this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'finding_reported'),
+        eq(discoveryEvents.targetParticipantId, participantId),
+        eq(discoveryEvents.actorAgentId, agentId),
+        gt(discoveryEvents.sequence, afterSequence),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .all()
+      .map(toDiscoveryEvent);
   }
 
   private findResponseReviewCompletionAt(
@@ -1706,14 +1795,23 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           .get()
       : undefined;
     const requestEvent = request ? toDiscoveryEvent(request) : undefined;
-    const resultingFinding = requestEvent
-      ? findings.find(({ finding, outboundMessages }) => (
-          finding.sequence > requestEvent.sequence
-          && outboundMessages.some(({ sequence }) => (
-            sequence === requestEvent.sequence
-          ))
-        ))
+    const requestOutcome = requestEvent
+      ? this.readNetworkRequestOutcome(
+          representative,
+          requestEvent,
+          this.listFindingEvents(
+            representative.participantId,
+            representative.id,
+            currentAssignment.sequence,
+          ),
+        )
       : undefined;
+    const linkedFindingSequences = new Set(
+      requestOutcome?.linkedFindings.map(({ sequence }) => sequence),
+    );
+    const resultingFinding = findings.find(({ finding }) => (
+      linkedFindingSequences.has(finding.sequence)
+    ));
 
     return {
       guidance,
@@ -1727,13 +1825,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         : undefined,
       workingNote,
       request: requestEvent,
-      requestProgress: requestEvent
-        ? this.readNetworkRequestProgress(
-            representative,
-            requestEvent,
-            findings,
-          )
-        : undefined,
+      requestProgress: requestOutcome?.progress,
       resultingFinding,
     };
   }

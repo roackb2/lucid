@@ -20,7 +20,9 @@ The product deliberately shows one participant's perspective:
 9. compare the latest guidance with the later private note, disclosed request,
    and resulting finding or continued silence; and
 10. distinguish a request still waiting for the network, delivered messages
-    pending review, and a completed review with nothing new to report.
+    pending review, and a completed review with nothing new to report; and
+11. keep up to five earlier disclosed request cycles visible under the current
+    interest, including the guidance they carried and findings they produced.
 
 Lucid records communication and delivery. It does not claim that a simulated
 network proves a philosophical thesis, validates a market, or makes a message
@@ -169,6 +171,8 @@ Lucid structures only behavior it can enforce:
   working note supplied through the same fixed wake horizon;
 - a participant-scoped follow-through projection built only from persisted
   feedback, note, request, and finding events;
+- a bounded participant-scoped history of earlier published requests for the
+  current assignment, excluding empty heartbeat wakes and unrelated events;
 - retry-stable working-note updates that remain invisible to a replay of the
   wake that produced them;
 - interest/check wakes cannot settle successfully until the representative has
