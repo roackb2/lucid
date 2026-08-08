@@ -40,6 +40,19 @@ export type NetworkMessageRole = z.infer<typeof networkMessageRoleSchema>;
 export type DiscoveryEventKind = z.infer<typeof discoveryEventKindSchema>;
 export type DiscoveryEventMetadata = Record<string, unknown>;
 
+export type AppendDiscoveryEventInput = {
+  wakeNumber?: number;
+  kind: DiscoveryEventKind;
+  actorAgentId?: string;
+  targetAgentId?: string;
+  targetParticipantId?: string;
+  replyToSequence?: number;
+  idempotencyKey?: string;
+  title: string;
+  content: string;
+  metadata?: DiscoveryEventMetadata;
+};
+
 export type DiscoveryWorkspace = {
   id: string;
   versionId: string;
@@ -242,15 +255,18 @@ export type RepresentativeWorkingContext = {
   workingNote?: DiscoveryEvent;
 };
 
-export type AgentWakeContext = {
+export type AgentWakeClaim = {
   agent: Agent;
   participant: Participant;
   wakeId: string;
   claimToken: string;
   wakeNumber: number;
   visibleEvents: DiscoveryEvent[];
-  workingContext: RepresentativeWorkingContext;
   horizonSequence: number;
+};
+
+export type AgentWakeContext = AgentWakeClaim & {
+  workingContext: RepresentativeWorkingContext;
 };
 
 export type RepresentativeAgentTaskStatus =

@@ -7,18 +7,28 @@ simulation scenarios.
 
 ## Service boundaries
 
-| File | Responsibility |
+| Directory | Responsibility |
 | --- | --- |
-| `discovery-workspace-service.ts` | Coordinates the local participant's saved interest, run requests, feedback, durable listening preference, and scoped snapshot |
-| `participant-network-service.ts` | Coordinates trusted participant registration/input, lifecycle, Heddle task reconciliation, reset, and development diagnostics |
-| `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per representative, claims mailbox wakes, routes request/response run intents, and coordinates an injected execution host |
-| `heddle-representative-agent-runner.ts` | Builds one claimed wake's prompt/tools and delegates execution through Heddle's context |
-| `discovery-repository.ts` | Defines the asynchronous storage-independent domain port |
-| `agent-communication-tools.ts` | Enforces visible sources, fixed horizons, encountered-peer addressing, action budgets, and idempotent communication/working-note writes |
-| `agent-prompts.ts` | Builds generic representative identity plus bounded longitudinal wake context |
-| `representative-profile.ts` | Builds the generic representative profile for dynamically registered participants |
-| `local-participant.ts` | Defines only the stable local participant and representative identity |
-| `discovery-types.ts` | Defines persisted records, scoped product views, and development diagnostics |
+| `workspace/` | Local participant actions, scoped projection, primary and secondary projection ports, workspace identity, and PostgreSQL adapter |
+| `network/` | Trusted participant ingress, lifecycle, diagnostics, participant visibility, its store port, and PostgreSQL adapter |
+| `representative/` | Heddle task reconciliation, mailbox wake settlement, mailbox policy, its store port, PostgreSQL adapter, and runner composition |
+| `representative/communication/` | Agent-visible communication tools, their store port, and PostgreSQL visibility/provenance adapter |
+| `persistence/postgres/` | Shared product schema, policy-free record decoding, and the disposable PostgreSQL test fixture; no product store implementation |
+| `agent-prompts.ts` | Generic representative identity plus bounded longitudinal wake context |
+| `representative-profile.ts` | Generic representative profile for dynamically registered participants |
+| `local-participant.ts` | Stable local participant and representative identity |
+| `discovery-types.ts` | Persisted records, scoped product views, and development diagnostics |
+
+Primary store interfaces and their PostgreSQL implementations live beside the
+service that owns them. Each adapter keeps the complete multi-table transaction
+for its owning use case; the split is by behavior, never by table. The workspace
+slice also exports `RepresentativeWorkingContextReader` as an explicitly
+secondary projection port consumed by representative wake orchestration.
+Composition constructs all adapters over one pool and exposes only the narrow
+ports required by each service. Concrete adapters never import one another.
+
+See [`../../../../docs/coding-conventions.md`](../../../../docs/coding-conventions.md)
+for the vertical-slice Hexagonal Architecture rules contributors must follow.
 
 Names describe engineering responsibilities. `Wake` means one claimed
 heartbeat execution; `task`, `mailbox`, `event`, `finding`, and `participant`
@@ -259,7 +269,7 @@ not model success.
 
 Heddle checkpoints preserve runtime transcript continuity, but Lucid does not
 use a checkpoint as its only product-memory contract. Before every model run,
-the repository projects history through the claimed wake horizon:
+the workspace store projects history through the claimed wake horizon:
 
 - the latest saved interest plus recent participant inputs and direct guidance;
 - recent participant-scoped findings and any feedback attached to them; and
@@ -281,7 +291,7 @@ ownership, visibility, reply/source integrity, and retry safety only.
 
 Failed, interrupted, or escalated wakes keep their cursor and active claim.
 Retry reuses the same wake ID, number, horizon, and action slots. Ordinary
-repository startup never steals a claim. After a Heddle execution lease
+store startup never steals a claim. After a Heddle execution lease
 expires, Heddle claim-fenced recovery returns the task to a runnable state and
 passes that exact interrupted execution ID to Lucid. Lucid releases only the
 matching product wake claim; a stale recovery cannot release a newer worker.

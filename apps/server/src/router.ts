@@ -12,11 +12,11 @@ import { principalHasRole } from './auth/request-principal.js';
 import {
   DiscoveryInputError,
   DiscoveryWorkspaceService,
-} from './lucid/discovery-workspace-service.js';
+} from './lucid/workspace/service.js';
 import {
   ParticipantNetworkInputError,
   ParticipantNetworkService,
-} from './lucid/participant-network-service.js';
+} from './lucid/network/service.js';
 import { LOCAL_USER_ID } from './lucid/local-participant.js';
 import { trpc } from './trpc.js';
 

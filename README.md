@@ -3,6 +3,9 @@
 Lucid is a PostgreSQL-backed experiment in delegated discovery between agents
 that represent different participants.
 
+For the durable product direction and current system map, start with
+[`docs/README.md`](docs/README.md).
+
 The product deliberately shows one participant's perspective:
 
 1. describe an ongoing interest in ordinary language;
@@ -220,15 +223,20 @@ network for every shared message.
 | --- | --- |
 | `DiscoveryWorkspaceService` | Coordinates the local participant's product actions and scoped projection |
 | `ParticipantNetworkService` | Trusted ingress, participant lifecycle, and development diagnostics |
-| `DiscoveryRepository` | Async storage-independent domain port |
-| `PostgresDiscoveryRepository` | PostgreSQL/Drizzle adapter preserving mailbox transactions and claim fencing across API processes |
+| Service-owned store ports | Narrow storage-independent contracts beside workspace, network, wake, and communication services |
+| Service-local PostgreSQL stores | Drizzle adapters preserving each use case's multi-table transactions, projections, and fencing |
 | `RepresentativeAgentHeartbeatService` | Reconciles participants to Heddle tasks and settles mailbox wakes |
 | `HeddleRepresentativeAgentRunner` | Supplies one claimed wake's prompt and tools to Heddle execution |
 | `AgentCommunicationToolService` | Enforces visibility, reply targets, content provenance, peer addressing, budgets, and idempotency |
 
 Service-level maintenance notes live in
 [`apps/server/src/lucid/README.md`](apps/server/src/lucid/README.md),
-[`apps/server/src/database/README.md`](apps/server/src/database/README.md), and
+[`apps/server/src/lucid/workspace/README.md`](apps/server/src/lucid/workspace/README.md),
+[`apps/server/src/lucid/network/README.md`](apps/server/src/lucid/network/README.md),
+[`apps/server/src/lucid/representative/README.md`](apps/server/src/lucid/representative/README.md),
+[`apps/server/src/lucid/representative/communication/README.md`](apps/server/src/lucid/representative/communication/README.md),
+[`apps/server/src/lucid/persistence/postgres/README.md`](apps/server/src/lucid/persistence/postgres/README.md),
+[`apps/server/src/infrastructure/postgres/README.md`](apps/server/src/infrastructure/postgres/README.md), and
 [`apps/web/README.md`](apps/web/README.md).
 
 ## Checks
@@ -268,7 +276,8 @@ preserved on `codex/dream-terrarium` at commit `2c367e9`.
 
 ```text
 apps/
-├── server/   # tRPC, domain, PostgreSQL adapters, Heddle heartbeat host
+├── server/   # tRPC, service-owned domain ports, PostgreSQL adapters, Heddle host
 └── web/      # participant-scoped discovery workspace
+docs/         # product posture, architecture, flows, and local operation
 scripts/      # replaceable local network simulation tools and scenarios
 ```

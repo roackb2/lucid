@@ -9,7 +9,7 @@ It owns:
 
 - HTTP/tRPC transport and CORS policy;
 - PostgreSQL pool lifecycle and checked-in Drizzle migrations;
-- construction of the product repository and Heddle task authority;
+- construction of the service-owned product stores and Heddle task authority;
 - construction and startup of the selected representative execution host;
 - graceful shutdown ordering.
 
@@ -19,17 +19,19 @@ bounded execution, and recovery predictable.
 
 ## Entrypoints
 
-- `src/server.ts` constructs the repository, runner, heartbeat host, workspace
+- `src/server.ts` constructs the stores, runner, heartbeat host, workspace
   service, and HTTP server.
 - `src/migrate.ts` applies checked-in PostgreSQL product and Heddle migrations
   as an explicit deployment step.
-- `src/database/postgres-database.ts` and
-  `src/database/postgres-discovery-repository.ts` provide the hosted product
-  persistence boundary.
-- `src/database/postgres-heartbeat-task-store.ts` implements Heddle's public
+- `src/infrastructure/postgres/database.ts` owns the shared PostgreSQL pool and
+  migration mechanism without importing product schemas.
+- `src/lucid/{workspace,network,representative}/postgres-store.ts` and
+  `src/lucid/representative/communication/postgres-store.ts` implement four
+  service-owned store ports with their use-case transactions.
+- `src/runtime/heartbeat/postgres/task-store.ts` implements Heddle's public
   task authority contracts over the same owned pool.
-- `src/database/discovery-persistence.ts` composes both PostgreSQL adapters and
-  owns pool shutdown.
+- `src/composition/postgres-persistence.ts` composes the four product stores
+  and Heddle task adapter, then owns their shared pool shutdown.
 - `src/router.ts` exposes:
   - `discovery.snapshot`
   - `discovery.saveInterest`
@@ -65,11 +67,17 @@ Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
 
 `src/lucid` owns participants, mailbox events, findings, feedback, wake claims,
-and the storage-independent `DiscoveryRepository` port. Heddle owns provider
+and the service-owned store ports. Heddle owns provider
 credentials, unattended approval policy, execution cancellation, checkpoints,
 run requests, and task settlement. It is integrated through
 `HeddleRepresentativeAgentRunner` and `RepresentativeAgentHeartbeatService`.
 
-Read [`src/database/README.md`](src/database/README.md) before changing storage
-infrastructure. Read [`src/lucid/README.md`](src/lucid/README.md) before
-changing agent lifecycle or mailbox behavior.
+Read [`src/infrastructure/postgres/README.md`](src/infrastructure/postgres/README.md)
+before changing pool or migration infrastructure,
+[`src/lucid/persistence/postgres/README.md`](src/lucid/persistence/postgres/README.md)
+before changing the shared schema or record codecs, the relevant service README
+before changing a product store, and
+[`src/lucid/README.md`](src/lucid/README.md) before changing agent lifecycle or
+mailbox behavior. The project-wide
+[`../../docs/coding-conventions.md`](../../docs/coding-conventions.md) defines
+the required dependency and test shape.

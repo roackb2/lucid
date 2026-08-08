@@ -1,7 +1,7 @@
 /**
  * Presents participant context and Lucid behavior guidance to a representative.
  * These prompts help the model choose useful actions but are not a security or
- * reliability boundary; communication tools and the repository enforce every
+ * reliability boundary; communication tools and durable stores enforce every
  * visibility, reply-routing, source-provenance, action-budget, and cursor
  * invariant described here.
  */
