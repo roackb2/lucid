@@ -8,7 +8,7 @@ The simulator owns scenario-specific synthetic identities, private context,
 observation text, seeded selection, and event timing. It calls the server's
 loopback-only `development` tRPC router. It must not import or write through:
 
-- `SqliteDiscoveryRepository` or the database connection;
+- any persistence adapter or database connection;
 - Heddle task files or scheduler services;
 - the web application;
 - product initialization defaults.

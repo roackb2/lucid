@@ -2,7 +2,7 @@
 
 This directory owns participant identity, mailboxes, findings, and the bridge
 to durable representative execution. It is separate from tRPC transport,
-SQLite's concrete lifecycle, the React product projection, and development
+PostgreSQL's concrete lifecycle, the React product projection, and development
 simulation scenarios.
 
 ## Service boundaries
@@ -11,7 +11,7 @@ simulation scenarios.
 | --- | --- |
 | `discovery-workspace-service.ts` | Coordinates the local participant's saved interest, run requests, feedback, durable listening preference, and scoped snapshot |
 | `participant-network-service.ts` | Coordinates trusted participant registration/input, lifecycle, Heddle task reconciliation, reset, and development diagnostics |
-| `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per representative, claims mailbox wakes, routes request/response run intents, and owns scheduler lifecycle |
+| `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per representative, claims mailbox wakes, routes request/response run intents, and coordinates an injected execution host |
 | `heddle-representative-agent-runner.ts` | Builds one claimed wake's prompt/tools and delegates execution through Heddle's context |
 | `discovery-repository.ts` | Defines the asynchronous storage-independent domain port |
 | `agent-communication-tools.ts` | Enforces visible sources, fixed horizons, encountered-peer addressing, action budgets, and idempotent communication/working-note writes |
@@ -93,6 +93,13 @@ Heddle owns:
 - claim-fenced task settlement and interrupted-task recovery;
 - non-agent skipped outcomes for empty scheduled mailboxes.
 
+The composition root injects one structural task authority implementing both
+Heddle's targeted store and administration contracts. Lucid never constructs a
+file store inside the domain service and never rewrites task lifecycle state
+directly. The same service therefore works with the zero-setup file authority
+and long-lived scheduler or a shared PostgreSQL authority plus targeted worker
+host.
+
 The development simulator owns scenario characters and input timing. No domain
 module imports simulator scenarios.
 
@@ -102,7 +109,7 @@ Network ingress uses a caller-provided `registrationKey`. Reusing the same key
 with the same kind, name, and private context returns the original participant;
 reusing it with a conflicting profile fails. Participant identity,
 representative identity, join mailbox floor, and a text-free audit event are
-created in one SQLite transaction.
+created in one PostgreSQL transaction.
 
 Human registration and later context replacement require explicit approval.
 Synthetic registration is explicitly labelled and requires no fictional
@@ -172,8 +179,12 @@ active. Mail accumulates, the preference survives restart in Heddle's task
 store, and Resume enables and triggers the same task. Other participant nodes
 continue running.
 
-The workspace-level background flag is an internal master switch used by
-reset/recovery, not the normal participant product control.
+The workspace-level background flag is a durable operator dispatch gate, not
+the normal participant product control. Global pause preserves every task's
+personal `enabled` preference, continues to persist/coalesce run intent,
+cancels and awaits only locally owned active work, and dispatches pending
+enabled tasks after resume. Every admitted wake rereads this durable gate
+before mailbox or model work and again before Lucid commits completion.
 
 ## Communication and peer discovery
 
@@ -269,9 +280,11 @@ ownership, visibility, reply/source integrity, and retry safety only.
 ## Recovery and concurrency
 
 Failed, interrupted, or escalated wakes keep their cursor and active claim.
-Retry reuses the same wake ID, number, horizon, and action slots. Repository
-startup releases stale agent state; Heddle claim-fenced recovery returns stale
-tasks to a runnable state before Lucid reconciles configuration.
+Retry reuses the same wake ID, number, horizon, and action slots. Ordinary
+repository startup never steals a claim. After a Heddle execution lease
+expires, Heddle claim-fenced recovery returns the task to a runnable state and
+passes that exact interrupted execution ID to Lucid. Lucid releases only the
+matching product wake claim; a stale recovery cannot release a newer worker.
 
 Participant disable/retire uses Heddle task-scoped cancellation. A `not-owned`
 or `not-found` cancellation blocks the domain mutation because another runtime
@@ -281,6 +294,8 @@ Independent representatives execute concurrently up to
 `LUCID_HEARTBEAT_MAX_CONCURRENCY`. Each wake keeps tool concurrency at one so
 dependent writes and the action budget remain ordered.
 
-The file scheduler is single-host. PostgreSQL would not by itself provide
-distributed task claims; a hosted multi-replica design also needs a durable
-queue or workflow executor with leased ownership.
+The optional long-lived scheduler host is single-process. PostgreSQL provides
+atomic task claims, execution leases, and fenced settlement, but it is not a
+delivery service. A hosted multi-replica design still needs a durable queue or
+request executor; the current in-process targeted dispatcher is the local
+proof of that replaceable host boundary.

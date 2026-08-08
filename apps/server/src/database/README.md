@@ -1,48 +1,48 @@
 # Lucid persistence infrastructure
 
-This directory owns Lucid's concrete SQLite and PostgreSQL adapters. It is
-infrastructure, not the delegated-discovery domain or Heddle's task runtime.
+This directory owns Lucid's PostgreSQL product adapter and the PostgreSQL
+implementation of Heddle's public task-store ports. It is infrastructure, not
+the delegated-discovery domain or Heddle's task runtime.
 
 ## Responsibilities
 
 | File | Responsibility |
 | --- | --- |
-| `sqlite-database.ts` | Opens and closes SQLite, applies durability pragmas, and runs migrations |
-| `sqlite-discovery-repository.ts` | Implements the async `DiscoveryRepository` port with SQLite and Drizzle |
-| `schema.ts` | Declares persisted tables, indexes, and database constraints |
-| `discovery-persistence.ts` | Selects the configured adapter and owns its startup/shutdown lifecycle |
+| `discovery-persistence.ts` | Composes the product and Heddle adapters over one pool and owns shutdown |
 | `postgres-database.ts` | Owns the PostgreSQL pool, transaction-pooler compatibility, migration lifecycle, and shutdown |
-| `postgres-discovery-repository.ts` | Implements the same domain port with PostgreSQL transactions and row locks |
+| `postgres-discovery-repository.ts` | Implements `DiscoveryRepository` with PostgreSQL transactions, row locks, and fenced wake recovery |
 | `postgres-schema.ts` | Declares product tables and constraints in the `lucid` PostgreSQL schema |
 | `postgres-discovery-repository.integration.test.ts` | Runs the shared adapter contract plus real multi-connection contention checks |
+| `postgres-heartbeat-schema.ts` | Declares task authority and immutable run history in the separate `heddle` schema |
+| `postgres-heartbeat-task-store.ts` | Implements Heddle's targeted execution and administration contracts with row/catalog locks, leases, and fencing |
+| `postgres-heartbeat-task-store.integration.test.ts` | Runs canonical adapter conformance and administration races against independent PostgreSQL pools |
+| `postgres-test-harness.ts` | Requires an explicit disposable test URL and creates isolated real-PostgreSQL fixtures |
+| `heartbeat/README.md` | Defines the hosted heartbeat persistence boundary and its lease/recovery rules |
 
-`LucidSqliteDatabase` is deliberately not named a service or repository. It
-owns the lifetime and configuration of one SQLite resource. Domain
-repositories own data access and transactional behavior.
-
-The port is asynchronous even though `better-sqlite3` performs synchronous
-local I/O. The PostgreSQL adapter therefore uses a conventional async driver
-without changing `DiscoveryWorkspaceService`,
+The domain port remains storage-independent. PostgreSQL driver, query-builder,
+and transaction types do not leak into `DiscoveryWorkspaceService`,
 `RepresentativeAgentHeartbeatService`,
 `HeddleRepresentativeAgentRunner`, or tRPC.
 
-Replacing the product adapter is not the same as making Lucid distributed.
 PostgreSQL now preserves atomic wake claims, monotonic event sequences, unique
 idempotency keys, fixed horizons, attempt-level settlement fencing, and cursor
 semantics across API processes. A retry keeps its semantic wake ID so tool
 effects remain idempotent, but rotates `active_wake_claim_token`; completion,
 failure, and interruption reject a stale token.
-Multi-host scheduling still requires Heddle's released targeted-worker lease
-contract; ordinary PostgreSQL adapter initialization intentionally does not
-reset `running` claims because another process may still own them.
+Multi-host scheduling uses the PostgreSQL Heddle task store and a host
+dispatcher. Ordinary product-repository initialization intentionally does not
+reset either Lucid wake claims or Heddle `running` tasks because another
+process may still own them. Lease recovery supplies the interrupted Heddle
+execution ID to Lucid's fenced recovery operation, so it can release only the
+matching product wake claim.
 
 ## PostgreSQL operational boundary
 
 PostgreSQL uses the standard `lucid` schema for product state. Heddle task,
-run-request, checkpoint, and lease state will use a separate `heddle` schema
-after [Heddle #318](https://github.com/roackb2/heddle/issues/318) is released.
-Lucid does not copy Heddle's private file-store model or use a filtered local
-store as a distributed lock.
+run-request, checkpoint, lease, and run-history state uses the separate
+`heddle` schema through Heddle's released targeted-store contract and public
+state/control projectors. Lucid does not copy Heddle's private file-store model
+or use a filtered local store as a distributed lock.
 
 `LucidPostgresDatabase` defaults to `prepare: false`, which is compatible with
 Supavisor transaction pooling. Use a direct PostgreSQL connection for
@@ -52,31 +52,32 @@ secrets: pass them through environment configuration and never log them.
 Generate and apply checked-in PostgreSQL migrations with:
 
 ```bash
-yarn server:db:generate:postgres
-LUCID_DATABASE_URL='postgresql://...' yarn server:db:migrate:postgres
+yarn server:db:generate
+LUCID_DATABASE_URL='postgresql://...' yarn server:db:migrate
 ```
 
 Runtime startup must not generate schemas or silently run shared-database
 migrations. Apply migrations as a bounded deployment step before starting new
 workers.
 
-Select the product adapter with `LUCID_DATABASE_DRIVER=sqlite|postgres`.
-PostgreSQL additionally requires `LUCID_DATABASE_URL`. This selection changes
-Lucid product persistence only: the current server still uses Heddle's local
-file task store and must run as one process until the hosted task contract is
-available.
+`LUCID_DATABASE_URL` is required. The composition uses both schemas through one
+owned pool, an explicit Heddle namespace, and a lease longer than the bounded
+worker attempt; see `heartbeat/README.md`. There is no runtime backend selector
+or fallback database.
 
 The full adapter contract requires a disposable real PostgreSQL database:
 
 ```bash
-LUCID_POSTGRES_TEST_URL='postgresql://...' yarn server:test:postgres
+LUCID_POSTGRES_TEST_URL='postgresql:///lucid_test' yarn test
 ```
 
-The suite resets only the `lucid` product tables inside that database. It
-validates all shared repository behavior, two-pool wake contention,
-cross-process idempotency, non-stealing initialization, and persistence after
-every client connection closes. The ordinary unit-test command skips this
-suite when no test URL is configured.
+The product suite resets only the `lucid` product tables inside that database;
+the heartbeat suite deletes only its opaque test namespaces. Together they
+validate shared repository behavior, two-pool wake and task contention,
+cross-process idempotency, lease recovery and fencing, non-stealing
+initialization, and persistence after every client connection closes. The URL
+is mandatory for server tests and never falls back to the runtime URL. Test
+files run serially because they share fixed schema names.
 
 ## Data ownership
 

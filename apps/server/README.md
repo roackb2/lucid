@@ -1,15 +1,16 @@
 # Lucid server
 
-The server is the composition root for Lucid's delegated-discovery runtime.
-The active local composition still uses SQLite; the PostgreSQL product adapter
-is independently runnable and tested for the hosted pilot.
+The server is the composition root for Lucid's PostgreSQL-backed
+delegated-discovery runtime. Local development and the hosted pilot use the
+same product and Heddle task authority; only the execution-host topology may
+differ.
 
 It owns:
 
 - HTTP/tRPC transport and CORS policy;
-- SQLite lifecycle and checked-in Drizzle migrations;
-- construction of the discovery repository;
-- construction and startup of representative heartbeat tasks;
+- PostgreSQL pool lifecycle and checked-in Drizzle migrations;
+- construction of the product repository and Heddle task authority;
+- construction and startup of the selected representative execution host;
 - graceful shutdown ordering.
 
 The server does not decide whether a message is true or useful. It makes
@@ -20,17 +21,15 @@ bounded execution, and recovery predictable.
 
 - `src/server.ts` constructs the repository, runner, heartbeat host, workspace
   service, and HTTP server.
-- `src/migrate.ts` applies checked-in SQLite migrations.
-- `src/migrate-postgres.ts` applies checked-in PostgreSQL product migrations as
-  an explicit deployment step.
-- `src/database/sqlite-database.ts` owns the concrete SQLite connection.
-- `src/database/sqlite-discovery-repository.ts` implements the async domain
-  repository port with Drizzle and SQLite.
+- `src/migrate.ts` applies checked-in PostgreSQL product and Heddle migrations
+  as an explicit deployment step.
 - `src/database/postgres-database.ts` and
   `src/database/postgres-discovery-repository.ts` provide the hosted product
-  persistence boundary without changing domain services.
-- `src/database/discovery-persistence.ts` selects SQLite or PostgreSQL from
-  validated host configuration and owns adapter shutdown.
+  persistence boundary.
+- `src/database/postgres-heartbeat-task-store.ts` implements Heddle's public
+  task authority contracts over the same owned pool.
+- `src/database/discovery-persistence.ts` composes both PostgreSQL adapters and
+  owns pool shutdown.
 - `src/router.ts` exposes:
   - `discovery.snapshot`
   - `discovery.saveInterest`
@@ -44,21 +43,26 @@ bounded execution, and recovery predictable.
 
 Startup order is:
 
-1. migrate and initialize SQLite;
-2. recover interrupted Heddle executions through its claim-fenced task API;
-3. reconcile heartbeat tasks with the current workspace generation;
-4. start the bounded Heddle scheduler through its lifecycle handle;
-5. accept HTTP requests.
+1. validate the PostgreSQL and authentication configuration;
+2. initialize product defaults without stealing live claims;
+3. recover expired Heddle executions through its lease- and claim-fenced API;
+4. reconcile heartbeat tasks with the current workspace generation;
+5. start either the targeted bounded-worker host or the optional long-lived
+   scheduler;
+6. accept HTTP requests.
 
 Shutdown first stops new HTTP work, then aborts and settles heartbeat
-execution, and closes SQLite last. Persistence code must remain available
+execution, and closes PostgreSQL last. Persistence code must remain available
 until every claimed wake has either completed or been returned to unread state.
 
-The hosted composition is deliberately not switched on yet. It depends on the
-released Heddle #318 targeted-worker/store contract so an ephemeral invocation
-can lease and run exactly one due task. Until then, using PostgreSQL beside the
-process-local scheduler would create the appearance of multi-host safety
-without an authoritative distributed task owner.
+The targeted host is the default. It invokes one addressed task at a time,
+retains a correctness poll fallback, and uses the database task lease as the
+authority for recovery. The optional scheduler host is useful for a
+single-process demo but does not change persistence or create a second task
+authority.
+
+Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
+against the deployment database before starting a new version.
 
 `src/lucid` owns participants, mailbox events, findings, feedback, wake claims,
 and the storage-independent `DiscoveryRepository` port. Heddle owns provider

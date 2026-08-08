@@ -17,9 +17,6 @@ export type DiscoveryRepositoryContractOptions = {
     repository: DiscoveryRepository;
     close: () => Promise<void>;
   }>;
-  recoverInterruptedWake?: (
-    repository: DiscoveryRepository,
-  ) => Promise<void>;
 };
 
 /**
@@ -1010,39 +1007,49 @@ export const defineDiscoveryRepositoryContract = (
     )).toHaveLength(1);
   });
 
-  const recoverInterruptedWake = options.recoverInterruptedWake;
-  if (recoverInterruptedWake) {
-    it('recovers an interrupted wake without consuming unread input', async () => {
-      const interest = await repository.saveInterest(
-        'Keep this input unread until the wake succeeds.',
-      );
-      const claimed = await repository.beginAgentWake(
-        USER_AGENT_ID,
-        'wake_before_restart',
-      );
-      expect(claimed?.visibleEvents.map(({ sequence }) => sequence))
-        .toContain(interest.sequence);
+  it('recovers only the matching interrupted wake without consuming unread input', async () => {
+    const interest = await repository.saveInterest(
+      'Keep this input unread until the wake succeeds.',
+    );
+    const claimed = await repository.beginAgentWake(
+      USER_AGENT_ID,
+      'execution_before_restart',
+    );
+    expect(claimed?.visibleEvents.map(({ sequence }) => sequence))
+      .toContain(interest.sequence);
 
-      await recoverInterruptedWake(repository);
-      const resumed = await repository.beginAgentWake(
-        USER_AGENT_ID,
-        'wake_after_restart',
-      );
-      expect(resumed).toMatchObject({
-        wakeId: claimed!.wakeId,
-        wakeNumber: claimed!.wakeNumber,
-        horizonSequence: claimed!.horizonSequence,
-      });
-      expect(resumed?.visibleEvents.map(({ sequence }) => sequence))
-        .toContain(interest.sequence);
-      expect((await repository.readNetworkDiagnostics()).events).toContainEqual(
-        expect.objectContaining({
-          kind: 'error',
-          title: 'Interrupted agent wakes recovered',
-        }),
-      );
+    expect(await repository.recoverInterruptedAgentWake(
+      USER_AGENT_ID,
+      'different_execution',
+    )).toBe(false);
+    expect((await repository.requireUserAgent()).status).toBe('running');
+    expect(await repository.recoverInterruptedAgentWake(
+      USER_AGENT_ID,
+      claimed!.claimToken,
+    )).toBe(true);
+    expect(await repository.recoverInterruptedAgentWake(
+      USER_AGENT_ID,
+      claimed!.claimToken,
+    )).toBe(false);
+
+    const resumed = await repository.beginAgentWake(
+      USER_AGENT_ID,
+      'execution_after_restart',
+    );
+    expect(resumed).toMatchObject({
+      wakeId: claimed!.wakeId,
+      wakeNumber: claimed!.wakeNumber,
+      horizonSequence: claimed!.horizonSequence,
     });
-  }
+    expect(resumed?.visibleEvents.map(({ sequence }) => sequence))
+      .toContain(interest.sequence);
+    expect((await repository.readNetworkDiagnostics()).events).toContainEqual(
+      expect.objectContaining({
+        kind: 'error',
+        title: 'Interrupted representative wake recovered',
+      }),
+    );
+  });
 });
 
 async function registerSynthetic(

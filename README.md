@@ -1,7 +1,7 @@
 # Lucid
 
-Lucid is a local experiment in delegated discovery between agents that
-represent different participants.
+Lucid is a PostgreSQL-backed experiment in delegated discovery between agents
+that represent different participants.
 
 The product deliberately shows one participant's perspective:
 
@@ -74,8 +74,8 @@ that model, not the world administrator.
 | Development simulator | Scenario-specific synthetic people, seeded observation selection, timing, and exogenous input |
 
 The simulator uses the same ingress a future account, import, webhook, or human
-participant client could use. It never imports SQLite, the Heddle task store, or
-Lucid product initialization.
+participant client could use. It never opens a product database connection,
+imports the Heddle task store, or invokes Lucid product initialization.
 
 ## Run locally
 
@@ -83,11 +83,14 @@ Requirements:
 
 - Node.js 22
 - Yarn 1.22
+- PostgreSQL 14 or newer
+- `LUCID_DATABASE_URL` pointing to a migrated PostgreSQL database
 - either `OPENAI_API_KEY` in `.env` or credentials available to Heddle
 
 ```bash
 cp .env.example .env
 yarn install
+yarn server:db:migrate
 yarn dev
 ```
 
@@ -181,7 +184,9 @@ Lucid structures only behavior it can enforce:
   visible peer-authored messages;
 - participant-scoped projections that omit private context and global state;
 - task-scoped pause/cancellation without stopping unrelated nodes;
-- restart recovery that preserves claimed mail and Heddle task state.
+- restart recovery that preserves claimed mail and Heddle task state;
+- execution-ID-fenced interrupted-wake recovery that cannot release a newer
+  worker's product claim.
 
 Interest, messages, findings, and feedback remain ordinary text. Lucid does not
 invent confidence scores, reputation, evidence packets, or universal value
@@ -216,8 +221,7 @@ network for every shared message.
 | `DiscoveryWorkspaceService` | Coordinates the local participant's product actions and scoped projection |
 | `ParticipantNetworkService` | Trusted ingress, participant lifecycle, and development diagnostics |
 | `DiscoveryRepository` | Async storage-independent domain port |
-| `SqliteDiscoveryRepository` | SQLite/Drizzle adapter preserving mailbox transactions |
-| `PostgresDiscoveryRepository` | PostgreSQL/Drizzle adapter preserving the same contract across API processes |
+| `PostgresDiscoveryRepository` | PostgreSQL/Drizzle adapter preserving mailbox transactions and claim fencing across API processes |
 | `RepresentativeAgentHeartbeatService` | Reconciles participants to Heddle tasks and settles mailbox wakes |
 | `HeddleRepresentativeAgentRunner` | Supplies one claimed wake's prompt and tools to Heddle execution |
 | `AgentCommunicationToolService` | Enforces visibility, reply targets, content provenance, peer addressing, budgets, and idempotency |
@@ -231,31 +235,31 @@ Service-level maintenance notes live in
 
 ```bash
 yarn typecheck
-yarn test
+LUCID_POSTGRES_TEST_URL='postgresql:///lucid_test' yarn test
 yarn build
 yarn server:db:generate
-yarn server:db:migrate
+LUCID_DATABASE_URL='postgresql:///lucid' yarn server:db:migrate
 ```
 
 Drizzle snapshots are committed but marked generated in `.gitattributes`.
+The test URL must name a disposable database: the suite resets Lucid's fixed
+test schemas and never falls back to `LUCID_DATABASE_URL`.
 
 ## Persistence
 
-Runtime state defaults to `local/discovery-home/`:
+PostgreSQL is Lucid's sole product and task authority:
 
 ```text
-local/discovery-home/
-├── lucid.sqlite
-└── heddle/
-    └── heartbeat/
-        ├── tasks/
-        ├── checkpoints/
-        └── runs/
+PostgreSQL database
+├── lucid schema    # participants, mailboxes, findings, product wake claims
+└── heddle schema   # tasks, checkpoints, leases, run requests, run history
 ```
 
-The file-backed scheduler and SQLite adapter are appropriate for this
-single-host experiment. PostgreSQL alone would not make it multi-replica;
-distributed execution also needs leased or queued task ownership.
+`LUCID_STATE_ROOT` remains local scratch space for Heddle execution artifacts;
+it is not Lucid's durable product database. The targeted host is the default
+and uses PostgreSQL leases plus bounded workers. The long-lived scheduler is an
+optional single-process execution topology over the same PostgreSQL authority.
+Migrations are an explicit deployment step and never run silently at startup.
 
 Older experiments remain available in Git history. The Dream Terrarium is
 preserved on `codex/dream-terrarium` at commit `2c367e9`.
@@ -264,7 +268,7 @@ preserved on `codex/dream-terrarium` at commit `2c367e9`.
 
 ```text
 apps/
-├── server/   # tRPC, domain, SQLite adapter, Heddle heartbeat host
+├── server/   # tRPC, domain, PostgreSQL adapters, Heddle heartbeat host
 └── web/      # participant-scoped discovery workspace
 scripts/      # replaceable local network simulation tools and scenarios
 ```

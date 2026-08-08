@@ -1,13 +1,14 @@
-import { fileURLToPath } from 'node:url';
 import {
-  afterEach,
+  afterAll,
+  beforeAll,
   beforeEach,
   describe,
   expect,
   it,
 } from 'vitest';
-import { SqliteDiscoveryRepository } from '../database/sqlite-discovery-repository.js';
-import { LucidSqliteDatabase } from '../database/sqlite-database.js';
+import type { LucidPostgresDatabase } from '../database/postgres-database.js';
+import type { PostgresDiscoveryRepository } from '../database/postgres-discovery-repository.js';
+import { createPostgresTestRepository } from '../database/postgres-test-harness.js';
 import { AgentCommunicationToolService } from './agent-communication-tools.js';
 import {
   LOCAL_USER_ID,
@@ -18,24 +19,22 @@ import {
   buildRepresentativeAgentInstructions,
 } from './agent-prompts.js';
 
-const MIGRATIONS_ROOT = fileURLToPath(
-  new URL('../../drizzle', import.meta.url),
-);
-
 describe('representative-agent communication', () => {
-  let database: LucidSqliteDatabase;
-  let repository: SqliteDiscoveryRepository;
+  let database: LucidPostgresDatabase;
+  let repository: PostgresDiscoveryRepository;
+
+  beforeAll(async () => {
+    ({ database, repository } = await createPostgresTestRepository({
+      applicationName: 'lucid-agent-communication-test',
+      reset: false,
+    }));
+  });
 
   beforeEach(async () => {
-    database = new LucidSqliteDatabase(':memory:');
-    database.migrate(MIGRATIONS_ROOT);
-    repository = new SqliteDiscoveryRepository(database);
-    await repository.initialize();
+    await repository.reset({ backgroundChecksEnabled: true });
   });
 
-  afterEach(() => {
-    database.close();
-  });
+  afterAll(async () => database.close());
 
   it('declares host-owned effects and domain write scope', async () => {
     const tools = await createUserTools(repository, 'wake_policy', 1);
@@ -727,7 +726,7 @@ You represent an explicitly simulated test participant, not a real person or ext
 });
 
 async function registerSynthetic(
-  repository: SqliteDiscoveryRepository,
+  repository: PostgresDiscoveryRepository,
   key: string,
 ) {
   return await repository.registerParticipant({
@@ -739,7 +738,7 @@ async function registerSynthetic(
 }
 
 async function peerMessage(
-  repository: SqliteDiscoveryRepository,
+  repository: PostgresDiscoveryRepository,
   actorAgentId: string,
   targetAgentId: string,
   content: string,
@@ -754,7 +753,7 @@ async function peerMessage(
 }
 
 async function createUserTools(
-  repository: SqliteDiscoveryRepository,
+  repository: PostgresDiscoveryRepository,
   wakeId: string,
   wakeNumber: number,
   horizonSequence = Number.MAX_SAFE_INTEGER,

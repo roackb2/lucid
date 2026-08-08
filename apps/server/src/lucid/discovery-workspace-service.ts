@@ -44,6 +44,11 @@ export class DiscoveryWorkspaceService {
   async runNow(): Promise<DiscoveryWorkspaceSnapshot> {
     const userAgent = await this.repository.requireUserAgent();
     const heartbeat = await this.heartbeats.snapshotForAgent(userAgent.id);
+    if (!heartbeat.dispatchEnabled) {
+      throw new DiscoveryInputError(
+        'The hosted demo is paused by an operator. Try again after dispatch resumes.',
+      );
+    }
     if (!heartbeat.enabled) {
       throw new DiscoveryInputError(
         'Background checks are paused. Resume them before running now.',
@@ -127,6 +132,11 @@ ${interest.content}`,
   async retryCurrentWake(): Promise<DiscoveryWorkspaceSnapshot> {
     const userAgent = await this.repository.requireUserAgent();
     const heartbeat = await this.heartbeats.snapshotForAgent(userAgent.id);
+    if (!heartbeat.dispatchEnabled) {
+      throw new DiscoveryInputError(
+        'The hosted demo is paused by an operator. Try again after dispatch resumes.',
+      );
+    }
     if (!heartbeat.enabled) {
       throw new DiscoveryInputError(
         'Background checks are paused. Resume them before retrying.',
