@@ -217,6 +217,7 @@ network for every shared message.
 | `ParticipantNetworkService` | Trusted ingress, participant lifecycle, and development diagnostics |
 | `DiscoveryRepository` | Async storage-independent domain port |
 | `SqliteDiscoveryRepository` | SQLite/Drizzle adapter preserving mailbox transactions |
+| `PostgresDiscoveryRepository` | PostgreSQL/Drizzle adapter preserving the same contract across API processes |
 | `RepresentativeAgentHeartbeatService` | Reconciles participants to Heddle tasks and settles mailbox wakes |
 | `HeddleRepresentativeAgentRunner` | Supplies one claimed wake's prompt and tools to Heddle execution |
 | `AgentCommunicationToolService` | Enforces visibility, reply targets, content provenance, peer addressing, budgets, and idempotency |

@@ -1,5 +1,5 @@
 /**
- * SQLite/Drizzle implementation of Lucid's durable discovery-state boundary.
+ * PostgreSQL/Drizzle implementation of Lucid's durable discovery-state boundary.
  *
  * Besides persistence, this adapter owns the atomic invariants that depend on
  * storage: participant-agent lifecycle changes, append-only mailbox ordering,
@@ -18,6 +18,7 @@ import {
   lte,
   ne,
   or,
+  sql,
 } from 'drizzle-orm';
 import {
   LOCAL_PARTICIPANT,
@@ -58,12 +59,12 @@ import {
   type RepresentativeWorkingContext,
 } from '../lucid/discovery-types.js';
 import {
-  discoveryEvents,
-  discoveryWorkspaces,
-  participants,
-  representativeAgents,
-} from './schema.js';
-import type { LucidSqliteDatabase } from './sqlite-database.js';
+  postgresDiscoveryEvents as discoveryEvents,
+  postgresDiscoveryWorkspaces as discoveryWorkspaces,
+  postgresParticipants as participants,
+  postgresRepresentativeAgents as representativeAgents,
+} from './postgres-schema.js';
+import type { LucidPostgresDatabase } from './postgres-database.js';
 
 const WORKSPACE_ID = 'local-discovery-workspace';
 const SNAPSHOT_EVENT_LIMIT = 220;
@@ -82,53 +83,67 @@ type AgentRow = typeof representativeAgents.$inferSelect;
 type DiscoveryEventRow = typeof discoveryEvents.$inferSelect;
 type DiscoveryWorkspaceRow = typeof discoveryWorkspaces.$inferSelect;
 type ParticipantRow = typeof participants.$inferSelect;
+type LucidPostgresTransaction = Parameters<
+  Parameters<LucidPostgresDatabase['orm']['transaction']>[0]
+>[0];
 
 /**
- * SQLite/Drizzle adapter for Lucid's storage-independent discovery repository.
+ * PostgreSQL/Drizzle adapter for Lucid's storage-independent discovery repository.
  * Content remains ordinary language and is never scored here.
  */
-export class SqliteDiscoveryRepository implements DiscoveryRepository {
-  constructor(private readonly database: LucidSqliteDatabase) {}
+export class PostgresDiscoveryRepository implements DiscoveryRepository {
+  constructor(private readonly database: LucidPostgresDatabase) {}
 
   async initialize(): Promise<void> {
-    const workspace = this.findWorkspace();
-    if (workspace) {
-      this.recoverInterruptedAgentRuns(workspace);
-      return;
-    }
-    this.createWorkspace();
+    await this.database.orm.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${WORKSPACE_ID}))`,
+      );
+      const [workspace] = await transaction
+        .select({ id: discoveryWorkspaces.id })
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
+        .limit(1);
+      if (!workspace) {
+        await this.insertWorkspace(transaction);
+      }
+    });
   }
 
   async reset(options: { backgroundChecksEnabled: boolean }): Promise<void> {
-    this.database.client.transaction(() => {
-      this.database.orm.delete(discoveryWorkspaces).run();
-      this.database.client
-        .prepare("DELETE FROM sqlite_sequence WHERE name = 'discovery_events'")
-        .run();
-      this.insertWorkspace(options.backgroundChecksEnabled);
-    })();
+    await this.database.orm.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${WORKSPACE_ID}))`,
+      );
+      await transaction.execute(
+        sql`truncate table lucid.discovery_workspaces restart identity cascade`,
+      );
+      await this.insertWorkspace(
+        transaction,
+        options.backgroundChecksEnabled,
+      );
+    });
   }
 
   async readWorkspace(): Promise<DiscoveryWorkspace> {
-    return this.requireWorkspace();
+    return await this.requireWorkspace();
   }
 
   async setBackgroundChecksEnabled(
     enabled: boolean,
   ): Promise<DiscoveryWorkspace> {
-    this.database.orm
+    await this.database.orm
       .update(discoveryWorkspaces)
       .set({
         backgroundChecksEnabled: enabled,
         updatedAt: dayjs().toISOString(),
       })
-      .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
-      .run();
-    return this.requireWorkspace();
+      .where(eq(discoveryWorkspaces.id, WORKSPACE_ID));
+    return await this.requireWorkspace();
   }
 
   async readSnapshot(): Promise<DiscoveryRepositorySnapshot> {
-    const workspace = this.requireWorkspace();
+    const workspace = await this.requireWorkspace();
     const [user, representative] = await Promise.all([
       this.requireParticipant(LOCAL_USER_ID),
       this.requireUserAgent(),
@@ -143,8 +158,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       representative: await this.toAgentView(representative, user),
       interest: await this.findSavedInterest(),
       workingNote: workingContext.workingNote,
-      networkActivity: this.readNetworkActivity(representative),
-      guidanceFollowThrough: this.readGuidanceFollowThrough(
+      networkActivity: await this.readNetworkActivity(representative),
+      guidanceFollowThrough: await this.readGuidanceFollowThrough(
         representative,
         workingContext.findings,
       ),
@@ -153,7 +168,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   async readNetworkDiagnostics(): Promise<NetworkDiagnosticsRepositorySnapshot> {
-    const workspace = this.requireWorkspace();
+    const workspace = await this.requireWorkspace();
     const [participantList, agentList] = await Promise.all([
       this.listParticipants(),
       this.listAgents(),
@@ -170,13 +185,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       }
       return await this.toAgentView(agent, participant);
     }));
-    const events = this.database.orm
+    const events = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(eq(discoveryEvents.workspaceId, WORKSPACE_ID))
       .orderBy(desc(discoveryEvents.sequence))
-      .limit(SNAPSHOT_EVENT_LIMIT)
-      .all()
+      .limit(SNAPSHOT_EVENT_LIMIT))
       .reverse()
       .map(toDiscoveryEvent);
 
@@ -189,22 +203,20 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   async listParticipants(): Promise<Participant[]> {
-    return this.database.orm
+    return (await this.database.orm
       .select()
       .from(participants)
       .where(eq(participants.workspaceId, WORKSPACE_ID))
-      .orderBy(asc(participants.createdAt))
-      .all()
+      .orderBy(asc(participants.createdAt)))
       .map(toParticipant);
   }
 
   async listAgents(): Promise<Agent[]> {
-    return this.database.orm
+    return (await this.database.orm
       .select()
       .from(representativeAgents)
       .where(eq(representativeAgents.workspaceId, WORKSPACE_ID))
-      .orderBy(asc(representativeAgents.sortOrder))
-      .all()
+      .orderBy(asc(representativeAgents.sortOrder)))
       .map(toAgent);
   }
 
@@ -224,14 +236,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   async requireParticipant(id: string): Promise<Participant> {
-    const row = this.database.orm
+    const [row] = await this.database.orm
       .select()
       .from(participants)
       .where(and(
         eq(participants.workspaceId, WORKSPACE_ID),
         eq(participants.id, id),
       ))
-      .get();
+      .limit(1);
     if (!row) {
       throw new Error(`Participant not found: ${id}`);
     }
@@ -239,14 +251,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   async requireAgent(id: string): Promise<Agent> {
-    const row = this.database.orm
+    const [row] = await this.database.orm
       .select()
       .from(representativeAgents)
       .where(and(
         eq(representativeAgents.workspaceId, WORKSPACE_ID),
         eq(representativeAgents.id, id),
       ))
-      .get();
+      .limit(1);
     if (!row) {
       throw new Error(`Representative agent not found: ${id}`);
     }
@@ -254,14 +266,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   async requireAgentByParticipantId(participantId: string): Promise<Agent> {
-    const row = this.database.orm
+    const [row] = await this.database.orm
       .select()
       .from(representativeAgents)
       .where(and(
         eq(representativeAgents.workspaceId, WORKSPACE_ID),
         eq(representativeAgents.participantId, participantId),
       ))
-      .get();
+      .limit(1);
     if (!row) {
       throw new Error(
         `Representative agent not found for participant: ${participantId}`,
@@ -299,57 +311,74 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       throw new Error('Participant context must contain 1 to 4,000 characters.');
     }
 
-    const existingRow = this.database.orm
-      .select()
-      .from(participants)
-      .where(and(
-        eq(participants.workspaceId, WORKSPACE_ID),
-        eq(participants.registrationKey, registrationKey),
-      ))
-      .get();
-    if (existingRow) {
-      const participant = toParticipant(existingRow);
-      if (
-        participant.kind !== input.kind
-        || participant.displayName !== displayName
-        || participant.privateContext !== privateContext
-      ) {
-        throw new Error(
-          `Registration key ${registrationKey} already belongs to a different participant profile.`,
-        );
-      }
-      return {
-        participant,
-        agent: await this.requireAgentByParticipantId(participant.id),
-        created: false,
-      };
-    }
-
     const now = dayjs().toISOString();
     const participantId = `participant_${randomUUID()}`;
     const agentId = `agent_${randomUUID()}`;
 
-    return this.database.orm.transaction((transaction) => {
-      const workspace = transaction
+    return await this.database.orm.transaction(async (transaction) => {
+      // Serialize one stable registration identity across API instances. This
+      // makes participant + representative creation one idempotent unit rather
+      // than relying on a pre-insert existence check.
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${registrationKey}))`,
+      );
+      const [existingRow] = await transaction
+        .select()
+        .from(participants)
+        .where(and(
+          eq(participants.workspaceId, WORKSPACE_ID),
+          eq(participants.registrationKey, registrationKey),
+        ))
+        .limit(1);
+      if (existingRow) {
+        const participant = toParticipant(existingRow);
+        if (
+          participant.kind !== input.kind
+          || participant.displayName !== displayName
+          || participant.privateContext !== privateContext
+        ) {
+          throw new Error(
+            `Registration key ${registrationKey} already belongs to a different participant profile.`,
+          );
+        }
+        const [existingAgent] = await transaction
+          .select()
+          .from(representativeAgents)
+          .where(eq(representativeAgents.participantId, participant.id))
+          .limit(1);
+        if (!existingAgent) {
+          throw new Error(
+            `Representative agent not found for participant: ${participant.id}`,
+          );
+        }
+        return {
+          participant,
+          agent: toAgent(existingAgent),
+          created: false,
+        };
+      }
+
+      const [workspace] = await transaction
         .select()
         .from(discoveryWorkspaces)
         .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
-        .get();
+        .for('update')
+        .limit(1);
       if (!workspace) {
         throw new Error('Discovery workspace is missing.');
       }
-      const lastAgent = transaction
+      const [lastAgent] = await transaction
         .select({ sortOrder: representativeAgents.sortOrder })
         .from(representativeAgents)
         .where(eq(representativeAgents.workspaceId, WORKSPACE_ID))
         .orderBy(desc(representativeAgents.sortOrder))
-        .get();
-      const latestEvent = transaction
+        .limit(1);
+      const [latestEvent] = await transaction
         .select({ sequence: discoveryEvents.sequence })
         .from(discoveryEvents)
         .where(eq(discoveryEvents.workspaceId, WORKSPACE_ID))
         .orderBy(desc(discoveryEvents.sequence))
-        .get();
+        .limit(1);
       // Participant, representative, initial mailbox floor, and audit event are
       // one unit. The current tail prevents a new source from reading old mail.
       const profile = createRepresentativeProfile({
@@ -359,7 +388,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         kind: input.kind,
         sortOrder: (lastAgent?.sortOrder ?? 0) + 1,
       });
-      const participantRow = transaction
+      const [participantRow] = await transaction
         .insert(participants)
         .values({
           id: participantId,
@@ -373,9 +402,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           createdAt: now,
           updatedAt: now,
         })
-        .returning()
-        .get();
-      const agentRow = transaction
+        .returning();
+      const [agentRow] = await transaction
         .insert(representativeAgents)
         .values({
           ...profile,
@@ -387,9 +415,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           createdAt: now,
           updatedAt: now,
         })
-        .returning()
-        .get();
-      transaction.insert(discoveryEvents).values({
+        .returning();
+      await transaction.insert(discoveryEvents).values({
         id: `event_${randomUUID()}`,
         workspaceId: WORKSPACE_ID,
         wakeNumber: workspace.currentWake,
@@ -407,7 +434,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           contextConsentAt: input.kind === 'human' ? now : undefined,
         },
         createdAt: now,
-      }).run();
+      });
+
+      if (!participantRow || !agentRow) {
+        throw new Error('PostgreSQL did not return the created participant.');
+      }
 
       return {
         participant: toParticipant(participantRow),
@@ -424,23 +455,25 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     this.assertManageableParticipant(participantId);
     const now = dayjs().toISOString();
 
-    return this.database.orm.transaction((transaction) => {
-      const workspace = transaction
+    return await this.database.orm.transaction(async (transaction) => {
+      const [workspace] = await transaction
         .select()
         .from(discoveryWorkspaces)
         .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
-        .get();
+        .for('update')
+        .limit(1);
       if (!workspace) {
         throw new Error('Discovery workspace is missing.');
       }
-      const participantRow = transaction
+      const [participantRow] = await transaction
         .select()
         .from(participants)
         .where(and(
           eq(participants.workspaceId, WORKSPACE_ID),
           eq(participants.id, participantId),
         ))
-        .get();
+        .for('update')
+        .limit(1);
       if (!participantRow) {
         throw new Error(`Participant not found: ${participantId}`);
       }
@@ -448,11 +481,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       if (participant.status === 'retired') {
         throw new Error('A retired participant cannot be re-enabled.');
       }
-      const agentRow = transaction
+      const [agentRow] = await transaction
         .select()
         .from(representativeAgents)
         .where(eq(representativeAgents.participantId, participantId))
-        .get();
+        .for('update')
+        .limit(1);
       if (!agentRow) {
         throw new Error(
           `Representative agent not found for participant: ${participantId}`,
@@ -464,19 +498,18 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
 
       // Resuming accepts only messages created after this transaction. Pausing
       // preserves the existing floor because task shutdown already prevents reads.
-      const latestEvent = transaction
+      const [latestEvent] = await transaction
         .select({ sequence: discoveryEvents.sequence })
         .from(discoveryEvents)
         .where(eq(discoveryEvents.workspaceId, WORKSPACE_ID))
         .orderBy(desc(discoveryEvents.sequence))
-        .get();
-      const updatedParticipantRow = transaction
+        .limit(1);
+      const [updatedParticipantRow] = await transaction
         .update(participants)
         .set({ status, updatedAt: now })
         .where(eq(participants.id, participantId))
-        .returning()
-        .get();
-      const updatedAgentRow = transaction
+        .returning();
+      const [updatedAgentRow] = await transaction
         .update(representativeAgents)
         .set({
           status: 'idle',
@@ -487,15 +520,15 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             ? latestEvent?.sequence ?? agentRow.lastSeenSequence
             : agentRow.lastSeenSequence,
           activeWakeId: null,
+          activeWakeClaimToken: null,
           activeWakeNumber: null,
           activeWakeHorizon: null,
           updatedAt: now,
         })
         .where(eq(representativeAgents.id, agentRow.id))
-        .returning()
-        .get();
+        .returning();
       // Persist lifecycle state and its operator audit record atomically.
-      transaction.insert(discoveryEvents).values({
+      await transaction.insert(discoveryEvents).values({
         id: `event_${randomUUID()}`,
         workspaceId: WORKSPACE_ID,
         wakeNumber: workspace.currentWake,
@@ -515,7 +548,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           status,
         },
         createdAt: now,
-      }).run();
+      });
+
+      if (!updatedParticipantRow || !updatedAgentRow) {
+        throw new Error('Participant lifecycle update did not persist.');
+      }
 
       return {
         participant: toParticipant(updatedParticipantRow),
@@ -530,32 +567,35 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     this.assertManageableParticipant(participantId);
     const now = dayjs().toISOString();
 
-    return this.database.orm.transaction((transaction) => {
-      const workspace = transaction
+    return await this.database.orm.transaction(async (transaction) => {
+      const [workspace] = await transaction
         .select()
         .from(discoveryWorkspaces)
         .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
-        .get();
+        .for('update')
+        .limit(1);
       if (!workspace) {
         throw new Error('Discovery workspace is missing.');
       }
-      const participantRow = transaction
+      const [participantRow] = await transaction
         .select()
         .from(participants)
         .where(and(
           eq(participants.workspaceId, WORKSPACE_ID),
           eq(participants.id, participantId),
         ))
-        .get();
+        .for('update')
+        .limit(1);
       if (!participantRow) {
         throw new Error(`Participant not found: ${participantId}`);
       }
       const participant = toParticipant(participantRow);
-      const agentRow = transaction
+      const [agentRow] = await transaction
         .select()
         .from(representativeAgents)
         .where(eq(representativeAgents.participantId, participantId))
-        .get();
+        .for('update')
+        .limit(1);
       if (!agentRow) {
         throw new Error(
           `Representative agent not found for participant: ${participantId}`,
@@ -564,15 +604,15 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       if (participant.status === 'retired') {
         return { participant, agent: toAgent(agentRow) };
       }
-      const latestEvent = transaction
+      const [latestEvent] = await transaction
         .select({ sequence: discoveryEvents.sequence })
         .from(discoveryEvents)
         .where(eq(discoveryEvents.workspaceId, WORKSPACE_ID))
         .orderBy(desc(discoveryEvents.sequence))
-        .get();
+        .limit(1);
       // Retirement is irreversible in this workspace generation: scrub private
       // context in the same transaction that closes the mailbox and records it.
-      const updatedParticipantRow = transaction
+      const [updatedParticipantRow] = await transaction
         .update(participants)
         .set({
           status: 'retired',
@@ -580,9 +620,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           updatedAt: now,
         })
         .where(eq(participants.id, participantId))
-        .returning()
-        .get();
-      const updatedAgentRow = transaction
+        .returning();
+      const [updatedAgentRow] = await transaction
         .update(representativeAgents)
         .set({
           status: 'idle',
@@ -590,14 +629,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             latestEvent?.sequence ?? agentRow.mailboxFloorSequence,
           lastSeenSequence: latestEvent?.sequence ?? agentRow.lastSeenSequence,
           activeWakeId: null,
+          activeWakeClaimToken: null,
           activeWakeNumber: null,
           activeWakeHorizon: null,
           updatedAt: now,
         })
         .where(eq(representativeAgents.id, agentRow.id))
-        .returning()
-        .get();
-      transaction.insert(discoveryEvents).values({
+        .returning();
+      await transaction.insert(discoveryEvents).values({
         id: `event_${randomUUID()}`,
         workspaceId: WORKSPACE_ID,
         wakeNumber: workspace.currentWake,
@@ -615,7 +654,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           privateContextRemoved: true,
         },
         createdAt: now,
-      }).run();
+      });
+
+      if (!updatedParticipantRow || !updatedAgentRow) {
+        throw new Error('Participant retirement did not persist.');
+      }
 
       return {
         participant: toParticipant(updatedParticipantRow),
@@ -625,7 +668,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   async findSavedInterest(): Promise<DiscoveryEvent | undefined> {
-    const row = this.database.orm
+    const [row] = await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -635,7 +678,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.targetParticipantId, LOCAL_USER_ID),
       ))
       .orderBy(desc(discoveryEvents.sequence))
-      .get();
+      .limit(1);
     return row ? toDiscoveryEvent(row) : undefined;
   }
 
@@ -699,11 +742,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     findingSequence: number,
     content: string,
   ): Promise<DiscoveryEvent> {
-    const finding = this.requireParticipantFinding(
+    const finding = await this.requireParticipantFinding(
       participantId,
       findingSequence,
     );
-    const existing = this.database.orm
+    const [existing] = await this.database.orm
       .select({ sequence: discoveryEvents.sequence })
       .from(discoveryEvents)
       .where(and(
@@ -711,7 +754,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.kind, 'feedback_saved'),
         eq(discoveryEvents.replyToSequence, findingSequence),
       ))
-      .get();
+      .limit(1);
     if (existing) {
       throw new Error('Feedback has already been saved for this finding.');
     }
@@ -742,7 +785,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     if (!interest) {
       throw new Error('Save an interest before refining the representative.');
     }
-    const workingNote = this.findWorkingNote(
+    const workingNote = await this.findWorkingNote(
       representative,
       Number.MAX_SAFE_INTEGER,
     );
@@ -769,7 +812,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     limit = 40,
     throughSequence?: number,
   ): Promise<DiscoveryEvent[]> {
-    const agent = this.findActiveAgent(agentId);
+    const agent = await this.findActiveAgent(agentId);
     if (!agent) {
       return [];
     }
@@ -779,7 +822,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       afterSequence,
       agent.mailboxFloorSequence,
     );
-    return this.database.orm
+    return (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -806,8 +849,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         ),
       ))
       .orderBy(asc(discoveryEvents.sequence))
-      .limit(limit)
-      .all()
+      .limit(limit))
       .map(toDiscoveryEvent);
   }
 
@@ -815,12 +857,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     agentId: string,
     sequences: number[],
   ): Promise<DiscoveryEvent[]> {
-    const agent = this.findActiveAgent(agentId);
+    const agent = await this.findActiveAgent(agentId);
     if (!sequences.length || !agent) {
       return [];
     }
 
-    return this.database.orm
+    return (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -842,20 +884,19 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           ),
         ),
       ))
-      .orderBy(asc(discoveryEvents.sequence))
-      .all()
+      .orderBy(asc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent);
   }
 
   async readEvent(sequence: number): Promise<DiscoveryEvent | undefined> {
-    return this.readEventsBySequence([sequence])[0];
+    return (await this.readEventsBySequence([sequence]))[0];
   }
 
   async listAgentWakeCommunicationEvents(
     agentId: string,
     wakeNumber: number,
   ): Promise<DiscoveryEvent[]> {
-    return this.database.orm
+    return (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -864,8 +905,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.wakeNumber, wakeNumber),
         inArray(discoveryEvents.kind, ['shared_message', 'direct_message']),
       ))
-      .orderBy(asc(discoveryEvents.sequence))
-      .all()
+      .orderBy(asc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent);
   }
 
@@ -879,19 +919,24 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     // This projection deliberately ignores unread cursors. Findings and
     // feedback remain relevant after mailbox consumption, while the explicit
     // sequence bound preserves one claimed wake's retry-stable view.
-    return {
-      principalInputs: this.listPrincipalInputs(
+    const [principalInputs, findings, workingNote] = await Promise.all([
+      this.listPrincipalInputs(
         agent,
         boundedSequence,
       ),
-      findings: this.listFindings(
+      this.listFindings(
         agent.participantId,
         boundedSequence,
       ),
-      workingNote: this.findWorkingNote(
+      this.findWorkingNote(
         agent,
         boundedSequence,
       ),
+    ]);
+    return {
+      principalInputs,
+      findings,
+      workingNote,
     };
   }
 
@@ -903,26 +948,28 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
 
     // Selection, horizon assignment, agent ownership, and the audit event must
     // commit together; otherwise two schedulers could consume different views.
-    const claim = this.database.orm.transaction((transaction) => {
-      const workspaceRow = transaction
+    const claim = await this.database.orm.transaction(async (transaction) => {
+      const [workspaceRow] = await transaction
         .select()
         .from(discoveryWorkspaces)
         .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
-        .get();
+        .for('update')
+        .limit(1);
       if (!workspaceRow) {
         throw new Error(
           'Discovery workspace is missing. Run the database migration and restart the service.',
         );
       }
 
-      const agentRow = transaction
+      const [agentRow] = await transaction
         .select()
         .from(representativeAgents)
         .where(and(
           eq(representativeAgents.workspaceId, WORKSPACE_ID),
           eq(representativeAgents.id, agentId),
         ))
-        .get();
+        .for('update')
+        .limit(1);
       if (!agentRow) {
         throw new Error(`Representative agent not found: ${agentId}`);
       }
@@ -931,14 +978,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         throw new Error(`Representative agent is already running: ${agentId}`);
       }
 
-      const participantRow = transaction
+      const [participantRow] = await transaction
         .select()
         .from(participants)
         .where(and(
           eq(participants.workspaceId, WORKSPACE_ID),
           eq(participants.id, selectedAgent.participantId),
         ))
-        .get();
+        .limit(1);
       if (!participantRow) {
         throw new Error(`Participant not found: ${selectedAgent.participantId}`);
       }
@@ -984,28 +1031,27 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           ),
         ),
       ];
-      const visibleEvents = transaction
+      const visibleEvents = (await transaction
         .select()
         .from(discoveryEvents)
         .where(and(...visibleEventConditions))
         .orderBy(asc(discoveryEvents.sequence))
-        .limit(40)
-        .all()
+        .limit(40))
         .map(toDiscoveryEvent);
       if (!visibleEvents.length) {
         // A stale claim can become empty after cursor recovery. Clear only claim
         // metadata; never advance the cursor when no event was consumed.
         if (selectedAgent.activeWakeId) {
-          transaction
+          await transaction
             .update(representativeAgents)
             .set({
               activeWakeId: null,
+              activeWakeClaimToken: null,
               activeWakeNumber: null,
               activeWakeHorizon: null,
               updatedAt: now,
             })
-            .where(eq(representativeAgents.id, selectedAgent.id))
-            .run();
+            .where(eq(representativeAgents.id, selectedAgent.id));
         }
         return undefined;
       }
@@ -1015,6 +1061,9 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       const activeWakeId = resumingWake
         ? selectedAgent.activeWakeId!
         : wakeId;
+      // The wake ID remains stable for idempotent effects; every retry gets a
+      // new ownership token so a late worker cannot settle a newer attempt.
+      const claimToken = wakeId;
       const horizonSequence = resumingWake
         ? selectedAgent.activeWakeHorizon!
         : visibleEvents.at(-1)!.sequence;
@@ -1023,27 +1072,26 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         : workspaceRow.currentWake + 1;
 
       if (!resumingWake) {
-        transaction
+        await transaction
           .update(discoveryWorkspaces)
           .set({ currentWake: wakeNumber, updatedAt: now })
-          .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
-          .run();
+          .where(eq(discoveryWorkspaces.id, WORKSPACE_ID));
       }
-      transaction
+      await transaction
         .update(representativeAgents)
         .set({
           status: 'running',
           runCount: selectedAgent.runCount + 1,
           activeWakeId,
+          activeWakeClaimToken: claimToken,
           activeWakeNumber: wakeNumber,
           activeWakeHorizon: horizonSequence,
           lastRunAt: now,
           updatedAt: now,
         })
-        .where(eq(representativeAgents.id, selectedAgent.id))
-        .run();
+        .where(eq(representativeAgents.id, selectedAgent.id));
       if (!resumingWake) {
-        transaction
+        await transaction
           .insert(discoveryEvents)
           .values({
             id: `event_${randomUUID()}`,
@@ -1065,8 +1113,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
               wakeId: activeWakeId,
             },
             createdAt: now,
-          })
-          .run();
+          });
       }
       return {
         agent: {
@@ -1074,6 +1121,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           status: 'running' as const,
           runCount: selectedAgent.runCount + 1,
           activeWakeId,
+          activeWakeClaimToken: claimToken,
           activeWakeNumber: wakeNumber,
           activeWakeHorizon: horizonSequence,
           lastRunAt: now,
@@ -1081,7 +1129,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         },
         participant: toParticipant(participantRow),
         wakeId: activeWakeId,
-        claimToken: activeWakeId,
+        claimToken,
         wakeNumber,
         visibleEvents,
         horizonSequence,
@@ -1108,12 +1156,13 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     // This is the sole wake-settlement operation that consumes claimed mail.
     // Failure and interruption leave both the cursor and active claim retryable.
     const agent = await this.requireAgent(agentId);
-    const result = this.database.orm
+    const updated = await this.database.orm
       .update(representativeAgents)
       .set({
         status: 'idle',
         lastSeenSequence: Math.max(agent.lastSeenSequence, horizonSequence),
         activeWakeId: null,
+        activeWakeClaimToken: null,
         activeWakeNumber: null,
         activeWakeHorizon: null,
         updatedAt: dayjs().toISOString(),
@@ -1121,11 +1170,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       .where(and(
         eq(representativeAgents.id, agentId),
         eq(representativeAgents.status, 'running'),
-        eq(representativeAgents.activeWakeId, claimToken),
+        eq(representativeAgents.activeWakeClaimToken, claimToken),
         eq(representativeAgents.activeWakeHorizon, horizonSequence),
       ))
-      .run();
-    if (!result.changes) {
+      .returning({ id: representativeAgents.id });
+    if (!updated.length) {
       throw new Error(
         `Wake claim is no longer owned by representative agent: ${agentId}`,
       );
@@ -1133,16 +1182,16 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   async failAgentWake(agentId: string, claimToken: string): Promise<void> {
-    const result = this.database.orm
+    const updated = await this.database.orm
       .update(representativeAgents)
       .set({ status: 'error', updatedAt: dayjs().toISOString() })
       .where(and(
         eq(representativeAgents.id, agentId),
         eq(representativeAgents.status, 'running'),
-        eq(representativeAgents.activeWakeId, claimToken),
+        eq(representativeAgents.activeWakeClaimToken, claimToken),
       ))
-      .run();
-    if (!result.changes) {
+      .returning({ id: representativeAgents.id });
+    if (!updated.length) {
       throw new Error(
         `Wake claim is no longer owned by representative agent: ${agentId}`,
       );
@@ -1150,16 +1199,16 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
   }
 
   async interruptAgentWake(agentId: string, claimToken: string): Promise<void> {
-    const result = this.database.orm
+    const updated = await this.database.orm
       .update(representativeAgents)
       .set({ status: 'idle', updatedAt: dayjs().toISOString() })
       .where(and(
         eq(representativeAgents.id, agentId),
         eq(representativeAgents.status, 'running'),
-        eq(representativeAgents.activeWakeId, claimToken),
+        eq(representativeAgents.activeWakeClaimToken, claimToken),
       ))
-      .run();
-    if (!result.changes) {
+      .returning({ id: representativeAgents.id });
+    if (!updated.length) {
       throw new Error(
         `Wake claim is no longer owned by representative agent: ${agentId}`,
       );
@@ -1175,33 +1224,36 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     }
     const reporter = await this.requireAgentByParticipantId(participantId);
     const requested = new Set(
-      this.findOriginatingPeerMessages(sourceEventIds, reporter.id)
+      (await this.findOriginatingPeerMessages(sourceEventIds, reporter.id))
         .map(({ sequence }) => sequence),
     );
     if (!requested.size) {
       return false;
     }
-    return this.database.orm
+    const findings = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         eq(discoveryEvents.kind, 'finding_reported'),
         eq(discoveryEvents.targetParticipantId, participantId),
-      ))
-      .all()
-      .map(toDiscoveryEvent)
-      .some((finding) => this.findOriginatingPeerMessages(
+      )))
+      .map(toDiscoveryEvent);
+    return (await Promise.all(findings.map(async (finding) => (
+      await this.findOriginatingPeerMessages(
         readSequenceIds(finding.metadata.sourceEventIds),
         reporter.id,
-      ).some(({ sequence }) => requested.has(sequence)));
+      )
+    )))).some((origins) => (
+      origins.some(({ sequence }) => requested.has(sequence))
+    ));
   }
 
   async findAgentPublishedRequestForTrigger(
     agentId: string,
     triggerSequence: number,
   ): Promise<DiscoveryEvent | undefined> {
-    const row = this.database.orm
+    const [row] = await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1211,7 +1263,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.replyToSequence, triggerSequence),
       ))
       .orderBy(asc(discoveryEvents.sequence))
-      .get();
+      .limit(1);
     return row ? toDiscoveryEvent(row) : undefined;
   }
 
@@ -1219,7 +1271,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     agentId: string,
     sourceSequence: number,
   ): Promise<boolean> {
-    return this.database.orm
+    return (await this.database.orm
       .select({ metadata: discoveryEvents.metadata })
       .from(discoveryEvents)
       .where(and(
@@ -1228,8 +1280,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.actorAgentId, agentId),
         eq(discoveryEvents.targetAgentId, agentId),
         gt(discoveryEvents.sequence, sourceSequence),
-      ))
-      .all()
+      )))
       .some(({ metadata }) => (
         readMetadataSequence(metadata?.throughSequence) >= sourceSequence
       ));
@@ -1239,7 +1290,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     agentId: string,
     wakeNumber: number,
   ): Promise<number> {
-    return this.database.orm
+    return (await this.database.orm
       .select({ sequence: discoveryEvents.sequence })
       .from(discoveryEvents)
       .where(and(
@@ -1252,8 +1303,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           'finding_reported',
           'agent_wake_no_action',
         ]),
-      ))
-      .all()
+      )))
       .length;
   }
 
@@ -1262,12 +1312,12 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     replyToSequence: number,
     currentWakeId: string,
   ): Promise<boolean> {
-    const requestRoot = this.findReplyThreadRoot(replyToSequence);
+    const requestRoot = await this.findReplyThreadRoot(replyToSequence);
     if (!requestRoot) {
       return false;
     }
 
-    return this.database.orm
+    const priorMessages = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1277,89 +1327,105 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
           discoveryEvents.kind,
           ['shared_message', 'direct_message'],
         ),
-      ))
-      .all()
+      )))
       .map(toDiscoveryEvent)
-      .filter((event) => event.metadata.wakeId !== currentWakeId)
-      .some((event) => this.findReplyThreadRoot(event.sequence) === requestRoot);
+      .filter((event) => event.metadata.wakeId !== currentWakeId);
+    return (await Promise.all(priorMessages.map(
+      async (event) => await this.findReplyThreadRoot(event.sequence),
+    ))).some((root) => root === requestRoot);
   }
 
   async appendEvent(
     input: AppendDiscoveryEventInput,
   ): Promise<DiscoveryEvent> {
-    if (input.idempotencyKey) {
-      // Tool and wake retries reuse deterministic keys, so an already committed
-      // side effect is returned rather than appended a second time.
-      const existing = this.database.orm
+    return await this.database.orm.transaction(async (transaction) => {
+      // The unique key is the final concurrency authority. `onConflictDoNothing`
+      // allows simultaneous retries from different workers without surfacing a
+      // transient constraint error or duplicating the side effect.
+      const [workspace] = await transaction
+        .select({ currentWake: discoveryWorkspaces.currentWake })
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
+        .limit(1);
+      if (!workspace) {
+        throw new Error(
+          'Discovery workspace is missing. Run the database migration and restart the service.',
+        );
+      }
+      const [inserted] = await transaction
+        .insert(discoveryEvents)
+        .values({
+          id: `event_${randomUUID()}`,
+          workspaceId: WORKSPACE_ID,
+          wakeNumber: input.wakeNumber ?? workspace.currentWake,
+          kind: input.kind,
+          actorAgentId: input.actorAgentId,
+          targetAgentId: input.targetAgentId,
+          targetParticipantId: input.targetParticipantId,
+          replyToSequence: input.replyToSequence,
+          idempotencyKey: input.idempotencyKey,
+          title: input.title,
+          content: input.content,
+          metadata: input.metadata ?? {},
+          createdAt: dayjs().toISOString(),
+        })
+        .onConflictDoNothing({ target: discoveryEvents.idempotencyKey })
+        .returning();
+      if (inserted) {
+        return toDiscoveryEvent(inserted);
+      }
+      if (!input.idempotencyKey) {
+        throw new Error('PostgreSQL did not return the appended event.');
+      }
+      const [existing] = await transaction
+        .select()
+        .from(discoveryEvents)
+        .where(eq(discoveryEvents.idempotencyKey, input.idempotencyKey))
+        .limit(1);
+      if (!existing) {
+        throw new Error(
+          `Idempotent event is missing after a concurrent insert: ${input.idempotencyKey}`,
+        );
+      }
+      return toDiscoveryEvent(existing);
+    });
+  }
+
+  private async listPrincipalInputs(
+    agent: Agent,
+    throughSequence: number,
+  ): Promise<DiscoveryEvent[]> {
+    const [latestInterestRows, recentParticipantInputRows] = await Promise.all([
+      this.database.orm
         .select()
         .from(discoveryEvents)
         .where(and(
           eq(discoveryEvents.workspaceId, WORKSPACE_ID),
-          eq(discoveryEvents.idempotencyKey, input.idempotencyKey),
+          eq(discoveryEvents.kind, 'interest_saved'),
+          eq(discoveryEvents.targetAgentId, agent.id),
+          eq(discoveryEvents.targetParticipantId, agent.participantId),
+          lte(discoveryEvents.sequence, throughSequence),
         ))
-        .get();
-      if (existing) {
-        return toDiscoveryEvent(existing);
-      }
-    }
-
-    const workspace = this.requireWorkspace();
-    const row = this.database.orm
-      .insert(discoveryEvents)
-      .values({
-        id: `event_${randomUUID()}`,
-        workspaceId: WORKSPACE_ID,
-        wakeNumber: input.wakeNumber ?? workspace.currentWake,
-        kind: input.kind,
-        actorAgentId: input.actorAgentId,
-        targetAgentId: input.targetAgentId,
-        targetParticipantId: input.targetParticipantId,
-        replyToSequence: input.replyToSequence,
-        idempotencyKey: input.idempotencyKey,
-        title: input.title,
-        content: input.content,
-        metadata: input.metadata ?? {},
-        createdAt: dayjs().toISOString(),
-      })
-      .returning()
-      .get();
-
-    return toDiscoveryEvent(row);
-  }
-
-  private listPrincipalInputs(
-    agent: Agent,
-    throughSequence: number,
-  ): DiscoveryEvent[] {
-    const latestInterest = this.database.orm
-      .select()
-      .from(discoveryEvents)
-      .where(and(
-        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
-        eq(discoveryEvents.kind, 'interest_saved'),
-        eq(discoveryEvents.targetAgentId, agent.id),
-        eq(discoveryEvents.targetParticipantId, agent.participantId),
-        lte(discoveryEvents.sequence, throughSequence),
-      ))
-      .orderBy(desc(discoveryEvents.sequence))
-      .get();
-    const recentParticipantInputs = this.database.orm
-      .select()
-      .from(discoveryEvents)
-      .where(and(
-        eq(discoveryEvents.workspaceId, WORKSPACE_ID),
-        inArray(discoveryEvents.kind, [
-          'participant_input',
-          'guidance_saved',
-        ]),
-        eq(discoveryEvents.targetAgentId, agent.id),
-        eq(discoveryEvents.targetParticipantId, agent.participantId),
-        lte(discoveryEvents.sequence, throughSequence),
-      ))
-      .orderBy(desc(discoveryEvents.sequence))
-      .limit(PRINCIPAL_INPUT_LIMIT)
-      .all()
-      .reverse();
+        .orderBy(desc(discoveryEvents.sequence))
+        .limit(1),
+      this.database.orm
+        .select()
+        .from(discoveryEvents)
+        .where(and(
+          eq(discoveryEvents.workspaceId, WORKSPACE_ID),
+          inArray(discoveryEvents.kind, [
+            'participant_input',
+            'guidance_saved',
+          ]),
+          eq(discoveryEvents.targetAgentId, agent.id),
+          eq(discoveryEvents.targetParticipantId, agent.participantId),
+          lte(discoveryEvents.sequence, throughSequence),
+        ))
+        .orderBy(desc(discoveryEvents.sequence))
+        .limit(PRINCIPAL_INPUT_LIMIT),
+    ]);
+    const latestInterest = latestInterestRows[0];
+    const recentParticipantInputs = recentParticipantInputRows.reverse();
 
     return [
       ...(latestInterest ? [toDiscoveryEvent(latestInterest)] : []),
@@ -1367,11 +1433,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     ].sort((left, right) => left.sequence - right.sequence);
   }
 
-  private findWorkingNote(
+  private async findWorkingNote(
     agent: Agent,
     throughSequence: number,
-  ): DiscoveryEvent | undefined {
-    const row = this.database.orm
+  ): Promise<DiscoveryEvent | undefined> {
+    const [row] = await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1383,15 +1449,15 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         lte(discoveryEvents.sequence, throughSequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
-      .get();
+      .limit(1);
     return row ? toDiscoveryEvent(row) : undefined;
   }
 
-  private listFindings(
+  private async listFindings(
     participantId: string,
     throughSequence = Number.MAX_SAFE_INTEGER,
-  ): FindingView[] {
-    return this.database.orm
+  ): Promise<FindingView[]> {
+    const findings = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1401,20 +1467,27 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         lte(discoveryEvents.sequence, throughSequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
-      .limit(FINDING_LIMIT)
-      .all()
-      .map(toDiscoveryEvent)
-      .map((finding) => {
-        const sourceEventIds = readSequenceIds(finding.metadata.sourceEventIds);
-        const originatingSources = this.findOriginatingPeerMessages(
+      .limit(FINDING_LIMIT))
+      .map(toDiscoveryEvent);
+    return await Promise.all(findings.map(async (finding) => {
+      const sourceEventIds = readSequenceIds(finding.metadata.sourceEventIds);
+      const [
+        sourceEvents,
+        originatingSources,
+        outboundMessages,
+        assignmentRows,
+        feedbackRows,
+      ] = await Promise.all([
+        this.readEventsBySequence(sourceEventIds),
+        this.findOriginatingPeerMessages(
           sourceEventIds,
           finding.actorAgentId,
-        );
-        const outboundMessages = this.listRequestThreadOutboundMessages(
+        ),
+        this.listRequestThreadOutboundMessages(
           sourceEventIds,
           finding.actorAgentId,
-        );
-        const assignmentRow = this.database.orm
+        ),
+        this.database.orm
           .select({ sequence: discoveryEvents.sequence })
           .from(discoveryEvents)
           .where(and(
@@ -1424,8 +1497,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             lte(discoveryEvents.sequence, finding.sequence),
           ))
           .orderBy(desc(discoveryEvents.sequence))
-          .get();
-        const feedbackRow = this.database.orm
+          .limit(1),
+        this.database.orm
           .select()
           .from(discoveryEvents)
           .where(and(
@@ -1435,29 +1508,38 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             lte(discoveryEvents.sequence, throughSequence),
           ))
           .orderBy(desc(discoveryEvents.sequence))
-          .get();
+          .limit(1),
+      ]);
+      const [sources, originatingSourceViews] = await Promise.all([
+        Promise.all(sourceEvents.map(
+          async (source) => await this.toFindingSourceView(source),
+        )),
+        Promise.all(originatingSources.map(
+          async (source) => await this.toFindingSourceView(source),
+        )),
+      ]);
 
-        return {
-          finding,
-          sources: this.readEventsBySequence(sourceEventIds)
-            .map((source) => this.toFindingSourceView(source)),
-          originatingSources: originatingSources
-            .map((source) => this.toFindingSourceView(source)),
-          outboundMessages,
-          feedback: feedbackRow ? toDiscoveryEvent(feedbackRow) : undefined,
-          noMatch: finding.metadata.noMatch === true,
-          assignmentSequence: assignmentRow?.sequence,
-          origin: outboundMessages.length
-            ? 'request-thread' as const
-            : 'ambient-network' as const,
-        };
-      });
+      return {
+        finding,
+        sources,
+        originatingSources: originatingSourceViews,
+        outboundMessages,
+        feedback: feedbackRows[0]
+          ? toDiscoveryEvent(feedbackRows[0])
+          : undefined,
+        noMatch: finding.metadata.noMatch === true,
+        assignmentSequence: assignmentRows[0]?.sequence,
+        origin: outboundMessages.length
+          ? 'request-thread' as const
+          : 'ambient-network' as const,
+      };
+    }));
   }
 
-  private readNetworkActivity(
+  private async readNetworkActivity(
     representative: Agent,
-  ): NetworkActivityView | undefined {
-    const assignmentRow = this.database.orm
+  ): Promise<NetworkActivityView | undefined> {
+    const [assignmentRow] = await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1466,7 +1548,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.kind, 'interest_saved'),
       ))
       .orderBy(desc(discoveryEvents.sequence))
-      .get();
+      .limit(1);
     if (!assignmentRow) {
       return undefined;
     }
@@ -1475,7 +1557,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     // assignment roots. Keeping this projection anchored to the saved interest
     // prevents “Run now” from making the product appear to forget its request.
     const assignment = toDiscoveryEvent(assignmentRow);
-    const checks = this.database.orm
+    const checks = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1484,14 +1566,13 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.targetAgentId, representative.id),
         gt(discoveryEvents.sequence, assignment.sequence),
       ))
-      .orderBy(desc(discoveryEvents.sequence))
-      .all()
+      .orderBy(desc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent);
     const requestTriggers = [...checks, assignment];
     const triggerSequences = new Set(
       requestTriggers.map(({ sequence }) => sequence),
     );
-    const requestByTriggerSequence = this.database.orm
+    const requestByTriggerSequence = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1500,8 +1581,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.actorAgentId, representative.id),
         gt(discoveryEvents.sequence, assignment.sequence),
       ))
-      .orderBy(asc(discoveryEvents.sequence))
-      .all()
+      .orderBy(asc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent)
       .reduce((byTrigger, request) => {
         const triggerSequence = request.replyToSequence;
@@ -1515,39 +1595,42 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         byTrigger.set(triggerSequence, request);
         return byTrigger;
       }, new Map<number, DiscoveryEvent>());
-    const findingEvents = this.listFindingEvents(
+    const findingEvents = await this.listFindingEvents(
       representative.participantId,
       representative.id,
       assignment.sequence,
     );
     const currentTrigger = requestTriggers[0]!;
     const request = requestByTriggerSequence.get(currentTrigger.sequence);
-    const previousRequests = requestTriggers
+    const previousRequestItems = await Promise.all(requestTriggers
       .slice(1)
-      .flatMap((trigger) => {
+      .map(async (trigger) => {
         const previousRequest = requestByTriggerSequence.get(trigger.sequence);
         return previousRequest
-          ? [this.toNetworkRequestHistoryItem(
+          ? await this.toNetworkRequestHistoryItem(
               representative,
               trigger,
               previousRequest,
               findingEvents,
-            )]
-          : [];
-      })
+            )
+          : undefined;
+      }));
+    const previousRequests = previousRequestItems
+      .filter((item): item is NetworkRequestHistoryItemView => Boolean(item))
       .slice(0, NETWORK_REQUEST_HISTORY_LIMIT);
     if (!request) {
       return { assignment, previousRequests };
     }
 
+    const requestOutcome = await this.readNetworkRequestOutcome(
+      representative,
+      request,
+      findingEvents,
+    );
     return {
       assignment,
       request,
-      requestProgress: this.readNetworkRequestOutcome(
-        representative,
-        request,
-        findingEvents,
-      ).progress,
+      requestProgress: requestOutcome.progress,
       previousRequests,
     };
   }
@@ -1557,13 +1640,13 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
    * event ledger. Guidance is included only when the check explicitly carried
    * that participant-authored event into its request.
    */
-  private toNetworkRequestHistoryItem(
+  private async toNetworkRequestHistoryItem(
     representative: Agent,
     trigger: DiscoveryEvent,
     request: DiscoveryEvent,
     findingEvents: DiscoveryEvent[],
-  ): NetworkRequestHistoryItemView {
-    const outcome = this.readNetworkRequestOutcome(
+  ): Promise<NetworkRequestHistoryItemView> {
+    const outcome = await this.readNetworkRequestOutcome(
       representative,
       request,
       findingEvents,
@@ -1572,13 +1655,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       trigger.metadata.latestGuidanceSequence,
     );
 
+    const guidance = guidanceSequence
+      ? (await this.readEventsBySequence([guidanceSequence]))[0]
+      : undefined;
     return {
       trigger,
       request,
       progress: outcome.progress,
-      guidance: guidanceSequence
-        ? this.readEventsBySequence([guidanceSequence])[0]
-        : undefined,
+      guidance,
       linkedFindings: outcome.linkedFindings,
     };
   }
@@ -1588,19 +1672,19 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
    * pending review until the representative's successful cursor passes it;
    * only then may absence of a linked finding become deliberate silence.
    */
-  private readNetworkRequestOutcome(
+  private async readNetworkRequestOutcome(
     representative: Agent,
     request: DiscoveryEvent,
     findingEvents: DiscoveryEvent[],
-  ): {
+  ): Promise<{
     progress: NetworkRequestProgressView;
     linkedFindings: DiscoveryEvent[];
-  } {
+  }> {
     // One assignment/check defines one semantic request. Include any retry-era
     // duplicate writes in the same lifecycle so their delivered replies and
     // linked findings cannot produce contradictory participant-facing states.
     const requestSequences = request.replyToSequence
-      ? this.database.orm
+      ? (await this.database.orm
           .select({ sequence: discoveryEvents.sequence })
           .from(discoveryEvents)
           .where(and(
@@ -1609,12 +1693,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             eq(discoveryEvents.actorAgentId, representative.id),
             eq(discoveryEvents.replyToSequence, request.replyToSequence),
           ))
-          .orderBy(asc(discoveryEvents.sequence))
-          .all()
+          .orderBy(asc(discoveryEvents.sequence)))
           .map(({ sequence }) => sequence)
       : [request.sequence];
     const requestSequenceSet = new Set(requestSequences);
-    const responses = this.database.orm
+    const responses = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1624,15 +1707,21 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         gt(discoveryEvents.sequence, request.sequence),
         inArray(discoveryEvents.replyToSequence, requestSequences),
       ))
-      .orderBy(asc(discoveryEvents.sequence))
-      .all()
+      .orderBy(asc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent);
-    const originatingResponses = uniqueEvents(responses.flatMap((response) => (
-      this.findOriginatingPeerMessages([response.sequence], representative.id)
-    )));
-    const originatingParticipantIds = new Set(originatingResponses.flatMap(
-      (response) => {
-        const attribution = this.toFindingSourceView(response).attribution;
+    const originatingResponses = uniqueEvents((await Promise.all(
+      responses.map(async (response) => (
+        await this.findOriginatingPeerMessages(
+          [response.sequence],
+          representative.id,
+        )
+      )),
+    )).flat());
+    const sourceViews = await Promise.all(originatingResponses.map(
+      async (response) => await this.toFindingSourceView(response),
+    ));
+    const originatingParticipantIds = new Set(sourceViews.flatMap(
+      ({ attribution }) => {
         return attribution ? [attribution.participantId] : [];
       },
     ));
@@ -1640,19 +1729,31 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     const pendingReviewCount = responses.filter(
       ({ sequence }) => sequence > representative.lastSeenSequence,
     ).length;
-    const linkedFindings = findingEvents.filter((finding) => (
-      finding.sequence > request.sequence
-      && this.listRequestThreadOutboundMessages(
-        readSequenceIds(finding.metadata.sourceEventIds),
-        representative.id,
-      ).some(({ sequence }) => requestSequenceSet.has(sequence))
+    const linkedFindingFlags = await Promise.all(findingEvents.map(
+      async (finding) => (
+        finding.sequence > request.sequence
+        && (await this.listRequestThreadOutboundMessages(
+          readSequenceIds(finding.metadata.sourceEventIds),
+          representative.id,
+        )).some(({ sequence }) => requestSequenceSet.has(sequence))
+      ),
     ));
+    const linkedFindings = findingEvents.filter(
+      (_finding, index) => linkedFindingFlags[index],
+    );
     const phase = resolveNetworkRequestProgressPhase({
       responseCount: responses.length,
       pendingReviewCount,
       hasLinkedFinding: linkedFindings.length > 0,
     });
 
+    const reviewedAt = phase === 'finding-reported'
+      || phase === 'reviewed-without-finding'
+      ? await this.findResponseReviewCompletionAt(
+          representative.id,
+          responses.at(-1)?.sequence,
+        )
+      : undefined;
     return {
       progress: {
         phase,
@@ -1661,24 +1762,18 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         originatingResponseCount: originatingResponses.length,
         originatingParticipantCount: originatingParticipantIds.size,
         latestResponseAt: responses.at(-1)?.createdAt,
-        reviewedAt: phase === 'finding-reported'
-          || phase === 'reviewed-without-finding'
-          ? this.findResponseReviewCompletionAt(
-              representative.id,
-              responses.at(-1)?.sequence,
-            )
-          : undefined,
+        reviewedAt,
       },
       linkedFindings,
     };
   }
 
-  private listFindingEvents(
+  private async listFindingEvents(
     participantId: string,
     agentId: string,
     afterSequence: number,
-  ): DiscoveryEvent[] {
-    return this.database.orm
+  ): Promise<DiscoveryEvent[]> {
+    return (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1688,20 +1783,19 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.actorAgentId, agentId),
         gt(discoveryEvents.sequence, afterSequence),
       ))
-      .orderBy(desc(discoveryEvents.sequence))
-      .all()
+      .orderBy(desc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent);
   }
 
-  private findResponseReviewCompletionAt(
+  private async findResponseReviewCompletionAt(
     agentId: string,
     latestResponseSequence?: number,
-  ): string | undefined {
+  ): Promise<string | undefined> {
     if (!latestResponseSequence) {
       return undefined;
     }
 
-    const wakeEvents = this.database.orm
+    const wakeEvents = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1713,8 +1807,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         ),
         gt(discoveryEvents.sequence, latestResponseSequence),
       ))
-      .orderBy(asc(discoveryEvents.sequence))
-      .all()
+      .orderBy(asc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent);
     const horizonByWake = new Map(wakeEvents.flatMap((event) => (
       event.kind === 'agent_wake_started'
@@ -1730,11 +1823,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     ))?.createdAt;
   }
 
-  private readGuidanceFollowThrough(
+  private async readGuidanceFollowThrough(
     representative: Agent,
     findings: FindingView[],
-  ): GuidanceFollowThroughView | undefined {
-    const currentAssignment = this.database.orm
+  ): Promise<GuidanceFollowThroughView | undefined> {
+    const [currentAssignment] = await this.database.orm
       .select({ sequence: discoveryEvents.sequence })
       .from(discoveryEvents)
       .where(and(
@@ -1743,7 +1836,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.targetAgentId, representative.id),
       ))
       .orderBy(desc(discoveryEvents.sequence))
-      .get();
+      .limit(1);
     if (!currentAssignment) {
       return undefined;
     }
@@ -1756,7 +1849,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         right.feedback!.sequence - left.feedback!.sequence
       ))
       .at(0);
-    const directGuidanceRow = this.database.orm
+    const [directGuidanceRow] = await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1766,7 +1859,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         gt(discoveryEvents.sequence, currentAssignment.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
-      .get();
+      .limit(1);
     const directGuidance = directGuidanceRow
       ? toDiscoveryEvent(directGuidanceRow)
       : undefined;
@@ -1778,7 +1871,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       return undefined;
     }
 
-    const workingNote = this.database.orm
+    const workingNote = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1788,14 +1881,13 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.targetParticipantId, representative.participantId),
         gt(discoveryEvents.sequence, guidance.sequence),
       ))
-      .orderBy(desc(discoveryEvents.sequence))
-      .all()
+      .orderBy(desc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent)
       .find((event) => (
         readMetadataSequence(event.metadata.throughSequence)
         >= guidance.sequence
       ));
-    const check = this.database.orm
+    const check = (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -1804,15 +1896,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.targetAgentId, representative.id),
         gt(discoveryEvents.sequence, guidance.sequence),
       ))
-      .orderBy(desc(discoveryEvents.sequence))
-      .all()
+      .orderBy(desc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent)
       .find((event) => (
         readMetadataSequence(event.metadata.latestGuidanceSequence)
         === guidance.sequence
       ));
-    const request = check
-      ? this.database.orm
+    const [request] = check
+      ? await this.database.orm
           .select()
           .from(discoveryEvents)
           .where(and(
@@ -1822,18 +1913,21 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
             eq(discoveryEvents.replyToSequence, check.sequence),
           ))
           .orderBy(asc(discoveryEvents.sequence))
-          .get()
-      : undefined;
+          .limit(1)
+      : [];
     const requestEvent = request ? toDiscoveryEvent(request) : undefined;
+    const findingEvents = requestEvent
+      ? await this.listFindingEvents(
+          representative.participantId,
+          representative.id,
+          currentAssignment.sequence,
+        )
+      : [];
     const requestOutcome = requestEvent
-      ? this.readNetworkRequestOutcome(
+      ? await this.readNetworkRequestOutcome(
           representative,
           requestEvent,
-          this.listFindingEvents(
-            representative.participantId,
-            representative.id,
-            currentAssignment.sequence,
-          ),
+          findingEvents,
         )
       : undefined;
     const linkedFindingSequences = new Set(
@@ -1843,16 +1937,17 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       linkedFindingSequences.has(finding.sequence)
     ));
 
+    const priorWorkingNote = guidance.kind === 'guidance_saved'
+      ? (await this.readEventsBySequence(
+          guidance.replyToSequence ? [guidance.replyToSequence] : [],
+        ))[0]
+      : undefined;
     return {
       guidance,
       sourceFinding: guidance.kind === 'feedback_saved'
         ? feedbackSource?.finding
         : undefined,
-      priorWorkingNote: guidance.kind === 'guidance_saved'
-        ? this.readEventsBySequence(
-            guidance.replyToSequence ? [guidance.replyToSequence] : [],
-          )[0]
-        : undefined,
+      priorWorkingNote,
       workingNote,
       request: requestEvent,
       requestProgress: requestOutcome?.progress,
@@ -1860,23 +1955,25 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     };
   }
 
-  private toFindingSourceView(message: DiscoveryEvent): FindingSourceView {
+  private async toFindingSourceView(
+    message: DiscoveryEvent,
+  ): Promise<FindingSourceView> {
     if (!message.actorAgentId) {
       return { message };
     }
-    const agentRow = this.database.orm
+    const [agentRow] = await this.database.orm
       .select()
       .from(representativeAgents)
       .where(eq(representativeAgents.id, message.actorAgentId))
-      .get();
+      .limit(1);
     if (!agentRow) {
       return { message };
     }
-    const participantRow = this.database.orm
+    const [participantRow] = await this.database.orm
       .select()
       .from(participants)
       .where(eq(participants.id, agentRow.participantId))
-      .get();
+      .limit(1);
     if (!participantRow) {
       return { message };
     }
@@ -1893,14 +1990,14 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     };
   }
 
-  private listRequestThreadOutboundMessages(
+  private async listRequestThreadOutboundMessages(
     sourceEventIds: number[],
     reporterAgentId?: string,
-  ): DiscoveryEvent[] {
+  ): Promise<DiscoveryEvent[]> {
     // Walk the reply thread backward from a finding source to reveal what its
     // representative disclosed. Content provenance is intentionally separate.
     const visited = new Set(sourceEventIds);
-    const queue = this.readEventsBySequence(sourceEventIds);
+    const queue = await this.readEventsBySequence(sourceEventIds);
     const outboundMessages: DiscoveryEvent[] = [];
 
     while (queue.length) {
@@ -1918,7 +2015,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         ? [event.replyToSequence]
         : [];
       ancestorIds.forEach((sequence) => visited.add(sequence));
-      queue.push(...this.readEventsBySequence(ancestorIds));
+      queue.push(...await this.readEventsBySequence(ancestorIds));
     }
 
     return outboundMessages.sort(
@@ -1926,15 +2023,17 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     );
   }
 
-  private findReplyThreadRoot(sequence: number): number | undefined {
+  private async findReplyThreadRoot(
+    sequence: number,
+  ): Promise<number | undefined> {
     const visited = new Set<number>();
     let currentSequence: number | undefined = sequence;
     let latestResolved: number | undefined;
 
     while (currentSequence && !visited.has(currentSequence)) {
       visited.add(currentSequence);
-      const event: DiscoveryEvent | undefined = this.readEventsBySequence(
-        [currentSequence],
+      const event: DiscoveryEvent | undefined = (
+        await this.readEventsBySequence([currentSequence])
       )[0];
       if (!event) {
         return latestResolved;
@@ -1950,34 +2049,35 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
    * Resolves the earliest peer-authored messages behind cited content. A relay
    * with upstream peer provenance therefore contributes no additional origin.
    */
-  private findOriginatingPeerMessages(
+  private async findOriginatingPeerMessages(
     sourceEventIds: number[],
     reporterAgentId?: string,
-  ): DiscoveryEvent[] {
+  ): Promise<DiscoveryEvent[]> {
     const memo = new Map<number, DiscoveryEvent[]>();
-    const visiting = new Set<number>();
 
-    const resolve = (sequence: number): DiscoveryEvent[] => {
+    const resolve = async (
+      sequence: number,
+      ancestors: ReadonlySet<number>,
+    ): Promise<DiscoveryEvent[]> => {
       const cached = memo.get(sequence);
       if (cached) {
         return cached;
       }
-      if (visiting.has(sequence)) {
+      if (ancestors.has(sequence)) {
         return [];
       }
-      visiting.add(sequence);
-      const event = this.readEventsBySequence([sequence])[0];
+      const event = (await this.readEventsBySequence([sequence]))[0];
       if (!event) {
-        visiting.delete(sequence);
         memo.set(sequence, []);
         return [];
       }
-      const sourceEvents = this.readEventsBySequence(
+      const sourceEvents = await this.readEventsBySequence(
         readSequenceIds(event.metadata.sourceEventIds),
       );
-      const upstream = uniqueEvents(sourceEvents.flatMap(({ sequence }) => (
-        resolve(sequence)
-      )));
+      const nextAncestors = new Set([...ancestors, sequence]);
+      const upstream = uniqueEvents((await Promise.all(sourceEvents.map(
+        async (source) => await resolve(source.sequence, nextAncestors),
+      ))).flat());
       const isPeerMessage = Boolean(
         event.actorAgentId
         && event.actorAgentId !== reporterAgentId
@@ -1999,35 +2099,37 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         ...upstream,
         ...(originatesContent ? [event] : []),
       ]);
-      visiting.delete(sequence);
       memo.set(sequence, origins);
       return origins;
     };
 
-    return uniqueEvents(sourceEventIds.flatMap(resolve));
+    return uniqueEvents((await Promise.all(sourceEventIds.map(
+      async (sequence) => await resolve(sequence, new Set()),
+    ))).flat());
   }
 
-  private readEventsBySequence(sequences: number[]): DiscoveryEvent[] {
+  private async readEventsBySequence(
+    sequences: number[],
+  ): Promise<DiscoveryEvent[]> {
     if (!sequences.length) {
       return [];
     }
-    return this.database.orm
+    return (await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, WORKSPACE_ID),
         inArray(discoveryEvents.sequence, sequences),
       ))
-      .orderBy(asc(discoveryEvents.sequence))
-      .all()
+      .orderBy(asc(discoveryEvents.sequence)))
       .map(toDiscoveryEvent);
   }
 
-  private requireParticipantFinding(
+  private async requireParticipantFinding(
     participantId: string,
     sequence: number,
-  ): DiscoveryEvent {
-    const row = this.database.orm
+  ): Promise<DiscoveryEvent> {
+    const [row] = await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
@@ -2036,7 +2138,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(discoveryEvents.kind, 'finding_reported'),
         eq(discoveryEvents.targetParticipantId, participantId),
       ))
-      .get();
+      .limit(1);
     if (!row) {
       throw new Error(
         `Finding not found for participant ${participantId}: ${sequence}`,
@@ -2045,17 +2147,17 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     return toDiscoveryEvent(row);
   }
 
-  private findWorkspace(): DiscoveryWorkspace | undefined {
-    const row = this.database.orm
+  private async findWorkspace(): Promise<DiscoveryWorkspace | undefined> {
+    const [row] = await this.database.orm
       .select()
       .from(discoveryWorkspaces)
       .where(eq(discoveryWorkspaces.id, WORKSPACE_ID))
-      .get();
+      .limit(1);
     return row ? toDiscoveryWorkspace(row) : undefined;
   }
 
-  private requireWorkspace(): DiscoveryWorkspace {
-    const workspace = this.findWorkspace();
+  private async requireWorkspace(): Promise<DiscoveryWorkspace> {
+    const workspace = await this.findWorkspace();
     if (!workspace) {
       throw new Error(
         'Discovery workspace is missing. Run the database migration and restart the service.',
@@ -2064,32 +2166,31 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
     return workspace;
   }
 
-  private createWorkspace(): void {
-    this.database.client.transaction(() => {
-      this.insertWorkspace();
-    })();
-  }
-
-  private insertWorkspace(backgroundChecksEnabled = true): void {
+  private async insertWorkspace(
+    transaction: LucidPostgresTransaction,
+    backgroundChecksEnabled = true,
+  ): Promise<void> {
     const now = dayjs().toISOString();
     const versionId = randomUUID();
 
-    this.database.orm.insert(discoveryWorkspaces).values({
+    await transaction.insert(discoveryWorkspaces).values({
       id: WORKSPACE_ID,
       versionId,
       currentWake: 0,
       backgroundChecksEnabled,
       createdAt: now,
       updatedAt: now,
-    }).run();
-    this.database.orm.insert(participants).values({
+    });
+    await transaction.insert(participants).values({
       ...LOCAL_PARTICIPANT,
       workspaceId: WORKSPACE_ID,
+      // The local user knowingly operates this workspace, so its seed record
+      // satisfies the same consent invariant required of other human ingress.
       contextConsentAt: now,
       createdAt: now,
       updatedAt: now,
-    }).run();
-    this.database.orm.insert(representativeAgents).values({
+    });
+    await transaction.insert(representativeAgents).values({
       ...LOCAL_REPRESENTATIVE,
       workspaceId: WORKSPACE_ID,
       status: 'idle',
@@ -2098,8 +2199,8 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
       lastSeenSequence: 0,
       createdAt: now,
       updatedAt: now,
-    }).run();
-    this.database.orm.insert(discoveryEvents).values({
+    });
+    await transaction.insert(discoveryEvents).values({
       id: `event_${randomUUID()}`,
       workspaceId: WORKSPACE_ID,
       wakeNumber: 0,
@@ -2113,53 +2214,11 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         source: 'system',
       },
       createdAt: now,
-    }).run();
-  }
-
-  private recoverInterruptedAgentRuns(workspace: DiscoveryWorkspace): void {
-    const interrupted = this.database.orm
-      .select()
-      .from(representativeAgents)
-      .where(and(
-        eq(representativeAgents.workspaceId, WORKSPACE_ID),
-        eq(representativeAgents.status, 'running'),
-      ))
-      .all();
-    if (!interrupted.length) {
-      return;
-    }
-
-    const now = dayjs().toISOString();
-    this.database.orm.transaction((transaction) => {
-      transaction
-        .update(representativeAgents)
-        .set({ status: 'idle', updatedAt: now })
-        .where(and(
-          eq(representativeAgents.workspaceId, WORKSPACE_ID),
-          eq(representativeAgents.status, 'running'),
-        ))
-        .run();
-      transaction.insert(discoveryEvents).values({
-        id: `event_${randomUUID()}`,
-        workspaceId: WORKSPACE_ID,
-        wakeNumber: workspace.currentWake,
-        kind: 'error',
-        title: 'Interrupted agent wakes recovered',
-        content:
-          `${interrupted.map((agent) => agent.name).join(', ')} ${
-            interrupted.length === 1 ? 'was' : 'were'
-          } running when the host stopped. Unread events remain available for a later check.`,
-        metadata: {
-          visibility: 'operator',
-          recoveredAgentIds: interrupted.map((agent) => agent.id),
-        },
-        createdAt: now,
-      }).run();
     });
   }
 
-  private findActiveAgent(agentId: string): Agent | undefined {
-    const row = this.database.orm
+  private async findActiveAgent(agentId: string): Promise<Agent | undefined> {
+    const [row] = await this.database.orm
       .select({
         participantStatus: participants.status,
         agent: representativeAgents,
@@ -2173,7 +2232,7 @@ export class SqliteDiscoveryRepository implements DiscoveryRepository {
         eq(representativeAgents.workspaceId, WORKSPACE_ID),
         eq(representativeAgents.id, agentId),
       ))
-      .get();
+      .limit(1);
     return row?.participantStatus === 'active'
       ? toAgent(row.agent)
       : undefined;
@@ -2217,6 +2276,7 @@ function toAgent(row: AgentRow): Agent {
     ...row,
     status: agentStatusSchema.parse(row.status),
     activeWakeId: row.activeWakeId ?? undefined,
+    activeWakeClaimToken: row.activeWakeClaimToken ?? undefined,
     activeWakeNumber: row.activeWakeNumber ?? undefined,
     activeWakeHorizon: row.activeWakeHorizon ?? undefined,
     lastRunAt: row.lastRunAt ?? undefined,

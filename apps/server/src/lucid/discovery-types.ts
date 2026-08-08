@@ -90,6 +90,8 @@ export type Agent = {
   mailboxFloorSequence: number;
   lastSeenSequence: number;
   activeWakeId?: string;
+  /** Rotates for every execution attempt while activeWakeId stays retry-stable. */
+  activeWakeClaimToken?: string;
   activeWakeNumber?: number;
   activeWakeHorizon?: number;
   lastRunAt?: string;
@@ -103,6 +105,7 @@ export type AgentView = Omit<
   | 'mailboxFloorSequence'
   | 'lastSeenSequence'
   | 'activeWakeId'
+  | 'activeWakeClaimToken'
   | 'activeWakeNumber'
   | 'activeWakeHorizon'
 > & {
@@ -243,6 +246,7 @@ export type AgentWakeContext = {
   agent: Agent;
   participant: Participant;
   wakeId: string;
+  claimToken: string;
   wakeNumber: number;
   visibleEvents: DiscoveryEvent[];
   workingContext: RepresentativeWorkingContext;

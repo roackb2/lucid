@@ -67,8 +67,9 @@ export type ParticipantWithAgent = {
  */
 export interface DiscoveryRepository {
   /**
-   * Creates missing product state and recovers interrupted agent status
-   * without advancing unread cursors.
+   * Creates missing product state. A single-host adapter may also recover its
+   * own interrupted claims, but a shared adapter must not steal live work
+   * during ordinary API-process startup.
    */
   initialize(): Promise<void>;
 
@@ -138,7 +139,8 @@ export interface DiscoveryRepository {
   /**
    * Atomically claims one agent wake and returns a fixed unread-event horizon.
    * A wake without unread input returns undefined without incrementing the
-   * agent run count or changing its status.
+   * agent run count or changing its status. The semantic wake ID survives a
+   * retry; the claim token rotates and fences every settlement attempt.
    */
   beginAgentWake(
     agentId: string,
@@ -146,10 +148,11 @@ export interface DiscoveryRepository {
   ): Promise<AgentWakeContext | undefined>;
   completeAgentWake(
     agentId: string,
+    claimToken: string,
     horizonSequence: number,
   ): Promise<void>;
-  failAgentWake(agentId: string): Promise<void>;
-  interruptAgentWake(agentId: string): Promise<void>;
+  failAgentWake(agentId: string, claimToken: string): Promise<void>;
+  interruptAgentWake(agentId: string, claimToken: string): Promise<void>;
   hasParticipantFindingUsingAnyOrigin(
     participantId: string,
     sourceEventIds: number[],

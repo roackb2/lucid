@@ -293,6 +293,7 @@ describe('representative-agent heartbeat service', () => {
     });
     await repository.completeAgentWake(
       USER_AGENT_ID,
+      initialWake!.claimToken,
       initialWake!.horizonSequence,
     );
 
@@ -851,7 +852,7 @@ function createTestConfig(stateRoot: string): LucidConfig {
     webOrigin: 'http://127.0.0.1:3080',
     repoRoot: stateRoot,
     stateRoot,
-    databasePath: ':memory:',
+    database: { driver: 'sqlite', path: ':memory:' },
     heddleStateRoot: join(stateRoot, 'heddle'),
     model: 'gpt-5.4-mini',
     maxSteps: 4,

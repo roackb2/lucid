@@ -1,7 +1,7 @@
-# Lucid SQLite infrastructure
+# Lucid persistence infrastructure
 
-This directory owns Lucid's concrete single-process SQLite setup. It is
-infrastructure, not the delegated-discovery domain.
+This directory owns Lucid's concrete SQLite and PostgreSQL adapters. It is
+infrastructure, not the delegated-discovery domain or Heddle's task runtime.
 
 ## Responsibilities
 
@@ -10,22 +10,73 @@ infrastructure, not the delegated-discovery domain.
 | `sqlite-database.ts` | Opens and closes SQLite, applies durability pragmas, and runs migrations |
 | `sqlite-discovery-repository.ts` | Implements the async `DiscoveryRepository` port with SQLite and Drizzle |
 | `schema.ts` | Declares persisted tables, indexes, and database constraints |
+| `discovery-persistence.ts` | Selects the configured adapter and owns its startup/shutdown lifecycle |
+| `postgres-database.ts` | Owns the PostgreSQL pool, transaction-pooler compatibility, migration lifecycle, and shutdown |
+| `postgres-discovery-repository.ts` | Implements the same domain port with PostgreSQL transactions and row locks |
+| `postgres-schema.ts` | Declares product tables and constraints in the `lucid` PostgreSQL schema |
+| `postgres-discovery-repository.integration.test.ts` | Runs the shared adapter contract plus real multi-connection contention checks |
 
 `LucidSqliteDatabase` is deliberately not named a service or repository. It
 owns the lifetime and configuration of one SQLite resource. Domain
 repositories own data access and transactional behavior.
 
 The port is asynchronous even though `better-sqlite3` performs synchronous
-local I/O. A PostgreSQL adapter can therefore use a conventional async driver
+local I/O. The PostgreSQL adapter therefore uses a conventional async driver
 without changing `DiscoveryWorkspaceService`,
 `RepresentativeAgentHeartbeatService`,
 `HeddleRepresentativeAgentRunner`, or tRPC.
 
-Replacing the adapter is not the same as making Lucid distributed. A remote
-adapter must preserve atomic wake claims, monotonic event sequences, unique
-idempotency keys, and cursor semantics. Multi-host scheduling additionally
-requires leased task ownership outside the current file-backed Heddle
-scheduler.
+Replacing the product adapter is not the same as making Lucid distributed.
+PostgreSQL now preserves atomic wake claims, monotonic event sequences, unique
+idempotency keys, fixed horizons, attempt-level settlement fencing, and cursor
+semantics across API processes. A retry keeps its semantic wake ID so tool
+effects remain idempotent, but rotates `active_wake_claim_token`; completion,
+failure, and interruption reject a stale token.
+Multi-host scheduling still requires Heddle's released targeted-worker lease
+contract; ordinary PostgreSQL adapter initialization intentionally does not
+reset `running` claims because another process may still own them.
+
+## PostgreSQL operational boundary
+
+PostgreSQL uses the standard `lucid` schema for product state. Heddle task,
+run-request, checkpoint, and lease state will use a separate `heddle` schema
+after [Heddle #318](https://github.com/roackb2/heddle/issues/318) is released.
+Lucid does not copy Heddle's private file-store model or use a filtered local
+store as a distributed lock.
+
+`LucidPostgresDatabase` defaults to `prepare: false`, which is compatible with
+Supavisor transaction pooling. Use a direct PostgreSQL connection for
+migrations and a pooled application connection at runtime. Both URLs are
+secrets: pass them through environment configuration and never log them.
+
+Generate and apply checked-in PostgreSQL migrations with:
+
+```bash
+yarn server:db:generate:postgres
+LUCID_DATABASE_URL='postgresql://...' yarn server:db:migrate:postgres
+```
+
+Runtime startup must not generate schemas or silently run shared-database
+migrations. Apply migrations as a bounded deployment step before starting new
+workers.
+
+Select the product adapter with `LUCID_DATABASE_DRIVER=sqlite|postgres`.
+PostgreSQL additionally requires `LUCID_DATABASE_URL`. This selection changes
+Lucid product persistence only: the current server still uses Heddle's local
+file task store and must run as one process until the hosted task contract is
+available.
+
+The full adapter contract requires a disposable real PostgreSQL database:
+
+```bash
+LUCID_POSTGRES_TEST_URL='postgresql://...' yarn server:test:postgres
+```
+
+The suite resets only the `lucid` product tables inside that database. It
+validates all shared repository behavior, two-pool wake contention,
+cross-process idempotency, non-stealing initialization, and persistence after
+every client connection closes. The ordinary unit-test command skips this
+suite when no test URL is configured.
 
 ## Data ownership
 
@@ -94,9 +145,9 @@ boundary. Renewed participant consent replaces `private_context` and
 participant scrubs `private_context` but keeps its row and representative
 identity for append-only historical attribution.
 
-SQLite does not encrypt `private_context` at rest. The field is private because
+Neither adapter encrypts `private_context` at the application layer. The field is private because
 ordinary product/diagnostic projections and agent visibility exclude it from
-every non-owner, not because the database file is cryptographically protected.
+every non-owner, not because the underlying storage is cryptographically protected.
 Trusted ingress may replace it through the repository contract; it is never
 part of the participant-scoped workspace snapshot.
 

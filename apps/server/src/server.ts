@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import heddlePackage from '@roackb2/heddle/package.json' with { type: 'json' };
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
-import { LUCID_MIGRATIONS_ROOT, resolveLucidConfig } from './config.js';
-import { LucidSqliteDatabase } from './database/sqlite-database.js';
-import { SqliteDiscoveryRepository } from './database/sqlite-discovery-repository.js';
+import { resolveLucidConfig } from './config.js';
+import { createDiscoveryPersistence } from './database/discovery-persistence.js';
 import { DiscoveryWorkspaceService } from './lucid/discovery-workspace-service.js';
 import {
   HeddleRepresentativeAgentRunner,
@@ -17,12 +16,8 @@ import { createAppRouter } from './router.js';
 
 const config = resolveLucidConfig();
 const logger = createLucidLogger(config.logLevel);
-const database = new LucidSqliteDatabase(config.databasePath);
-
-database.migrate(LUCID_MIGRATIONS_ROOT);
-
-const repository = new SqliteDiscoveryRepository(database);
-await repository.initialize();
+const persistence = await createDiscoveryPersistence(config);
+const { repository } = persistence;
 const agentRunner = new HeddleRepresentativeAgentRunner(repository, config);
 const heartbeats = new RepresentativeAgentHeartbeatService(
   repository,
@@ -83,7 +78,10 @@ let shuttingDown = false;
 server.listen(config.port, config.host, () => {
   logger.info({
     address: `http://${config.host}:${config.port}`,
-    databasePath: config.databasePath,
+    databaseDriver: config.database.driver,
+    databasePath: config.database.driver === 'sqlite'
+      ? config.database.path
+      : undefined,
     model: config.model,
   }, 'lucid.server.ready');
 });
@@ -116,5 +114,5 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
     logger.error({ error: closeError }, 'lucid.server.close_failed');
     process.exitCode = 1;
   }
-  database.close();
+  await persistence.close();
 }
