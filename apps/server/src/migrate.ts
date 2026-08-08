@@ -8,7 +8,7 @@ import { config as loadDotEnv } from 'dotenv';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { LucidPostgresDatabase } from './database/postgres-database.js';
+import { PostgresDatabase } from './infrastructure/postgres/database.js';
 
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
 loadDotEnv({ path: join(repoRoot, '.env'), quiet: true });
@@ -19,7 +19,7 @@ const environment = z.object({
 const migrationsRoot = fileURLToPath(
   new URL('../drizzle', import.meta.url),
 );
-const database = new LucidPostgresDatabase({
+const database = new PostgresDatabase({
   url: environment.LUCID_DATABASE_URL,
   maxConnections: 1,
   applicationName: 'lucid-postgres-migrator',

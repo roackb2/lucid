@@ -15,22 +15,22 @@ import {
   type HeartbeatTaskCancellationDisposition,
   type HeartbeatTaskView,
 } from '@roackb2/heddle/advanced';
-import type { LucidConfig } from '../config.js';
-import type { LucidLogger } from '../logger.js';
+import type { LucidConfig } from '../../config.js';
+import type { LucidLogger } from '../../logger.js';
 import type {
   RepresentativeAgentExecutionHost,
   RepresentativeHeartbeatTaskAuthority,
-} from '../runtime/representative-agent-execution-host.js';
-import type { DiscoveryRepository } from './discovery-repository.js';
+} from '../../runtime/representative-agent-execution-host.js';
 import {
   networkMessageRoleSchema,
   type AgentWakeContext,
   type BackgroundChecksView,
   type RepresentativeAgentTaskView,
-} from './discovery-types.js';
+} from '../discovery-types.js';
 import type {
   RepresentativeAgentHeartbeatRunner,
-} from './heddle-representative-agent-runner.js';
+} from './heddle-runner.js';
+import type { RepresentativeWakeRepository } from './repository.js';
 
 export const REPRESENTATIVE_AGENT_TASK_ID_PREFIX = 'lucid-representative-';
 const UNSAFE_CANCELLATION_DISPOSITIONS = new Set<
@@ -52,7 +52,7 @@ export class RepresentativeAgentHeartbeatService {
   private readonly taskMutationMutex = new Mutex();
 
   constructor(
-    private readonly repository: DiscoveryRepository,
+    private readonly repository: RepresentativeWakeRepository,
     private readonly runner: RepresentativeAgentHeartbeatRunner,
     private readonly config: LucidConfig,
     private readonly logger: LucidLogger,

@@ -5,16 +5,37 @@ import {
   expect,
   it,
 } from 'vitest';
-import type { DiscoveryRepository } from './discovery-repository.js';
+import type { Agent, Participant } from '../../discovery-types.js';
 import {
   LOCAL_USER_ID,
   USER_AGENT_ID,
-} from './local-participant.js';
+} from '../../local-participant.js';
+import type { ParticipantNetworkRepository } from '../../network/repository.js';
+import type {
+  AgentCommunicationRepository,
+} from '../../representative/communication/repository.js';
+import type {
+  RepresentativeWakeRepository,
+} from '../../representative/repository.js';
+import type {
+  DiscoveryWorkspaceRepository,
+} from '../../workspace/repository.js';
 
-export type DiscoveryRepositoryContractOptions = {
+export type LucidRepositoryContract =
+  & DiscoveryWorkspaceRepository
+  & ParticipantNetworkRepository
+  & RepresentativeWakeRepository
+  & AgentCommunicationRepository
+  & {
+    initialize(): Promise<void>;
+    requireParticipant(id: string): Promise<Participant>;
+    requireAgent(id: string): Promise<Agent>;
+  };
+
+export type LucidRepositoryContractOptions = {
   name: string;
   create: () => Promise<{
-    repository: DiscoveryRepository;
+    repository: LucidRepositoryContract;
     close: () => Promise<void>;
   }>;
 };
@@ -26,10 +47,10 @@ export type DiscoveryRepositoryContractOptions = {
  * behavior. Keeping domain behavior here prevents PostgreSQL from becoming a
  * schema-compatible but semantically different implementation.
  */
-export const defineDiscoveryRepositoryContract = (
-  options: DiscoveryRepositoryContractOptions,
+export const defineLucidRepositoryContract = (
+  options: LucidRepositoryContractOptions,
 ): void => describe(options.name, () => {
-  let repository: DiscoveryRepository;
+  let repository: LucidRepositoryContract;
   let close: (() => Promise<void>) | undefined;
 
   beforeEach(async () => {
@@ -1053,7 +1074,7 @@ export const defineDiscoveryRepositoryContract = (
 });
 
 async function registerSynthetic(
-  repository: DiscoveryRepository,
+  repository: LucidRepositoryContract,
   key: string,
 ) {
   return await repository.registerParticipant({

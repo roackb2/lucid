@@ -39,11 +39,13 @@ import {
 import {
   postgresHeartbeatRunRecords as heartbeatRunRecords,
   postgresHeartbeatTasks as heartbeatTasks,
-} from './postgres-heartbeat-schema.js';
-import type { LucidPostgresDatabase } from './postgres-database.js';
+} from './schema.js';
+import type {
+  PostgresDatabase,
+} from '../../../infrastructure/postgres/database.js';
 
 export type PostgresHeartbeatTaskStoreOptions = {
-  database: LucidPostgresDatabase;
+  database: PostgresDatabase;
   /** Isolates one hosted service or test fixture inside the shared schema. */
   namespace: string;
   /** Must exceed the host's maximum bounded worker attempt duration. */
@@ -53,7 +55,7 @@ export type PostgresHeartbeatTaskStoreOptions = {
 type HeartbeatTaskRow = typeof heartbeatTasks.$inferSelect;
 type HeartbeatRunRecordRow = typeof heartbeatRunRecords.$inferSelect;
 type LucidPostgresTransaction = Parameters<
-  Parameters<LucidPostgresDatabase['orm']['transaction']>[0]
+  Parameters<PostgresDatabase['orm']['transaction']>[0]
 >[0];
 
 type WriteTaskOptions = {
@@ -72,7 +74,7 @@ export class PostgresHeartbeatTaskStore implements
   HeartbeatTargetedTaskStore,
   HeartbeatTaskAdministrationService
 {
-  private readonly database: LucidPostgresDatabase;
+  private readonly database: PostgresDatabase;
   private readonly namespace: string;
   private readonly executionLeaseMs: number;
 
@@ -764,7 +766,7 @@ export class PostgresHeartbeatTaskStore implements
   }
 
   private async insertRunRecord(
-    database: Pick<LucidPostgresDatabase['orm'], 'insert'>,
+    database: Pick<PostgresDatabase['orm'], 'insert'>,
     record: HeartbeatTaskRunRecord,
   ): Promise<void> {
     const details = resolveRunRecord(record);

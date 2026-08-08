@@ -3,16 +3,16 @@ import heddlePackage from '@roackb2/heddle/package.json' with { type: 'json' };
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import { createLucidAuthenticator } from './auth/authenticator.js';
 import { resolveLucidConfig } from './config.js';
-import { createDiscoveryPersistence } from './database/discovery-persistence.js';
-import { DiscoveryWorkspaceService } from './lucid/discovery-workspace-service.js';
+import { createPostgresPersistence } from './composition/postgres-persistence.js';
+import { DiscoveryWorkspaceService } from './lucid/workspace/service.js';
 import {
   HeddleRepresentativeAgentRunner,
-} from './lucid/heddle-representative-agent-runner.js';
-import { ParticipantNetworkService } from './lucid/participant-network-service.js';
+} from './lucid/representative/heddle-runner.js';
+import { ParticipantNetworkService } from './lucid/network/service.js';
 import {
   REPRESENTATIVE_AGENT_TASK_ID_PREFIX,
   RepresentativeAgentHeartbeatService,
-} from './lucid/representative-agent-heartbeat-service.js';
+} from './lucid/representative/heartbeat-service.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
 import {
@@ -22,18 +22,21 @@ import {
 const config = resolveLucidConfig();
 const logger = createLucidLogger(config.logLevel);
 const authenticator = createLucidAuthenticator(config.authentication);
-const persistence = await createDiscoveryPersistence(config);
-const { repository, taskAuthority } = persistence;
-const agentRunner = new HeddleRepresentativeAgentRunner(repository, config);
+const persistence = await createPostgresPersistence(config);
+const { repositories, taskAuthority } = persistence;
+const agentRunner = new HeddleRepresentativeAgentRunner(
+  repositories.communication,
+  config,
+);
 const executionHost = createRepresentativeAgentExecutionHost({
   config,
-  repository,
+  repository: repositories.representative,
   taskAuthority,
   taskIdPrefix: REPRESENTATIVE_AGENT_TASK_ID_PREFIX,
   logger,
 });
 const heartbeats = new RepresentativeAgentHeartbeatService(
-  repository,
+  repositories.representative,
   agentRunner,
   config,
   logger,
@@ -43,7 +46,7 @@ const heartbeats = new RepresentativeAgentHeartbeatService(
 await heartbeats.initialize();
 heartbeats.start();
 const discoveryWorkspace = new DiscoveryWorkspaceService(
-  repository,
+  repositories.workspace,
   heartbeats,
   {
     model: config.model,
@@ -51,7 +54,7 @@ const discoveryWorkspace = new DiscoveryWorkspaceService(
   },
 );
 const participantNetwork = new ParticipantNetworkService(
-  repository,
+  repositories.network,
   heartbeats,
   {
     model: config.model,

@@ -1,5 +1,7 @@
 import type { LucidConfig } from '../config.js';
-import type { DiscoveryRepository } from '../lucid/discovery-repository.js';
+import type {
+  RepresentativeWakeRepository,
+} from '../lucid/representative/repository.js';
 import type { LucidLogger } from '../logger.js';
 import {
   LongLivedRepresentativeAgentExecutionHost,
@@ -11,7 +13,7 @@ import { RepresentativeAgentWorker } from './representative-agent-worker.js';
 
 export type RepresentativeAgentExecutionCompositionOptions = {
   config: LucidConfig;
-  repository: DiscoveryRepository;
+  repository: RepresentativeWakeRepository;
   taskAuthority: RepresentativeHeartbeatTaskAuthority;
   taskIdPrefix: string;
   logger: LucidLogger;

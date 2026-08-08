@@ -7,18 +7,18 @@ import {
   it,
   vi,
 } from 'vitest';
-import type { LucidPostgresDatabase } from '../database/postgres-database.js';
-import type { PostgresDiscoveryRepository } from '../database/postgres-discovery-repository.js';
-import { createPostgresTestRepository } from '../database/postgres-test-harness.js';
-import { LOCAL_USER_ID, USER_AGENT_ID } from './local-participant.js';
-import { DiscoveryWorkspaceService } from './discovery-workspace-service.js';
+import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
+import type { PostgresLucidRepository } from '../persistence/postgres/repository.js';
+import { createPostgresTestRepository } from '../persistence/postgres/test-context.js';
+import { LOCAL_USER_ID, USER_AGENT_ID } from '../local-participant.js';
+import { DiscoveryWorkspaceService } from './service.js';
 import type {
   RepresentativeAgentHeartbeatService,
-} from './representative-agent-heartbeat-service.js';
+} from '../representative/heartbeat-service.js';
 
 describe('discovery workspace service', () => {
-  let database: LucidPostgresDatabase;
-  let repository: PostgresDiscoveryRepository;
+  let database: PostgresDatabase;
+  let repository: PostgresLucidRepository;
 
   beforeAll(async () => {
     ({ database, repository } = await createPostgresTestRepository({

@@ -2,9 +2,9 @@
  * PostgreSQL persistence model for Lucid's shared hosted workspace.
  *
  * The `lucid` schema contains product-owned participant, representative, and
- * immutable event state. Heddle heartbeat state belongs to a separate
- * `heddle` schema and will be introduced only against Heddle's released remote
- * store contract; this module deliberately does not copy Heddle internals.
+ * immutable event state. The runtime heartbeat adapter owns the separate
+ * `heddle` schema through Heddle's released remote-store contracts; this
+ * module deliberately declares no Heddle internals.
  */
 import { sql } from 'drizzle-orm';
 import {
@@ -19,7 +19,7 @@ import {
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import type { DiscoveryEventMetadata } from '../lucid/discovery-types.js';
+import type { DiscoveryEventMetadata } from '../../discovery-types.js';
 
 export const lucidPostgresSchema = pgSchema('lucid');
 

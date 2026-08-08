@@ -14,13 +14,13 @@ import type {
   ToolPolicyHostContext,
   ToolResult,
 } from '@roackb2/heddle';
-import type { DiscoveryRepository } from './discovery-repository.js';
 import type {
   Agent,
   DiscoveryEvent,
   NetworkMessageRole,
   Participant,
-} from './discovery-types.js';
+} from '../../discovery-types.js';
+import type { AgentCommunicationRepository } from './repository.js';
 
 const readMessagesInputSchema = z.object({
   after_sequence: z.number().int().min(0).optional(),
@@ -83,7 +83,7 @@ export class AgentCommunicationToolService {
   private pendingRequiredWorkingNoteSourceIds = new Set<number>();
 
   constructor(
-    private readonly repository: DiscoveryRepository,
+    private readonly repository: AgentCommunicationRepository,
     private readonly agent: Agent,
     private readonly participant: Participant,
     private readonly wakeId: string,

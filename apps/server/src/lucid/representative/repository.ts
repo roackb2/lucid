@@ -1,0 +1,47 @@
+/** Persistence port for representative wake orchestration. */
+import type {
+  Agent,
+  AgentWakeContext,
+  AppendDiscoveryEventInput,
+  DiscoveryEvent,
+  DiscoveryWorkspace,
+  Participant,
+} from '../discovery-types.js';
+
+export interface RepresentativeWakeRepository {
+  reset(options: { backgroundChecksEnabled: boolean }): Promise<void>;
+  readWorkspace(): Promise<DiscoveryWorkspace>;
+  setBackgroundChecksEnabled(enabled: boolean): Promise<DiscoveryWorkspace>;
+  listParticipants(): Promise<Participant[]>;
+  listAgents(): Promise<Agent[]>;
+  listActiveAgents(): Promise<Agent[]>;
+  readEvent(sequence: number): Promise<DiscoveryEvent | undefined>;
+  listAgentWakeCommunicationEvents(
+    agentId: string,
+    wakeNumber: number,
+  ): Promise<DiscoveryEvent[]>;
+  beginAgentWake(
+    agentId: string,
+    wakeId: string,
+  ): Promise<AgentWakeContext | undefined>;
+  completeAgentWake(
+    agentId: string,
+    claimToken: string,
+    horizonSequence: number,
+  ): Promise<void>;
+  failAgentWake(agentId: string, claimToken: string): Promise<void>;
+  interruptAgentWake(agentId: string, claimToken: string): Promise<void>;
+  recoverInterruptedAgentWake(
+    agentId: string,
+    interruptedExecutionId: string,
+  ): Promise<boolean>;
+  findAgentPublishedRequestForTrigger(
+    agentId: string,
+    triggerSequence: number,
+  ): Promise<DiscoveryEvent | undefined>;
+  hasAgentUpdatedWorkingNoteThrough(
+    agentId: string,
+    sourceSequence: number,
+  ): Promise<boolean>;
+  appendEvent(input: AppendDiscoveryEventInput): Promise<DiscoveryEvent>;
+}

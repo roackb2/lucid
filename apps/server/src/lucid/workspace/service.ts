@@ -5,19 +5,19 @@
  * Network registration, world diagnostics, and participant administration live
  * in ParticipantNetworkService and never leak into the main user snapshot.
  */
-import type { DiscoveryRepository } from './discovery-repository.js';
-import { LOCAL_USER_ID } from './local-participant.js';
-import type { DiscoveryWorkspaceSnapshot } from './discovery-types.js';
+import { LOCAL_USER_ID } from '../local-participant.js';
+import type { DiscoveryWorkspaceSnapshot } from '../discovery-types.js';
 import type {
   RepresentativeAgentHeartbeatService,
-} from './representative-agent-heartbeat-service.js';
+} from '../representative/heartbeat-service.js';
+import type { DiscoveryWorkspaceRepository } from './repository.js';
 
 export class DiscoveryInputError extends Error {}
 
 /** Coordinates local-user commands with durable mailbox execution. */
 export class DiscoveryWorkspaceService {
   constructor(
-    private readonly repository: DiscoveryRepository,
+    private readonly repository: DiscoveryWorkspaceRepository,
     private readonly heartbeats: RepresentativeAgentHeartbeatService,
     private readonly runtime: { model: string; heddleVersion: string },
   ) {}

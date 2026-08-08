@@ -1,40 +1,37 @@
-# Lucid persistence infrastructure
+# Lucid PostgreSQL adapter
 
-This directory owns Lucid's PostgreSQL product adapter and the PostgreSQL
-implementation of Heddle's public task-store ports. It is infrastructure, not
-the delegated-discovery domain or Heddle's task runtime.
+This directory owns Lucid's concrete PostgreSQL product adapter. Repository
+ports stay beside the workspace, participant-network, representative-wake, and
+agent-communication services that consume them. The shared adapter implements
+all four because their durable invariants span the same product transaction
+and append-only event history.
 
 ## Responsibilities
 
 | File | Responsibility |
 | --- | --- |
-| `discovery-persistence.ts` | Composes the product and Heddle adapters over one pool and owns shutdown |
-| `postgres-database.ts` | Owns the PostgreSQL pool, transaction-pooler compatibility, migration lifecycle, and shutdown |
-| `postgres-discovery-repository.ts` | Implements `DiscoveryRepository` with PostgreSQL transactions, row locks, and fenced wake recovery |
-| `postgres-schema.ts` | Declares product tables and constraints in the `lucid` PostgreSQL schema |
-| `postgres-discovery-repository.integration.test.ts` | Runs the shared adapter contract plus real multi-connection contention checks |
-| `postgres-heartbeat-schema.ts` | Declares task authority and immutable run history in the separate `heddle` schema |
-| `postgres-heartbeat-task-store.ts` | Implements Heddle's targeted execution and administration contracts with row/catalog locks, leases, and fencing |
-| `postgres-heartbeat-task-store.integration.test.ts` | Runs canonical adapter conformance and administration races against independent PostgreSQL pools |
-| `postgres-test-harness.ts` | Requires an explicit disposable test URL and creates isolated real-PostgreSQL fixtures |
-| `heartbeat/README.md` | Defines the hosted heartbeat persistence boundary and its lease/recovery rules |
+| `repository.ts` | Implements the service-owned ports with PostgreSQL transactions, row locks, read projections, and fenced wake recovery |
+| `schema.ts` | Declares product tables and constraints in the `lucid` schema |
+| `repository.integration.test.ts` | Runs the full adapter contract plus real multi-connection contention and reconnect checks |
+| `repository-contract.test-support.ts` | Defines storage-independent behavior required of a complete Lucid adapter |
+| `test-context.ts` | Adds Lucid initialization and destructive product reset to the neutral PostgreSQL test fixture |
 
-The domain port remains storage-independent. PostgreSQL driver, query-builder,
-and transaction types do not leak into `DiscoveryWorkspaceService`,
-`RepresentativeAgentHeartbeatService`,
-`HeddleRepresentativeAgentRunner`, or tRPC.
+The services receive different structural views of the adapter through
+`composition/postgres-persistence.ts`. PostgreSQL driver, query-builder, and
+transaction types do not leak into services, the Heddle runner, or tRPC. Do
+not replace these ports with table-shaped CRUD repositories: participant
+lifecycle, mailbox floors, event visibility, wake claims, and participant read
+models deliberately cross table boundaries.
 
 PostgreSQL now preserves atomic wake claims, monotonic event sequences, unique
 idempotency keys, fixed horizons, attempt-level settlement fencing, and cursor
 semantics across API processes. A retry keeps its semantic wake ID so tool
 effects remain idempotent, but rotates `active_wake_claim_token`; completion,
 failure, and interruption reject a stale token.
-Multi-host scheduling uses the PostgreSQL Heddle task store and a host
-dispatcher. Ordinary product-repository initialization intentionally does not
-reset either Lucid wake claims or Heddle `running` tasks because another
-process may still own them. Lease recovery supplies the interrupted Heddle
-execution ID to Lucid's fenced recovery operation, so it can release only the
-matching product wake claim.
+Ordinary product-repository initialization intentionally does not reset Lucid
+wake claims because another process may still own them. Heddle lease recovery
+supplies the interrupted execution ID to Lucid's fenced recovery operation, so
+it can release only the matching product wake claim.
 
 ## PostgreSQL operational boundary
 
@@ -44,10 +41,12 @@ run-request, checkpoint, lease, and run-history state uses the separate
 state/control projectors. Lucid does not copy Heddle's private file-store model
 or use a filtered local store as a distributed lock.
 
-`LucidPostgresDatabase` defaults to `prepare: false`, which is compatible with
-Supavisor transaction pooling. Use a direct PostgreSQL connection for
-migrations and a pooled application connection at runtime. Both URLs are
-secrets: pass them through environment configuration and never log them.
+The schema-neutral `PostgresDatabase` in
+`../../../infrastructure/postgres/database.ts` defaults to `prepare: false`,
+which is compatible with Supavisor transaction pooling. Use a direct
+PostgreSQL connection for migrations and a pooled application connection at
+runtime. Both URLs are secrets: pass them through environment configuration
+and never log them.
 
 Generate and apply checked-in PostgreSQL migrations with:
 
@@ -62,8 +61,9 @@ workers.
 
 `LUCID_DATABASE_URL` is required. The composition uses both schemas through one
 owned pool, an explicit Heddle namespace, and a lease longer than the bounded
-worker attempt; see `heartbeat/README.md`. There is no runtime backend selector
-or fallback database.
+worker attempt; see
+`../../../runtime/heartbeat/postgres/README.md`. There is no runtime backend
+selector or fallback database.
 
 The full adapter contract requires a disposable real PostgreSQL database:
 
@@ -149,7 +149,7 @@ identity for append-only historical attribution.
 Neither adapter encrypts `private_context` at the application layer. The field is private because
 ordinary product/diagnostic projections and agent visibility exclude it from
 every non-owner, not because the underlying storage is cryptographically protected.
-Trusted ingress may replace it through the repository contract; it is never
+Trusted ingress may replace it through the participant-network port; it is never
 part of the participant-scoped workspace snapshot.
 
 ## Relations

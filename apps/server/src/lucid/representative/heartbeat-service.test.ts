@@ -22,34 +22,34 @@ import {
   it,
   vi,
 } from 'vitest';
-import type { LucidConfig } from '../config.js';
-import type { LucidPostgresDatabase } from '../database/postgres-database.js';
-import type { PostgresDiscoveryRepository } from '../database/postgres-discovery-repository.js';
-import { createPostgresTestRepository } from '../database/postgres-test-harness.js';
-import { createLucidLogger } from '../logger.js';
+import type { LucidConfig } from '../../config.js';
+import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
+import type { PostgresLucidRepository } from '../persistence/postgres/repository.js';
+import { createPostgresTestRepository } from '../persistence/postgres/test-context.js';
+import { createLucidLogger } from '../../logger.js';
 import {
   LongLivedRepresentativeAgentExecutionHost,
-} from '../runtime/representative-agent-execution-host.js';
-import { AgentCommunicationToolService } from './agent-communication-tools.js';
+} from '../../runtime/representative-agent-execution-host.js';
+import { AgentCommunicationToolService } from './communication/tool-service.js';
 import {
   LOCAL_USER_ID,
   USER_AGENT_ID,
-} from './local-participant.js';
-import { DiscoveryWorkspaceService } from './discovery-workspace-service.js';
+} from '../local-participant.js';
+import { DiscoveryWorkspaceService } from '../workspace/service.js';
 import type {
   RepresentativeAgentHeartbeatRunner,
   RunRepresentativeAgentHeartbeatInput,
-} from './heddle-representative-agent-runner.js';
-import { ParticipantNetworkService } from './participant-network-service.js';
+} from './heddle-runner.js';
+import { ParticipantNetworkService } from '../network/service.js';
 import {
   RepresentativeAgentHeartbeatService,
-} from './representative-agent-heartbeat-service.js';
+} from './heartbeat-service.js';
 
 const TEST_RUNTIME = { model: 'gpt-5.4-mini', heddleVersion: 'test' };
 
 describe('representative-agent heartbeat service', () => {
-  let database: LucidPostgresDatabase;
-  let repository: PostgresDiscoveryRepository;
+  let database: PostgresDatabase;
+  let repository: PostgresLucidRepository;
   let config: LucidConfig;
   let stateRoot: string;
   let heartbeats: RepresentativeAgentHeartbeatService[];
@@ -689,7 +689,7 @@ describe('representative-agent heartbeat service', () => {
 class RoutingHeartbeatRunner implements RepresentativeAgentHeartbeatRunner {
   readonly agentIds: string[] = [];
 
-  constructor(private readonly repository: PostgresDiscoveryRepository) {}
+  constructor(private readonly repository: PostgresLucidRepository) {}
 
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
@@ -820,7 +820,7 @@ implements RepresentativeAgentHeartbeatRunner {
     horizonSequence: number;
   }> = [];
 
-  constructor(private readonly repository: PostgresDiscoveryRepository) {}
+  constructor(private readonly repository: PostgresLucidRepository) {}
 
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
@@ -845,7 +845,7 @@ class IgnoreGuidanceHeartbeatRunner
 implements RepresentativeAgentHeartbeatRunner {
   guidanceRuns = 0;
 
-  constructor(private readonly repository: PostgresDiscoveryRepository) {}
+  constructor(private readonly repository: PostgresLucidRepository) {}
 
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
@@ -877,7 +877,7 @@ implements RepresentativeAgentHeartbeatRunner {
 }
 
 async function registerSynthetic(
-  repository: PostgresDiscoveryRepository,
+  repository: PostgresLucidRepository,
   key: string,
 ) {
   return await repository.registerParticipant({
@@ -889,7 +889,7 @@ async function registerSynthetic(
 }
 
 async function createWakeTools(
-  repository: PostgresDiscoveryRepository,
+  repository: PostgresLucidRepository,
   input: RunRepresentativeAgentHeartbeatInput,
 ) {
   const requiredRequestSourceIds = input.wake.visibleEvents

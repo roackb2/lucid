@@ -25,17 +25,26 @@ import {
   LOCAL_REPRESENTATIVE,
   LOCAL_USER_ID,
   USER_AGENT_ID,
-} from '../lucid/local-participant.js';
-import { createRepresentativeProfile } from '../lucid/representative-profile.js';
+} from '../../local-participant.js';
+import { createRepresentativeProfile } from '../../representative-profile.js';
 import type {
-  AppendDiscoveryEventInput,
-  DiscoveryRepository,
-  DiscoveryRepositorySnapshot,
   NetworkDiagnosticsRepositorySnapshot,
   ParticipantWithAgent,
-} from '../lucid/discovery-repository.js';
+  ParticipantNetworkRepository,
+} from '../../network/repository.js';
+import type {
+  AgentCommunicationRepository,
+} from '../../representative/communication/repository.js';
+import type {
+  RepresentativeWakeRepository,
+} from '../../representative/repository.js';
+import type {
+  DiscoveryWorkspaceRepository,
+  DiscoveryWorkspaceRepositorySnapshot,
+} from '../../workspace/repository.js';
 import {
   agentStatusSchema,
+  type AppendDiscoveryEventInput,
   discoveryEventKindSchema,
   participantKindSchema,
   participantStatusSchema,
@@ -57,14 +66,14 @@ import {
   type ParticipantView,
   type RegisterParticipantInput,
   type RepresentativeWorkingContext,
-} from '../lucid/discovery-types.js';
+} from '../../discovery-types.js';
 import {
   postgresDiscoveryEvents as discoveryEvents,
   postgresDiscoveryWorkspaces as discoveryWorkspaces,
   postgresParticipants as participants,
   postgresRepresentativeAgents as representativeAgents,
-} from './postgres-schema.js';
-import type { LucidPostgresDatabase } from './postgres-database.js';
+} from './schema.js';
+import type { PostgresDatabase } from '../../../infrastructure/postgres/database.js';
 
 const WORKSPACE_ID = 'local-discovery-workspace';
 const SNAPSHOT_EVENT_LIMIT = 220;
@@ -84,15 +93,19 @@ type DiscoveryEventRow = typeof discoveryEvents.$inferSelect;
 type DiscoveryWorkspaceRow = typeof discoveryWorkspaces.$inferSelect;
 type ParticipantRow = typeof participants.$inferSelect;
 type LucidPostgresTransaction = Parameters<
-  Parameters<LucidPostgresDatabase['orm']['transaction']>[0]
+  Parameters<PostgresDatabase['orm']['transaction']>[0]
 >[0];
 
 /**
- * PostgreSQL/Drizzle adapter for Lucid's storage-independent discovery repository.
+ * PostgreSQL/Drizzle adapter for Lucid's service-owned persistence ports.
  * Content remains ordinary language and is never scored here.
  */
-export class PostgresDiscoveryRepository implements DiscoveryRepository {
-  constructor(private readonly database: LucidPostgresDatabase) {}
+export class PostgresLucidRepository implements
+  DiscoveryWorkspaceRepository,
+  ParticipantNetworkRepository,
+  RepresentativeWakeRepository,
+  AgentCommunicationRepository {
+  constructor(private readonly database: PostgresDatabase) {}
 
   async initialize(): Promise<void> {
     await this.database.orm.transaction(async (transaction) => {
@@ -142,7 +155,7 @@ export class PostgresDiscoveryRepository implements DiscoveryRepository {
     return await this.requireWorkspace();
   }
 
-  async readSnapshot(): Promise<DiscoveryRepositorySnapshot> {
+  async readSnapshot(): Promise<DiscoveryWorkspaceRepositorySnapshot> {
     const workspace = await this.requireWorkspace();
     const [user, representative] = await Promise.all([
       this.requireParticipant(LOCAL_USER_ID),

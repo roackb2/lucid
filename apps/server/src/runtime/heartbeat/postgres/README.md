@@ -89,12 +89,12 @@ yarn server:db:generate
 LUCID_DATABASE_URL='postgresql://...' yarn server:db:migrate
 ```
 
-Certify the adapter against an isolated real PostgreSQL database:
+Certify the adapter against a dedicated disposable PostgreSQL database:
 
 ```bash
-LUCID_POSTGRES_TEST_URL='postgresql:///postgres' \
+LUCID_POSTGRES_TEST_URL='postgresql:///lucid_test' \
   yarn workspace @lucid/server vitest run \
-  src/database/postgres-heartbeat-task-store.integration.test.ts
+  src/runtime/heartbeat/postgres/task-store.integration.test.ts
 ```
 
 The suite uses independent connection pools and opaque random namespaces. It

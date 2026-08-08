@@ -1,5 +1,5 @@
 /**
- * Owns one PostgreSQL connection pool and Lucid migration lifecycle.
+ * Owns one PostgreSQL connection pool and the explicit migration lifecycle.
  *
  * Product repositories receive the Drizzle handle. They do not parse database
  * URLs, configure pooling/prepared statements, run migrations, or close the
@@ -9,20 +9,19 @@
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres, { type Sql } from 'postgres';
-import * as schema from './postgres-schema.js';
 
-export type LucidPostgresDatabaseOptions = {
+export type PostgresDatabaseOptions = {
   url: string;
   maxConnections?: number;
   prepareStatements?: boolean;
   applicationName?: string;
 };
 
-export class LucidPostgresDatabase {
+export class PostgresDatabase {
   readonly client: Sql;
-  readonly orm: PostgresJsDatabase<typeof schema>;
+  readonly orm: PostgresJsDatabase;
 
-  constructor(options: LucidPostgresDatabaseOptions) {
+  constructor(options: PostgresDatabaseOptions) {
     this.client = postgres(options.url, {
       max: options.maxConnections ?? 10,
       prepare: options.prepareStatements ?? false,
@@ -31,7 +30,7 @@ export class LucidPostgresDatabase {
       },
       onnotice: () => undefined,
     });
-    this.orm = drizzle(this.client, { schema });
+    this.orm = drizzle(this.client);
   }
 
   async migrate(migrationsFolder: string): Promise<void> {

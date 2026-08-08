@@ -7,18 +7,24 @@ simulation scenarios.
 
 ## Service boundaries
 
-| File | Responsibility |
+| Directory | Responsibility |
 | --- | --- |
-| `discovery-workspace-service.ts` | Coordinates the local participant's saved interest, run requests, feedback, durable listening preference, and scoped snapshot |
-| `participant-network-service.ts` | Coordinates trusted participant registration/input, lifecycle, Heddle task reconciliation, reset, and development diagnostics |
-| `representative-agent-heartbeat-service.ts` | Reconciles one Heddle task per representative, claims mailbox wakes, routes request/response run intents, and coordinates an injected execution host |
-| `heddle-representative-agent-runner.ts` | Builds one claimed wake's prompt/tools and delegates execution through Heddle's context |
-| `discovery-repository.ts` | Defines the asynchronous storage-independent domain port |
-| `agent-communication-tools.ts` | Enforces visible sources, fixed horizons, encountered-peer addressing, action budgets, and idempotent communication/working-note writes |
-| `agent-prompts.ts` | Builds generic representative identity plus bounded longitudinal wake context |
-| `representative-profile.ts` | Builds the generic representative profile for dynamically registered participants |
-| `local-participant.ts` | Defines only the stable local participant and representative identity |
-| `discovery-types.ts` | Defines persisted records, scoped product views, and development diagnostics |
+| `workspace/` | Local participant actions, scoped projection, and the narrow repository port those operations require |
+| `network/` | Trusted participant ingress, lifecycle, diagnostics, and its repository port |
+| `representative/` | Heddle task reconciliation, mailbox wake settlement, runner composition, and the representative repository port |
+| `representative/communication/` | Agent-visible communication tools and their visibility/provenance repository port |
+| `persistence/postgres/` | One Lucid-owned PostgreSQL adapter implementing all four ports while preserving shared transactions and projections |
+| `agent-prompts.ts` | Generic representative identity plus bounded longitudinal wake context |
+| `representative-profile.ts` | Generic representative profile for dynamically registered participants |
+| `local-participant.ts` | Stable local participant and representative identity |
+| `discovery-types.ts` | Persisted records, scoped product views, and development diagnostics |
+
+Repository interfaces live beside the service that consumes them. The
+PostgreSQL implementation remains one Lucid adapter because participant
+lifecycle, mailbox visibility, event append, wake claims, and read projections
+share atomic invariants. Splitting that adapter by table would either duplicate
+those rules or move transactions back into application services. Composition
+exposes only the appropriate narrow port to each service.
 
 Names describe engineering responsibilities. `Wake` means one claimed
 heartbeat execution; `task`, `mailbox`, `event`, `finding`, and `participant`

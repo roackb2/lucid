@@ -27,31 +27,31 @@ import {
   expect,
   it,
 } from 'vitest';
-import { LucidPostgresDatabase } from './postgres-database.js';
+import { PostgresDatabase } from '../../../infrastructure/postgres/database.js';
 import {
   POSTGRES_MIGRATIONS_ROOT,
   POSTGRES_TEST_DATABASE_URL,
-} from './postgres-test-harness.js';
+} from '../../../infrastructure/postgres/test-database.js';
 import {
   postgresHeartbeatRunRecords as heartbeatRunRecords,
   postgresHeartbeatTasks as heartbeatTasks,
-} from './postgres-heartbeat-schema.js';
-import { PostgresHeartbeatTaskStore } from './postgres-heartbeat-task-store.js';
+} from './schema.js';
+import { PostgresHeartbeatTaskStore } from './task-store.js';
 
 const NOW = new Date('2026-08-08T08:00:00.000Z');
 const TEST_EXECUTION_LEASE_MS = 60_000;
 
 describe('PostgreSQL heartbeat persistence', () => {
-  const databasesByNamespace = new Map<string, LucidPostgresDatabase[]>();
+  const databasesByNamespace = new Map<string, PostgresDatabase[]>();
   const databaseByStore = new WeakMap<
     HeartbeatTargetedTaskStore,
-    LucidPostgresDatabase
+    PostgresDatabase
   >();
-  let migrationDatabase: LucidPostgresDatabase | undefined;
+  let migrationDatabase: PostgresDatabase | undefined;
 
   const harness: HeartbeatTaskStoreConformanceHarness = {
     createStore: (namespace) => {
-      const database = new LucidPostgresDatabase({
+      const database = new PostgresDatabase({
         url: POSTGRES_TEST_DATABASE_URL,
         maxConnections: 2,
         applicationName: 'lucid-heartbeat-store-conformance',
@@ -123,7 +123,7 @@ describe('PostgreSQL heartbeat persistence', () => {
   };
 
   beforeAll(async () => {
-    migrationDatabase = new LucidPostgresDatabase({
+    migrationDatabase = new PostgresDatabase({
       url: POSTGRES_TEST_DATABASE_URL,
       maxConnections: 1,
       applicationName: 'lucid-heartbeat-store-migrator',

@@ -9,11 +9,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   LOCAL_USER_ID,
   USER_AGENT_ID,
-} from '../lucid/local-participant.js';
-import { defineDiscoveryRepositoryContract } from '../lucid/discovery-repository.test-support.js';
-import { LucidPostgresDatabase } from './postgres-database.js';
-import { PostgresDiscoveryRepository } from './postgres-discovery-repository.js';
-import { createPostgresTestRepository } from './postgres-test-harness.js';
+} from '../../local-participant.js';
+import { defineLucidRepositoryContract } from './repository-contract.test-support.js';
+import type { PostgresDatabase } from '../../../infrastructure/postgres/database.js';
+import { PostgresLucidRepository } from './repository.js';
+import { createPostgresTestRepository } from './test-context.js';
 
 async function createRepository(options?: { reset?: boolean }) {
   return await createPostgresTestRepository({
@@ -23,8 +23,8 @@ async function createRepository(options?: { reset?: boolean }) {
 }
 
 describe('PostgreSQL persistence integration', () => {
-  defineDiscoveryRepositoryContract({
-    name: 'PostgreSQL discovery repository contract',
+  defineLucidRepositoryContract({
+    name: 'PostgreSQL Lucid adapter contract',
     create: async () => {
       const { database, repository } = await createRepository();
       return {
@@ -34,11 +34,11 @@ describe('PostgreSQL persistence integration', () => {
     },
   });
 
-  describe('PostgreSQL discovery repository concurrency', () => {
-    let primaryDatabase: LucidPostgresDatabase | undefined;
-    let primary: PostgresDiscoveryRepository;
-    let secondaryDatabase: LucidPostgresDatabase | undefined;
-    let secondary: PostgresDiscoveryRepository;
+  describe('PostgreSQL Lucid adapter concurrency', () => {
+    let primaryDatabase: PostgresDatabase | undefined;
+    let primary: PostgresLucidRepository;
+    let secondaryDatabase: PostgresDatabase | undefined;
+    let secondary: PostgresLucidRepository;
 
     beforeEach(async () => {
       ({ database: primaryDatabase, repository: primary } =
@@ -50,7 +50,7 @@ describe('PostgreSQL persistence integration', () => {
     afterEach(async () => {
       await Promise.all(
         [primaryDatabase, secondaryDatabase]
-          .filter((database): database is LucidPostgresDatabase => Boolean(database))
+          .filter((database): database is PostgresDatabase => Boolean(database))
           .map(async (database) => database.close()),
       );
       primaryDatabase = undefined;
@@ -151,7 +151,7 @@ describe('PostgreSQL persistence integration', () => {
     });
   });
 
-  describe('PostgreSQL discovery repository reconnect durability', () => {
+  describe('PostgreSQL Lucid adapter reconnect durability', () => {
     it('preserves participant state after every connection closes', async () => {
       const first = await createRepository();
       const interest = await first.repository.saveInterest(

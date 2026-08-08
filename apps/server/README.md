@@ -23,13 +23,14 @@ bounded execution, and recovery predictable.
   service, and HTTP server.
 - `src/migrate.ts` applies checked-in PostgreSQL product and Heddle migrations
   as an explicit deployment step.
-- `src/database/postgres-database.ts` and
-  `src/database/postgres-discovery-repository.ts` provide the hosted product
-  persistence boundary.
-- `src/database/postgres-heartbeat-task-store.ts` implements Heddle's public
+- `src/infrastructure/postgres/database.ts` owns the shared PostgreSQL pool and
+  migration mechanism without importing product schemas.
+- `src/lucid/persistence/postgres/repository.ts` implements Lucid's four
+  service-owned repository ports and cross-service transactional invariants.
+- `src/runtime/heartbeat/postgres/task-store.ts` implements Heddle's public
   task authority contracts over the same owned pool.
-- `src/database/discovery-persistence.ts` composes both PostgreSQL adapters and
-  owns pool shutdown.
+- `src/composition/postgres-persistence.ts` composes both PostgreSQL adapters,
+  narrows the product adapter per consumer, and owns pool shutdown.
 - `src/router.ts` exposes:
   - `discovery.snapshot`
   - `discovery.saveInterest`
@@ -65,11 +66,14 @@ Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
 
 `src/lucid` owns participants, mailbox events, findings, feedback, wake claims,
-and the storage-independent `DiscoveryRepository` port. Heddle owns provider
+and the service-owned repository ports. Heddle owns provider
 credentials, unattended approval policy, execution cancellation, checkpoints,
 run requests, and task settlement. It is integrated through
 `HeddleRepresentativeAgentRunner` and `RepresentativeAgentHeartbeatService`.
 
-Read [`src/database/README.md`](src/database/README.md) before changing storage
-infrastructure. Read [`src/lucid/README.md`](src/lucid/README.md) before
-changing agent lifecycle or mailbox behavior.
+Read [`src/infrastructure/postgres/README.md`](src/infrastructure/postgres/README.md)
+before changing pool or migration infrastructure,
+[`src/lucid/persistence/postgres/README.md`](src/lucid/persistence/postgres/README.md)
+before changing product persistence, and
+[`src/lucid/README.md`](src/lucid/README.md) before changing agent lifecycle or
+mailbox behavior.

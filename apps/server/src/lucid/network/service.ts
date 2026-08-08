@@ -6,23 +6,23 @@
  * reconciling/requesting Heddle execution. The user-facing workspace never
  * receives this service's world-wide diagnostics projection.
  */
-import type { DiscoveryRepository } from './discovery-repository.js';
-import { LOCAL_USER_ID } from './local-participant.js';
+import { LOCAL_USER_ID } from '../local-participant.js';
 import type {
   BackgroundChecksView,
   NetworkDiagnosticsSnapshot,
   RegisterParticipantInput,
-} from './discovery-types.js';
+} from '../discovery-types.js';
 import type {
   RepresentativeAgentHeartbeatService,
-} from './representative-agent-heartbeat-service.js';
+} from '../representative/heartbeat-service.js';
+import type { ParticipantNetworkRepository } from './repository.js';
 
 export class ParticipantNetworkInputError extends Error {}
 
 /** Coordinates network ingress with derived representative heartbeat tasks. */
 export class ParticipantNetworkService {
   constructor(
-    private readonly repository: DiscoveryRepository,
+    private readonly repository: ParticipantNetworkRepository,
     private readonly heartbeats: RepresentativeAgentHeartbeatService,
     private readonly runtime: { model: string; heddleVersion: string },
   ) {}

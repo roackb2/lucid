@@ -6,22 +6,22 @@ import {
   expect,
   it,
 } from 'vitest';
-import type { LucidPostgresDatabase } from '../database/postgres-database.js';
-import type { PostgresDiscoveryRepository } from '../database/postgres-discovery-repository.js';
-import { createPostgresTestRepository } from '../database/postgres-test-harness.js';
-import { AgentCommunicationToolService } from './agent-communication-tools.js';
+import type { PostgresDatabase } from '../../../infrastructure/postgres/database.js';
+import type { PostgresLucidRepository } from '../../persistence/postgres/repository.js';
+import { createPostgresTestRepository } from '../../persistence/postgres/test-context.js';
+import { AgentCommunicationToolService } from './tool-service.js';
 import {
   LOCAL_USER_ID,
   USER_AGENT_ID,
-} from './local-participant.js';
+} from '../../local-participant.js';
 import {
   buildAgentWakePrompt,
   buildRepresentativeAgentInstructions,
-} from './agent-prompts.js';
+} from '../../agent-prompts.js';
 
 describe('representative-agent communication', () => {
-  let database: LucidPostgresDatabase;
-  let repository: PostgresDiscoveryRepository;
+  let database: PostgresDatabase;
+  let repository: PostgresLucidRepository;
 
   beforeAll(async () => {
     ({ database, repository } = await createPostgresTestRepository({
@@ -726,7 +726,7 @@ You represent an explicitly simulated test participant, not a real person or ext
 });
 
 async function registerSynthetic(
-  repository: PostgresDiscoveryRepository,
+  repository: PostgresLucidRepository,
   key: string,
 ) {
   return await repository.registerParticipant({
@@ -738,7 +738,7 @@ async function registerSynthetic(
 }
 
 async function peerMessage(
-  repository: PostgresDiscoveryRepository,
+  repository: PostgresLucidRepository,
   actorAgentId: string,
   targetAgentId: string,
   content: string,
@@ -753,7 +753,7 @@ async function peerMessage(
 }
 
 async function createUserTools(
-  repository: PostgresDiscoveryRepository,
+  repository: PostgresLucidRepository,
   wakeId: string,
   wakeNumber: number,
   horizonSequence = Number.MAX_SAFE_INTEGER,

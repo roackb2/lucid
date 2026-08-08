@@ -3,14 +3,16 @@ import {
   type AgentHeartbeatResult,
   type HeartbeatExecutionContext,
 } from '@roackb2/heddle/advanced';
-import type { LucidConfig } from '../config.js';
-import { AgentCommunicationToolService } from './agent-communication-tools.js';
+import type { LucidConfig } from '../../config.js';
+import { AgentCommunicationToolService } from './communication/tool-service.js';
 import {
   buildAgentWakePrompt,
   buildRepresentativeAgentInstructions,
-} from './agent-prompts.js';
-import type { DiscoveryRepository } from './discovery-repository.js';
-import type { AgentWakeContext } from './discovery-types.js';
+} from '../agent-prompts.js';
+import type { AgentWakeContext } from '../discovery-types.js';
+import type {
+  AgentCommunicationRepository,
+} from './communication/repository.js';
 
 export type RunRepresentativeAgentHeartbeatInput = {
   wake: AgentWakeContext;
@@ -33,7 +35,7 @@ export interface RepresentativeAgentHeartbeatRunner {
 export class HeddleRepresentativeAgentRunner
 implements RepresentativeAgentHeartbeatRunner {
   constructor(
-    private readonly repository: DiscoveryRepository,
+    private readonly repository: AgentCommunicationRepository,
     private readonly config: LucidConfig,
   ) {}
 

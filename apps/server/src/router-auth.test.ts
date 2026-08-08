@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DiscoveryWorkspaceService } from './lucid/discovery-workspace-service.js';
-import type { ParticipantNetworkService } from './lucid/participant-network-service.js';
+import type { DiscoveryWorkspaceService } from './lucid/workspace/service.js';
+import type { ParticipantNetworkService } from './lucid/network/service.js';
 import { createAppRouter } from './router.js';
 import type { LucidRequestContext } from './trpc.js';
 
