@@ -16,6 +16,8 @@ const environmentSchema = z.object({
     .default('info'),
   LUCID_WEB_ORIGIN: z.url().default('http://127.0.0.1:3080'),
   LUCID_STATE_ROOT: z.string().trim().min(1).optional(),
+  LUCID_DATABASE_DRIVER: z.enum(['sqlite', 'postgres']).default('sqlite'),
+  LUCID_DATABASE_URL: z.string().trim().min(1).optional(),
   LUCID_MODEL: z.string().trim().min(1).default('gpt-5.4-mini'),
   LUCID_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(7),
   LUCID_HEARTBEAT_INTERVAL_MS: z.coerce
@@ -35,9 +37,24 @@ const environmentSchema = z.object({
     .max(16)
     .default(3),
   LUCID_PREFER_API_KEY: z.enum(['true', 'false']).default('false'),
+}).superRefine((environment, context) => {
+  if (
+    environment.LUCID_DATABASE_DRIVER === 'postgres'
+    && !environment.LUCID_DATABASE_URL
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['LUCID_DATABASE_URL'],
+      message: 'LUCID_DATABASE_URL is required for the PostgreSQL driver.',
+    });
+  }
 });
 
 const environment = environmentSchema.parse(process.env);
+
+export type LucidDatabaseConfig =
+  | { driver: 'sqlite'; path: string }
+  | { driver: 'postgres'; url: string };
 
 export type LucidConfig = {
   host: string;
@@ -46,7 +63,7 @@ export type LucidConfig = {
   webOrigin: string;
   repoRoot: string;
   stateRoot: string;
-  databasePath: string;
+  database: LucidDatabaseConfig;
   heddleStateRoot: string;
   model: string;
   maxSteps: number;
@@ -60,6 +77,16 @@ export function resolveLucidConfig(): LucidConfig {
   const stateRoot = resolve(
     environment.LUCID_STATE_ROOT ?? join(LUCID_REPO_ROOT, 'local', 'discovery-home'),
   );
+  const database: LucidDatabaseConfig = environment.LUCID_DATABASE_DRIVER
+    === 'postgres'
+    ? {
+        driver: 'postgres',
+        url: environment.LUCID_DATABASE_URL!,
+      }
+    : {
+        driver: 'sqlite',
+        path: join(stateRoot, 'lucid.sqlite'),
+      };
 
   return {
     host: environment.HOST,
@@ -68,7 +95,7 @@ export function resolveLucidConfig(): LucidConfig {
     webOrigin: environment.LUCID_WEB_ORIGIN,
     repoRoot: LUCID_REPO_ROOT,
     stateRoot,
-    databasePath: join(stateRoot, 'lucid.sqlite'),
+    database,
     heddleStateRoot: join(stateRoot, 'heddle'),
     model: environment.LUCID_MODEL,
     maxSteps: environment.LUCID_MAX_STEPS,

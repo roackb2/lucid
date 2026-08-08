@@ -1,2 +1,3 @@
 # Drizzle Kit schema snapshots are machine generated.
 apps/server/drizzle/meta/*_snapshot.json linguist-generated
+apps/server/drizzle-postgres/meta/*_snapshot.json linguist-generated

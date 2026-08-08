@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url';
 import {
   afterEach,
   beforeEach,
@@ -6,30 +5,43 @@ import {
   expect,
   it,
 } from 'vitest';
-import { SqliteDiscoveryRepository } from '../database/sqlite-discovery-repository.js';
-import { LucidSqliteDatabase } from '../database/sqlite-database.js';
+import type { DiscoveryRepository } from './discovery-repository.js';
 import {
   LOCAL_USER_ID,
   USER_AGENT_ID,
 } from './local-participant.js';
 
-const MIGRATIONS_ROOT = fileURLToPath(
-  new URL('../../drizzle', import.meta.url),
-);
+export type DiscoveryRepositoryContractOptions = {
+  name: string;
+  create: () => Promise<{
+    repository: DiscoveryRepository;
+    close: () => Promise<void>;
+  }>;
+  recoverInterruptedWake?: (
+    repository: DiscoveryRepository,
+  ) => Promise<void>;
+};
 
-describe('SQLite discovery repository', () => {
-  let database: LucidSqliteDatabase;
-  let repository: SqliteDiscoveryRepository;
+/**
+ * Shared behavioral contract for every durable Lucid repository adapter.
+ *
+ * Storage-specific tests still own transaction contention and reconnect
+ * behavior. Keeping domain behavior here prevents PostgreSQL from becoming a
+ * schema-compatible but semantically different implementation.
+ */
+export const defineDiscoveryRepositoryContract = (
+  options: DiscoveryRepositoryContractOptions,
+): void => describe(options.name, () => {
+  let repository: DiscoveryRepository;
+  let close: (() => Promise<void>) | undefined;
 
   beforeEach(async () => {
-    database = new LucidSqliteDatabase(':memory:');
-    database.migrate(MIGRATIONS_ROOT);
-    repository = new SqliteDiscoveryRepository(database);
-    await repository.initialize();
+    ({ repository, close } = await options.create());
   });
 
-  afterEach(() => {
-    database.close();
+  afterEach(async () => {
+    await close?.();
+    close = undefined;
   });
 
   it('starts with only the local participant and returns a scoped product view', async () => {
@@ -256,6 +268,7 @@ describe('SQLite discovery repository', () => {
     });
     await repository.completeAgentWake(
       USER_AGENT_ID,
+      responseWake!.claimToken,
       responseWake!.horizonSequence,
     );
     expect((await repository.readSnapshot()).networkActivity).toMatchObject({
@@ -373,6 +386,7 @@ describe('SQLite discovery repository', () => {
     });
     await repository.completeAgentWake(
       USER_AGENT_ID,
+      responseWake!.claimToken,
       responseWake!.horizonSequence,
     );
 
@@ -535,6 +549,7 @@ describe('SQLite discovery repository', () => {
     });
     await repository.completeAgentWake(
       USER_AGENT_ID,
+      responseWake!.claimToken,
       responseWake!.horizonSequence,
     );
 
@@ -960,7 +975,7 @@ describe('SQLite discovery repository', () => {
       content: 'This note was written by the first attempt.',
       metadata: { throughSequence: firstWake!.horizonSequence },
     });
-    await repository.failAgentWake(USER_AGENT_ID);
+    await repository.failAgentWake(USER_AGENT_ID, firstWake!.claimToken);
 
     const retriedWake = await repository.beginAgentWake(
       USER_AGENT_ID,
@@ -995,40 +1010,43 @@ describe('SQLite discovery repository', () => {
     )).toHaveLength(1);
   });
 
-  it('recovers an interrupted wake without consuming unread input', async () => {
-    const interest = await repository.saveInterest(
-      'Keep this input unread until the wake succeeds.',
-    );
-    const claimed = await repository.beginAgentWake(
-      USER_AGENT_ID,
-      'wake_before_restart',
-    );
-    expect(claimed?.visibleEvents.map(({ sequence }) => sequence))
-      .toContain(interest.sequence);
+  const recoverInterruptedWake = options.recoverInterruptedWake;
+  if (recoverInterruptedWake) {
+    it('recovers an interrupted wake without consuming unread input', async () => {
+      const interest = await repository.saveInterest(
+        'Keep this input unread until the wake succeeds.',
+      );
+      const claimed = await repository.beginAgentWake(
+        USER_AGENT_ID,
+        'wake_before_restart',
+      );
+      expect(claimed?.visibleEvents.map(({ sequence }) => sequence))
+        .toContain(interest.sequence);
 
-    await repository.initialize();
-    const resumed = await repository.beginAgentWake(
-      USER_AGENT_ID,
-      'wake_after_restart',
-    );
-    expect(resumed).toMatchObject({
-      wakeId: claimed!.wakeId,
-      wakeNumber: claimed!.wakeNumber,
-      horizonSequence: claimed!.horizonSequence,
+      await recoverInterruptedWake(repository);
+      const resumed = await repository.beginAgentWake(
+        USER_AGENT_ID,
+        'wake_after_restart',
+      );
+      expect(resumed).toMatchObject({
+        wakeId: claimed!.wakeId,
+        wakeNumber: claimed!.wakeNumber,
+        horizonSequence: claimed!.horizonSequence,
+      });
+      expect(resumed?.visibleEvents.map(({ sequence }) => sequence))
+        .toContain(interest.sequence);
+      expect((await repository.readNetworkDiagnostics()).events).toContainEqual(
+        expect.objectContaining({
+          kind: 'error',
+          title: 'Interrupted agent wakes recovered',
+        }),
+      );
     });
-    expect(resumed?.visibleEvents.map(({ sequence }) => sequence))
-      .toContain(interest.sequence);
-    expect((await repository.readNetworkDiagnostics()).events).toContainEqual(
-      expect.objectContaining({
-        kind: 'error',
-        title: 'Interrupted agent wakes recovered',
-      }),
-    );
-  });
+  }
 });
 
 async function registerSynthetic(
-  repository: SqliteDiscoveryRepository,
+  repository: DiscoveryRepository,
   key: string,
 ) {
   return await repository.registerParticipant({

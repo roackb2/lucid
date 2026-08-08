@@ -26,6 +26,7 @@ import type { LucidLogger } from '../logger.js';
 import type { DiscoveryRepository } from './discovery-repository.js';
 import {
   networkMessageRoleSchema,
+  type AgentWakeContext,
   type BackgroundChecksView,
   type RepresentativeAgentTaskView,
 } from './discovery-types.js';
@@ -394,7 +395,7 @@ export class RepresentativeAgentHeartbeatService {
     }
 
     const proposedWakeId = `wake_${randomUUID()}`;
-    let claimedWake = false;
+    let claimedWake: AgentWakeContext | undefined;
 
     try {
       // The repository atomically fixes the mailbox horizon and persists the
@@ -410,7 +411,7 @@ export class RepresentativeAgentHeartbeatService {
           summary: 'No unread messages were available for this agent.',
         });
       }
-      claimedWake = true;
+      claimedWake = wake;
 
       const result = await this.runner.run({
         wake,
@@ -431,15 +432,15 @@ export class RepresentativeAgentHeartbeatService {
       ) {
         // Heddle records scheduler cancellation; Lucid independently preserves
         // the claimed horizon and unread cursor for the next domain retry.
-        await this.repository.interruptAgentWake(agentId);
+        await this.repository.interruptAgentWake(agentId, wake.claimToken);
         return result;
       }
       if (
         result.state.outcome !== 'done'
         || result.decision === 'escalate'
       ) {
-        await this.repository.failAgentWake(agentId);
-        claimedWake = false;
+        await this.repository.failAgentWake(agentId, wake.claimToken);
+        claimedWake = undefined;
         return result;
       }
 
@@ -462,8 +463,8 @@ export class RepresentativeAgentHeartbeatService {
         // Saving an assignment cannot be acknowledged as complete until the
         // representative actually publishes a privacy-minimized request. A
         // failed wake retains its fixed horizon and retry-stable action slots.
-        await this.repository.failAgentWake(agentId);
-        claimedWake = false;
+        await this.repository.failAgentWake(agentId, wake.claimToken);
+        claimedWake = undefined;
         throw new Error(
           'The representative finished without sharing the required network request.',
         );
@@ -484,8 +485,8 @@ export class RepresentativeAgentHeartbeatService {
         // Direct participant guidance changes the representative's durable
         // interpretation. A model summary alone cannot acknowledge it: the
         // revised note must exist before the mailbox cursor advances.
-        await this.repository.failAgentWake(agentId);
-        claimedWake = false;
+        await this.repository.failAgentWake(agentId, wake.claimToken);
+        claimedWake = undefined;
         throw new Error(
           'The representative finished without revising its working note for the latest guidance.',
         );
@@ -512,8 +513,10 @@ export class RepresentativeAgentHeartbeatService {
       });
       await this.repository.completeAgentWake(
         agentId,
+        wake.claimToken,
         wake.horizonSequence,
       );
+      claimedWake = undefined;
       // Route only the new messages from this wake. A root request fans out
       // once; responses return to the requester; ambient contributions wait
       // for normal schedules. This avoids treating every shared message as a
@@ -529,9 +532,12 @@ export class RepresentativeAgentHeartbeatService {
           || this.paused
         )
       ) {
-        await this.repository.interruptAgentWake(agentId);
+        await this.repository.interruptAgentWake(
+          agentId,
+          claimedWake.claimToken,
+        );
       } else if (claimedWake) {
-        await this.repository.failAgentWake(agentId);
+        await this.repository.failAgentWake(agentId, claimedWake.claimToken);
       }
       throw error;
     }

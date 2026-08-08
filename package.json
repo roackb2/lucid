@@ -20,6 +20,9 @@
     "server:start": "yarn workspace @lucid/server start",
     "server:db:generate": "yarn workspace @lucid/server db:generate",
     "server:db:migrate": "yarn workspace @lucid/server db:migrate",
+    "server:db:generate:postgres": "yarn workspace @lucid/server db:generate:postgres",
+    "server:db:migrate:postgres": "yarn workspace @lucid/server db:migrate:postgres",
+    "server:test:postgres": "yarn workspace @lucid/server test:postgres",
     "web:dev": "yarn workspace @lucid/web dev",
     "web:build": "yarn workspace @lucid/web build"
   },
