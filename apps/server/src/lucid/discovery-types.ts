@@ -255,15 +255,18 @@ export type RepresentativeWorkingContext = {
   workingNote?: DiscoveryEvent;
 };
 
-export type AgentWakeContext = {
+export type AgentWakeClaim = {
   agent: Agent;
   participant: Participant;
   wakeId: string;
   claimToken: string;
   wakeNumber: number;
   visibleEvents: DiscoveryEvent[];
-  workingContext: RepresentativeWorkingContext;
   horizonSequence: number;
+};
+
+export type AgentWakeContext = AgentWakeClaim & {
+  workingContext: RepresentativeWorkingContext;
 };
 
 export type RepresentativeAgentTaskStatus =

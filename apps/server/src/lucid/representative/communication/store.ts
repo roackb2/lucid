@@ -5,7 +5,21 @@ import type {
   DiscoveryEvent,
 } from '../../discovery-types.js';
 
-export interface AgentCommunicationRepository {
+export type CommunicationEventKind =
+  | 'representative_note_updated'
+  | 'shared_message'
+  | 'direct_message'
+  | 'finding_reported'
+  | 'agent_wake_no_action';
+
+export type AppendCommunicationEventInput = {
+  [Kind in CommunicationEventKind]: Omit<
+    AppendDiscoveryEventInput,
+    'kind'
+  > & { kind: Kind };
+}[CommunicationEventKind];
+
+export interface AgentCommunicationStore {
   listAgents(): Promise<Agent[]>;
   listActiveAgents(): Promise<Agent[]>;
   listEventsVisibleToAgent(
@@ -39,5 +53,7 @@ export interface AgentCommunicationRepository {
     replyToSequence: number,
     currentWakeId: string,
   ): Promise<boolean>;
-  appendEvent(input: AppendDiscoveryEventInput): Promise<DiscoveryEvent>;
+  appendCommunicationEvent(
+    input: AppendCommunicationEventInput,
+  ): Promise<DiscoveryEvent>;
 }

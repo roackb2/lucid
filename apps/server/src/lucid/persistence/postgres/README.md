@@ -1,34 +1,39 @@
-# Lucid PostgreSQL adapter
+# Shared Lucid PostgreSQL model
 
-This directory owns Lucid's concrete PostgreSQL product adapter. Repository
-ports stay beside the workspace, participant-network, representative-wake, and
-agent-communication services that consume them. The shared adapter implements
-all four because their durable invariants span the same product transaction
-and append-only event history.
+This directory owns only the product schema, policy-free record codecs, and the
+disposable real-PostgreSQL fixture shared by adapter tests. Concrete stores and
+their Drizzle queries live beside the workspace, participant-network,
+representative-wake, and agent-communication services that own those use cases.
+This directory must never grow back into a central product repository.
 
 ## Responsibilities
 
 | File | Responsibility |
 | --- | --- |
-| `repository.ts` | Implements the service-owned ports with PostgreSQL transactions, row locks, read projections, and fenced wake recovery |
 | `schema.ts` | Declares product tables and constraints in the `lucid` schema |
-| `repository.integration.test.ts` | Runs the full adapter contract plus real multi-connection contention and reconnect checks |
-| `repository-contract.test-support.ts` | Defines storage-independent behavior required of a complete Lucid adapter |
-| `test-context.ts` | Adds Lucid initialization and destructive product reset to the neutral PostgreSQL test fixture |
+| `records.ts` | Decodes and normalizes PostgreSQL records without owning queries or domain policy |
+| `test-context.ts` | Constructs the four named stores over the disposable PostgreSQL fixture |
 
-The services receive different structural views of the adapter through
+The services receive narrow store ports through
 `composition/postgres-persistence.ts`. PostgreSQL driver, query-builder, and
 transaction types do not leak into services, the Heddle runner, or tRPC. Do
-not replace these ports with table-shaped CRUD repositories: participant
-lifecycle, mailbox floors, event visibility, wake claims, and participant read
-models deliberately cross table boundaries.
+not replace these ports with table-shaped CRUD stores: participant lifecycle,
+mailbox floors, event visibility, wake claims, and participant read models
+deliberately cross table boundaries within their owning service-local adapter.
+
+The cross-store behavioral and contention suite lives at
+`../../../composition/postgres-persistence.integration.test.ts`. Service tests
+remain beside their services. Tests address the owning stores by name rather
+than reconstructing a central product repository. See
+[`../../../../../../docs/coding-conventions.md`](../../../../../../docs/coding-conventions.md)
+for the required Hexagonal Architecture and test shape.
 
 PostgreSQL now preserves atomic wake claims, monotonic event sequences, unique
 idempotency keys, fixed horizons, attempt-level settlement fencing, and cursor
 semantics across API processes. A retry keeps its semantic wake ID so tool
 effects remain idempotent, but rotates `active_wake_claim_token`; completion,
 failure, and interruption reject a stale token.
-Ordinary product-repository initialization intentionally does not reset Lucid
+Ordinary product-store initialization intentionally does not reset Lucid
 wake claims because another process may still own them. Heddle lease recovery
 supplies the interrupted execution ID to Lucid's fenced recovery operation, so
 it can release only the matching product wake claim.
@@ -65,7 +70,7 @@ worker attempt; see
 `../../../runtime/heartbeat/postgres/README.md`. There is no runtime backend
 selector or fallback database.
 
-The full adapter contract requires a disposable real PostgreSQL database:
+The full cross-store contract requires a disposable real PostgreSQL database:
 
 ```bash
 LUCID_POSTGRES_TEST_URL='postgresql:///lucid_test' yarn test
@@ -73,7 +78,7 @@ LUCID_POSTGRES_TEST_URL='postgresql:///lucid_test' yarn test
 
 The product suite resets only the `lucid` product tables inside that database;
 the heartbeat suite deletes only its opaque test namespaces. Together they
-validate shared repository behavior, two-pool wake and task contention,
+validate shared store behavior, two-pool wake and task contention,
 cross-process idempotency, lease recovery and fencing, non-stealing
 initialization, and persistence after every client connection closes. The URL
 is mandatory for server tests and never falls back to the runtime URL. Test
@@ -107,25 +112,26 @@ feedback on the current assignment, the prior note or source finding, the
 latest later working-note revision whose claimed horizon includes that
 guidance, the latest manual check carrying its sequence, the shared request
 replying to that check, and any finding whose reply thread includes that
-request. Missing steps remain missing; the adapter never infers successful
-understanding or usefulness.
+request. Missing steps remain missing; the workspace store never infers
+successful understanding or usefulness.
 
 The participant-facing request-progress view is also derived state. A response
 whose event sequence is beyond the representative's durable cursor is pending
-review. Once every delivered response is behind that cursor, the adapter checks
-whether a participant-scoped finding cites the same request thread. The result
-is either a reported finding or a completed review without one. The completion
-timestamp comes from the persisted wake whose fixed horizon covered the latest
-response; no confidence, relevance, or model-authored completion field is
-stored.
+review. Once every delivered response is behind that cursor, the workspace
+store checks whether a participant-scoped finding cites the same request thread.
+The result is either a reported finding or a completed review without one. The
+completion timestamp comes from the persisted wake whose fixed horizon covered
+the latest response; no confidence, relevance, or model-authored completion
+field is stored.
 
 Recent network-request history is a bounded read model over the same immutable
-events, not a new table. For the latest `interest_saved` event, the adapter
-orders later `check_requested` triggers, resolves the first persisted shared
-request for each trigger, and derives its reply/finding outcome. It returns at
-most five earlier published cycles, newest first. Guidance appears only when
-its sequence was explicitly carried by that check. Scheduled wakes that did
-not publish, unrelated traffic, and requests from older interests are omitted.
+events, not a new table. For the latest `interest_saved` event, the workspace
+store orders later `check_requested` triggers, resolves the first persisted
+shared request for each trigger, and derives its reply/finding outcome. It
+returns at most five earlier published cycles, newest first. Guidance appears
+only when its sequence was explicitly carried by that check. Scheduled wakes
+that did not publish, unrelated traffic, and requests from older interests are
+omitted.
 
 Direct guidance is an immutable `guidance_saved` event. It preserves the raw
 participant instruction and references the note visible when it was entered;
@@ -146,11 +152,12 @@ boundary. Renewed participant consent replaces `private_context` and
 participant scrubs `private_context` but keeps its row and representative
 identity for append-only historical attribution.
 
-Neither adapter encrypts `private_context` at the application layer. The field is private because
-ordinary product/diagnostic projections and agent visibility exclude it from
-every non-owner, not because the underlying storage is cryptographically protected.
-Trusted ingress may replace it through the participant-network port; it is never
-part of the participant-scoped workspace snapshot.
+No Lucid product store encrypts `private_context` at the application layer. The
+field is private because ordinary product/diagnostic projections and agent
+visibility exclude it from every non-owner, not because the underlying storage
+is cryptographically protected. Trusted ingress may replace it through the
+participant-network port; it is never part of the participant-scoped workspace
+snapshot.
 
 ## Relations
 
@@ -167,7 +174,7 @@ discovery_events metadata source IDs  ──> content provenance references
 
 Workspace and participant ownership use foreign keys. Event actor, recipient,
 reply, and provenance identifiers remain append-only logical references
-validated by the repository adapter. A reply determines which request should
+validated by the owning store adapter. A reply determines which request should
 receive a response; a source determines which earlier content was repeated or
 used. Keeping them separate prevents delivery paths from being presented as
 independent corroboration.

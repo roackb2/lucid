@@ -8,8 +8,10 @@ import {
   vi,
 } from 'vitest';
 import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
-import type { PostgresLucidRepository } from '../persistence/postgres/repository.js';
-import { createPostgresTestRepository } from '../persistence/postgres/test-context.js';
+import {
+  createPostgresTestStores,
+  type PostgresTestStores,
+} from '../persistence/postgres/test-context.js';
 import { LOCAL_USER_ID, USER_AGENT_ID } from '../local-participant.js';
 import { DiscoveryWorkspaceService } from './service.js';
 import type {
@@ -18,17 +20,17 @@ import type {
 
 describe('discovery workspace service', () => {
   let database: PostgresDatabase;
-  let repository: PostgresLucidRepository;
+  let stores: PostgresTestStores['stores'];
 
   beforeAll(async () => {
-    ({ database, repository } = await createPostgresTestRepository({
+    ({ database, stores } = await createPostgresTestStores({
       applicationName: 'lucid-discovery-workspace-test',
       reset: false,
     }));
   });
 
   beforeEach(async () => {
-    await repository.reset({ backgroundChecksEnabled: true });
+    await stores.representative.reset({ backgroundChecksEnabled: true });
   });
 
   afterAll(async () => database.close());
@@ -53,27 +55,27 @@ describe('discovery workspace service', () => {
       triggerAgent,
     } as unknown as RepresentativeAgentHeartbeatService;
     const workspace = new DiscoveryWorkspaceService(
-      repository,
+      stores.workspace,
       heartbeats,
       { model: 'test-model', heddleVersion: 'test' },
     );
-    const interest = await repository.saveInterest(
+    const interest = await stores.workspace.saveInterest(
       'Find useful long-running agent workflows.',
     );
-    const source = await repository.registerParticipant({
+    const source = await stores.network.registerParticipant({
       registrationKey: 'test:manual-check-source',
       kind: 'synthetic',
       displayName: 'Workflow operator',
       privateContext: 'Has experience with support workflows.',
     });
-    const sourceMessage = await repository.appendEvent({
+    const sourceMessage = await stores.communication.appendCommunicationEvent({
       kind: 'direct_message',
       actorAgentId: source.agent.id,
       targetAgentId: USER_AGENT_ID,
       title: 'An earlier network lead',
       content: 'A support operator keeps unresolved cases across daily wakes.',
     });
-    const finding = await repository.appendEvent({
+    const finding = await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
       actorAgentId: USER_AGENT_ID,
       targetParticipantId: LOCAL_USER_ID,
@@ -81,12 +83,12 @@ describe('discovery workspace service', () => {
       content: 'A support workflow may be relevant.',
       metadata: { sourceEventIds: [sourceMessage.sequence] },
     });
-    const feedback = await repository.saveFeedback(
+    const feedback = await stores.workspace.saveFeedback(
       LOCAL_USER_ID,
       finding.sequence,
       'Only continue when the lead names the actual handoff and recovery steps.',
     );
-    const priorNote = await repository.appendEvent({
+    const priorNote = await stores.communication.appendCommunicationEvent({
       kind: 'representative_note_updated',
       actorAgentId: USER_AGENT_ID,
       targetAgentId: USER_AGENT_ID,
@@ -100,7 +102,7 @@ describe('discovery workspace service', () => {
     );
     const guidance = guidanceSnapshot.guidanceFollowThrough?.guidance;
     expect(guidance).toBeDefined();
-    const note = await repository.appendEvent({
+    const note = await stores.communication.appendCommunicationEvent({
       kind: 'representative_note_updated',
       actorAgentId: USER_AGENT_ID,
       targetAgentId: USER_AGENT_ID,
@@ -113,7 +115,7 @@ describe('discovery workspace service', () => {
 
     await workspace.runNow();
 
-    const check = (await repository.readNetworkDiagnostics()).events
+    const check = (await stores.network.readNetworkDiagnostics()).events
       .findLast(({ kind }) => kind === 'check_requested');
     expect(check).toMatchObject({
       targetAgentId: USER_AGENT_ID,

@@ -15,14 +15,14 @@ import type {
 import type {
   RepresentativeAgentHeartbeatService,
 } from '../representative/heartbeat-service.js';
-import type { ParticipantNetworkRepository } from './repository.js';
+import type { ParticipantNetworkStore } from './store.js';
 
 export class ParticipantNetworkInputError extends Error {}
 
 /** Coordinates network ingress with derived representative heartbeat tasks. */
 export class ParticipantNetworkService {
   constructor(
-    private readonly repository: ParticipantNetworkRepository,
+    private readonly store: ParticipantNetworkStore,
     private readonly heartbeats: RepresentativeAgentHeartbeatService,
     private readonly runtime: { model: string; heddleVersion: string },
   ) {}
@@ -35,7 +35,7 @@ export class ParticipantNetworkService {
     kind: RegisterParticipantInput['kind'];
   }> {
     try {
-      const registered = await this.repository.registerParticipant(input);
+      const registered = await this.store.registerParticipant(input);
       try {
         await this.heartbeats.reconcileAgentTasks();
       } catch (error) {
@@ -45,7 +45,7 @@ export class ParticipantNetworkService {
         // Never leave a newly visible principal routable without an execution
         // task. If compensation also fails, report both failures explicitly.
         try {
-          await this.repository.setParticipantStatus(
+          await this.store.setParticipantStatus(
             registered.participant.id,
             'disabled',
           );
@@ -86,12 +86,12 @@ export class ParticipantNetworkService {
     sequence: number;
   }> {
     try {
-      const agent = await this.repository.requireAgentByParticipantId(
+      const agent = await this.store.requireAgentByParticipantId(
         input.participantId,
       );
       // Durable input is committed before Heddle is notified. A failed wake
       // request leaves unread mail that startup or a later trigger can recover.
-      const event = await this.repository.saveParticipantInput(
+      const event = await this.store.saveParticipantInput(
         input.participantId,
         input.content,
         input.idempotencyKey,
@@ -120,13 +120,13 @@ export class ParticipantNetworkService {
       );
     }
     try {
-      const agent = await this.repository.requireAgentByParticipantId(
+      const agent = await this.store.requireAgentByParticipantId(
         participantId,
       );
       if (!enabled) {
         await this.heartbeats.disableAgentTasks([agent.id]);
       }
-      await this.repository.setParticipantStatus(
+      await this.store.setParticipantStatus(
         participantId,
         enabled ? 'active' : 'disabled',
       );
@@ -134,7 +134,7 @@ export class ParticipantNetworkService {
         try {
           await this.heartbeats.enableAgentTask(agent.id);
         } catch (error) {
-          await this.repository.setParticipantStatus(
+          await this.store.setParticipantStatus(
             participantId,
             'disabled',
           );
@@ -162,11 +162,11 @@ export class ParticipantNetworkService {
       );
     }
     try {
-      const agent = await this.repository.requireAgentByParticipantId(
+      const agent = await this.store.requireAgentByParticipantId(
         participantId,
       );
       await this.heartbeats.disableAgentTasks([agent.id]);
-      await this.repository.retireParticipant(participantId);
+      await this.store.retireParticipant(participantId);
       await this.heartbeats.reconcileAgentTasks();
       return await this.diagnostics();
     } catch (error) {
@@ -197,7 +197,7 @@ export class ParticipantNetworkService {
 
   async diagnostics(): Promise<NetworkDiagnosticsSnapshot> {
     const [network, backgroundChecks] = await Promise.all([
-      this.repository.readNetworkDiagnostics(),
+      this.store.readNetworkDiagnostics(),
       this.heartbeats.snapshot(),
     ]);
     return {

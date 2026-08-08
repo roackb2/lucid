@@ -12,7 +12,10 @@ product, not a developer SDK.
    state, Heddle runtime, and authentication boundary.
 3. [How it works](how-it-works.md) follows an interest through representative
    wakes, network messages, findings, feedback, pause, and recovery.
-4. [Running locally](running-locally.md) covers setup, migrations, simulation,
+4. [Coding conventions](coding-conventions.md) defines Lucid's vertical-slice
+   Hexagonal Architecture, storage ports, PostgreSQL adapters, and dependency
+   rules.
+5. [Running locally](running-locally.md) covers setup, migrations, simulation,
    authentication modes, and checks.
 
 The root [README](../README.md) remains the quickest product tour. More

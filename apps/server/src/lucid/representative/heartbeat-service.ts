@@ -1,7 +1,7 @@
 /**
  * Adapts Lucid's participant and mailbox lifecycle to Heddle heartbeat tasks.
  *
- * The repository remains authoritative for who may run and which events a wake
+ * The store remains authoritative for who may run and which events a wake
  * may consume. Heddle owns durable scheduling, credentials, cancellation,
  * checkpoints, and execution settlement. This module coordinates the two
  * systems without deciding whether message content is useful.
@@ -23,6 +23,7 @@ import type {
 } from '../../runtime/representative-agent-execution-host.js';
 import {
   networkMessageRoleSchema,
+  type AgentWakeClaim,
   type AgentWakeContext,
   type BackgroundChecksView,
   type RepresentativeAgentTaskView,
@@ -30,7 +31,12 @@ import {
 import type {
   RepresentativeAgentHeartbeatRunner,
 } from './heddle-runner.js';
-import type { RepresentativeWakeRepository } from './repository.js';
+import type {
+  RepresentativeWakeStore,
+} from './store.js';
+import type {
+  RepresentativeWorkingContextReader,
+} from '../workspace/store.js';
 
 export const REPRESENTATIVE_AGENT_TASK_ID_PREFIX = 'lucid-representative-';
 const UNSAFE_CANCELLATION_DISPOSITIONS = new Set<
@@ -52,7 +58,8 @@ export class RepresentativeAgentHeartbeatService {
   private readonly taskMutationMutex = new Mutex();
 
   constructor(
-    private readonly repository: RepresentativeWakeRepository,
+    private readonly store: RepresentativeWakeStore,
+    private readonly workingContext: RepresentativeWorkingContextReader,
     private readonly runner: RepresentativeAgentHeartbeatRunner,
     private readonly config: LucidConfig,
     private readonly logger: LucidLogger,
@@ -61,7 +68,7 @@ export class RepresentativeAgentHeartbeatService {
   ) {}
 
   async initialize(): Promise<void> {
-    const workspace = await this.repository.readWorkspace();
+    const workspace = await this.store.readWorkspace();
     this.globallyEnabled = workspace.backgroundChecksEnabled;
     await this.ensureAgentTasks();
   }
@@ -84,9 +91,9 @@ export class RepresentativeAgentHeartbeatService {
 
   async snapshot(): Promise<BackgroundChecksView> {
     const [workspace, participants, agents, taskViews] = await Promise.all([
-      this.repository.readWorkspace(),
-      this.repository.listParticipants(),
-      this.repository.listAgents(),
+      this.store.readWorkspace(),
+      this.store.listParticipants(),
+      this.store.listAgents(),
       this.tasks.listTaskViews(),
     ]);
     const participantById = new Map(
@@ -157,7 +164,7 @@ export class RepresentativeAgentHeartbeatService {
     const request = await this.tasks.requestTaskRun(task.id, {
       reason: `lucid-mailbox:${agentId}`,
     });
-    if ((await this.repository.readWorkspace()).backgroundChecksEnabled) {
+    if ((await this.store.readWorkspace()).backgroundChecksEnabled) {
       this.executionHost.notify(request);
     }
   }
@@ -169,7 +176,7 @@ export class RepresentativeAgentHeartbeatService {
   async setGlobalBackgroundChecksEnabled(enabled: boolean): Promise<void> {
     await this.taskMutationMutex.runExclusive(async () => {
       if (!enabled) {
-        await this.repository.setBackgroundChecksEnabled(false);
+        await this.store.setBackgroundChecksEnabled(false);
         this.globallyEnabled = false;
         await this.executionHost.pause({
           reason: 'Lucid operator paused global background dispatch.',
@@ -177,12 +184,12 @@ export class RepresentativeAgentHeartbeatService {
         return;
       }
 
-      await this.repository.setBackgroundChecksEnabled(true);
+      await this.store.setBackgroundChecksEnabled(true);
       this.globallyEnabled = true;
       try {
         this.executionHost.resume();
       } catch (error) {
-        await this.repository.setBackgroundChecksEnabled(false);
+        await this.store.setBackgroundChecksEnabled(false);
         this.globallyEnabled = false;
         await this.executionHost.pause({
           reason: 'Lucid global dispatch resume failed closed.',
@@ -194,21 +201,21 @@ export class RepresentativeAgentHeartbeatService {
 
   async resetWorkspace(): Promise<void> {
     await this.taskMutationMutex.runExclusive(async () => {
-      const wasEnabled = (await this.repository.readWorkspace())
+      const wasEnabled = (await this.store.readWorkspace())
         .backgroundChecksEnabled;
       // The durable gate closes before either store changes. A remote running
       // task that this host cannot cancel then fails deletion through Heddle's
       // administration policy instead of crossing the reset boundary.
-      await this.repository.setBackgroundChecksEnabled(false);
+      await this.store.setBackgroundChecksEnabled(false);
       this.globallyEnabled = false;
       await this.executionHost.pause({
         reason: 'Lucid workspace reset.',
       });
       await this.deleteManagedTasks();
-      await this.repository.reset({ backgroundChecksEnabled: false });
+      await this.store.reset({ backgroundChecksEnabled: false });
       await this.ensureAgentTasks();
       if (wasEnabled) {
-        await this.repository.setBackgroundChecksEnabled(true);
+        await this.store.setBackgroundChecksEnabled(true);
         this.globallyEnabled = true;
         this.executionHost.resume();
       }
@@ -281,9 +288,9 @@ export class RepresentativeAgentHeartbeatService {
     // participants, the existing Heddle task retains its durable personal
     // listening preference across host restarts and unrelated reconciliation.
     const [workspace, participants, agents, existingTasks] = await Promise.all([
-      this.repository.readWorkspace(),
-      this.repository.listParticipants(),
-      this.repository.listAgents(),
+      this.store.readWorkspace(),
+      this.store.listParticipants(),
+      this.store.listAgents(),
       this.listManagedTasks(),
     ]);
     const participantById = new Map(
@@ -370,32 +377,40 @@ export class RepresentativeAgentHeartbeatService {
       return execution.skip({ summary: 'Background checks are paused.' });
     }
 
-    let claimedWake: AgentWakeContext | undefined;
+    let claimedWake: AgentWakeClaim | undefined;
 
     try {
       const interruptedExecutionId = execution.task.state?.recovery
         ?.interruptedExecutionId;
       if (interruptedExecutionId) {
-        await this.repository.recoverInterruptedAgentWake(
+        await this.store.recoverInterruptedAgentWake(
           agentId,
           interruptedExecutionId,
         );
       }
-      // The repository atomically fixes the mailbox horizon and persists the
+      // The store atomically fixes the mailbox horizon and persists the
       // claim. The Heddle execution ID is also Lucid's claim-fencing token, so
       // lease recovery can release only the matching interrupted product wake.
-      const wake = await this.repository.beginAgentWake(
+      const claim = await this.store.beginAgentWake(
         agentId,
         execution.executionId,
       );
-      if (!wake) {
+      if (!claim) {
         // context.skip() records a lightweight non-agent outcome and avoids
         // manufacturing an LLM checkpoint for a healthy empty mailbox.
         return execution.skip({
           summary: 'No unread messages were available for this agent.',
         });
       }
-      claimedWake = wake;
+      claimedWake = claim;
+      const wake: AgentWakeContext = {
+        ...claim,
+        workingContext:
+          await this.workingContext.readRepresentativeWorkingContext(
+            agentId,
+            claim.horizonSequence,
+          ),
+      };
 
       const result = await this.runner.run({
         wake,
@@ -412,7 +427,7 @@ export class RepresentativeAgentHeartbeatService {
       if (!await this.isExecutionAllowed(execution.signal)) {
         // Heddle records scheduler cancellation; Lucid independently preserves
         // the claimed horizon and unread cursor for the next domain retry.
-        await this.repository.interruptAgentWake(agentId, wake.claimToken);
+        await this.store.interruptAgentWake(agentId, wake.claimToken);
         return execution.signal.aborted
           ? result
           : execution.retry({
@@ -424,7 +439,7 @@ export class RepresentativeAgentHeartbeatService {
         result.state.outcome !== 'done'
         || result.decision === 'escalate'
       ) {
-        await this.repository.failAgentWake(agentId, wake.claimToken);
+        await this.store.failAgentWake(agentId, wake.claimToken);
         claimedWake = undefined;
         return result;
       }
@@ -438,7 +453,7 @@ export class RepresentativeAgentHeartbeatService {
         requiredRequestSourceIds.length
         && !(await Promise.all(requiredRequestSourceIds.map(
           async (sourceEventId) => Boolean(
-            await this.repository.findAgentPublishedRequestForTrigger(
+            await this.store.findAgentPublishedRequestForTrigger(
               agentId,
               sourceEventId,
             ),
@@ -448,7 +463,7 @@ export class RepresentativeAgentHeartbeatService {
         // Saving an assignment cannot be acknowledged as complete until the
         // representative actually publishes a privacy-minimized request. A
         // failed wake retains its fixed horizon and retry-stable action slots.
-        await this.repository.failAgentWake(agentId, wake.claimToken);
+        await this.store.failAgentWake(agentId, wake.claimToken);
         claimedWake = undefined;
         throw new Error(
           'The representative finished without sharing the required network request.',
@@ -461,7 +476,7 @@ export class RepresentativeAgentHeartbeatService {
       if (
         requiredWorkingNoteSourceIds.length
         && !(await Promise.all(requiredWorkingNoteSourceIds.map(
-          (sourceEventId) => this.repository.hasAgentUpdatedWorkingNoteThrough(
+          (sourceEventId) => this.store.hasAgentUpdatedWorkingNoteThrough(
             agentId,
             sourceEventId,
           ),
@@ -470,7 +485,7 @@ export class RepresentativeAgentHeartbeatService {
         // Direct participant guidance changes the representative's durable
         // interpretation. A model summary alone cannot acknowledge it: the
         // revised note must exist before the mailbox cursor advances.
-        await this.repository.failAgentWake(agentId, wake.claimToken);
+        await this.store.failAgentWake(agentId, wake.claimToken);
         claimedWake = undefined;
         throw new Error(
           'The representative finished without revising its working note for the latest guidance.',
@@ -479,9 +494,8 @@ export class RepresentativeAgentHeartbeatService {
 
       // Completion is idempotent and precedes cursor advancement. A crash
       // between the writes can replay the same wake without duplicate events.
-      await this.repository.appendEvent({
+      await this.store.recordWakeCompletion({
         wakeNumber: wake.wakeNumber,
-        kind: 'agent_wake_completed',
         actorAgentId: agentId,
         idempotencyKey: `${wake.wakeId}:completed`,
         title: `${wake.agent.name} completes a background check`,
@@ -496,7 +510,7 @@ export class RepresentativeAgentHeartbeatService {
           outcome: result.state.outcome,
         },
       });
-      await this.repository.completeAgentWake(
+      await this.store.completeAgentWake(
         agentId,
         wake.claimToken,
         wake.horizonSequence,
@@ -510,12 +524,12 @@ export class RepresentativeAgentHeartbeatService {
       return result;
     } catch (error) {
       if (claimedWake && !await this.isExecutionAllowed(execution.signal)) {
-        await this.repository.interruptAgentWake(
+        await this.store.interruptAgentWake(
           agentId,
           claimedWake.claimToken,
         );
       } else if (claimedWake) {
-        await this.repository.failAgentWake(agentId, claimedWake.claimToken);
+        await this.store.failAgentWake(agentId, claimedWake.claimToken);
       }
       throw error;
     }
@@ -526,11 +540,11 @@ export class RepresentativeAgentHeartbeatService {
     wakeNumber: number,
   ): Promise<void> {
     const [messages, activeAgents] = await Promise.all([
-      this.repository.listAgentWakeCommunicationEvents(
+      this.store.listAgentWakeCommunicationEvents(
         sourceAgentId,
         wakeNumber,
       ),
-      this.repository.listActiveAgents(),
+      this.store.listActiveAgents(),
     ]);
     const activeAgentIds = new Set(activeAgents.map(({ id }) => id));
     const recipientIds = new Set<string>();
@@ -557,7 +571,7 @@ export class RepresentativeAgentHeartbeatService {
         messageRole === 'response'
         && message.replyToSequence
       ) {
-        const repliedTo = await this.repository.readEvent(
+        const repliedTo = await this.store.readEvent(
           message.replyToSequence,
         );
         if (
@@ -614,7 +628,7 @@ export class RepresentativeAgentHeartbeatService {
       return false;
     }
     try {
-      return (await this.repository.readWorkspace()).backgroundChecksEnabled;
+      return (await this.store.readWorkspace()).backgroundChecksEnabled;
     } catch (error) {
       this.logger.error({ error }, 'lucid.global_dispatch_gate.failed');
       return false;

@@ -5,19 +5,22 @@
  * development must run the explicit migration command first.
  */
 import type { LucidConfig } from '../config.js';
+import { PostgresParticipantNetworkStore } from '../lucid/network/postgres-store.js';
+import type { ParticipantNetworkStore } from '../lucid/network/store.js';
+import {
+  PostgresAgentCommunicationStore,
+} from '../lucid/representative/communication/postgres-store.js';
 import type {
-  ParticipantNetworkRepository,
-} from '../lucid/network/repository.js';
-import { PostgresLucidRepository } from '../lucid/persistence/postgres/repository.js';
-import type {
-  AgentCommunicationRepository,
-} from '../lucid/representative/communication/repository.js';
-import type {
-  RepresentativeWakeRepository,
-} from '../lucid/representative/repository.js';
-import type {
-  DiscoveryWorkspaceRepository,
-} from '../lucid/workspace/repository.js';
+  AgentCommunicationStore,
+} from '../lucid/representative/communication/store.js';
+import {
+  PostgresRepresentativeWakeStore,
+} from '../lucid/representative/postgres-store.js';
+import type { RepresentativeWakeStore } from '../lucid/representative/store.js';
+import {
+  PostgresDiscoveryWorkspaceStore,
+} from '../lucid/workspace/postgres-store.js';
+import type { DiscoveryWorkspaceStore } from '../lucid/workspace/store.js';
 import { PostgresDatabase } from '../infrastructure/postgres/database.js';
 import type {
   RepresentativeHeartbeatTaskAuthority,
@@ -27,11 +30,11 @@ import {
 } from '../runtime/heartbeat/postgres/task-store.js';
 
 export type PostgresPersistence = {
-  repositories: {
-    workspace: DiscoveryWorkspaceRepository;
-    network: ParticipantNetworkRepository;
-    representative: RepresentativeWakeRepository;
-    communication: AgentCommunicationRepository;
+  stores: {
+    workspace: DiscoveryWorkspaceStore;
+    network: ParticipantNetworkStore;
+    representative: RepresentativeWakeStore;
+    communication: AgentCommunicationStore;
   };
   taskAuthority: RepresentativeHeartbeatTaskAuthority;
   close: () => Promise<void>;
@@ -45,14 +48,15 @@ export async function createPostgresPersistence(
     applicationName: 'lucid-server',
   });
   try {
-    const repository = new PostgresLucidRepository(database);
-    await repository.initialize();
+    const workspace = new PostgresDiscoveryWorkspaceStore(database);
+    const representative = new PostgresRepresentativeWakeStore(database);
+    await representative.initialize();
     return {
-      repositories: {
-        workspace: repository,
-        network: repository,
-        representative: repository,
-        communication: repository,
+      stores: {
+        workspace,
+        network: new PostgresParticipantNetworkStore(database),
+        representative,
+        communication: new PostgresAgentCommunicationStore(database),
       },
       taskAuthority: new PostgresHeartbeatTaskStore({
         database,

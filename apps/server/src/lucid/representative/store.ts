@@ -1,14 +1,19 @@
 /** Persistence port for representative wake orchestration. */
 import type {
   Agent,
-  AgentWakeContext,
+  AgentWakeClaim,
   AppendDiscoveryEventInput,
   DiscoveryEvent,
   DiscoveryWorkspace,
   Participant,
 } from '../discovery-types.js';
 
-export interface RepresentativeWakeRepository {
+export type RecordWakeCompletionInput = Omit<
+  AppendDiscoveryEventInput,
+  'kind'
+>;
+
+export interface RepresentativeWakeStore {
   reset(options: { backgroundChecksEnabled: boolean }): Promise<void>;
   readWorkspace(): Promise<DiscoveryWorkspace>;
   setBackgroundChecksEnabled(enabled: boolean): Promise<DiscoveryWorkspace>;
@@ -23,7 +28,7 @@ export interface RepresentativeWakeRepository {
   beginAgentWake(
     agentId: string,
     wakeId: string,
-  ): Promise<AgentWakeContext | undefined>;
+  ): Promise<AgentWakeClaim | undefined>;
   completeAgentWake(
     agentId: string,
     claimToken: string,
@@ -43,5 +48,7 @@ export interface RepresentativeWakeRepository {
     agentId: string,
     sourceSequence: number,
   ): Promise<boolean>;
-  appendEvent(input: AppendDiscoveryEventInput): Promise<DiscoveryEvent>;
+  recordWakeCompletion(
+    input: RecordWakeCompletionInput,
+  ): Promise<DiscoveryEvent>;
 }

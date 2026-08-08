@@ -223,14 +223,18 @@ network for every shared message.
 | --- | --- |
 | `DiscoveryWorkspaceService` | Coordinates the local participant's product actions and scoped projection |
 | `ParticipantNetworkService` | Trusted ingress, participant lifecycle, and development diagnostics |
-| Service-owned repository ports | Narrow storage-independent contracts beside workspace, network, wake, and communication services |
-| `PostgresLucidRepository` | Shared PostgreSQL/Drizzle adapter preserving cross-service mailbox transactions and claim fencing |
+| Service-owned store ports | Narrow storage-independent contracts beside workspace, network, wake, and communication services |
+| Service-local PostgreSQL stores | Drizzle adapters preserving each use case's multi-table transactions, projections, and fencing |
 | `RepresentativeAgentHeartbeatService` | Reconciles participants to Heddle tasks and settles mailbox wakes |
 | `HeddleRepresentativeAgentRunner` | Supplies one claimed wake's prompt and tools to Heddle execution |
 | `AgentCommunicationToolService` | Enforces visibility, reply targets, content provenance, peer addressing, budgets, and idempotency |
 
 Service-level maintenance notes live in
 [`apps/server/src/lucid/README.md`](apps/server/src/lucid/README.md),
+[`apps/server/src/lucid/workspace/README.md`](apps/server/src/lucid/workspace/README.md),
+[`apps/server/src/lucid/network/README.md`](apps/server/src/lucid/network/README.md),
+[`apps/server/src/lucid/representative/README.md`](apps/server/src/lucid/representative/README.md),
+[`apps/server/src/lucid/representative/communication/README.md`](apps/server/src/lucid/representative/communication/README.md),
 [`apps/server/src/lucid/persistence/postgres/README.md`](apps/server/src/lucid/persistence/postgres/README.md),
 [`apps/server/src/infrastructure/postgres/README.md`](apps/server/src/infrastructure/postgres/README.md), and
 [`apps/web/README.md`](apps/web/README.md).

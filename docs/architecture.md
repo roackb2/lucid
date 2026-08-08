@@ -11,15 +11,24 @@ flowchart LR
   Simulator["Loopback development simulator"] --> API
   API --> Workspace["Workspace service"]
   API --> Network["Participant network service"]
-  Workspace --> ProductPorts["Service-owned Lucid repository ports"]
-  Network --> ProductPorts
-  Heartbeat["Representative heartbeat service"] --> ProductPorts
+  Workspace --> WorkspaceStore["Workspace store port"]
+  Network --> NetworkStore["Network store port"]
+  Heartbeat["Representative heartbeat service"] --> WakeStore["Wake store port"]
+  Heartbeat --> WorkingContext["Workspace working-context port"]
   Heartbeat --> Tasks["Heddle task authority"]
   Tasks --> Host["Bounded execution host"]
   Host --> Runner["Heddle representative runner"]
   Runner --> Tools["Lucid communication tools"]
-  Tools --> ProductPorts
-  ProductPorts --> LucidSchema[("PostgreSQL: lucid schema")]
+  Tools --> CommunicationStore["Communication store port"]
+  WorkspaceStore --> WorkspaceAdapter["Workspace PostgreSQL adapter"]
+  WorkingContext --> WorkspaceAdapter
+  NetworkStore --> NetworkAdapter["Network PostgreSQL adapter"]
+  WakeStore --> WakeAdapter["Wake PostgreSQL adapter"]
+  CommunicationStore --> CommunicationAdapter["Communication PostgreSQL adapter"]
+  WorkspaceAdapter --> LucidSchema[("PostgreSQL: lucid schema")]
+  NetworkAdapter --> LucidSchema
+  WakeAdapter --> LucidSchema
+  CommunicationAdapter --> LucidSchema
   Tasks --> HeddleSchema[("PostgreSQL: heddle schema")]
 ```
 
@@ -58,11 +67,19 @@ The server is organized around behavior rather than tables:
 - the communication tool service grants one representative a bounded set of
   visible reads and validated writes for one wake.
 
-Each service owns a narrow repository contract expressed in domain operations.
-The PostgreSQL product implementation lives under `lucid/persistence` because
-the physical schema and important cross-service transactions and projections
-are genuinely shared. Neutral PostgreSQL infrastructure owns only pool and
-migration mechanics. Neither location becomes a second domain layer.
+Each service owns a narrow primary store port expressed in domain operations.
+Its PostgreSQL adapter lives in the same behavior slice and implements that
+port with the real Drizzle queries and transactions. A service may also consume
+an explicitly named projection port owned by another slice. Representative wake
+orchestration, for example, reads retry-stable working context through the
+workspace-owned `RepresentativeWorkingContextReader`; it does not import the
+workspace adapter.
+
+Shared persistence code owns only the schema, policy-free record codecs, and
+the disposable test fixture. Neutral PostgreSQL infrastructure owns pool and
+migration mechanics. Mailbox visibility, participant projection, workspace
+identity, initialization, and read-model policy remain in their owning slices.
+Neither shared location becomes a second domain layer.
 
 This is deliberately not repository-per-table CRUD. Operations such as
 participant registration or wake claiming span several records and must remain
@@ -72,20 +89,24 @@ one domain transaction.
 
 | Path | Responsibility |
 | --- | --- |
-| `apps/server/src/lucid/workspace/` | Participant workspace service and its narrow repository port |
-| `apps/server/src/lucid/network/` | Participant ingress/lifecycle service and its repository port |
-| `apps/server/src/lucid/representative/` | Representative wake/task coordination, the Heddle runner, and the wake repository port |
-| `apps/server/src/lucid/representative/communication/` | Bounded communication tools and their repository port |
-| `apps/server/src/lucid/persistence/postgres/` | Shared Lucid schema, adapter implementation, and test context where cross-service transactions and projections genuinely span ports |
+| `apps/server/src/lucid/workspace/` | Participant workspace service, primary store port, secondary working-context port, PostgreSQL adapter, and workspace policy |
+| `apps/server/src/lucid/network/` | Participant ingress/lifecycle service, store port, PostgreSQL adapter, and participant-visibility policy |
+| `apps/server/src/lucid/representative/` | Representative wake/task coordination, store port, PostgreSQL adapter, runner, and mailbox policy |
+| `apps/server/src/lucid/representative/communication/` | Bounded communication tools, store port, and PostgreSQL adapter |
+| `apps/server/src/lucid/persistence/postgres/` | Shared Lucid schema, policy-free record codecs, and disposable PostgreSQL test fixture only |
 | `apps/server/src/infrastructure/postgres/` | Neutral PostgreSQL pool and migration mechanics without Lucid product policy |
 | `apps/server/src/runtime/heartbeat/postgres/` | PostgreSQL adapter for Heddle's public task-authority contracts |
 | `apps/server/src/composition/postgres-persistence.ts` | Constructs the adapters over one pool and owns their shared shutdown boundary |
 
-The shared Lucid PostgreSQL adapter is allowed to implement several
-service-owned ports because registration, projections, and wake settlement
-need atomic work across the same product tables. Its placement does not turn
-those ports back into one service-wide repository contract: each caller sees
-only the operations it owns.
+Transactions follow use-case ownership rather than table ownership. A
+service-local adapter may atomically query or update several product tables,
+but it must not call another service or concrete store inside that transaction.
+A cross-slice read depends on an explicit port exported by the slice that owns
+the projection; composition injects its implementation.
+A genuinely cross-service workflow receives its own explicit application
+boundary instead of recreating one service-wide repository. See
+[Coding conventions](coding-conventions.md) for the dependency and testing
+rules.
 
 ## Persistence
 

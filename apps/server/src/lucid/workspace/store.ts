@@ -17,7 +17,7 @@ import type {
   RepresentativeWorkingContext,
 } from '../discovery-types.js';
 
-export type DiscoveryWorkspaceRepositorySnapshot = {
+export type DiscoveryWorkspaceStoreSnapshot = {
   workspace: DiscoveryWorkspace;
   user: ParticipantView;
   representative: AgentView;
@@ -28,8 +28,22 @@ export type DiscoveryWorkspaceRepositorySnapshot = {
   findings: FindingView[];
 };
 
-export interface DiscoveryWorkspaceRepository {
-  readSnapshot(): Promise<DiscoveryWorkspaceRepositorySnapshot>;
+export type RecordCheckRequestInput = Omit<
+  AppendDiscoveryEventInput,
+  'kind'
+>;
+
+/** Secondary projection port consumed by representative wake orchestration. */
+export interface RepresentativeWorkingContextReader {
+  readRepresentativeWorkingContext(
+    agentId: string,
+    throughSequence: number,
+  ): Promise<RepresentativeWorkingContext>;
+}
+
+export interface DiscoveryWorkspaceStore
+extends RepresentativeWorkingContextReader {
+  readSnapshot(): Promise<DiscoveryWorkspaceStoreSnapshot>;
   requireUserAgent(): Promise<Agent>;
   findSavedInterest(): Promise<DiscoveryEvent | undefined>;
   saveInterest(content: string): Promise<DiscoveryEvent>;
@@ -39,9 +53,5 @@ export interface DiscoveryWorkspaceRepository {
     content: string,
   ): Promise<DiscoveryEvent>;
   saveGuidance(content: string): Promise<DiscoveryEvent>;
-  readRepresentativeWorkingContext(
-    agentId: string,
-    throughSequence: number,
-  ): Promise<RepresentativeWorkingContext>;
-  appendEvent(input: AppendDiscoveryEventInput): Promise<DiscoveryEvent>;
+  recordCheckRequest(input: RecordCheckRequestInput): Promise<DiscoveryEvent>;
 }

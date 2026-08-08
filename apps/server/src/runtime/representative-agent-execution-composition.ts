@@ -1,7 +1,5 @@
 import type { LucidConfig } from '../config.js';
-import type {
-  RepresentativeWakeRepository,
-} from '../lucid/representative/repository.js';
+import type { RepresentativeWakeStore } from '../lucid/representative/store.js';
 import type { LucidLogger } from '../logger.js';
 import {
   LongLivedRepresentativeAgentExecutionHost,
@@ -13,7 +11,7 @@ import { RepresentativeAgentWorker } from './representative-agent-worker.js';
 
 export type RepresentativeAgentExecutionCompositionOptions = {
   config: LucidConfig;
-  repository: RepresentativeWakeRepository;
+  store: RepresentativeWakeStore;
   taskAuthority: RepresentativeHeartbeatTaskAuthority;
   taskIdPrefix: string;
   logger: LucidLogger;
@@ -25,7 +23,7 @@ export function createRepresentativeAgentExecutionHost(
 ): RepresentativeAgentExecutionHost {
   const {
     config,
-    repository,
+    store,
     taskAuthority,
     taskIdPrefix,
     logger,
@@ -74,7 +72,7 @@ export function createRepresentativeAgentExecutionHost(
     invocationTimeoutMs: config.heartbeatInvocationTimeoutMs,
     recoveryIntervalMs: config.heartbeatRecoveryIntervalMs,
     isGloballyEnabled: async () => (
-      await repository.readWorkspace()
+      await store.readWorkspace()
     ).backgroundChecksEnabled,
     onOutcome: ({ taskId, invocationId, result, decision }) => logger.debug({
       taskId,

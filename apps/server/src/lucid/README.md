@@ -9,22 +9,26 @@ simulation scenarios.
 
 | Directory | Responsibility |
 | --- | --- |
-| `workspace/` | Local participant actions, scoped projection, and the narrow repository port those operations require |
-| `network/` | Trusted participant ingress, lifecycle, diagnostics, and its repository port |
-| `representative/` | Heddle task reconciliation, mailbox wake settlement, runner composition, and the representative repository port |
-| `representative/communication/` | Agent-visible communication tools and their visibility/provenance repository port |
-| `persistence/postgres/` | One Lucid-owned PostgreSQL adapter implementing all four ports while preserving shared transactions and projections |
+| `workspace/` | Local participant actions, scoped projection, primary and secondary projection ports, workspace identity, and PostgreSQL adapter |
+| `network/` | Trusted participant ingress, lifecycle, diagnostics, participant visibility, its store port, and PostgreSQL adapter |
+| `representative/` | Heddle task reconciliation, mailbox wake settlement, mailbox policy, its store port, PostgreSQL adapter, and runner composition |
+| `representative/communication/` | Agent-visible communication tools, their store port, and PostgreSQL visibility/provenance adapter |
+| `persistence/postgres/` | Shared product schema, policy-free record decoding, and the disposable PostgreSQL test fixture; no product store implementation |
 | `agent-prompts.ts` | Generic representative identity plus bounded longitudinal wake context |
 | `representative-profile.ts` | Generic representative profile for dynamically registered participants |
 | `local-participant.ts` | Stable local participant and representative identity |
 | `discovery-types.ts` | Persisted records, scoped product views, and development diagnostics |
 
-Repository interfaces live beside the service that consumes them. The
-PostgreSQL implementation remains one Lucid adapter because participant
-lifecycle, mailbox visibility, event append, wake claims, and read projections
-share atomic invariants. Splitting that adapter by table would either duplicate
-those rules or move transactions back into application services. Composition
-exposes only the appropriate narrow port to each service.
+Primary store interfaces and their PostgreSQL implementations live beside the
+service that owns them. Each adapter keeps the complete multi-table transaction
+for its owning use case; the split is by behavior, never by table. The workspace
+slice also exports `RepresentativeWorkingContextReader` as an explicitly
+secondary projection port consumed by representative wake orchestration.
+Composition constructs all adapters over one pool and exposes only the narrow
+ports required by each service. Concrete adapters never import one another.
+
+See [`../../../../docs/coding-conventions.md`](../../../../docs/coding-conventions.md)
+for the vertical-slice Hexagonal Architecture rules contributors must follow.
 
 Names describe engineering responsibilities. `Wake` means one claimed
 heartbeat execution; `task`, `mailbox`, `event`, `finding`, and `participant`
@@ -265,7 +269,7 @@ not model success.
 
 Heddle checkpoints preserve runtime transcript continuity, but Lucid does not
 use a checkpoint as its only product-memory contract. Before every model run,
-the repository projects history through the claimed wake horizon:
+the workspace store projects history through the claimed wake horizon:
 
 - the latest saved interest plus recent participant inputs and direct guidance;
 - recent participant-scoped findings and any feedback attached to them; and
@@ -287,7 +291,7 @@ ownership, visibility, reply/source integrity, and retry safety only.
 
 Failed, interrupted, or escalated wakes keep their cursor and active claim.
 Retry reuses the same wake ID, number, horizon, and action slots. Ordinary
-repository startup never steals a claim. After a Heddle execution lease
+store startup never steals a claim. After a Heddle execution lease
 expires, Heddle claim-fenced recovery returns the task to a runnable state and
 passes that exact interrupted execution ID to Lucid. Lucid releases only the
 matching product wake claim; a stale recovery cannot release a newer worker.

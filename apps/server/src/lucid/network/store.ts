@@ -10,7 +10,7 @@ import type {
   RegisterParticipantInput,
 } from '../discovery-types.js';
 
-export type NetworkDiagnosticsRepositorySnapshot = {
+export type NetworkDiagnosticsStoreSnapshot = {
   workspace: DiscoveryWorkspace;
   participants: ParticipantView[];
   agents: AgentView[];
@@ -23,8 +23,8 @@ export type ParticipantWithAgent = {
   created?: boolean;
 };
 
-export interface ParticipantNetworkRepository {
-  readNetworkDiagnostics(): Promise<NetworkDiagnosticsRepositorySnapshot>;
+export interface ParticipantNetworkStore {
+  readNetworkDiagnostics(): Promise<NetworkDiagnosticsStoreSnapshot>;
   requireAgentByParticipantId(participantId: string): Promise<Agent>;
   registerParticipant(
     input: RegisterParticipantInput,

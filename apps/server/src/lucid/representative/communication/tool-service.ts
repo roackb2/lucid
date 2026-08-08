@@ -20,7 +20,7 @@ import type {
   NetworkMessageRole,
   Participant,
 } from '../../discovery-types.js';
-import type { AgentCommunicationRepository } from './repository.js';
+import type { AgentCommunicationStore } from './store.js';
 
 const readMessagesInputSchema = z.object({
   after_sequence: z.number().int().min(0).optional(),
@@ -83,7 +83,7 @@ export class AgentCommunicationToolService {
   private pendingRequiredWorkingNoteSourceIds = new Set<number>();
 
   constructor(
-    private readonly repository: AgentCommunicationRepository,
+    private readonly store: AgentCommunicationStore,
     private readonly agent: Agent,
     private readonly participant: Participant,
     private readonly wakeId: string,
@@ -103,14 +103,14 @@ export class AgentCommunicationToolService {
       satisfiedSources,
       satisfiedWorkingNoteSources,
     ] = await Promise.all([
-      this.repository.listActiveAgents(),
-      this.repository.listEventsVisibleToAgent(
+      this.store.listActiveAgents(),
+      this.store.listEventsVisibleToAgent(
         this.agent.id,
         0,
         1_000,
         this.horizonSequence,
       ),
-      this.repository.countAgentWakeCommunicationActions(
+      this.store.countAgentWakeCommunicationActions(
         this.agent.id,
         this.wakeNumber,
       ),
@@ -118,7 +118,7 @@ export class AgentCommunicationToolService {
         async (sequence) => ({
           sequence,
           satisfied: Boolean(
-            await this.repository.findAgentPublishedRequestForTrigger(
+            await this.store.findAgentPublishedRequestForTrigger(
               this.agent.id,
               sequence,
             ),
@@ -128,7 +128,7 @@ export class AgentCommunicationToolService {
       Promise.all(uniq(this.requiredWorkingNoteSourceIds).map(
         async (sequence) => ({
           sequence,
-          satisfied: await this.repository.hasAgentUpdatedWorkingNoteThrough(
+          satisfied: await this.store.hasAgentUpdatedWorkingNoteThrough(
             this.agent.id,
             sequence,
           ),
@@ -328,13 +328,13 @@ export class AgentCommunicationToolService {
     // Reads remain capped at the horizon captured before model execution; tool
     // calls cannot smuggle messages that arrived during this wake into context.
     const [events, agents] = await Promise.all([
-      this.repository.listEventsVisibleToAgent(
+      this.store.listEventsVisibleToAgent(
         this.agent.id,
         parsed.data.after_sequence ?? this.agent.lastSeenSequence,
         parsed.data.limit,
         this.horizonSequence,
       ),
-      this.repository.listAgents(),
+      this.store.listAgents(),
     ]);
     const agentById = new Map(agents.map((agent) => [agent.id, agent]));
 
@@ -361,7 +361,7 @@ export class AgentCommunicationToolService {
     // This internal state update has its own retry-stable key and does not
     // consume the two-action communication budget. Its horizon metadata lets
     // later readers distinguish the derived note from raw source events.
-    const event = await this.repository.appendEvent({
+    const event = await this.store.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'representative_note_updated',
       actorAgentId: this.agent.id,
@@ -425,7 +425,7 @@ export class AgentCommunicationToolService {
     const existingRequiredRequest = this.requiredRequestSourceIds.includes(
       parsed.data.reply_to_event_id,
     )
-      ? await this.repository.findAgentPublishedRequestForTrigger(
+      ? await this.store.findAgentPublishedRequestForTrigger(
         this.agent.id,
         parsed.data.reply_to_event_id,
       )
@@ -445,7 +445,7 @@ export class AgentCommunicationToolService {
       return idempotencyKey;
     }
 
-    const event = await this.repository.appendEvent({
+    const event = await this.store.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'shared_message',
       actorAgentId: this.agent.id,
@@ -486,7 +486,7 @@ export class AgentCommunicationToolService {
           'Direct messages can be sent only to a peer encountered through a visible message.',
       };
     }
-    const target = (await this.repository.listActiveAgents())
+    const target = (await this.store.listActiveAgents())
       .find((candidate) => candidate.id === parsed.data.target_agent_id);
     if (!target) {
       return { ok: false, error: 'The requested agent does not exist.' };
@@ -535,7 +535,7 @@ export class AgentCommunicationToolService {
       return actionIndex;
     }
 
-    return eventResult(await this.repository.appendEvent({
+    return eventResult(await this.store.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'direct_message',
       actorAgentId: this.agent.id,
@@ -581,7 +581,7 @@ export class AgentCommunicationToolService {
     }
     // Provenance must be both visible and peer-authored. This proves the network
     // path that produced a finding, not the truth of the underlying message.
-    const visibleSources = await this.repository.readVisibleEventsBySequence(
+    const visibleSources = await this.store.readVisibleEventsBySequence(
       this.agent.id,
       sourceEventIds,
     );
@@ -597,7 +597,7 @@ export class AgentCommunicationToolService {
           'A finding must cite at least one visible shared or direct message from another agent.',
       };
     }
-    if (await this.repository.hasParticipantFindingUsingAnyOrigin(
+    if (await this.store.hasParticipantFindingUsingAnyOrigin(
       this.participant.id,
       sourceEventIds,
     )) {
@@ -611,7 +611,7 @@ export class AgentCommunicationToolService {
       return actionIndex;
     }
 
-    return eventResult(await this.repository.appendEvent({
+    return eventResult(await this.store.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'finding_reported',
       actorAgentId: this.agent.id,
@@ -645,7 +645,7 @@ export class AgentCommunicationToolService {
       return actionIndex;
     }
 
-    return eventResult(await this.repository.appendEvent({
+    return eventResult(await this.store.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'agent_wake_no_action',
       actorAgentId: this.agent.id,
@@ -773,7 +773,7 @@ export class AgentCommunicationToolService {
       };
     }
     const visibleSequences = new Set(
-      (await this.repository
+      (await this.store
         .readVisibleEventsBySequence(this.agent.id, sourceEventIds))
         .map((event) => event.sequence),
     );
@@ -804,7 +804,7 @@ export class AgentCommunicationToolService {
         },
       };
     }
-    const event = (await this.repository.readVisibleEventsBySequence(
+    const event = (await this.store.readVisibleEventsBySequence(
       this.agent.id,
       [replyToSequence],
     ))[0];
@@ -842,9 +842,9 @@ export class AgentCommunicationToolService {
   private async validateThreadContribution(
     replyToSequence: number,
   ): Promise<ToolResult | undefined> {
-    // The repository follows the persisted reply chain to the request root;
+    // The store follows the persisted reply chain to the request root;
     // content provenance cannot accidentally merge unrelated conversations.
-    const alreadyContributed = await this.repository
+    const alreadyContributed = await this.store
       .hasAgentContributedToRequestThread(
         this.agent.id,
         replyToSequence,

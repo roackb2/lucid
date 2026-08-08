@@ -1,7 +1,7 @@
 /**
  * Owns one PostgreSQL connection pool and the explicit migration lifecycle.
  *
- * Product repositories receive the Drizzle handle. They do not parse database
+ * Product stores receive the Drizzle handle. They do not parse database
  * URLs, configure pooling/prepared statements, run migrations, or close the
  * underlying pool. `prepareStatements: false` is compatible with transaction
  * poolers such as Supavisor and is the safe hosted default.

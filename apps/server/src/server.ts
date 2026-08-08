@@ -23,20 +23,21 @@ const config = resolveLucidConfig();
 const logger = createLucidLogger(config.logLevel);
 const authenticator = createLucidAuthenticator(config.authentication);
 const persistence = await createPostgresPersistence(config);
-const { repositories, taskAuthority } = persistence;
+const { stores, taskAuthority } = persistence;
 const agentRunner = new HeddleRepresentativeAgentRunner(
-  repositories.communication,
+  stores.communication,
   config,
 );
 const executionHost = createRepresentativeAgentExecutionHost({
   config,
-  repository: repositories.representative,
+  store: stores.representative,
   taskAuthority,
   taskIdPrefix: REPRESENTATIVE_AGENT_TASK_ID_PREFIX,
   logger,
 });
 const heartbeats = new RepresentativeAgentHeartbeatService(
-  repositories.representative,
+  stores.representative,
+  stores.workspace,
   agentRunner,
   config,
   logger,
@@ -46,7 +47,7 @@ const heartbeats = new RepresentativeAgentHeartbeatService(
 await heartbeats.initialize();
 heartbeats.start();
 const discoveryWorkspace = new DiscoveryWorkspaceService(
-  repositories.workspace,
+  stores.workspace,
   heartbeats,
   {
     model: config.model,
@@ -54,7 +55,7 @@ const discoveryWorkspace = new DiscoveryWorkspaceService(
   },
 );
 const participantNetwork = new ParticipantNetworkService(
-  repositories.network,
+  stores.network,
   heartbeats,
   {
     model: config.model,

@@ -24,8 +24,10 @@ import {
 } from 'vitest';
 import type { LucidConfig } from '../../config.js';
 import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
-import type { PostgresLucidRepository } from '../persistence/postgres/repository.js';
-import { createPostgresTestRepository } from '../persistence/postgres/test-context.js';
+import {
+  createPostgresTestStores,
+  type PostgresTestStores,
+} from '../persistence/postgres/test-context.js';
 import { createLucidLogger } from '../../logger.js';
 import {
   LongLivedRepresentativeAgentExecutionHost,
@@ -44,25 +46,26 @@ import { ParticipantNetworkService } from '../network/service.js';
 import {
   RepresentativeAgentHeartbeatService,
 } from './heartbeat-service.js';
+import type { RepresentativeWorkingContextReader } from './store.js';
 
 const TEST_RUNTIME = { model: 'gpt-5.4-mini', heddleVersion: 'test' };
 
 describe('representative-agent heartbeat service', () => {
   let database: PostgresDatabase;
-  let repository: PostgresLucidRepository;
+  let stores: PostgresTestStores['stores'];
   let config: LucidConfig;
   let stateRoot: string;
   let heartbeats: RepresentativeAgentHeartbeatService[];
 
   beforeAll(async () => {
-    ({ database, repository } = await createPostgresTestRepository({
+    ({ database, stores } = await createPostgresTestStores({
       applicationName: 'lucid-heartbeat-service-test',
       reset: false,
     }));
   });
 
   beforeEach(async () => {
-    await repository.reset({ backgroundChecksEnabled: true });
+    await stores.representative.reset({ backgroundChecksEnabled: true });
     stateRoot = mkdtempSync(join(tmpdir(), 'lucid-heartbeat-test-'));
     config = createTestConfig(stateRoot);
     heartbeats = [];
@@ -81,10 +84,10 @@ describe('representative-agent heartbeat service', () => {
 
   it('routes dynamic participant messages until the local participant receives a finding', async () => {
     const sources = await Promise.all([
-      registerSynthetic(repository, 'builder'),
-      registerSynthetic(repository, 'organizer'),
+      registerSynthetic(stores, 'builder'),
+      registerSynthetic(stores, 'organizer'),
     ]);
-    const runner = new RoutingHeartbeatRunner(repository);
+    const runner = new RoutingHeartbeatRunner(stores);
     const { workspace } = await startServices(runner);
 
     await workspace.saveInterest(
@@ -124,7 +127,7 @@ describe('representative-agent heartbeat service', () => {
       expect(runner.agentIds.filter((agentId) => agentId === agent.id))
         .toHaveLength(1);
     });
-    expect((await repository.readNetworkDiagnostics()).events.filter(
+    expect((await stores.network.readNetworkDiagnostics()).events.filter(
       ({ kind }) => kind === 'shared_message',
     )).toHaveLength(3);
   });
@@ -183,7 +186,7 @@ describe('representative-agent heartbeat service', () => {
   });
 
   it('persists the local listening preference without pausing peer agents', async () => {
-    const source = await registerSynthetic(repository, 'always-listening-peer');
+    const source = await registerSynthetic(stores, 'always-listening-peer');
     const firstRunner = new CountingHeartbeatRunner();
     const first = await startServices(firstRunner);
 
@@ -200,10 +203,10 @@ describe('representative-agent heartbeat service', () => {
     )?.enabled).toBe(true);
 
     await first.heartbeat.stop();
-    const secondRunner = new RoutingHeartbeatRunner(repository);
+    const secondRunner = new RoutingHeartbeatRunner(stores);
     const secondHeartbeat = await createHeartbeat(secondRunner, true);
     const resumedWorkspace = new DiscoveryWorkspaceService(
-      repository,
+      stores.workspace,
       secondHeartbeat,
       TEST_RUNTIME,
     );
@@ -213,13 +216,13 @@ describe('representative-agent heartbeat service', () => {
     await resumedWorkspace.setBackgroundChecksEnabled(true);
     await vi.waitFor(async () => {
       expect(secondRunner.agentIds).toContain(USER_AGENT_ID);
-      expect((await repository.requireUserAgent()).lastSeenSequence)
+      expect((await requireAgent(stores, USER_AGENT_ID)).lastSeenSequence)
         .toBeGreaterThan(0);
     }, { interval: 10, timeout: 5_000 });
   });
 
   it('preserves participant task preferences across a global pause and restart', async () => {
-    const peer = await registerSynthetic(repository, 'global-pause-peer');
+    const peer = await registerSynthetic(stores, 'global-pause-peer');
     const first = await startServices(new CountingHeartbeatRunner());
 
     await first.workspace.setBackgroundChecksEnabled(false);
@@ -240,7 +243,7 @@ describe('representative-agent heartbeat service', () => {
     const second = await createHeartbeat(new CountingHeartbeatRunner(), true);
     await second.reconcileAgentTasks();
     diagnostics = await new ParticipantNetworkService(
-      repository,
+      stores.network,
       second,
       TEST_RUNTIME,
     ).diagnostics();
@@ -255,7 +258,7 @@ describe('representative-agent heartbeat service', () => {
   });
 
   it('cancels owned work on global pause and dispatches persisted intent on resume', async () => {
-    const source = await registerSynthetic(repository, 'global-gate-source');
+    const source = await registerSynthetic(stores, 'global-gate-source');
     const runner = new PauseThenCompleteHeartbeatRunner();
     const { heartbeat, network } = await startServices(runner);
 
@@ -289,7 +292,7 @@ describe('representative-agent heartbeat service', () => {
     await heartbeat.setGlobalBackgroundChecksEnabled(true);
     await vi.waitFor(async () => {
       expect(runner.agentIds).toHaveLength(2);
-      expect((await repository.requireAgent(source.agent.id)).lastSeenSequence)
+      expect((await requireAgent(stores, source.agent.id)).lastSeenSequence)
         .toBeGreaterThan(0);
     }, { interval: 10, timeout: 5_000 });
   });
@@ -311,8 +314,8 @@ describe('representative-agent heartbeat service', () => {
     }, { interval: 10, timeout: 5_000 });
 
     expect(runner.agentIds).toEqual([]);
-    expect((await repository.readWorkspace()).currentWake).toBe(0);
-    expect((await repository.readNetworkDiagnostics()).events.some(
+    expect((await stores.representative.readWorkspace()).currentWake).toBe(0);
+    expect((await stores.network.readNetworkDiagnostics()).events.some(
       ({ kind }) => kind === 'agent_wake_started',
     )).toBe(false);
     const records = await taskStore.listRunRecords({
@@ -322,8 +325,45 @@ describe('representative-agent heartbeat service', () => {
     expect(records[0]?.record.outcome?.kind).toBe('skipped');
   });
 
+  it('releases a wake claim when working-context projection fails', async () => {
+    const runner = new CountingHeartbeatRunner();
+    const readRepresentativeWorkingContext = vi.fn(async () => {
+      throw new Error('Working context projection is unavailable.');
+    });
+    const heartbeat = await createHeartbeat(runner, true, {
+      readRepresentativeWorkingContext,
+    });
+    await stores.workspace.saveInterest(
+      'Keep this assignment retryable after a context projection failure.',
+    );
+
+    await heartbeat.triggerAgent(USER_AGENT_ID);
+    await vi.waitFor(async () => {
+      expect((await requireAgent(stores, USER_AGENT_ID)).status).toBe('error');
+      expect((await heartbeat.snapshot()).running).toBe(false);
+    }, { interval: 10, timeout: 5_000 });
+
+    expect(readRepresentativeWorkingContext).toHaveBeenCalledTimes(1);
+    expect(runner.agentIds).toEqual([]);
+    const failedAgent = await requireAgent(stores, USER_AGENT_ID);
+    const retry = await stores.representative.beginAgentWake(
+      USER_AGENT_ID,
+      'retry_after_context_failure',
+    );
+    expect(retry).toMatchObject({
+      wakeId: failedAgent.activeWakeId,
+      wakeNumber: failedAgent.activeWakeNumber,
+      horizonSequence: failedAgent.activeWakeHorizon,
+    });
+    await stores.representative.interruptAgentWake(
+      USER_AGENT_ID,
+      retry!.claimToken,
+    );
+    expect((await requireAgent(stores, USER_AGENT_ID)).status).toBe('idle');
+  });
+
   it('rejects finishing an assignment wake before publishing its request', async () => {
-    const runner = new FinishWithoutActionHeartbeatRunner(repository);
+    const runner = new FinishWithoutActionHeartbeatRunner(stores);
     const { heartbeat, workspace } = await startServices(runner);
 
     await workspace.saveInterest(
@@ -333,8 +373,8 @@ describe('representative-agent heartbeat service', () => {
       expect((await heartbeat.snapshot()).tasks[0]?.status).toBe('failed');
     }, { interval: 10, timeout: 5_000 });
 
-    const agent = await repository.requireUserAgent();
-    const diagnostics = await repository.readNetworkDiagnostics();
+    const agent = await requireAgent(stores, USER_AGENT_ID);
+    const diagnostics = await stores.network.readNetworkDiagnostics();
     expect(agent.lastSeenSequence).toBe(0);
     expect(diagnostics.events.some(({ kind }) => kind === 'shared_message'))
       .toBe(false);
@@ -347,25 +387,25 @@ describe('representative-agent heartbeat service', () => {
     await expect(workspace.runNow()).rejects.toThrow(
       'needs to be retried before starting another check',
     );
-    expect((await repository.readNetworkDiagnostics()).events.filter(
+    expect((await stores.network.readNetworkDiagnostics()).events.filter(
       ({ kind }) => kind === 'check_requested',
     )).toHaveLength(checkCount);
     await expect(workspace.retryCurrentWake()).resolves.toBeDefined();
-    expect((await repository.readNetworkDiagnostics()).events.filter(
+    expect((await stores.network.readNetworkDiagnostics()).events.filter(
       ({ kind }) => kind === 'check_requested',
     )).toHaveLength(checkCount);
   });
 
   it('rejects a guidance wake that does not revise the durable working note', async () => {
-    const interest = await repository.saveInterest(
+    const interest = await stores.workspace.saveInterest(
       'Find early signals about durable personal agents.',
     );
-    const initialWake = await repository.beginAgentWake(
+    const initialWake = await stores.representative.beginAgentWake(
       USER_AGENT_ID,
       'wake_before_direct_guidance',
     );
     expect(initialWake).toBeDefined();
-    await repository.appendEvent({
+    await stores.communication.appendCommunicationEvent({
       wakeNumber: initialWake!.wakeNumber,
       kind: 'shared_message',
       actorAgentId: USER_AGENT_ID,
@@ -374,13 +414,13 @@ describe('representative-agent heartbeat service', () => {
       content: 'Looking for early signals about durable personal agents.',
       metadata: { sourceEventIds: [interest.sequence], messageRole: 'request' },
     });
-    await repository.completeAgentWake(
+    await stores.representative.completeAgentWake(
       USER_AGENT_ID,
       initialWake!.claimToken,
       initialWake!.horizonSequence,
     );
 
-    const runner = new IgnoreGuidanceHeartbeatRunner(repository);
+    const runner = new IgnoreGuidanceHeartbeatRunner(stores);
     const { heartbeat, workspace } = await startServices(runner);
 
     const withGuidance = await workspace.submitGuidance(
@@ -390,32 +430,32 @@ describe('representative-agent heartbeat service', () => {
     expect(guidance).toBeDefined();
     await vi.waitFor(async () => {
       expect(runner.guidanceRuns).toBe(1);
-      expect((await repository.requireUserAgent()).status).toBe('error');
+      expect((await requireAgent(stores, USER_AGENT_ID)).status).toBe('error');
       expect((await heartbeat.snapshot()).running).toBe(false);
     }, { interval: 10, timeout: 5_000 });
 
-    const agent = await repository.requireUserAgent();
+    const agent = await requireAgent(stores, USER_AGENT_ID);
     expect(agent.status).toBe('error');
     expect(agent.lastSeenSequence).toBeLessThan(guidance!.sequence);
-    expect(await repository.hasAgentUpdatedWorkingNoteThrough(
+    expect(await stores.representative.hasAgentUpdatedWorkingNoteThrough(
       USER_AGENT_ID,
       guidance!.sequence,
     )).toBe(false);
   });
 
   it('supplies Lucid working history without requiring an existing Heddle checkpoint', async () => {
-    const source = await registerSynthetic(repository, 'context-source');
-    const interest = await repository.saveInterest(
+    const source = await registerSynthetic(stores, 'context-source');
+    const interest = await stores.workspace.saveInterest(
       'Find concrete examples of preserving unfinished work.',
     );
-    const sourceMessage = await repository.appendEvent({
+    const sourceMessage = await stores.communication.appendCommunicationEvent({
       kind: 'direct_message',
       actorAgentId: source.agent.id,
       targetAgentId: USER_AGENT_ID,
       title: 'First network example',
       content: 'A team retained abandoned drafts for later comparison.',
     });
-    const finding = await repository.appendEvent({
+    const finding = await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
       actorAgentId: USER_AGENT_ID,
       targetParticipantId: LOCAL_USER_ID,
@@ -423,12 +463,12 @@ describe('representative-agent heartbeat service', () => {
       content: 'Abandoned drafts may preserve decision context.',
       metadata: { sourceEventIds: [sourceMessage.sequence] },
     });
-    const feedback = await repository.saveFeedback(
+    const feedback = await stores.workspace.saveFeedback(
       LOCAL_USER_ID,
       finding.sequence,
       'Only continue this direction with a named workflow.',
     );
-    const note = await repository.appendEvent({
+    const note = await stores.communication.appendCommunicationEvent({
       kind: 'representative_note_updated',
       actorAgentId: USER_AGENT_ID,
       targetAgentId: USER_AGENT_ID,
@@ -437,7 +477,7 @@ describe('representative-agent heartbeat service', () => {
       content: 'Require a named workflow before reporting this direction again.',
       metadata: { throughSequence: feedback.sequence, derived: true },
     });
-    await repository.appendEvent({
+    await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
       actorAgentId: USER_AGENT_ID,
       replyToSequence: interest.sequence,
@@ -445,7 +485,7 @@ describe('representative-agent heartbeat service', () => {
       content: 'Who has a named workflow involving unfinished work?',
       metadata: { sourceEventIds: [interest.sequence] },
     });
-    await repository.appendEvent({
+    await stores.communication.appendCommunicationEvent({
       kind: 'direct_message',
       actorAgentId: source.agent.id,
       targetAgentId: USER_AGENT_ID,
@@ -517,14 +557,14 @@ describe('representative-agent heartbeat service', () => {
   it('cancels one participant without aborting a running peer', async () => {
     config.heartbeatMaxConcurrency = 2;
     const sources = await Promise.all([
-      registerSynthetic(repository, 'cancel-target'),
-      registerSynthetic(repository, 'running-peer'),
+      registerSynthetic(stores, 'cancel-target'),
+      registerSynthetic(stores, 'running-peer'),
     ]);
     const [target, peer] = sources;
     const runner = new CoordinatedHeartbeatRunner();
     const heartbeat = await createHeartbeat(runner, false);
     const network = new ParticipantNetworkService(
-      repository,
+      stores.network,
       heartbeat,
       TEST_RUNTIME,
     );
@@ -542,9 +582,9 @@ describe('representative-agent heartbeat service', () => {
     await vi.waitFor(async () => {
       expect(runner.signalFor(target!.agent.id)).toBeDefined();
       expect(runner.signalFor(peer!.agent.id)).toBeDefined();
-      expect((await repository.requireAgent(target!.agent.id)).status)
+      expect((await requireAgent(stores, target!.agent.id)).status)
         .toBe('running');
-      expect((await repository.requireAgent(peer!.agent.id)).status)
+      expect((await requireAgent(stores, peer!.agent.id)).status)
         .toBe('running');
     }, { interval: 10, timeout: 5_000 });
 
@@ -560,7 +600,7 @@ describe('representative-agent heartbeat service', () => {
 
     runner.release(peer!.agent.id);
     await vi.waitFor(async () => {
-      expect((await repository.requireAgent(peer!.agent.id)).status).toBe('idle');
+      expect((await requireAgent(stores, peer!.agent.id)).status).toBe('idle');
     }, { interval: 10, timeout: 5_000 });
   });
 
@@ -583,12 +623,12 @@ describe('representative-agent heartbeat service', () => {
 
   it('recovers a Heddle task and its claimed mailbox wake after restart', async () => {
     await createHeartbeat(new CountingHeartbeatRunner(), false);
-    const principalInput = await repository.saveParticipantInput(
+    const principalInput = await stores.network.saveParticipantInput(
       LOCAL_USER_ID,
       'Resume this exact input after a host restart.',
       'test:restart:principal-input',
     );
-    const claimed = await repository.beginAgentWake(
+    const claimed = await stores.representative.beginAgentWake(
       USER_AGENT_ID,
       'wake_before_host_restart',
     );
@@ -611,12 +651,12 @@ describe('representative-agent heartbeat service', () => {
       },
     });
 
-    await repository.initialize();
-    const runner = new FinishWithoutActionHeartbeatRunner(repository);
+    await stores.representative.initialize();
+    const runner = new FinishWithoutActionHeartbeatRunner(stores);
     const recoveredHeartbeat = await createHeartbeat(runner, true);
     await vi.waitFor(async () => {
       expect(runner.wakes).toHaveLength(1);
-      expect((await repository.requireUserAgent()).lastSeenSequence)
+      expect((await requireAgent(stores, USER_AGENT_ID)).lastSeenSequence)
         .toBe(principalInput.sequence);
     }, { interval: 10, timeout: 5_000 });
 
@@ -640,12 +680,12 @@ describe('representative-agent heartbeat service', () => {
     return {
       heartbeat,
       workspace: new DiscoveryWorkspaceService(
-        repository,
+        stores.workspace,
         heartbeat,
         TEST_RUNTIME,
       ),
       network: new ParticipantNetworkService(
-        repository,
+        stores.network,
         heartbeat,
         TEST_RUNTIME,
       ),
@@ -655,6 +695,7 @@ describe('representative-agent heartbeat service', () => {
   async function createHeartbeat(
     runner: RepresentativeAgentHeartbeatRunner,
     start: boolean,
+    workingContext: RepresentativeWorkingContextReader = stores.workspace,
   ): Promise<RepresentativeAgentHeartbeatService> {
     const tasks = new FileHeartbeatTaskService({
       stateRoot: config.heddleStateRoot,
@@ -670,7 +711,8 @@ describe('representative-agent heartbeat service', () => {
       maxConcurrentTasks: config.heartbeatMaxConcurrency,
     });
     const heartbeat = new RepresentativeAgentHeartbeatService(
-      repository,
+      stores.representative,
+      workingContext,
       runner,
       config,
       createLucidLogger('silent'),
@@ -689,14 +731,14 @@ describe('representative-agent heartbeat service', () => {
 class RoutingHeartbeatRunner implements RepresentativeAgentHeartbeatRunner {
   readonly agentIds: string[] = [];
 
-  constructor(private readonly repository: PostgresLucidRepository) {}
+  constructor(private readonly stores: PostgresTestStores['stores']) {}
 
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
   ): Promise<AgentHeartbeatResult> {
     this.agentIds.push(input.wake.agent.id);
     const tools = new Map(
-      (await createWakeTools(this.repository, input))
+      (await createWakeTools(this.stores, input))
         .map((tool) => [tool.name, tool]),
     );
     const peerMessages = input.wake.visibleEvents.filter((event) => (
@@ -820,7 +862,7 @@ implements RepresentativeAgentHeartbeatRunner {
     horizonSequence: number;
   }> = [];
 
-  constructor(private readonly repository: PostgresLucidRepository) {}
+  constructor(private readonly stores: PostgresTestStores['stores']) {}
 
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
@@ -831,7 +873,7 @@ implements RepresentativeAgentHeartbeatRunner {
       horizonSequence: input.wake.horizonSequence,
     });
     const tools = new Map(
-      (await createWakeTools(this.repository, input))
+      (await createWakeTools(this.stores, input))
         .map((tool) => [tool.name, tool]),
     );
     await requireSuccessfulToolResult(tools.get('finish_without_action')!.execute({
@@ -845,7 +887,7 @@ class IgnoreGuidanceHeartbeatRunner
 implements RepresentativeAgentHeartbeatRunner {
   guidanceRuns = 0;
 
-  constructor(private readonly repository: PostgresLucidRepository) {}
+  constructor(private readonly stores: PostgresTestStores['stores']) {}
 
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
@@ -864,7 +906,7 @@ implements RepresentativeAgentHeartbeatRunner {
       ({ kind }) => kind === 'interest_saved',
     );
     const tools = new Map(
-      (await createWakeTools(this.repository, input))
+      (await createWakeTools(this.stores, input))
         .map((tool) => [tool.name, tool]),
     );
     await requireSuccessfulToolResult(tools.get('post_shared_message')!.execute({
@@ -877,10 +919,10 @@ implements RepresentativeAgentHeartbeatRunner {
 }
 
 async function registerSynthetic(
-  repository: PostgresLucidRepository,
+  stores: PostgresTestStores['stores'],
   key: string,
 ) {
-  return await repository.registerParticipant({
+  return await stores.network.registerParticipant({
     registrationKey: `sim:test:${key}`,
     kind: 'synthetic',
     displayName: `Synthetic ${key}`,
@@ -889,7 +931,7 @@ async function registerSynthetic(
 }
 
 async function createWakeTools(
-  repository: PostgresLucidRepository,
+  stores: PostgresTestStores['stores'],
   input: RunRepresentativeAgentHeartbeatInput,
 ) {
   const requiredRequestSourceIds = input.wake.visibleEvents
@@ -901,7 +943,7 @@ async function createWakeTools(
     .filter(({ kind }) => kind === 'guidance_saved')
     .map(({ sequence }) => sequence);
   return await new AgentCommunicationToolService(
-    repository,
+    stores.communication,
     input.wake.agent,
     input.wake.participant,
     input.wake.wakeId,
@@ -910,6 +952,18 @@ async function createWakeTools(
     requiredRequestSourceIds,
     requiredWorkingNoteSourceIds,
   ).definitions();
+}
+
+async function requireAgent(
+  stores: PostgresTestStores['stores'],
+  agentId: string,
+) {
+  const agent = (await stores.representative.listAgents())
+    .find(({ id }) => id === agentId);
+  if (!agent) {
+    throw new Error(`Representative agent not found: ${agentId}`);
+  }
+  return agent;
 }
 
 async function requireSuccessfulToolResult(

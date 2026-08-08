@@ -11,8 +11,8 @@ import {
 } from '../agent-prompts.js';
 import type { AgentWakeContext } from '../discovery-types.js';
 import type {
-  AgentCommunicationRepository,
-} from './communication/repository.js';
+  AgentCommunicationStore,
+} from './communication/store.js';
 
 export type RunRepresentativeAgentHeartbeatInput = {
   wake: AgentWakeContext;
@@ -35,7 +35,7 @@ export interface RepresentativeAgentHeartbeatRunner {
 export class HeddleRepresentativeAgentRunner
 implements RepresentativeAgentHeartbeatRunner {
   constructor(
-    private readonly repository: AgentCommunicationRepository,
+    private readonly store: AgentCommunicationStore,
     private readonly config: LucidConfig,
   ) {}
 
@@ -51,7 +51,7 @@ implements RepresentativeAgentHeartbeatRunner {
       .filter(({ kind }) => kind === 'guidance_saved')
       .map(({ sequence }) => sequence);
     const tools = await new AgentCommunicationToolService(
-      this.repository,
+      this.store,
       input.wake.agent,
       input.wake.participant,
       input.wake.wakeId,
