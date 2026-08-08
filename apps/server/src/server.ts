@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import heddlePackage from '@roackb2/heddle/package.json' with { type: 'json' };
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
+import { createLucidAuthenticator } from './auth/authenticator.js';
 import { resolveLucidConfig } from './config.js';
 import { createDiscoveryPersistence } from './database/discovery-persistence.js';
 import { DiscoveryWorkspaceService } from './lucid/discovery-workspace-service.js';
@@ -9,21 +10,35 @@ import {
 } from './lucid/heddle-representative-agent-runner.js';
 import { ParticipantNetworkService } from './lucid/participant-network-service.js';
 import {
+  REPRESENTATIVE_AGENT_TASK_ID_PREFIX,
   RepresentativeAgentHeartbeatService,
 } from './lucid/representative-agent-heartbeat-service.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
+import {
+  createRepresentativeAgentExecutionHost,
+} from './runtime/representative-agent-execution-composition.js';
 
 const config = resolveLucidConfig();
 const logger = createLucidLogger(config.logLevel);
+const authenticator = createLucidAuthenticator(config.authentication);
 const persistence = await createDiscoveryPersistence(config);
-const { repository } = persistence;
+const { repository, taskAuthority } = persistence;
 const agentRunner = new HeddleRepresentativeAgentRunner(repository, config);
+const executionHost = createRepresentativeAgentExecutionHost({
+  config,
+  repository,
+  taskAuthority,
+  taskIdPrefix: REPRESENTATIVE_AGENT_TASK_ID_PREFIX,
+  logger,
+});
 const heartbeats = new RepresentativeAgentHeartbeatService(
   repository,
   agentRunner,
   config,
   logger,
+  taskAuthority,
+  executionHost,
 );
 await heartbeats.initialize();
 heartbeats.start();
@@ -46,10 +61,17 @@ const participantNetwork = new ParticipantNetworkService(
 
 const server = createHTTPServer({
   router: createAppRouter(discoveryWorkspace, participantNetwork),
-  createContext: ({ req }) => ({
-    requestId: randomUUID(),
-    remoteAddress: req.socket.remoteAddress,
-  }),
+  createContext: async ({ req }) => {
+    const remoteAddress = req.socket.remoteAddress;
+    return {
+      requestId: randomUUID(),
+      remoteAddress,
+      principal: await authenticator.authenticate({
+        authorization: req.headers.authorization,
+        remoteAddress,
+      }),
+    };
+  },
   onError: ({ ctx, error, path }) => {
     logger.error({
       error,
@@ -60,7 +82,10 @@ const server = createHTTPServer({
   middleware: (request, response, next) => {
     response.setHeader('Access-Control-Allow-Origin', config.webOrigin);
     response.setHeader('Vary', 'Origin');
-    response.setHeader('Access-Control-Allow-Headers', 'content-type');
+    response.setHeader(
+      'Access-Control-Allow-Headers',
+      'authorization,content-type',
+    );
     response.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
 
     if (request.method === 'OPTIONS') {
@@ -78,10 +103,8 @@ let shuttingDown = false;
 server.listen(config.port, config.host, () => {
   logger.info({
     address: `http://${config.host}:${config.port}`,
-    databaseDriver: config.database.driver,
-    databasePath: config.database.driver === 'sqlite'
-      ? config.database.path
-      : undefined,
+    databaseDriver: 'postgres',
+    heartbeatHost: config.heartbeatHost,
     model: config.model,
   }, 'lucid.server.ready');
 });

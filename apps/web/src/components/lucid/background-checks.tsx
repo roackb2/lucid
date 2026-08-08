@@ -27,8 +27,11 @@ export function BackgroundChecks({
   const representativeTask = checks.tasks.find(({ status: taskStatus }) => (
     taskStatus === 'failed'
   )) ?? checks.tasks[0];
+  const globallyPaused = !checks.dispatchEnabled;
   const status = hasFailedWake
     ? 'Current work needs attention'
+    : globallyPaused
+    ? 'Hosted demo paused by operator'
     : checks.running
     ? 'Processing new messages'
     : checks.enabled
@@ -64,6 +67,8 @@ export function BackgroundChecks({
           {hasFailedWake
             ? representativeTask?.error
               ?? 'The last representative wake did not complete.'
+            : globallyPaused
+            ? `New messages and run intent stay saved. Only an operator can resume dispatch; your representative preference remains ${checks.enabled ? 'enabled' : 'paused'}.`
             : checks.enabled
             ? `Your representative wakes every ${formatInterval(checks.intervalMs)}. New mailbox messages can wake it sooner.`
             : 'Your interest and findings stay saved. Resume when you want your representative to process new messages.'}
@@ -75,7 +80,10 @@ export function BackgroundChecks({
             <CalendarClock size={12} />
             {hasFailedWake ? 'Next retry' : 'Next scheduled'}
           </dt>
-          <dd>{formatTimestamp(checks.nextRunAt, checks.enabled)}</dd>
+          <dd>{formatTimestamp(
+            checks.nextRunAt,
+            checks.enabled && checks.dispatchEnabled,
+          )}</dd>
         </div>
         <div>
           <dt><History size={12} /> Last agent wake</dt>
@@ -83,13 +91,17 @@ export function BackgroundChecks({
         </div>
       </dl>
       <Button
-        disabled={isUpdating}
+        disabled={isUpdating || globallyPaused}
         onClick={() => onSetEnabled(!checks.enabled)}
         size="small"
         variant="secondary"
       >
-        {checks.enabled ? <Pause size={13} /> : <Play size={13} />}
-        {checks.enabled ? 'Pause' : 'Resume'}
+        {globallyPaused || checks.enabled
+          ? <Pause size={13} />
+          : <Play size={13} />}
+        {globallyPaused
+          ? 'Operator paused'
+          : checks.enabled ? 'Pause' : 'Resume'}
       </Button>
     </section>
   );

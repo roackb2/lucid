@@ -15,17 +15,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/server.js",
     "db:generate": "drizzle-kit generate",
-    "db:generate:postgres": "drizzle-kit generate --config drizzle.postgres.config.ts",
     "db:migrate": "tsx src/migrate.ts",
-    "db:migrate:postgres": "tsx src/migrate-postgres.ts",
-    "test": "vitest run",
-    "test:postgres": "LUCID_REQUIRE_POSTGRES_TESTS=1 vitest run src/database/postgres-discovery-repository.integration.test.ts"
+    "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
-    "@roackb2/heddle": "5.8.0",
+    "@roackb2/heddle": "5.9.0",
     "@trpc/server": "11.16.0",
     "async-mutex": "0.5.0",
-    "better-sqlite3": "^12.4.1",
     "dayjs": "^1.11.20",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.2",
@@ -36,7 +32,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/lodash": "^4.17.24",
     "@types/node": "^22.13.10",
     "drizzle-kit": "^0.31.10",

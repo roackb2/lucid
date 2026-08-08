@@ -92,7 +92,11 @@ export default function App() {
             </div>
             <div>
               <dt>Mode</dt>
-              <dd>{backgroundChecks.enabled ? 'Listening' : 'Paused'}</dd>
+              <dd>{
+                !backgroundChecks.dispatchEnabled
+                  ? 'Demo paused'
+                  : backgroundChecks.enabled ? 'Listening' : 'Paused'
+              }</dd>
             </div>
           </dl>
         </section>
@@ -102,7 +106,9 @@ export default function App() {
             <InterestComposer
               interest={snapshot.interest}
               networkActivity={snapshot.networkActivity}
-              backgroundChecksEnabled={backgroundChecks.enabled}
+              backgroundChecksEnabled={
+                backgroundChecks.enabled && backgroundChecks.dispatchEnabled
+              }
               isChecking={backgroundChecks.running}
               isSaving={discovery.saveInterest.isPending}
               isRunningNow={discovery.runNow.isPending}
@@ -133,7 +139,9 @@ export default function App() {
             />
 
             <FindingsFeed
-              backgroundChecksEnabled={backgroundChecks.enabled}
+              backgroundChecksEnabled={
+                backgroundChecks.enabled && backgroundChecks.dispatchEnabled
+              }
               currentFindings={currentFindings}
               earlierFindings={earlierFindings}
               isChecking={backgroundChecks.running}

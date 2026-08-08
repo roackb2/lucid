@@ -5,7 +5,6 @@
  * and truncates only Lucid-owned tables between cases; it never creates or
  * destroys the database itself.
  */
-import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   LOCAL_USER_ID,
@@ -14,36 +13,16 @@ import {
 import { defineDiscoveryRepositoryContract } from '../lucid/discovery-repository.test-support.js';
 import { LucidPostgresDatabase } from './postgres-database.js';
 import { PostgresDiscoveryRepository } from './postgres-discovery-repository.js';
-
-const TEST_DATABASE_URL = process.env.LUCID_POSTGRES_TEST_URL?.trim();
-const MIGRATIONS_ROOT = fileURLToPath(
-  new URL('../../drizzle-postgres', import.meta.url),
-);
-
-if (!TEST_DATABASE_URL && process.env.LUCID_REQUIRE_POSTGRES_TESTS === '1') {
-  throw new Error(
-    'LUCID_POSTGRES_TEST_URL is required by the PostgreSQL integration test command.',
-  );
-}
+import { createPostgresTestRepository } from './postgres-test-harness.js';
 
 async function createRepository(options?: { reset?: boolean }) {
-  if (!TEST_DATABASE_URL) {
-    throw new Error('PostgreSQL integration tests are not configured.');
-  }
-  const database = new LucidPostgresDatabase({
-    url: TEST_DATABASE_URL,
+  return await createPostgresTestRepository({
     applicationName: 'lucid-postgres-integration-test',
+    reset: options?.reset,
   });
-  await database.migrate(MIGRATIONS_ROOT);
-  const repository = new PostgresDiscoveryRepository(database);
-  await repository.initialize();
-  if (options?.reset ?? true) {
-    await repository.reset({ backgroundChecksEnabled: true });
-  }
-  return { database, repository };
 }
 
-if (TEST_DATABASE_URL) {
+describe('PostgreSQL persistence integration', () => {
   defineDiscoveryRepositoryContract({
     name: 'PostgreSQL discovery repository contract',
     create: async () => {
@@ -188,8 +167,4 @@ if (TEST_DATABASE_URL) {
       }
     });
   });
-} else {
-  describe.skip('PostgreSQL discovery repository integration', () => {
-    it('requires LUCID_POSTGRES_TEST_URL', () => undefined);
-  });
-}
+});

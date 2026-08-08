@@ -275,7 +275,10 @@ export type RepresentativeAgentTaskView = {
 };
 
 export type BackgroundChecksView = {
+  /** Participant or network task preference, independent of the operator gate. */
   enabled: boolean;
+  /** Durable service-wide admission gate controlled only by an operator. */
+  dispatchEnabled: boolean;
   running: boolean;
   intervalMs: number;
   nextRunAt?: string;

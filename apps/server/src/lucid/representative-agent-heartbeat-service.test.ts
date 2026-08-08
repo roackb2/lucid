@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import dayjs from 'dayjs';
 import {
   AgentLoopCheckpointService,
@@ -14,7 +13,9 @@ import {
   type RunAgentHeartbeatOptions,
 } from '@roackb2/heddle/advanced';
 import {
+  afterAll,
   afterEach,
+  beforeAll,
   beforeEach,
   describe,
   expect,
@@ -22,9 +23,13 @@ import {
   vi,
 } from 'vitest';
 import type { LucidConfig } from '../config.js';
-import { SqliteDiscoveryRepository } from '../database/sqlite-discovery-repository.js';
-import { LucidSqliteDatabase } from '../database/sqlite-database.js';
+import type { LucidPostgresDatabase } from '../database/postgres-database.js';
+import type { PostgresDiscoveryRepository } from '../database/postgres-discovery-repository.js';
+import { createPostgresTestRepository } from '../database/postgres-test-harness.js';
 import { createLucidLogger } from '../logger.js';
+import {
+  LongLivedRepresentativeAgentExecutionHost,
+} from '../runtime/representative-agent-execution-host.js';
 import { AgentCommunicationToolService } from './agent-communication-tools.js';
 import {
   LOCAL_USER_ID,
@@ -40,24 +45,25 @@ import {
   RepresentativeAgentHeartbeatService,
 } from './representative-agent-heartbeat-service.js';
 
-const MIGRATIONS_ROOT = fileURLToPath(
-  new URL('../../drizzle', import.meta.url),
-);
 const TEST_RUNTIME = { model: 'gpt-5.4-mini', heddleVersion: 'test' };
 
 describe('representative-agent heartbeat service', () => {
-  let database: LucidSqliteDatabase;
-  let repository: SqliteDiscoveryRepository;
+  let database: LucidPostgresDatabase;
+  let repository: PostgresDiscoveryRepository;
   let config: LucidConfig;
   let stateRoot: string;
   let heartbeats: RepresentativeAgentHeartbeatService[];
 
+  beforeAll(async () => {
+    ({ database, repository } = await createPostgresTestRepository({
+      applicationName: 'lucid-heartbeat-service-test',
+      reset: false,
+    }));
+  });
+
   beforeEach(async () => {
+    await repository.reset({ backgroundChecksEnabled: true });
     stateRoot = mkdtempSync(join(tmpdir(), 'lucid-heartbeat-test-'));
-    database = new LucidSqliteDatabase(':memory:');
-    database.migrate(MIGRATIONS_ROOT);
-    repository = new SqliteDiscoveryRepository(database);
-    await repository.initialize();
     config = createTestConfig(stateRoot);
     heartbeats = [];
     vi.spyOn(HeartbeatRunnerAgent, 'run').mockImplementation(
@@ -68,9 +74,10 @@ describe('representative-agent heartbeat service', () => {
   afterEach(async () => {
     await Promise.all(heartbeats.map((heartbeat) => heartbeat.stop()));
     vi.restoreAllMocks();
-    database.close();
     rmSync(stateRoot, { force: true, recursive: true });
   });
+
+  afterAll(async () => database.close());
 
   it('routes dynamic participant messages until the local participant receives a finding', async () => {
     const sources = await Promise.all([
@@ -207,6 +214,82 @@ describe('representative-agent heartbeat service', () => {
     await vi.waitFor(async () => {
       expect(secondRunner.agentIds).toContain(USER_AGENT_ID);
       expect((await repository.requireUserAgent()).lastSeenSequence)
+        .toBeGreaterThan(0);
+    }, { interval: 10, timeout: 5_000 });
+  });
+
+  it('preserves participant task preferences across a global pause and restart', async () => {
+    const peer = await registerSynthetic(repository, 'global-pause-peer');
+    const first = await startServices(new CountingHeartbeatRunner());
+
+    await first.workspace.setBackgroundChecksEnabled(false);
+    await first.heartbeat.setGlobalBackgroundChecksEnabled(false);
+    await first.heartbeat.reconcileAgentTasks();
+
+    let diagnostics = await first.network.diagnostics();
+    expect(diagnostics.backgroundChecks.enabled).toBe(true);
+    expect(diagnostics.backgroundChecks.dispatchEnabled).toBe(false);
+    expect(diagnostics.backgroundChecks.tasks.find(
+      ({ agentId }) => agentId === USER_AGENT_ID,
+    )?.enabled).toBe(false);
+    expect(diagnostics.backgroundChecks.tasks.find(
+      ({ agentId }) => agentId === peer.agent.id,
+    )?.enabled).toBe(true);
+
+    await first.heartbeat.stop();
+    const second = await createHeartbeat(new CountingHeartbeatRunner(), true);
+    await second.reconcileAgentTasks();
+    diagnostics = await new ParticipantNetworkService(
+      repository,
+      second,
+      TEST_RUNTIME,
+    ).diagnostics();
+    expect(diagnostics.backgroundChecks.enabled).toBe(true);
+    expect(diagnostics.backgroundChecks.dispatchEnabled).toBe(false);
+    expect(diagnostics.backgroundChecks.tasks.find(
+      ({ agentId }) => agentId === USER_AGENT_ID,
+    )?.enabled).toBe(false);
+    expect(diagnostics.backgroundChecks.tasks.find(
+      ({ agentId }) => agentId === peer.agent.id,
+    )?.enabled).toBe(true);
+  });
+
+  it('cancels owned work on global pause and dispatches persisted intent on resume', async () => {
+    const source = await registerSynthetic(repository, 'global-gate-source');
+    const runner = new PauseThenCompleteHeartbeatRunner();
+    const { heartbeat, network } = await startServices(runner);
+
+    await network.submitParticipantInput({
+      participantId: source.participant.id,
+      content: 'Begin one wake before the operator pause.',
+      idempotencyKey: 'global-gate:before-pause',
+    });
+    await vi.waitFor(() => expect(runner.firstSignal).toBeDefined());
+
+    await heartbeat.setGlobalBackgroundChecksEnabled(false);
+    expect(runner.firstSignal?.aborted).toBe(true);
+    expect((await heartbeat.snapshot()).tasks.find(
+      ({ agentId }) => agentId === source.agent.id,
+    )).toMatchObject({ enabled: true });
+
+    await network.submitParticipantInput({
+      participantId: source.participant.id,
+      content: 'Persist this while global dispatch is paused.',
+      idempotencyKey: 'global-gate:while-paused',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(runner.agentIds).toHaveLength(1);
+    const task = await new FileHeartbeatTaskService({
+      stateRoot: config.heddleStateRoot,
+    }).loadTask(`lucid-representative-${source.agent.id}`);
+    expect(task?.state?.runRequest?.generation).toBeGreaterThan(
+      task?.state?.runRequest?.claimedGeneration ?? 0,
+    );
+
+    await heartbeat.setGlobalBackgroundChecksEnabled(true);
+    await vi.waitFor(async () => {
+      expect(runner.agentIds).toHaveLength(2);
+      expect((await repository.requireAgent(source.agent.id)).lastSeenSequence)
         .toBeGreaterThan(0);
     }, { interval: 10, timeout: 5_000 });
   });
@@ -439,7 +522,12 @@ describe('representative-agent heartbeat service', () => {
     ]);
     const [target, peer] = sources;
     const runner = new CoordinatedHeartbeatRunner();
-    const { network } = await startServices(runner);
+    const heartbeat = await createHeartbeat(runner, false);
+    const network = new ParticipantNetworkService(
+      repository,
+      heartbeat,
+      TEST_RUNTIME,
+    );
 
     await Promise.all(sources.map(({ participant }, index) => (
       network.submitParticipantInput({
@@ -448,6 +536,9 @@ describe('representative-agent heartbeat service', () => {
         idempotencyKey: `coordinated:${index}`,
       })
     )));
+    // Persist both due requests before the scheduler's first scan so this test
+    // deterministically exercises two concurrently admitted tasks.
+    heartbeat.start();
     await vi.waitFor(async () => {
       expect(runner.signalFor(target!.agent.id)).toBeDefined();
       expect(runner.signalFor(peer!.agent.id)).toBeDefined();
@@ -511,6 +602,11 @@ describe('representative-agent heartbeat service', () => {
         ...task.state,
         status: 'running',
         progress: 'Simulated interrupted host.',
+        execution: {
+          executionId: claimed!.claimToken,
+          ownerId: 'simulated-stopped-host',
+          claimedAt: dayjs().toISOString(),
+        },
         updatedAt: dayjs().toISOString(),
       },
     });
@@ -560,11 +656,26 @@ describe('representative-agent heartbeat service', () => {
     runner: RepresentativeAgentHeartbeatRunner,
     start: boolean,
   ): Promise<RepresentativeAgentHeartbeatService> {
+    const tasks = new FileHeartbeatTaskService({
+      stateRoot: config.heddleStateRoot,
+    });
+    const executionHost = new LongLivedRepresentativeAgentExecutionHost({
+      authority: tasks,
+      workspaceRoot: config.repoRoot,
+      stateRoot: config.heddleStateRoot,
+      model: config.model,
+      maxSteps: config.maxSteps,
+      preferApiKey: config.preferApiKey,
+      pollIntervalMs: config.heartbeatPollMs,
+      maxConcurrentTasks: config.heartbeatMaxConcurrency,
+    });
     const heartbeat = new RepresentativeAgentHeartbeatService(
       repository,
       runner,
       config,
       createLucidLogger('silent'),
+      tasks,
+      executionHost,
     );
     await heartbeat.initialize();
     if (start) {
@@ -578,7 +689,7 @@ describe('representative-agent heartbeat service', () => {
 class RoutingHeartbeatRunner implements RepresentativeAgentHeartbeatRunner {
   readonly agentIds: string[] = [];
 
-  constructor(private readonly repository: SqliteDiscoveryRepository) {}
+  constructor(private readonly repository: PostgresDiscoveryRepository) {}
 
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
@@ -638,6 +749,23 @@ class CountingHeartbeatRunner implements RepresentativeAgentHeartbeatRunner {
   }
 }
 
+class PauseThenCompleteHeartbeatRunner
+implements RepresentativeAgentHeartbeatRunner {
+  readonly agentIds: string[] = [];
+  firstSignal?: AbortSignal;
+
+  async run(
+    input: RunRepresentativeAgentHeartbeatInput,
+  ): Promise<AgentHeartbeatResult> {
+    this.agentIds.push(input.wake.agent.id);
+    if (this.agentIds.length === 1) {
+      this.firstSignal = input.execution.signal;
+      await aborted(input.execution.signal);
+    }
+    return await runTestAgent(input, 'Observed the global dispatch gate.');
+  }
+}
+
 class ContextCapturingHeartbeatRunner
 implements RepresentativeAgentHeartbeatRunner {
   readonly wakes: RunRepresentativeAgentHeartbeatInput['wake'][] = [];
@@ -692,7 +820,7 @@ implements RepresentativeAgentHeartbeatRunner {
     horizonSequence: number;
   }> = [];
 
-  constructor(private readonly repository: SqliteDiscoveryRepository) {}
+  constructor(private readonly repository: PostgresDiscoveryRepository) {}
 
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
@@ -717,7 +845,7 @@ class IgnoreGuidanceHeartbeatRunner
 implements RepresentativeAgentHeartbeatRunner {
   guidanceRuns = 0;
 
-  constructor(private readonly repository: SqliteDiscoveryRepository) {}
+  constructor(private readonly repository: PostgresDiscoveryRepository) {}
 
   async run(
     input: RunRepresentativeAgentHeartbeatInput,
@@ -749,7 +877,7 @@ implements RepresentativeAgentHeartbeatRunner {
 }
 
 async function registerSynthetic(
-  repository: SqliteDiscoveryRepository,
+  repository: PostgresDiscoveryRepository,
   key: string,
 ) {
   return await repository.registerParticipant({
@@ -761,7 +889,7 @@ async function registerSynthetic(
 }
 
 async function createWakeTools(
-  repository: SqliteDiscoveryRepository,
+  repository: PostgresDiscoveryRepository,
   input: RunRepresentativeAgentHeartbeatInput,
 ) {
   const requiredRequestSourceIds = input.wake.visibleEvents
@@ -836,6 +964,15 @@ function createHeartbeatResult(
   };
 }
 
+async function aborted(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
+}
+
 function readCheckpointState(
   checkpoint: AgentLoopState | AgentLoopCheckpoint | undefined,
 ): AgentLoopState | undefined {
@@ -850,15 +987,21 @@ function createTestConfig(stateRoot: string): LucidConfig {
     port: 0,
     logLevel: 'silent',
     webOrigin: 'http://127.0.0.1:3080',
+    authentication: { mode: 'development' },
     repoRoot: stateRoot,
     stateRoot,
-    database: { driver: 'sqlite', path: ':memory:' },
+    databaseUrl: 'postgresql://test.invalid/lucid',
     heddleStateRoot: join(stateRoot, 'heddle'),
     model: 'gpt-5.4-mini',
     maxSteps: 4,
     heartbeatIntervalMs: 60_000,
     heartbeatPollMs: 5,
     heartbeatMaxConcurrency: 1,
+    heartbeatHost: 'scheduler',
+    heartbeatNamespace: 'lucid:test:representatives',
+    heartbeatExecutionLeaseMs: 60_000,
+    heartbeatRecoveryIntervalMs: 10_000,
+    heartbeatInvocationTimeoutMs: 30_000,
     preferApiKey: false,
   };
 }

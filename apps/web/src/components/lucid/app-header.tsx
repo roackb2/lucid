@@ -8,6 +8,7 @@ type AppHeaderProps = {
 export function AppHeader({ snapshot }: AppHeaderProps) {
   const isRunning = snapshot.backgroundChecks.running;
   const isEnabled = snapshot.backgroundChecks.enabled;
+  const dispatchEnabled = snapshot.backgroundChecks.dispatchEnabled;
   const hasFailedWake = snapshot.representative.status === 'error'
     || snapshot.backgroundChecks.tasks.some(({ agentId, status }) => (
       agentId === snapshot.representative.id && status === 'failed'
@@ -39,6 +40,8 @@ export function AppHeader({ snapshot }: AppHeaderProps) {
         <span />
         {hasFailedWake
           ? 'Your agent needs attention'
+          : !dispatchEnabled
+          ? 'Hosted demo is paused'
           : isRunning
           ? 'Your agent is checking'
           : isEnabled

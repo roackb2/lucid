@@ -19,9 +19,6 @@ local/
 .heddle/
 apps/*/.heddle/
 apps/*/local/
-*.sqlite
-*.sqlite-shm
-*.sqlite-wal
 *.log
 *.tmp
 

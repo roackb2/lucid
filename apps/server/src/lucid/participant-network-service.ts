@@ -9,6 +9,7 @@
 import type { DiscoveryRepository } from './discovery-repository.js';
 import { LOCAL_USER_ID } from './local-participant.js';
 import type {
+  BackgroundChecksView,
   NetworkDiagnosticsSnapshot,
   RegisterParticipantInput,
 } from './discovery-types.js';
@@ -179,6 +180,19 @@ export class ParticipantNetworkService {
   async reset(): Promise<NetworkDiagnosticsSnapshot> {
     await this.heartbeats.resetWorkspace();
     return await this.diagnostics();
+  }
+
+  /** Returns the operator-safe execution projection without private events. */
+  async backgroundChecks(): Promise<BackgroundChecksView> {
+    return await this.heartbeats.snapshot();
+  }
+
+  /** Changes the durable service-wide dispatch gate, not participant preferences. */
+  async setGlobalBackgroundChecksEnabled(
+    enabled: boolean,
+  ): Promise<BackgroundChecksView> {
+    await this.heartbeats.setGlobalBackgroundChecksEnabled(enabled);
+    return await this.heartbeats.snapshot();
   }
 
   async diagnostics(): Promise<NetworkDiagnosticsSnapshot> {

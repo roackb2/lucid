@@ -61,9 +61,8 @@ export type ParticipantWithAgent = {
 /**
  * Storage-independent port for Lucid's delegated-discovery state.
  *
- * The contract is asynchronous even though the current SQLite adapter uses
- * synchronous I/O. Remote adapters such as PostgreSQL must not leak their
- * driver, query builder, or transaction types into the domain services.
+ * The contract is asynchronous so PostgreSQL driver, query-builder, and
+ * transaction types do not leak into domain services.
  */
 export interface DiscoveryRepository {
   /**
@@ -153,6 +152,14 @@ export interface DiscoveryRepository {
   ): Promise<void>;
   failAgentWake(agentId: string, claimToken: string): Promise<void>;
   interruptAgentWake(agentId: string, claimToken: string): Promise<void>;
+  /**
+   * Recovers only the product wake fenced by a confirmed interrupted Heddle
+   * execution. A different or still-current owner is never disturbed.
+   */
+  recoverInterruptedAgentWake(
+    agentId: string,
+    interruptedExecutionId: string,
+  ): Promise<boolean>;
   hasParticipantFindingUsingAnyOrigin(
     participantId: string,
     sourceEventIds: number[],

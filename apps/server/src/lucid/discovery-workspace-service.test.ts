@@ -1,42 +1,44 @@
-import { fileURLToPath } from 'node:url';
 import {
-  afterEach,
+  afterAll,
+  beforeAll,
   beforeEach,
   describe,
   expect,
   it,
   vi,
 } from 'vitest';
-import { SqliteDiscoveryRepository } from '../database/sqlite-discovery-repository.js';
-import { LucidSqliteDatabase } from '../database/sqlite-database.js';
+import type { LucidPostgresDatabase } from '../database/postgres-database.js';
+import type { PostgresDiscoveryRepository } from '../database/postgres-discovery-repository.js';
+import { createPostgresTestRepository } from '../database/postgres-test-harness.js';
 import { LOCAL_USER_ID, USER_AGENT_ID } from './local-participant.js';
 import { DiscoveryWorkspaceService } from './discovery-workspace-service.js';
 import type {
   RepresentativeAgentHeartbeatService,
 } from './representative-agent-heartbeat-service.js';
 
-const MIGRATIONS_ROOT = fileURLToPath(
-  new URL('../../drizzle', import.meta.url),
-);
-
 describe('discovery workspace service', () => {
-  let database: LucidSqliteDatabase;
-  let repository: SqliteDiscoveryRepository;
+  let database: LucidPostgresDatabase;
+  let repository: PostgresDiscoveryRepository;
 
-  beforeEach(async () => {
-    database = new LucidSqliteDatabase(':memory:');
-    database.migrate(MIGRATIONS_ROOT);
-    repository = new SqliteDiscoveryRepository(database);
-    await repository.initialize();
+  beforeAll(async () => {
+    ({ database, repository } = await createPostgresTestRepository({
+      applicationName: 'lucid-discovery-workspace-test',
+      reset: false,
+    }));
   });
 
-  afterEach(() => database.close());
+  beforeEach(async () => {
+    await repository.reset({ backgroundChecksEnabled: true });
+  });
+
+  afterAll(async () => database.close());
 
   it('uses the latest direct guidance in a manual check and triggers both wakes', async () => {
     const triggerAgent = vi.fn(async () => undefined);
     const heartbeats = {
       snapshotForAgent: async () => ({
         enabled: true,
+        dispatchEnabled: true,
         running: false,
         intervalMs: 60_000,
         tasks: [{

@@ -1,9 +1,14 @@
 /**
- * tRPC transport boundary for participant-scoped discovery and loopback-only
- * development ingress. Sequencing and compensation remain in domain services.
+ * tRPC transport boundary for participant-scoped discovery, a narrow operator
+ * surface, and loopback-only development ingress. Sequencing and compensation
+ * remain in domain services.
  */
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import {
+  isLoopbackAddress,
+} from './auth/authenticator.js';
+import { principalHasRole } from './auth/request-principal.js';
 import {
   DiscoveryInputError,
   DiscoveryWorkspaceService,
@@ -12,6 +17,7 @@ import {
   ParticipantNetworkInputError,
   ParticipantNetworkService,
 } from './lucid/participant-network-service.js';
+import { LOCAL_USER_ID } from './lucid/local-participant.js';
 import { trpc } from './trpc.js';
 
 const interestInputSchema = z.object({
@@ -62,7 +68,42 @@ const participantIdSchema = z.object({
   participantId: z.string().trim().min(1),
 });
 
-const loopbackProcedure = trpc.procedure.use(({ ctx, next }) => {
+const participantProcedure = trpc.procedure.use(({ ctx, next }) => {
+  if (!ctx.principal) {
+    throw new TRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'Lucid authentication is required.',
+    });
+  }
+  if (
+    !principalHasRole(ctx.principal, 'participant')
+    || ctx.principal.participantId !== LOCAL_USER_ID
+  ) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'This principal cannot access the discovery workspace.',
+    });
+  }
+  return next();
+});
+
+const operatorProcedure = trpc.procedure.use(({ ctx, next }) => {
+  if (!ctx.principal) {
+    throw new TRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'Lucid authentication is required.',
+    });
+  }
+  if (!principalHasRole(ctx.principal, 'operator')) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Lucid operator access is required.',
+    });
+  }
+  return next();
+});
+
+const developmentOperatorProcedure = operatorProcedure.use(({ ctx, next }) => {
   if (!isLoopbackAddress(ctx.remoteAddress)) {
     throw new TRPCError({
       code: 'FORBIDDEN',
@@ -84,24 +125,24 @@ export function createAppRouter(
       })),
     }),
     discovery: trpc.router({
-      snapshot: trpc.procedure.query(() => discoveryWorkspace.snapshot()),
-      saveInterest: trpc.procedure
+      snapshot: participantProcedure.query(() => discoveryWorkspace.snapshot()),
+      saveInterest: participantProcedure
         .input(interestInputSchema)
         .mutation(({ input }) => resolveDiscoveryError(
           () => discoveryWorkspace.saveInterest(input.content),
         )),
-      runNow: trpc.procedure.mutation(() => resolveDiscoveryError(
+      runNow: participantProcedure.mutation(() => resolveDiscoveryError(
         () => discoveryWorkspace.runNow(),
       )),
-      retryCurrentWake: trpc.procedure.mutation(() => resolveDiscoveryError(
+      retryCurrentWake: participantProcedure.mutation(() => resolveDiscoveryError(
         () => discoveryWorkspace.retryCurrentWake(),
       )),
-      setBackgroundChecksEnabled: trpc.procedure
+      setBackgroundChecksEnabled: participantProcedure
         .input(backgroundChecksInputSchema)
         .mutation(({ input }) => resolveDiscoveryError(
           () => discoveryWorkspace.setBackgroundChecksEnabled(input.enabled),
         )),
-      submitFeedback: trpc.procedure
+      submitFeedback: participantProcedure
         .input(feedbackInputSchema)
         .mutation(({ input }) => resolveDiscoveryError(
           () => discoveryWorkspace.submitFeedback(
@@ -109,24 +150,34 @@ export function createAppRouter(
             input.content,
           ),
         )),
-      submitGuidance: trpc.procedure
+      submitGuidance: participantProcedure
         .input(guidanceInputSchema)
         .mutation(({ input }) => resolveDiscoveryError(
           () => discoveryWorkspace.submitGuidance(input.content),
         )),
     }),
+    operator: trpc.router({
+      backgroundChecks: operatorProcedure.query(() => (
+        participantNetwork.backgroundChecks()
+      )),
+      setGlobalBackgroundChecksEnabled: operatorProcedure
+        .input(backgroundChecksInputSchema)
+        .mutation(({ input }) => (
+          participantNetwork.setGlobalBackgroundChecksEnabled(input.enabled)
+        )),
+    }),
     development: trpc.router({
-      registerParticipant: loopbackProcedure
+      registerParticipant: developmentOperatorProcedure
         .input(participantRegistrationSchema)
         .mutation(({ input }) => resolveParticipantNetworkError(
           () => participantNetwork.registerParticipant(input),
         )),
-      submitParticipantInput: loopbackProcedure
+      submitParticipantInput: developmentOperatorProcedure
         .input(participantInputSchema)
         .mutation(({ input }) => resolveParticipantNetworkError(
           () => participantNetwork.submitParticipantInput(input),
         )),
-      setParticipantEnabled: loopbackProcedure
+      setParticipantEnabled: developmentOperatorProcedure
         .input(participantEnabledInputSchema)
         .mutation(({ input }) => resolveParticipantNetworkError(
           () => participantNetwork.setParticipantEnabled(
@@ -134,15 +185,15 @@ export function createAppRouter(
             input.enabled,
           ),
         )),
-      retireParticipant: loopbackProcedure
+      retireParticipant: developmentOperatorProcedure
         .input(participantIdSchema)
         .mutation(({ input }) => resolveParticipantNetworkError(
           () => participantNetwork.retireParticipant(input.participantId),
         )),
-      diagnostics: loopbackProcedure.query(() => (
+      diagnostics: developmentOperatorProcedure.query(() => (
         participantNetwork.diagnostics()
       )),
-      reset: loopbackProcedure.mutation(() => (
+      reset: developmentOperatorProcedure.mutation(() => (
         participantNetwork.reset()
       )),
     }),
@@ -181,10 +232,4 @@ async function resolveParticipantNetworkError<T>(
     }
     throw error;
   }
-}
-
-function isLoopbackAddress(address: string | undefined): boolean {
-  return address === '127.0.0.1'
-    || address === '::1'
-    || address === '::ffff:127.0.0.1';
 }

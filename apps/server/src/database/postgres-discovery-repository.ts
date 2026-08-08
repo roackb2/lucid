@@ -1215,6 +1215,55 @@ export class PostgresDiscoveryRepository implements DiscoveryRepository {
     }
   }
 
+  async recoverInterruptedAgentWake(
+    agentId: string,
+    interruptedExecutionId: string,
+  ): Promise<boolean> {
+    const now = dayjs().toISOString();
+    return await this.database.orm.transaction(async (transaction) => {
+      const [agentRow] = await transaction
+        .select()
+        .from(representativeAgents)
+        .where(and(
+          eq(representativeAgents.workspaceId, WORKSPACE_ID),
+          eq(representativeAgents.id, agentId),
+        ))
+        .for('update')
+        .limit(1);
+      if (
+        !agentRow
+        || agentRow.status !== 'running'
+        || agentRow.activeWakeClaimToken !== interruptedExecutionId
+      ) {
+        return false;
+      }
+
+      await transaction
+        .update(representativeAgents)
+        .set({ status: 'idle', updatedAt: now })
+        .where(eq(representativeAgents.id, agentId));
+      await transaction.insert(discoveryEvents).values({
+        id: `event_${randomUUID()}`,
+        workspaceId: WORKSPACE_ID,
+        wakeNumber: agentRow.activeWakeNumber ?? 0,
+        kind: 'error',
+        actorAgentId: agentId,
+        idempotencyKey:
+          `${agentRow.activeWakeId ?? agentId}:recovered:${interruptedExecutionId}`,
+        title: 'Interrupted representative wake recovered',
+        content:
+          'The prior execution lease expired. Its unread mailbox horizon remains available for a fenced retry.',
+        metadata: {
+          visibility: 'operator',
+          wakeId: agentRow.activeWakeId,
+          interruptedExecutionId,
+        },
+        createdAt: now,
+      });
+      return true;
+    });
+  }
+
   async hasParticipantFindingUsingAnyOrigin(
     participantId: string,
     sourceEventIds: number[],
