@@ -1,9 +1,9 @@
 # Lucid server
 
 The server is the composition root for Lucid's PostgreSQL-backed
-delegated-discovery runtime. Local development and the hosted pilot use the
-same product and Heddle task authority; only the execution-host topology may
-differ.
+delegated-discovery runtime. Both current execution-host selections run inside
+this process and use the same product and Heddle task authority. External
+Heddle execution is a separate, not-yet-wired boundary.
 
 It owns:
 
@@ -62,6 +62,10 @@ retains a correctness poll fallback, and uses the database task lease as the
 authority for recovery. The optional scheduler host is useful for a
 single-process demo but does not change persistence or create a second task
 authority.
+
+Neither current host is a remote transport. See
+[`../../docs/hosted-execution.md`](../../docs/hosted-execution.md) before adding
+an external execution adapter, identity assertion, or MCP surface.
 
 Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
