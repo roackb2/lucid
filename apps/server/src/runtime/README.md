@@ -8,7 +8,7 @@ transitions, or PostgreSQL persistence.
 
 | File | Responsibility |
 | --- | --- |
-| `representative-task-invocation.ts` | Defines the replaceable boundary for one host-routed task invocation |
+| `representative-task-invocation.ts` | Defines the internal boundary for one locally routed task invocation |
 | `representative-agent-worker.ts` | Runs exactly one routed task through Heddle's targeted execution API |
 | `in-process-representative-task-dispatcher.ts` | Provides durable-notification acceleration, due-task polling fallback, bounded delivery, local cancellation, and graceful shutdown |
 | `representative-agent-execution-host.ts` | Provides the shared lifecycle seam for Heddle's long-lived scheduler and request-routed targeted execution |
@@ -23,27 +23,32 @@ durable task catalog remains the correctness fallback when notification is
 lost, when a periodic task becomes due, or when the API process restarts.
 
 Every delivery calls a `RepresentativeTaskInvocationTarget` with one task ID.
-`RepresentativeAgentWorker` is the local target and delegates direct lookup,
-the final due check, execution claim, checkpoint handling, and claim-fenced
-settlement to `HeartbeatSchedulerService.runTask()`. It performs no global
-scan, subscription, polling, or recovery.
+`RepresentativeAgentWorker` delegates direct lookup, the final due check,
+execution claim, checkpoint handling, and claim-fenced settlement to
+`HeartbeatSchedulerService.runTask()`. It performs no global scan,
+subscription, polling, or recovery.
 
-An AgentCore adapter can implement the same invocation-target interface by
-sending `taskId`, `invocationId`, and optional run-request generation to one
-runtime invocation. Task IDs are internal routing identifiers, not user
-authorization; a remote adapter must authenticate its caller and retain the
-configured Lucid task namespace.
+This target is an in-process boundary, not a remote service contract. Its
+invocation contains an `AbortSignal`, its result is Heddle's targeted-task
+result, and the worker requires both the PostgreSQL task store and Lucid's
+handler closure. A task ID is also a routing identifier, never user or tenant
+authorization.
 
 The dispatcher applies a cooperative wall-clock timeout to every invocation.
-A local worker observes the abort signal directly; a remote target must
-translate it into cancellation of the addressed remote invocation and await
-that invocation's terminal response.
+The local worker observes the abort signal directly and must settle before
+shutdown can close persistence.
 
 `RepresentativeAgentExecutionHost` is the domain-facing composition seam.
 `LongLivedRepresentativeAgentExecutionHost` preserves the supported Heddle
 scheduler path for zero-setup local mode. `TargetedRepresentativeAgentExecutionHost`
-uses the dispatcher and can replace only its invocation target for AgentCore;
-the heartbeat domain does not branch on deployment topology.
+uses the dispatcher to run bounded workers without changing heartbeat-domain
+policy.
+
+An external Heddle host needs a different, serializable agent-turn contract.
+Lucid must keep product identity, task and wake fencing, PostgreSQL authority,
+and durable settlement, while the runtime calls curated domain operations
+through tenant-scoped MCP capabilities. See
+[`../../../../docs/hosted-execution.md`](../../../../docs/hosted-execution.md).
 
 ## Retry and cancellation
 
@@ -58,9 +63,9 @@ Heddle outcomes already encode durable task state:
 The dispatcher tracks at most one active invocation per task in this process.
 `cancelTask()` aborts and awaits that local invocation but does not disable the
 durable Heddle task. The caller must coordinate durable task lifecycle through
-the Heddle task authority. A future AgentCore target must be able to stop and
-await the specific remote invocation before participant disable or retirement
-can safely move Lucid's mailbox eligibility boundary.
+the Heddle task authority. Any future external execution adapter must stop and
+await its specifically owned invocation before participant disable or
+retirement can safely move Lucid's mailbox eligibility boundary.
 
 Both execution hosts classify a durable `running` task without matching local
 ownership as `not-owned`. Participant disable, retirement, and reset must fail

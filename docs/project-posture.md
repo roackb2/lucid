@@ -31,8 +31,8 @@ network mechanics.
 
 It is not deployed as a production multi-user service. The current static-token
 mode is suitable only for a private single-user pilot over TLS. Production
-identity, tenant isolation, abuse controls, metering, and a remote execution
-adapter remain future work.
+identity, tenant isolation, abuse controls, metering, and integration with an
+external execution host remain future work.
 
 The architecture should therefore favor clean, testable ownership boundaries
 without prematurely optimizing for traffic or preserving obsolete local
@@ -54,6 +54,9 @@ adapters.
   merely to make the network look active.
 - Keep hosted execution replaceable. A deployment host may run Heddle, but it
   does not become the authority for Lucid's participants or product history.
+- Keep PostgreSQL and product authorization in Lucid. An external runtime gets
+  only a signed execution scope and curated, tenant-scoped MCP capabilities;
+  it never receives Lucid database credentials.
 
 ## Non-goals at this stage
 

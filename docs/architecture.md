@@ -154,10 +154,18 @@ durable Heddle run request. The default targeted host then:
 The optional long-lived scheduler uses the same PostgreSQL authorities. It is
 useful for topology comparison, not a second persistence mode.
 
-The invocation-target interface is the intended hosted seam. A future
-AgentCore target can replace the local invocation transport while Lucid keeps
-participant state, Heddle keeps task/run semantics, and the dispatcher keeps
-bounded admission and durable polling. No AgentCore adapter is active today.
+The invocation-target interface is local infrastructure, not a hosted wire
+contract. It carries an `AbortSignal`, returns Heddle's targeted-task result,
+and delegates to a worker that needs both the PostgreSQL task store and an
+in-process heartbeat handler. Sending only its task ID to AgentCore would move
+neither the authorized agent loop nor Lucid's domain tools.
+
+A future external host must receive a serializable, authorized agent turn while
+Lucid retains product identity, task and wake fencing, PostgreSQL authority,
+and durable settlement. The runtime receives no database credential and calls
+curated Lucid operations through tenant-scoped MCP capabilities. The exact
+prerequisites and trust boundary are recorded in
+[External Heddle execution host](hosted-execution.md).
 
 ## Agent boundary
 

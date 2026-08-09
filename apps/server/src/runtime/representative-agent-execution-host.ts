@@ -187,7 +187,7 @@ export type TargetedRepresentativeAgentExecutionHostOptions =
   };
 
 /**
- * Request-routed execution host suitable for a later AgentCore target.
+ * Request-routed in-process execution host for bounded targeted-task delivery.
  *
  * The local dispatcher remains responsible for bounded delivery only. Heddle
  * performs direct lookup, due claiming, fencing, execution, and settlement.
