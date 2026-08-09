@@ -4,13 +4,13 @@ import {
   type RuntimeToolSelectionProfile,
 } from '@roackb2/heddle';
 import { ConversationRunService } from '@roackb2/heddle/hosted';
-import type { RuntimeConfig } from './config.js';
 import type {
   AgentTurnExecutionHandle,
   AgentTurnExecutionInput,
   AgentTurnExecutor,
-} from './agent-turn-executor.js';
-import type { RuntimePublicResult } from './contracts.js';
+} from '../runtime-session/executor.js';
+import type { RuntimePublicResult } from '../runtime-session/types.js';
+import type { HeddleExecutionConfig } from './types.js';
 
 const WORKSTATION_TOOL_PROFILE: RuntimeToolSelectionProfile = {
   preset: 'custom',
@@ -46,7 +46,7 @@ export class HeddleTurnExecutor implements AgentTurnExecutor {
     },
   });
 
-  constructor(private readonly config: RuntimeConfig) {}
+  constructor(private readonly config: HeddleExecutionConfig) {}
 
   async start(input: AgentTurnExecutionInput): Promise<AgentTurnExecutionHandle> {
     const engine = createConversationEngine({
@@ -68,18 +68,18 @@ export class HeddleTurnExecutor implements AgentTurnExecutor {
     });
 
     await engine.sessions.ensure({
-      id: input.sessionId,
+      id: input.executionSessionId,
       name: 'Isolated hosted workstation',
     });
 
     return this.runs.startTurn({
       address: {
         scopeId: input.scopeKey,
-        sessionId: input.sessionId,
+        sessionId: input.executionSessionId,
       },
       engine,
       turn: {
-        sessionId: input.sessionId,
+        sessionId: input.executionSessionId,
         prompt: input.prompt,
         abortSignal: input.abortSignal,
         maxSteps: this.config.maxSteps,

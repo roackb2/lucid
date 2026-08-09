@@ -104,7 +104,10 @@ one domain transaction.
 | `apps/server/src/infrastructure/postgres/` | Neutral PostgreSQL pool and migration mechanics without Lucid product policy |
 | `apps/server/src/runtime/heartbeat/postgres/` | PostgreSQL adapter for Heddle's public task-authority contracts |
 | `apps/server/src/composition/postgres-persistence.ts` | Constructs the adapters over one pool and owns their shared shutdown boundary |
-| `apps/agent-runtime/` | Separate AgentCore-compatible HTTP adapter for a generic isolated Heddle workstation turn; not connected to Lucid persistence or representative wakes |
+| `apps/agent-runtime/src/runtime-session/` | Provider-neutral application service for process-bound scope, admission, deadlines, cancellation, status, and the execution port |
+| `apps/agent-runtime/src/agentcore/` | Inbound AgentCore HTTP/wire/SSE adapter and local protocol client |
+| `apps/agent-runtime/src/heddle/` | Outbound adapter implementing the execution port with a concrete Heddle workstation |
+| `apps/agent-runtime/src/bootstrap/` | Agent runtime environment adapter and composition root; the only module that joins concrete adapters |
 
 Transactions follow use-case ownership rather than table ownership. A
 service-local adapter may atomically query or update several product tables,
@@ -185,8 +188,10 @@ tenant, user, and conversation scope. It rejects scope changes and one
 concurrent turn, and it cancels the exact local run when its client
 disconnects.
 
-This app is an HTTP/isolation adapter, not another Lucid service. It owns no
-product identity, task authority, participant policy, or database connection.
+This app is a small hexagonal application, not another Lucid product service.
+Its provider-neutral runtime-session service is surrounded by an AgentCore
+inbound adapter and Heddle outbound adapter, joined only by bootstrap. It owns
+no product identity, task authority, participant policy, or database connection.
 It currently has no Lucid MCP capabilities. The full workstation profile may
 run only in an explicitly isolated container or provider environment; a host
 process alone is not a tenant boundary. See

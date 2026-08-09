@@ -3,33 +3,33 @@ import {
   TestTurnExecutor,
   TestTurnHandle,
 } from './__tests__/test-turn-executor.test-support.js';
-import type { AgentTurnExecutor } from './agent-turn-executor.js';
-import type { RuntimeInvocation } from './contracts.js';
+import type { AgentTurnExecutor } from './executor.js';
+import type { RuntimeTurnRequest } from './types.js';
 import {
-  AgentRuntimeService,
   RuntimeBusyError,
   RuntimeDeadlineError,
   RuntimeDuplicateInvocationError,
-} from './runtime-service.js';
+  RuntimeSessionService,
+} from './service.js';
 import { RuntimeScopeMismatchError } from './scope-binding.js';
 
-describe('agent runtime service', () => {
+describe('runtime session service', () => {
   it('binds scope, runs once, and tracks busy health through settlement', async () => {
     const executor = new TestTurnExecutor();
     const service = createService(executor);
     const handle = await service.start(startInput());
 
-    expect(service.health().read().status).toBe('HealthyBusy');
+    expect(service.readStatus().state).toBe('executing');
     expect(executor.inputs[0]).toMatchObject({
       prompt: 'Inspect the workspace.',
       modelApiKey: 'model-key-for-test',
     });
-    expect(executor.inputs[0]?.sessionId).toMatch(/^agentcore-[a-f0-9]{64}$/);
+    expect(executor.inputs[0]?.executionSessionId).toMatch(/^runtime-[a-f0-9]{64}$/);
 
     executor.latest().activity();
     executor.latest().finish();
     await expect(handle.result).resolves.toMatchObject({ outcome: 'done' });
-    expect(service.health().read().status).toBe('Healthy');
+    expect(service.readStatus().state).toBe('idle');
   });
 
   it('rejects concurrent work and a later cross-scope request', async () => {
@@ -60,7 +60,7 @@ describe('agent runtime service', () => {
         release = resolve;
       }),
     };
-    const service = new AgentRuntimeService({
+    const service = new RuntimeSessionService({
       config: { maxInvocationMs: 15 * 60_000 },
       executor,
     });
@@ -85,13 +85,13 @@ describe('agent runtime service', () => {
         throw new Error('Executor startup failed');
       },
     };
-    const service = new AgentRuntimeService({
+    const service = new RuntimeSessionService({
       config: { maxInvocationMs: 15 * 60_000 },
       executor,
     });
 
     await expect(service.start(startInput())).rejects.toThrow(/startup failed/);
-    expect(service.health().read().status).toBe('Healthy');
+    expect(service.readStatus().state).toBe('idle');
     await expect(service.shutdown()).resolves.toBeUndefined();
   });
 
@@ -117,7 +117,7 @@ describe('agent runtime service', () => {
 
     await expect(handle.result).rejects.toThrow(/Cancelled by test/);
     expect(executor.latest().cancelCalls).toBe(1);
-    expect(service.health().read().status).toBe('Healthy');
+    expect(service.readStatus().state).toBe('idle');
   });
 
   it('rejects an expired deadline before binding the process', async () => {
@@ -135,7 +135,7 @@ describe('agent runtime service', () => {
 });
 
 function createService(executor: TestTurnExecutor) {
-  return new AgentRuntimeService({
+  return new RuntimeSessionService({
     config: { maxInvocationMs: 15 * 60_000 },
     executor,
     now: () => new Date('2026-08-09T00:00:00.000Z'),
@@ -151,10 +151,8 @@ function startInput() {
   };
 }
 
-function invocation(invocationId: string): RuntimeInvocation {
+function invocation(invocationId: string): RuntimeTurnRequest {
   return {
-    schemaVersion: 1,
-    kind: 'conversation-turn',
     invocationId,
     scope: {
       adopterId: 'heddle-customer',

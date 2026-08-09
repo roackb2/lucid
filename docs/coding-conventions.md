@@ -29,6 +29,34 @@ lucid/network/
 - `README.md` records what the service owns, what it deliberately does not own,
   and any important transaction or concurrency invariants.
 
+The same dependency rule applies to services without persistence. Use an
+explicitly named outbound port instead of forcing every domain into a store or
+repository pattern:
+
+```text
+agent-runtime/src/
+├── runtime-session/       # application policy and service-owned port
+│   ├── types.ts
+│   ├── executor.ts
+│   ├── service.ts
+│   └── README.md
+├── agentcore/             # inbound transport adapter
+├── heddle/                # outbound execution adapter
+└── bootstrap/             # composition root
+```
+
+Use DDD as an ownership vocabulary, not a folder-count target. Introduce an
+entity, aggregate, repository, or domain service only when the code owns the
+corresponding domain behavior or durable invariant. A process coordinator such
+as `RuntimeSessionService` is an application service; its execution dependency
+is a capability port, not a fake repository.
+
+Each non-trivial boundary keeps a local README with: owned behavior, explicit
+non-responsibilities, important invariants, and routing guidance for the next
+contributor. Its `types.ts` owns transport-independent values. Put dependency
+ports in a capability-named file such as `executor.ts` or `store.ts` so that
+the dependency direction stays visible.
+
 Do not expose a generic event-table append method from a store port. Use a
 domain operation that fixes the event kind, or a narrow discriminated input
 whose allowed kinds all belong to that service. Keep the raw insert private to

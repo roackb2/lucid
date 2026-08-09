@@ -1,16 +1,16 @@
 import type {
-  ConversationRunStreamItem,
-} from '@roackb2/heddle/hosted';
-import type {
   AgentTurnExecutionHandle,
   AgentTurnExecutor,
-} from './agent-turn-executor.js';
-import type { RuntimeConfig } from './config.js';
+} from './executor.js';
 import type {
-  RuntimeInvocation,
-  RuntimePublicResult,
-} from './contracts.js';
-import { RuntimeHealthService } from './health.js';
+  RuntimeInvocationHandle,
+  RuntimeSessionConfig,
+  RuntimeTurnRequest,
+} from './types.js';
+import {
+  RuntimeSessionStatusService,
+  type RuntimeSessionStatusSnapshot,
+} from './status.js';
 import {
   RuntimeScopeBindingService,
   type BoundRuntimeScope,
@@ -30,14 +30,6 @@ export class RuntimeDeadlineError extends Error {
 
 const RECENT_INVOCATION_LIMIT = 128;
 
-export type RuntimeInvocationHandle = {
-  runId: string;
-  acceptedAt: string;
-  events(): AsyncIterable<ConversationRunStreamItem<RuntimePublicResult>>;
-  cancel(): boolean;
-  result: Promise<RuntimePublicResult>;
-};
-
 type ActiveInvocation = {
   invocationId: string;
   run: AgentTurnExecutionHandle;
@@ -52,7 +44,7 @@ type StartingInvocation = {
 };
 
 /** Coordinates one process-bound Runtime session without owning product data. */
-export class AgentRuntimeService {
+export class RuntimeSessionService {
   private active?: ActiveInvocation;
   private starting?: StartingInvocation;
   private readonly recentCompletedInvocationIds = new Set<string>();
@@ -60,21 +52,21 @@ export class AgentRuntimeService {
 
   constructor(
     private readonly options: {
-      config: Pick<RuntimeConfig, 'maxInvocationMs'>;
+      config: RuntimeSessionConfig;
       executor: AgentTurnExecutor;
       binding?: RuntimeScopeBindingService;
-      health?: RuntimeHealthService;
+      status?: RuntimeSessionStatusService;
       now?: () => Date;
     },
   ) {}
 
-  health(): RuntimeHealthService {
-    return this.options.health ??= new RuntimeHealthService(this.options.now);
+  readStatus(): RuntimeSessionStatusSnapshot {
+    return this.statusService().read();
   }
 
   async start(input: {
     runtimeSessionId: string;
-    invocation: RuntimeInvocation;
+    invocation: RuntimeTurnRequest;
     modelApiKey: string;
     callerSignal: AbortSignal;
   }): Promise<RuntimeInvocationHandle> {
@@ -107,11 +99,11 @@ export class AgentRuntimeService {
     );
     deadlineTimer.unref();
 
-    this.health().markBusy();
+    this.statusService().markExecuting();
     let run: AgentTurnExecutionHandle;
     const startPromise = Promise.resolve().then(() => this.options.executor.start({
       scopeKey: binding.scopeKey,
-      sessionId: binding.heddleSessionId,
+      executionSessionId: binding.executionSessionId,
       prompt: input.invocation.prompt,
       modelApiKey: input.modelApiKey,
       abortSignal: controller.signal,
@@ -126,7 +118,7 @@ export class AgentRuntimeService {
     } catch (error) {
       clearTimeout(deadlineTimer);
       input.callerSignal.removeEventListener('abort', abortFromCaller);
-      this.health().markHealthy();
+      this.statusService().markIdle();
       throw error;
     } finally {
       if (this.starting === starting) {
@@ -218,7 +210,7 @@ export class AgentRuntimeService {
     active.removeCallerAbortListener();
     this.active = undefined;
     this.rememberCompletedInvocation(active.invocationId);
-    this.health().markHealthy();
+    this.statusService().markIdle();
   }
 
   private rememberCompletedInvocation(invocationId: string): void {
@@ -235,5 +227,9 @@ export class AgentRuntimeService {
 
   private now(): Date {
     return (this.options.now ?? (() => new Date()))();
+  }
+
+  private statusService(): RuntimeSessionStatusService {
+    return this.options.status ??= new RuntimeSessionStatusService(this.options.now);
   }
 }

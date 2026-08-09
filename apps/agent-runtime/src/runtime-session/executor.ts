@@ -1,9 +1,11 @@
-import type { ConversationRunStreamItem } from '@roackb2/heddle/hosted';
-import type { RuntimePublicResult } from './contracts.js';
+import type {
+  RuntimePublicResult,
+  RuntimeTurnStreamItem,
+} from './types.js';
 
 export type AgentTurnExecutionInput = {
   scopeKey: string;
-  sessionId: string;
+  executionSessionId: string;
   prompt: string;
   modelApiKey: string;
   abortSignal: AbortSignal;
@@ -14,11 +16,11 @@ export type AgentTurnExecutionHandle = {
   result: Promise<RuntimePublicResult>;
   events(options?: {
     signal?: AbortSignal;
-  }): AsyncIterable<ConversationRunStreamItem<RuntimePublicResult>>;
+  }): AsyncIterable<RuntimeTurnStreamItem>;
   cancel(): boolean;
 };
 
-/** Provider-neutral seam used by the AgentCore HTTP adapter and deterministic tests. */
+/** Outbound execution port owned by the runtime-session application service. */
 export type AgentTurnExecutor = {
   start(input: AgentTurnExecutionInput): Promise<AgentTurnExecutionHandle>;
 };

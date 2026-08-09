@@ -1,28 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import {
-  RuntimeInvocationSchema,
-  RuntimeSessionIdSchema,
-} from './contracts.js';
+  AgentCoreInvocationSchema,
+  AgentCoreRuntimeSessionIdSchema,
+} from './types.js';
 
 describe('runtime wire contracts', () => {
   it('accepts the versioned conversation-turn input', () => {
-    expect(RuntimeInvocationSchema.parse(validInvocation())).toMatchObject({
+    expect(AgentCoreInvocationSchema.parse(validInvocation())).toMatchObject({
       schemaVersion: 1,
       kind: 'conversation-turn',
     });
   });
 
   it('rejects unknown input fields and path-like identity values', () => {
-    expect(() => RuntimeInvocationSchema.parse({ ...validInvocation(), unexpected: true })).toThrow();
-    expect(() => RuntimeInvocationSchema.parse({
+    expect(() => AgentCoreInvocationSchema.parse({ ...validInvocation(), unexpected: true })).toThrow();
+    expect(() => AgentCoreInvocationSchema.parse({
       ...validInvocation(),
       scope: { ...validInvocation().scope, tenantId: '../other-tenant' },
     })).toThrow();
   });
 
   it('enforces AgentCore session identifier length', () => {
-    expect(RuntimeSessionIdSchema.parse('s'.repeat(33))).toHaveLength(33);
-    expect(() => RuntimeSessionIdSchema.parse('too-short')).toThrow();
+    expect(AgentCoreRuntimeSessionIdSchema.parse('s'.repeat(33))).toHaveLength(33);
+    expect(() => AgentCoreRuntimeSessionIdSchema.parse('too-short')).toThrow();
   });
 });
 

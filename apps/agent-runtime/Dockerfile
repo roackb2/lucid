@@ -57,4 +57,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD curl --fail --silent http://127.0.0.1:8080/ping >/dev/null || exit 1
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "/opt/lucid/apps/agent-runtime/dist/server.js"]
+CMD ["node", "/opt/lucid/apps/agent-runtime/dist/bootstrap/server.js"]

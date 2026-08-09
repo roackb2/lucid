@@ -1,10 +1,12 @@
-import type { ConversationRunStreamItem } from '@roackb2/heddle/hosted';
 import type {
   AgentTurnExecutionHandle,
   AgentTurnExecutionInput,
   AgentTurnExecutor,
-} from '../agent-turn-executor.js';
-import type { RuntimePublicResult } from '../contracts.js';
+} from '../executor.js';
+import type {
+  RuntimePublicResult,
+  RuntimeTurnStreamItem,
+} from '../types.js';
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -17,7 +19,7 @@ export class TestTurnHandle implements AgentTurnExecutionHandle {
   readonly result: Promise<RuntimePublicResult>;
   cancelCalls = 0;
   private readonly resultDeferred = deferred<RuntimePublicResult>();
-  private readonly buffer = new AsyncBuffer<ConversationRunStreamItem<RuntimePublicResult>>();
+  private readonly buffer = new AsyncBuffer<RuntimeTurnStreamItem>();
   private settled = false;
 
   constructor(runId: string) {
@@ -25,7 +27,7 @@ export class TestTurnHandle implements AgentTurnExecutionHandle {
     this.result = this.resultDeferred.promise;
   }
 
-  events(): AsyncIterable<ConversationRunStreamItem<RuntimePublicResult>> {
+  events(): AsyncIterable<RuntimeTurnStreamItem> {
     return this.buffer.read();
   }
 

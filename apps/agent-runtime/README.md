@@ -20,6 +20,38 @@ It does not receive PostgreSQL credentials, open Lucid tables, schedule
 representatives, authenticate product users, or expose Lucid MCP tools. The
 existing server remains Lucid's identity, control, and data plane.
 
+## Internal architecture
+
+The app borrows DDD vocabulary and Hexagonal Architecture only where they make
+ownership clearer. It has one application service, two adapters, and one
+composition root; it does not invent aggregates or repositories because this
+process owns no durable product data.
+
+```text
+AgentCore request
+  -> agentcore inbound adapter
+  -> runtime-session application service
+  -> AgentTurnExecutor port
+  -> heddle outbound adapter
+
+bootstrap -> constructs every concrete dependency above
+```
+
+| Path | Responsibility | Put new work here when... |
+| --- | --- | --- |
+| `src/runtime-session/` | Process-bound scope, admission, deadlines, cancellation, status, and the `AgentTurnExecutor` port | the rule must remain true for any transport or execution engine |
+| `src/agentcore/` | AWS HTTP contract, wire schemas, local ingress authentication, health projection, SSE, and local client | the change concerns AgentCore or HTTP transport behavior |
+| `src/heddle/` | Concrete Heddle engine, workstation tools, approval policy, and result projection | the change concerns how Heddle executes a turn |
+| `src/bootstrap/` | Environment validation, filesystem setup, dependency construction, server lifecycle, and signals | a dependency or deployable-process concern must be composed |
+
+Every boundary has a local `README.md`. Domain and application values live in
+that boundary's `types.ts`; dependency interfaces use an explicit capability
+name such as `executor.ts` rather than being hidden in a generic types file.
+Dependencies point inward: `runtime-session` must not import `agentcore`,
+`heddle`, or `bootstrap`, and concrete adapters are joined only in `bootstrap`.
+Do not add a catch-all `contracts.ts`, shared utility folder, or database access
+to this app.
+
 ## Security posture
 
 The workstation profile includes file reads/writes, shell inspection and

@@ -2,9 +2,9 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import pino from 'pino';
 import { loadRuntimeConfig } from './config.js';
-import { HeddleTurnExecutor } from './heddle-turn-executor.js';
-import { createRuntimeHttpApp } from './http-server.js';
-import { AgentRuntimeService } from './runtime-service.js';
+import { createAgentCoreHttpApp } from '../agentcore/http-adapter.js';
+import { HeddleTurnExecutor } from '../heddle/executor.js';
+import { RuntimeSessionService } from '../runtime-session/service.js';
 
 async function main(): Promise<void> {
   const config = loadRuntimeConfig();
@@ -17,11 +17,11 @@ async function main(): Promise<void> {
     mkdir(config.stateRoot, { recursive: true }),
   ]);
 
-  const runtime = new AgentRuntimeService({
+  const runtime = new RuntimeSessionService({
     config,
     executor: new HeddleTurnExecutor(config),
   });
-  const app = createRuntimeHttpApp({ config, runtime, logger });
+  const app = createAgentCoreHttpApp({ config, runtime, logger });
   const server = createServer(app);
   server.requestTimeout = 0;
 

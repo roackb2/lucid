@@ -1,12 +1,12 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { RuntimeConfig } from './config.js';
+import type { AgentCoreHttpConfig } from './types.js';
 
-export class RuntimeAuthenticationError extends Error {
-  readonly name = 'RuntimeAuthenticationError';
+export class AgentCoreAuthenticationError extends Error {
+  readonly name = 'AgentCoreAuthenticationError';
 }
 
-export function authenticateRuntimeRequest(input: {
-  config: Pick<RuntimeConfig, 'mode' | 'localTokenSha256'>;
+export function authenticateAgentCoreRequest(input: {
+  config: Pick<AgentCoreHttpConfig, 'mode' | 'localTokenSha256'>;
   providedToken?: string;
 }): void {
   if (input.config.mode === 'agentcore') {
@@ -16,7 +16,7 @@ export function authenticateRuntimeRequest(input: {
   const expected = input.config.localTokenSha256;
   const provided = input.providedToken;
   if (!expected || !provided || !matchesDigest(expected, provided)) {
-    throw new RuntimeAuthenticationError('Runtime request authentication failed.');
+    throw new AgentCoreAuthenticationError('Runtime request authentication failed.');
   }
 }
 

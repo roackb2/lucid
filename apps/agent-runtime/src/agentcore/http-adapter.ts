@@ -5,46 +5,43 @@ import express, {
   type Response,
 } from 'express';
 import { z, ZodError } from 'zod';
-import type { RuntimeConfig } from './config.js';
 import {
   AGENTCORE_RUNTIME_SESSION_HEADER,
+  AgentCoreInvocationSchema,
+  AgentCoreRuntimeSessionIdSchema,
   LOCAL_RUNTIME_TOKEN_HEADER,
   MODEL_API_KEY_HEADER,
-  RuntimeInvocationSchema,
-  RuntimeSessionIdSchema,
-  type RuntimeApiError,
-  type RuntimeStreamEvent,
-} from './contracts.js';
+  type AgentCoreApiError,
+  type AgentCoreHealthResponse,
+  type AgentCoreHttpConfig,
+  type AgentCoreHttpLogger,
+  type AgentCoreStreamEvent,
+} from './types.js';
 import {
-  RuntimeAuthenticationError,
-  authenticateRuntimeRequest,
-} from './request-auth.js';
+  AgentCoreAuthenticationError,
+  authenticateAgentCoreRequest,
+} from './authentication.js';
 import {
-  AgentRuntimeService,
   RuntimeBusyError,
   RuntimeDeadlineError,
   RuntimeDuplicateInvocationError,
-} from './runtime-service.js';
-import { RuntimeScopeMismatchError } from './scope-binding.js';
+  RuntimeSessionService,
+} from '../runtime-session/service.js';
+import { RuntimeScopeMismatchError } from '../runtime-session/scope-binding.js';
+import type { RuntimeSessionStatusSnapshot } from '../runtime-session/status.js';
 
 const ModelApiKeySchema = z.string().trim().min(8).max(4_096);
 
-export type RuntimeHttpLogger = {
-  info(context: Record<string, unknown>, message: string): void;
-  warn(context: Record<string, unknown>, message: string): void;
-  error(context: Record<string, unknown>, message: string): void;
-};
-
-const SILENT_LOGGER: RuntimeHttpLogger = {
+const SILENT_LOGGER: AgentCoreHttpLogger = {
   info: () => undefined,
   warn: () => undefined,
   error: () => undefined,
 };
 
-export function createRuntimeHttpApp(input: {
-  config: Pick<RuntimeConfig, 'mode' | 'localTokenSha256' | 'keepAliveMs'>;
-  runtime: AgentRuntimeService;
-  logger?: RuntimeHttpLogger;
+export function createAgentCoreHttpApp(input: {
+  config: AgentCoreHttpConfig;
+  runtime: RuntimeSessionService;
+  logger?: AgentCoreHttpLogger;
 }): Express {
   const app = express();
   const logger = input.logger ?? SILENT_LOGGER;
@@ -52,7 +49,7 @@ export function createRuntimeHttpApp(input: {
   app.use(express.json({ limit: '512kb', strict: true }));
 
   app.get('/ping', (_request, response) => {
-    response.status(200).json(input.runtime.health().read());
+    response.status(200).json(toAgentCoreHealth(input.runtime.readStatus()));
   });
 
   app.post('/invocations', async (request, response) => {
@@ -68,22 +65,27 @@ export function createRuntimeHttpApp(input: {
 
     try {
       const localToken = takeSensitiveHeader(request, LOCAL_RUNTIME_TOKEN_HEADER);
-      authenticateRuntimeRequest({
+      authenticateAgentCoreRequest({
         config: input.config,
         providedToken: localToken,
       });
 
-      const runtimeSessionId = RuntimeSessionIdSchema.parse(
+      const runtimeSessionId = AgentCoreRuntimeSessionIdSchema.parse(
         request.header(AGENTCORE_RUNTIME_SESSION_HEADER),
       );
       const modelApiKey = ModelApiKeySchema.parse(
         takeSensitiveHeader(request, MODEL_API_KEY_HEADER),
       );
-      const invocation = RuntimeInvocationSchema.parse(request.body);
+      const invocation = AgentCoreInvocationSchema.parse(request.body);
+      const {
+        schemaVersion: _schemaVersion,
+        kind: _kind,
+        ...turn
+      } = invocation;
 
       const run = await input.runtime.start({
         runtimeSessionId,
-        invocation,
+        invocation: turn,
         modelApiKey,
         callerSignal: callerController.signal,
       });
@@ -102,7 +104,7 @@ export function createRuntimeHttpApp(input: {
       });
       response.flushHeaders();
 
-      const accepted: RuntimeStreamEvent = {
+      const accepted: AgentCoreStreamEvent = {
         schemaVersion: 1,
         invocationId: invocation.invocationId,
         runId: run.runId,
@@ -110,7 +112,7 @@ export function createRuntimeHttpApp(input: {
         timestamp: run.acceptedAt,
         kind: 'accepted',
       };
-      await writeRuntimeSseEvent(response, accepted);
+      await writeAgentCoreSseEvent(response, accepted);
 
       const keepAlive = setInterval(() => {
         if (!response.destroyed && !response.writableNeedDrain) {
@@ -125,8 +127,8 @@ export function createRuntimeHttpApp(input: {
             schemaVersion: 1 as const,
             invocationId: invocation.invocationId,
             ...event,
-          } satisfies RuntimeStreamEvent;
-          await writeRuntimeSseEvent(response, projected);
+          } satisfies AgentCoreStreamEvent;
+          await writeAgentCoreSseEvent(response, projected);
           if (event.kind !== 'activity') {
             terminalWritten = true;
           }
@@ -189,9 +191,9 @@ class RuntimeStreamDisconnectedError extends Error {
 }
 
 /** Applies Node stream backpressure so a slow SSE reader cannot grow memory unboundedly. */
-export function writeRuntimeSseEvent(
+export function writeAgentCoreSseEvent(
   response: Response,
-  event: RuntimeStreamEvent,
+  event: AgentCoreStreamEvent,
 ): Promise<void> {
   if (response.destroyed) {
     return Promise.reject(new RuntimeStreamDisconnectedError('Runtime SSE consumer disconnected.'));
@@ -246,8 +248,8 @@ export function takeSensitiveHeader(request: Request, name: string): string | un
   return value;
 }
 
-function toApiError(error: unknown): { status: number; body: RuntimeApiError } {
-  if (error instanceof RuntimeAuthenticationError) {
+function toApiError(error: unknown): { status: number; body: AgentCoreApiError } {
+  if (error instanceof AgentCoreAuthenticationError) {
     return apiError(401, 'unauthorized', 'Runtime request authentication failed.');
   }
   if (error instanceof RuntimeScopeMismatchError) {
@@ -283,4 +285,21 @@ function isJsonParseError(error: unknown): boolean {
 
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
+}
+
+const AGENTCORE_HEALTH_BY_RUNTIME_STATE: Record<
+  RuntimeSessionStatusSnapshot['state'],
+  AgentCoreHealthResponse['status']
+> = {
+  idle: 'Healthy',
+  executing: 'HealthyBusy',
+};
+
+function toAgentCoreHealth(
+  status: RuntimeSessionStatusSnapshot,
+): AgentCoreHealthResponse {
+  return {
+    status: AGENTCORE_HEALTH_BY_RUNTIME_STATE[status.state],
+    time_of_last_update: status.changedAtUnixSeconds,
+  };
 }

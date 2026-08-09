@@ -248,7 +248,9 @@ Service-level maintenance notes live in
 [`apps/server/src/lucid/representative/communication/README.md`](apps/server/src/lucid/representative/communication/README.md),
 [`apps/server/src/lucid/persistence/postgres/README.md`](apps/server/src/lucid/persistence/postgres/README.md),
 [`apps/server/src/infrastructure/postgres/README.md`](apps/server/src/infrastructure/postgres/README.md), and
-[`apps/web/README.md`](apps/web/README.md).
+[`apps/web/README.md`](apps/web/README.md). The isolated runtime has its own
+[app overview](apps/agent-runtime/README.md) plus boundary READMEs under
+`apps/agent-runtime/src/{runtime-session,agentcore,heddle,bootstrap}/`.
 
 ## Checks
 

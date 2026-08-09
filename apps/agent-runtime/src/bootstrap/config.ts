@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import type { RuntimeConfig } from './types.js';
 
 const PLAINTEXT_LOCAL_TOKEN_ENV = 'LUCID_AGENT_RUNTIME_LOCAL_TOKEN';
 const LocalTokenDigestSchema = z
@@ -45,20 +46,6 @@ const FORBIDDEN_AMBIENT_SECRET_NAMES = [
   'AWS_SESSION_TOKEN',
 ] as const;
 
-export type RuntimeConfig = {
-  mode: 'local' | 'agentcore';
-  host: '0.0.0.0';
-  port: 8080;
-  localTokenSha256?: string;
-  model: string;
-  workspaceRoot: string;
-  stateRoot: string;
-  maxSteps: number;
-  maxInvocationMs: number;
-  keepAliveMs: number;
-  logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
-};
-
 /**
  * Validates that the process receives only a one-way verifier for local
  * ingress. Model credentials arrive per invocation and never enter process.env.
@@ -87,7 +74,7 @@ export function loadRuntimeConfig(
     }
   }
 
-  const config: RuntimeConfig = {
+  return {
     mode: parsed.LUCID_AGENT_RUNTIME_MODE,
     host: '0.0.0.0',
     port: 8080,
@@ -100,7 +87,6 @@ export function loadRuntimeConfig(
     keepAliveMs: parsed.LUCID_AGENT_RUNTIME_KEEP_ALIVE_MS,
     logLevel: parsed.LOG_LEVEL,
   };
-  return config;
 }
 
 function assertNoAmbientServiceSecrets(environment: NodeJS.ProcessEnv): void {

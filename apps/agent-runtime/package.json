@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx src/server.ts",
-    "invoke": "tsx src/local-client.ts",
-    "start": "node dist/server.js",
+    "dev": "tsx src/bootstrap/server.ts",
+    "invoke": "tsx src/agentcore/local-client.ts",
+    "start": "node dist/bootstrap/server.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

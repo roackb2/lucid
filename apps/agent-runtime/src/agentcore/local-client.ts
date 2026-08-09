@@ -3,7 +3,7 @@ import {
   AGENTCORE_RUNTIME_SESSION_HEADER,
   LOCAL_RUNTIME_TOKEN_HEADER,
   MODEL_API_KEY_HEADER,
-} from './contracts.js';
+} from './types.js';
 
 async function main(): Promise<void> {
   const prompt = await readPrompt(process.argv.slice(2));

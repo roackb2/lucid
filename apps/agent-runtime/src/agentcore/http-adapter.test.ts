@@ -4,18 +4,18 @@ import type { AddressInfo } from 'node:net';
 import { EventEmitter } from 'node:events';
 import type { Request, Response as ExpressResponse } from 'express';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TestTurnExecutor } from './__tests__/test-turn-executor.test-support.js';
+import { TestTurnExecutor } from '../runtime-session/__tests__/test-turn-executor.test-support.js';
 import {
   AGENTCORE_RUNTIME_SESSION_HEADER,
   LOCAL_RUNTIME_TOKEN_HEADER,
   MODEL_API_KEY_HEADER,
-} from './contracts.js';
+} from './types.js';
 import {
-  createRuntimeHttpApp,
+  createAgentCoreHttpApp,
   takeSensitiveHeader,
-  writeRuntimeSseEvent,
-} from './http-server.js';
-import { AgentRuntimeService } from './runtime-service.js';
+  writeAgentCoreSseEvent,
+} from './http-adapter.js';
+import { RuntimeSessionService } from '../runtime-session/service.js';
 
 const LOCAL_TOKEN = 'local-token-'.padEnd(32, 'x');
 const SESSION_ID = 'runtime-session-'.padEnd(33, 's');
@@ -56,7 +56,7 @@ describe('AgentCore HTTP adapter', () => {
     const response = await fetch(`${url}/invocations`, requestInit());
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/event-stream');
-    expect(runtime.health().read().status).toBe('HealthyBusy');
+    expect(runtime.readStatus().state).toBe('executing');
 
     executor.latest().activity();
     executor.latest().finish();
@@ -68,7 +68,7 @@ describe('AgentCore HTTP adapter', () => {
     expect(events).toEqual(['accepted', 'activity', 'result']);
     expect(events.filter((event) => ['result', 'cancelled', 'error'].includes(event)))
       .toHaveLength(1);
-    expect(runtime.health().read().status).toBe('Healthy');
+    expect(runtime.readStatus().state).toBe('idle');
   });
 
   it('rejects concurrent invocation and cross-scope reuse', async () => {
@@ -128,7 +128,7 @@ describe('AgentCore HTTP adapter', () => {
       write: vi.fn(() => false),
     }) as unknown as ExpressResponse;
     let settled = false;
-    const write = writeRuntimeSseEvent(response, {
+    const write = writeAgentCoreSseEvent(response, {
       schemaVersion: 1,
       invocationId: 'invocation-001',
       runId: 'run-001',
@@ -151,11 +151,11 @@ describe('AgentCore HTTP adapter', () => {
 
 async function startTestServer() {
   const executor = new TestTurnExecutor();
-  const runtime = new AgentRuntimeService({
+  const runtime = new RuntimeSessionService({
     config: { maxInvocationMs: 15 * 60_000 },
     executor,
   });
-  const app = createRuntimeHttpApp({
+  const app = createAgentCoreHttpApp({
     config: {
       mode: 'local',
       localTokenSha256: createHash('sha256').update(LOCAL_TOKEN).digest('hex'),

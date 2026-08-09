@@ -42,7 +42,9 @@ these gates.
 
 ## Local runtime contract
 
-`apps/agent-runtime` is a thin HTTP and isolation adapter around Heddle. Its
+`apps/agent-runtime` is a small hexagonal runtime around Heddle: AgentCore is
+the inbound adapter, `runtime-session` owns provider-neutral application
+policy, and Heddle implements its outbound execution port. Its
 AgentCore-compatible surface is:
 
 - `GET /ping`, returning AgentCore's `Healthy` or `HealthyBusy` status;

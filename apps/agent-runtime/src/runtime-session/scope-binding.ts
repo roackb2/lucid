@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { RuntimeScope } from './contracts.js';
+import type { RuntimeScope } from './types.js';
 
 export type RuntimeScopeBinding = RuntimeScope & {
   runtimeSessionId: string;
@@ -8,7 +8,7 @@ export type RuntimeScopeBinding = RuntimeScope & {
 export type BoundRuntimeScope = {
   binding: RuntimeScopeBinding;
   scopeKey: string;
-  heddleSessionId: string;
+  executionSessionId: string;
 };
 
 export class RuntimeScopeMismatchError extends Error {
@@ -53,7 +53,7 @@ export class RuntimeScopeBindingService {
     return {
       binding: { ...binding },
       scopeKey,
-      heddleSessionId: `agentcore-${scopeKey}`,
+      executionSessionId: `runtime-${scopeKey}`,
     };
   }
 }
