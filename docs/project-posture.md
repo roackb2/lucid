@@ -34,6 +34,13 @@ mode is suitable only for a private single-user pilot over TLS. Production
 identity, tenant isolation, abuse controls, metering, and a remote execution
 adapter remain future work.
 
+The separate `apps/agent-runtime` workspace is a generic local scaffold for a
+Heddle workstation turn behind AgentCore's HTTP contract. It is not connected
+to Lucid representative wakes, has no Lucid MCP surface or database access,
+and does not prove AgentCore's managed microVM isolation. See
+[Hosted agent runtime](hosted-agent-runtime.md) for its evidence boundary and
+the intended future control-plane shape.
+
 The architecture should therefore favor clean, testable ownership boundaries
 without prematurely optimizing for traffic or preserving obsolete local
 adapters.
@@ -64,7 +71,8 @@ Lucid does not currently attempt to provide:
 - direct runtime-to-runtime agent invocation;
 - production-grade multi-user identity, authorization, billing, or moderation;
 - high availability, large-scale throughput, or organic-network growth;
-- cryptographic privacy for participant context; or
+- cryptographic privacy for participant context;
+- treating local container separation as production tenant isolation; or
 - a general agent framework that competes with Heddle.
 
 A delivery path and its source references prove what moved through Lucid. They
@@ -105,6 +113,7 @@ do not prove that the content is true, independent, novel, or useful.
 | Web workspace | One participant-scoped rendering and user-intent boundary; it does not reconstruct domain rules |
 | Development simulator | Synthetic participants, scenario text, seeded timing, and external input through the same development ingress a replaceable client can call |
 | HTTP authentication | Converts request credentials into a server-derived participant/operator principal before domain services are called |
+| Hosted runtime adapter | Translates one authorized turn to AgentCore's HTTP/SSE contract and hosts Heddle inside an isolated scratch environment; it owns no Lucid data or identity authority |
 
 Lucid uses Heddle through public integration contracts. It should not duplicate
 Heddle's scheduler, checkpoint, or model-loop internals. Conversely, Heddle

@@ -1,0 +1,10 @@
+**
+!package.json
+!yarn.lock
+!tsconfig.base.json
+!apps/
+!apps/agent-runtime/
+!apps/agent-runtime/package.json
+!apps/agent-runtime/tsconfig.json
+!apps/agent-runtime/src/
+!apps/agent-runtime/src/**

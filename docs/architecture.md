@@ -1,9 +1,16 @@
 # Lucid architecture
 
-Lucid is one TypeScript application with separate web and server workspaces.
-The server combines participant-facing APIs, domain services, PostgreSQL
-adapters, and a replaceable representative-execution host. PostgreSQL remains
-the authority when the API process or execution worker restarts.
+The current Lucid product is one TypeScript application with separate web and
+server workspaces. The server combines participant-facing APIs, domain
+services, PostgreSQL adapters, and an in-process representative-execution host.
+PostgreSQL remains the authority when the API process or execution worker
+restarts.
+
+The monorepo also contains a separate `apps/agent-runtime` workspace for a
+generic, local AgentCore-compatible Heddle scaffold. No current code path
+connects that runtime to Lucid representative wakes or PostgreSQL.
+
+## Current Lucid product topology
 
 ```mermaid
 flowchart LR
@@ -97,6 +104,7 @@ one domain transaction.
 | `apps/server/src/infrastructure/postgres/` | Neutral PostgreSQL pool and migration mechanics without Lucid product policy |
 | `apps/server/src/runtime/heartbeat/postgres/` | PostgreSQL adapter for Heddle's public task-authority contracts |
 | `apps/server/src/composition/postgres-persistence.ts` | Constructs the adapters over one pool and owns their shared shutdown boundary |
+| `apps/agent-runtime/` | Separate AgentCore-compatible HTTP adapter for a generic isolated Heddle workstation turn; not connected to Lucid persistence or representative wakes |
 
 Transactions follow use-case ownership rather than table ownership. A
 service-local adapter may atomically query or update several product tables,
@@ -154,10 +162,36 @@ durable Heddle run request. The default targeted host then:
 The optional long-lived scheduler uses the same PostgreSQL authorities. It is
 useful for topology comparison, not a second persistence mode.
 
-The invocation-target interface is the intended hosted seam. A future
-AgentCore target can replace the local invocation transport while Lucid keeps
-participant state, Heddle keeps task/run semantics, and the dispatcher keeps
-bounded admission and durable polling. No AgentCore adapter is active today.
+`RepresentativeTaskInvocationTarget` makes the local delivery mechanism
+replaceable, but it is not a remote hosted seam. Its invocation contains an
+in-process `AbortSignal`; composition builds the target around a live handler
+closure; and `RepresentativeAgentWorker` holds the PostgreSQL-backed Heddle
+task store used for claims, checkpoints, and settlement. That shape cannot be
+serialized into a database-free AgentCore runtime.
+
+A future hosted integration needs a small public, provider-neutral Heddle
+execution port. The backend should retain durable task ownership and Lucid wake
+fencing, then send only authorized turn input and scoped capabilities to the
+runtime. The runtime can execute the Heddle model/tool loop and stream the
+result without receiving PostgreSQL credentials or reimplementing Heddle task
+policy. No AgentCore target or Lucid MCP server is active today.
+
+## Generic hosted-runtime experiment
+
+`apps/agent-runtime` exercises one complete Heddle workstation turn through
+AgentCore's `POST /invocations` SSE contract and exposes `GET /ping`. A runtime
+process binds permanently to the first accepted runtime-session, adopter,
+tenant, user, and conversation scope. It rejects scope changes and one
+concurrent turn, and it cancels the exact local run when its client
+disconnects.
+
+This app is an HTTP/isolation adapter, not another Lucid service. It owns no
+product identity, task authority, participant policy, or database connection.
+It currently has no Lucid MCP capabilities. The full workstation profile may
+run only in an explicitly isolated container or provider environment; a host
+process alone is not a tenant boundary. See
+[Hosted agent runtime](hosted-agent-runtime.md) for the proof matrix and
+future control/data-plane design.
 
 ## Agent boundary
 

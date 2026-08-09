@@ -123,6 +123,75 @@ Do not shorten the execution lease below the invocation timeout. Configuration
 validation requires both the invocation timeout and recovery interval to be
 shorter than the lease.
 
+## Generic AgentCore-compatible runtime
+
+The separate `apps/agent-runtime` workspace exercises one complete generic
+Heddle turn through AgentCore's `/invocations` SSE protocol. It is not started
+by the ordinary Lucid `yarn dev` command, is not connected to representative
+wakes, and must never receive `LUCID_DATABASE_URL`.
+
+The supported local workstation path is the pinned ARM64 container. Build it
+from the repository root:
+
+```bash
+yarn agent-runtime:docker:build
+export LUCID_AGENT_RUNTIME_LOCAL_TOKEN="$(openssl rand -hex 32)"
+export LUCID_AGENT_RUNTIME_LOCAL_TOKEN_SHA256="$(
+  printf '%s' "${LUCID_AGENT_RUNTIME_LOCAL_TOKEN}" \
+    | openssl dgst -sha256 -r \
+    | cut -d' ' -f1
+)"
+
+docker run --rm --name lucid-agent-runtime-a \
+  --platform linux/arm64 \
+  --publish 127.0.0.1:18080:8080 \
+  --cpus 1 --memory 2g --pids-limit 256 \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --env LUCID_AGENT_RUNTIME_MODE=local \
+  --env LUCID_AGENT_RUNTIME_ISOLATED=true \
+  --env LUCID_AGENT_RUNTIME_LOCAL_TOKEN_SHA256 \
+  lucid-agent-runtime:local
+```
+
+In a second shell, export the same local token and keep the model key only in
+the client environment:
+
+```bash
+export LUCID_AGENT_RUNTIME_LOCAL_TOKEN="the-same-local-token"
+export OPENAI_API_KEY="your-key-from-a-secure-source"
+yarn agent-runtime:invoke -- "Inspect /workspace and explain what is available."
+```
+
+The local client sends the model key as an HTTP header from its own process; it
+is not a Docker environment variable or command argument. For focused checks:
+
+```bash
+yarn workspace @lucid/agent-runtime typecheck
+yarn workspace @lucid/agent-runtime test
+yarn workspace @lucid/agent-runtime build
+```
+
+Use the app's [runtime runbook](../apps/agent-runtime/README.md) for the wire
+schema, optional client scope variables, and fixture-mount guidance. Local mode
+requires a high-entropy `LUCID_AGENT_RUNTIME_LOCAL_TOKEN`, sent by the client
+through `X-Lucid-Local-Runtime-Token`, its SHA-256 verifier in the container,
+and an explicit isolation assertion.
+The model key is supplied for the turn through the
+`X-Lucid-Model-Api-Key` request header. Do not source the root Lucid `.env`,
+pass database variables, mount a developer credential home, or expose the
+runtime port beyond the local machine.
+
+Two warnings apply to every local result:
+
+- launching the Node process directly can check validation and protocol
+  behavior, but it is not a tenant-isolation test; and
+- separate local containers can check our image and scope defenses, but only a
+  deployed AgentCore spike can check provider microVM isolation, session
+  routing, cleanup, force-stop behavior, long streams, and real cost.
+
+See [Hosted agent runtime](hosted-agent-runtime.md) for the evidence matrix and
+future Lucid control-plane/MCP boundary.
+
 ## Authentication modes
 
 `development` is the supported local browser mode. A loopback request becomes

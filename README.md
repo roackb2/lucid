@@ -31,6 +31,17 @@ Lucid records communication and delivery. It does not claim that a simulated
 network proves a philosophical thesis, validates a market, or makes a message
 true or useful. That judgment remains with each participant.
 
+## Hosted runtime experiment
+
+The monorepo also contains a separate generic Heddle runtime for locally
+testing AWS AgentCore's HTTP shape and a workstation-style agent inside an
+explicit isolation boundary. It is not wired to Lucid representative wakes,
+does not receive PostgreSQL credentials, and is not evidence of managed
+AgentCore tenant isolation. The intended future design keeps the Lucid backend
+as the identity, control, and data plane while an isolated runtime consumes
+capability-scoped Lucid MCP tools. See
+[`docs/hosted-agent-runtime.md`](docs/hosted-agent-runtime.md).
+
 ## Current experiment
 
 A new workspace contains only the local participant and their representative.
