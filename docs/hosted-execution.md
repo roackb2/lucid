@@ -8,9 +8,29 @@ runtime such as Amazon Bedrock AgentCore Runtime.
 
 ## Current status
 
-The external execution host currently supports one versioned
-`conversation-turn` workflow. Lucid's representative workflow is not connected
-to it yet. A representative wake still requires:
+The external execution host supports one versioned `conversation-turn`
+workflow. Lucid now has three code-level adopter boundaries for that workflow:
+
+- an ES256 authority service that issues separately typed execution and MCP
+  credentials and projects public JWKS keys;
+- an independently authenticated Streamable HTTP MCP service exposing only
+  `read_workspace_snapshot` for the configured singleton pilot; and
+- a provider-neutral `ExecutionHost` port with a strict direct-development
+  HTTP/SSE adapter.
+
+Focused tests exercise JWT/JWKS compatibility, exact scope and tool checks,
+official-SDK MCP discovery and calls, cancellation/cleanup, secret exclusion,
+and ordered terminal-safe SSE parsing. Lucid imports no private host package,
+and the host receives no database credential.
+
+These pieces are not yet composed into ordinary server startup. There is no
+participant conversation endpoint, deployment key loader, public JWKS route,
+mounted MCP route, AgentCore SDK adapter, or durable conversation record yet.
+The code therefore establishes the adopter contract without claiming that a
+hosted Lucid conversation is available.
+
+Lucid's representative workflow is also not connected to the external host. A
+representative wake still requires:
 
 - a PostgreSQL-backed Heddle task claim, checkpoint, and fenced settlement;
 - a Lucid wake claim and fixed mailbox horizon;
@@ -18,9 +38,9 @@ to it yet. A representative wake still requires:
   policy; and
 - durable Lucid completion or failure settlement.
 
-Adding an HTTP client before those responsibilities have a supported remote
-contract would create unused code and falsely imply that hosted execution is
-available.
+The conversation port must not be relabeled as representative execution.
+Moving heartbeats requires a supported autonomous-task workflow and the same
+durable claim and settlement semantics.
 
 ## Why the current invocation target is local
 
@@ -73,29 +93,27 @@ implements a Lucid-owned outbound port against a versioned wire contract. If a
 generic contract must be shared at compile time, it belongs in a released
 public Heddle entrypoint after real consumer evidence justifies it.
 
-## Prerequisites for the first functional integration
+## Next integration sequence
 
-1. Heddle exposes a supported provider-neutral way to execute the agent portion
-   of a heartbeat while retaining its task claim, checkpoint, and settlement
-   semantics in the backend.
-2. The external host adds a versioned representative-workflow result and
-   cancellation contract instead of accepting only a conversation prompt.
-3. Lucid exposes stateless, authenticated MCP capabilities for the bounded
-   communication tools without weakening wake-local policy or idempotency.
-4. Lucid can issue short-lived asymmetric execution assertions and publish the
-   corresponding verification keys without placing signing material in the
-   runtime.
-5. A local end-to-end test proves ordered streaming, exactly one terminal
-   outcome, ambiguous-stream interruption, cancellation, durable wake
-   settlement, and cross-scope MCP denial.
-6. A separately approved AgentCore experiment proves managed header forwarding,
-   session isolation, lifecycle behavior, and cost. Local containers cannot
-   establish those provider properties.
-
-The first functional Lucid code slice should introduce a product-owned
-`RepresentativeAgentTurnExecutor` and a concrete external-host adapter only
-when the service can exercise them through a real representative flow. Until
-then, the existing in-process host remains the production code path.
+1. Compose the authority, public JWKS route, fixed MCP route, scoped workspace
+   reader, and direct host adapter behind an explicit hosted-conversation
+   configuration. Load signing material from a reviewed secret boundary rather
+   than source, Terraform state, or model-visible environment.
+2. Exercise one real local conversation against the private host: the host must
+   fetch JWKS, call `read_workspace_snapshot` through MCP, and return one clean
+   terminal stream while swapped scope, expiry, cancellation, and ambiguous
+   EOF fail closed.
+3. Add durable invocation/replay and browser streaming semantics before calling
+   the conversation path a supported product surface.
+4. Apply checked-in migrations to the managed PostgreSQL project, deploy the
+   stateless Lucid backend, and verify the existing local representative story
+   against that database.
+5. Only after separate resource-and-cost approval, deploy the host through the
+   Terraform AgentCore template and repeat the managed header, stream,
+   lifecycle, and tenant-isolation evidence.
+6. Add an `autonomous-task` contract before replacing Lucid's in-process
+   representative runner. Preserve PostgreSQL task/wake authority and expose
+   stateful communication tools only with durable invocation-scoped policy.
 
 ## Security invariants
 
