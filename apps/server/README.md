@@ -3,9 +3,9 @@
 The server is the composition root for Lucid's PostgreSQL-backed
 delegated-discovery runtime. Both current representative execution-host
 selections run inside this process and use the same product and Heddle task
-authority. The separate `src/hosted-execution/` boundary now defines execution
+authority. The optional `src/hosted-execution/` boundary composes execution
 assertion issuance, a scoped product MCP service, and an outbound conversation
-host port, but ordinary startup does not compose or expose them yet.
+host port only when its complete profile is explicitly enabled.
 
 It owns:
 

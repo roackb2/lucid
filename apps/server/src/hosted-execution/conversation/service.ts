@@ -9,6 +9,7 @@ import type {
   HostedConversationEvent,
   HostedConversationModelCredentialProvider,
   HostedConversationTurnInput,
+  HostedConversationTurnRunner,
 } from './types.js';
 
 export class HostedConversationConfigurationError extends Error {}
@@ -20,7 +21,8 @@ export class HostedConversationConfigurationError extends Error {}
  * credentials through a narrow port, and streams the provider-neutral host
  * contract without owning HTTP routes or durable product settlement.
  */
-export class HostedConversationTurnService {
+export class HostedConversationTurnService
+implements HostedConversationTurnRunner {
   constructor(
     private readonly authority: ExecutionAuthority,
     private readonly executionHost: ExecutionHost,

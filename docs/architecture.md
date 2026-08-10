@@ -172,9 +172,9 @@ The first external-host foundation is intentionally a separate
 `conversation-turn` path. The public adopter SDK mints short-lived execution
 and MCP authority, independently verifies the MCP bearer, and supplies the
 strict HTTP/SSE `ExecutionHost` port. Lucid contributes one read-only workspace
-projection through its product MCP service. These pieces are not yet composed
-into ordinary server startup, and they do not move representative heartbeats
-out of process.
+projection through its product MCP service. The optional hosted profile now
+composes these pieces into ordinary server startup, but it does not move
+representative heartbeats out of process.
 
 ## Agent boundary
 

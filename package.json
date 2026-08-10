@@ -15,6 +15,7 @@
     "simulate:network": "tsx scripts/network-simulator.ts",
     "simulate:learning": "tsx scripts/longitudinal-network-experiment.ts",
     "participant:submit": "tsx scripts/participant-input.ts",
+    "hosted:generate-key": "tsx scripts/generate-hosted-execution-key.ts",
     "server:dev": "yarn workspace @lucid/server dev",
     "server:build": "yarn workspace @lucid/server build",
     "server:start": "yarn workspace @lucid/server start",
