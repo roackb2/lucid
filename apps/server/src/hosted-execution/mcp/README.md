@@ -19,13 +19,13 @@ only after Lucid has a durable invocation-scoped port for that wake authority.
 
 ## Shape
 
-- `capability-verifier.ts` verifies the dedicated
+- `@roackb2/heddle-adopter/mcp` verifies the dedicated
   `heddle-mcp-capability+jwt` signature, issuer, audience, age, deployment
-  binding, and exact fixed tool allowlist using `jose` and JWKS.
+  binding, and Lucid's fixed supported-tool set using JWKS.
 - `service.ts` owns a stateless official-SDK Streamable HTTP server, bounded
   request parsing, safe errors, cancellation propagation, per-operation expiry
   checks, and SDK resource cleanup.
-- `types.ts` defines verified invocation scope and the product projection port.
+- `types.ts` defines Lucid's supported tools and product projection port.
 - `workspace-projection-reader.ts` binds the current singleton pilot workspace
   to one configured tenant, subject, and product-session identity.
 

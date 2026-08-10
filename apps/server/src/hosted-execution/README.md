@@ -7,11 +7,23 @@ still runs in process and retains its PostgreSQL task and wake authorities.
 
 ## Services
 
+Lucid imports the generic adopter machinery from the released
+`@roackb2/heddle-adopter` package:
+
+- `authority` mints short-lived execution assertions and optional MCP
+  capabilities and projects public JWKS keys;
+- `mcp` independently verifies capabilities at the product edge; and
+- `http-sse` defines the provider-neutral `ExecutionHost` port and strict
+  direct-development client.
+
+This directory contains only Lucid-owned behavior:
+
 | Path | Responsibility |
 | --- | --- |
-| `authority/` | Mint one short-lived execution assertion and one narrower MCP capability from product-authorized scope, and project public JWKS verification keys |
-| `mcp/` | Independently verify the MCP capability and expose curated Lucid product tools over stateless Streamable HTTP |
-| `host/` | Define Lucid's provider-neutral outbound execution port and validate the private host's direct-development HTTP/SSE contract |
+| `mcp/` | Define Lucid's fixed tool policy, expose curated product tools over stateless Streamable HTTP, and bind verified scope to product projections |
+
+Do not recreate wrappers around the public SDK here. Composition should import
+its services and types directly, then inject Lucid-owned ports.
 
 The first supported product capability is the read-only
 `read_workspace_snapshot` tool for a `conversation-turn`. A trusted,
@@ -24,12 +36,12 @@ action identities, and fenced settlement.
 
 ## Current integration state
 
-The three boundaries and their focused conformance tests are implemented, but
-ordinary Lucid server startup does not compose or expose them yet. In
-particular, this slice does not load a deployment signing key, publish the JWKS
-route, mount the MCP route, expose a participant conversation endpoint, or
-invoke AgentCore. That wiring must land as one separately testable composition
-so a partially configured credential path cannot appear enabled.
+The released SDK and Lucid product MCP boundary are implemented, but ordinary
+Lucid server startup does not compose or expose them yet. In particular, this
+slice does not load a deployment signing key, publish the JWKS route, mount the
+MCP route, expose a participant conversation endpoint, or invoke AgentCore.
+That wiring must land as one separately testable composition so a partially
+configured credential path cannot appear enabled.
 
 The direct HTTP adapter is only for a loopback or reviewed HTTPS host. A future
 AgentCore adapter implements the same `ExecutionHost` port with SigV4 and the
@@ -44,11 +56,11 @@ managed Runtime invocation API. Neither adapter may receive a PostgreSQL URL.
 - MCP exposes domain capabilities rather than database CRUD. It re-verifies
   every bearer independently instead of trusting the host's earlier decision.
 - No file in this boundary imports private execution-host code or AWS SDK
-  types. Provider-specific transports implement the Lucid-owned port.
+  types. Provider-specific transports implement the public SDK port.
 - Compact JWTs, model credentials, database URLs, and private signing keys must
   not enter prompts, result projections, logs, errors, files, or durable replay
   records.
 
-Read each service-level README before changing its contract. Update
+Read `mcp/README.md` before adding a product tool. Update
 `docs/hosted-execution.md` whenever supported workflows, trust ownership, or
 deployment evidence changes.

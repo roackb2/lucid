@@ -1,13 +1,13 @@
+import type { McpInvocationScope } from '@roackb2/heddle-adopter/mcp';
 import type {
   DiscoveryWorkspaceSnapshot,
 } from '../../lucid/discovery-types.js';
 import type {
-  LucidMcpInvocationScope,
   ScopedWorkspaceProjectionReader,
 } from './types.js';
 
 export type SingleWorkspaceIdentity = Pick<
-  LucidMcpInvocationScope,
+  McpInvocationScope,
   'tenantId' | 'subjectId' | 'productSessionId'
 >;
 
@@ -34,7 +34,7 @@ implements ScopedWorkspaceProjectionReader {
   ) {}
 
   async readWorkspaceProjection(input: {
-    scope: LucidMcpInvocationScope;
+    scope: McpInvocationScope;
     signal: AbortSignal;
   }): Promise<DiscoveryWorkspaceSnapshot> {
     input.signal.throwIfAborted();
@@ -44,7 +44,7 @@ implements ScopedWorkspaceProjectionReader {
     return snapshot;
   }
 
-  private assertScope(scope: LucidMcpInvocationScope): void {
+  private assertScope(scope: McpInvocationScope): void {
     if (
       scope.tenantId !== this.identity.tenantId
       || scope.subjectId !== this.identity.subjectId

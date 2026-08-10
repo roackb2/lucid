@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { McpInvocationScope } from '@roackb2/heddle-adopter/mcp';
 import {
   SingleWorkspaceProjectionReader,
   WorkspaceProjectionScopeError,
 } from './workspace-projection-reader.js';
 import { workspaceSnapshot } from './test-support.js';
-import type { LucidMcpInvocationScope } from './types.js';
 
-const SCOPE: LucidMcpInvocationScope = {
+const SCOPE: McpInvocationScope = {
   adopterId: 'lucid-adopter',
   tenantId: 'tenant-a',
   subjectId: 'subject-a',

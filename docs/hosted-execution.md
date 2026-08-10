@@ -9,19 +9,24 @@ runtime such as Amazon Bedrock AgentCore Runtime.
 ## Current status
 
 The external execution host supports one versioned `conversation-turn`
-workflow. Lucid now has three code-level adopter boundaries for that workflow:
+workflow. The released `@roackb2/heddle-adopter` package supplies the generic
+adopter machinery:
 
 - an ES256 authority service that issues separately typed execution and MCP
   credentials and projects public JWKS keys;
-- an independently authenticated Streamable HTTP MCP service exposing only
-  `read_workspace_snapshot` for the configured singleton pilot; and
 - a provider-neutral `ExecutionHost` port with a strict direct-development
-  HTTP/SSE adapter.
+  HTTP/SSE adapter; and
+- independent product-edge MCP capability verification.
 
-Focused tests exercise JWT/JWKS compatibility, exact scope and tool checks,
-official-SDK MCP discovery and calls, cancellation/cleanup, secret exclusion,
-and ordered terminal-safe SSE parsing. Lucid imports no private host package,
-and the host receives no database credential.
+Lucid keeps only its domain boundary: an authenticated Streamable HTTP MCP
+service exposing `read_workspace_snapshot` for the configured singleton pilot
+and binding verified scope to the product workspace projection.
+
+The public package owns generic JWT/JWKS and ordered SSE conformance. Lucid's
+focused tests issue and verify authority through that released package, then
+exercise exact product scope and tool checks, official-SDK MCP discovery and
+calls, cancellation/cleanup, and secret exclusion. Lucid imports no private
+host package, and the host receives no database credential.
 
 These pieces are not yet composed into ordinary server startup. There is no
 participant conversation endpoint, deployment key loader, public JWKS route,
@@ -88,10 +93,10 @@ tools expose domain operations, not database CRUD. The backend derives scope
 from a verified, short-lived capability rather than accepting tenant, user,
 agent, or wake identity from model-controlled arguments.
 
-Lucid must not depend on the private host as a source package. A future client
-implements a Lucid-owned outbound port against a versioned wire contract. If a
-generic contract must be shared at compile time, it belongs in a released
-public Heddle entrypoint after real consumer evidence justifies it.
+Lucid must not depend on the private host as a source package. It consumes the
+versioned public contract and reference implementation from
+`@roackb2/heddle-adopter`; provider-specific transports can implement the same
+public `ExecutionHost` port without exposing host internals.
 
 ## Next integration sequence
 

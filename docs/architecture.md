@@ -97,7 +97,7 @@ one domain transaction.
 | `apps/server/src/infrastructure/postgres/` | Neutral PostgreSQL pool and migration mechanics without Lucid product policy |
 | `apps/server/src/runtime/heartbeat/postgres/` | PostgreSQL adapter for Heddle's public task-authority contracts |
 | `apps/server/src/composition/postgres-persistence.ts` | Constructs the adapters over one pool and owns their shared shutdown boundary |
-| `apps/server/src/hosted-execution/` | Lucid-owned execution authority, scoped product MCP, and provider-neutral outbound host port for the external conversation workflow |
+| `apps/server/src/hosted-execution/` | Lucid-owned product MCP tools and scope-to-projection binding; generic authority, verification, and host clients come from `@roackb2/heddle-adopter` |
 
 Transactions follow use-case ownership rather than table ownership. A
 service-local adapter may atomically query or update several product tables,
@@ -169,11 +169,12 @@ prerequisites and trust boundary are recorded in
 [External Heddle execution host](hosted-execution.md).
 
 The first external-host foundation is intentionally a separate
-`conversation-turn` path: Lucid can mint short-lived execution and MCP
-authority, independently verify the MCP bearer, expose one read-only workspace
-projection, and consume the host's strict HTTP/SSE protocol through a
-Lucid-owned port. These pieces are not yet composed into ordinary server
-startup, and they do not move representative heartbeats out of process.
+`conversation-turn` path. The public adopter SDK mints short-lived execution
+and MCP authority, independently verifies the MCP bearer, and supplies the
+strict HTTP/SSE `ExecutionHost` port. Lucid contributes one read-only workspace
+projection through its product MCP service. These pieces are not yet composed
+into ordinary server startup, and they do not move representative heartbeats
+out of process.
 
 ## Agent boundary
 

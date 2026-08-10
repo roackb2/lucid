@@ -3,17 +3,18 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   StreamableHTTPServerTransport,
 } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import {
+  assertMcpCapabilityActive,
+  McpCapabilityUnavailableError,
+  McpCapabilityVerificationError,
+  type McpCapabilityVerifier,
+  type VerifiedMcpCapability,
+} from '@roackb2/heddle-adopter/mcp';
 import { z } from 'zod';
 import {
-  assertLucidMcpCapabilityActive,
-  LucidMcpCapabilityUnavailableError,
-  LucidMcpCapabilityVerificationError,
-} from './capability-verifier.js';
-import {
   READ_WORKSPACE_SNAPSHOT_TOOL,
-  type LucidMcpCapabilityVerifier,
+  type LucidProductMcpToolName,
   type ScopedWorkspaceProjectionReader,
-  type VerifiedLucidMcpCapability,
 } from './types.js';
 
 const DEFAULT_MAX_BODY_BYTES = 64 * 1_024;
@@ -42,7 +43,8 @@ export class LucidProductMcpService {
   private readonly maxBodyBytes: number;
 
   constructor(
-    private readonly capabilityVerifier: LucidMcpCapabilityVerifier,
+    private readonly capabilityVerifier:
+      McpCapabilityVerifier<LucidProductMcpToolName>,
     private readonly workspaceReader: ScopedWorkspaceProjectionReader,
     options: {
       maxBodyBytes?: number;
@@ -75,12 +77,12 @@ export class LucidProductMcpService {
       return;
     }
 
-    let capability: VerifiedLucidMcpCapability;
+    let capability: VerifiedMcpCapability<LucidProductMcpToolName>;
     try {
       capability = await this.capabilityVerifier.verify(assertion);
     } catch (error) {
       request.resume();
-      if (error instanceof LucidMcpCapabilityUnavailableError) {
+      if (error instanceof McpCapabilityUnavailableError) {
         writeJsonRpcError(response, 503, 'Authentication is temporarily unavailable.', {
           'Retry-After': '1',
         });
@@ -137,7 +139,7 @@ export class LucidProductMcpService {
   }
 
   private createServer(
-    capability: VerifiedLucidMcpCapability,
+    capability: VerifiedMcpCapability<LucidProductMcpToolName>,
     requestSignal: AbortSignal,
   ): McpServer {
     const server = new McpServer({
@@ -169,18 +171,18 @@ export class LucidProductMcpService {
   }
 
   private async readWorkspace(
-    capability: VerifiedLucidMcpCapability,
+    capability: VerifiedMcpCapability<LucidProductMcpToolName>,
     signal: AbortSignal,
   ) {
     try {
       signal.throwIfAborted();
-      assertLucidMcpCapabilityActive(capability, this.now());
+      assertMcpCapabilityActive(capability, this.now());
       const snapshot = await this.workspaceReader.readWorkspaceProjection({
         scope: capability.scope,
         signal,
       });
       signal.throwIfAborted();
-      assertLucidMcpCapabilityActive(capability, this.now());
+      assertMcpCapabilityActive(capability, this.now());
       return {
         content: [{
           type: 'text' as const,
@@ -190,7 +192,7 @@ export class LucidProductMcpService {
     } catch (error) {
       const message = signal.aborted
         ? 'Lucid workspace reading was cancelled.'
-        : error instanceof LucidMcpCapabilityVerificationError
+        : error instanceof McpCapabilityVerificationError
           ? 'Lucid MCP authority expired.'
           : 'Lucid workspace projection is unavailable.';
       return {

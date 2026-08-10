@@ -1,95 +1,102 @@
+import { webcrypto } from 'node:crypto';
 import {
-  createLocalJWKSet,
-  exportJWK,
-  generateKeyPair,
-  SignJWT,
-  type JSONWebKeySet,
-} from 'jose';
+  JoseExecutionAuthority,
+  type ExecutionAuthority,
+} from '@roackb2/heddle-adopter/authority';
+import {
+  JwtMcpCapabilityVerifier,
+} from '@roackb2/heddle-adopter/mcp';
 import type {
   DiscoveryWorkspaceSnapshot,
 } from '../../lucid/discovery-types.js';
 import {
-  HEDDLE_MCP_CAPABILITY_TYPE,
-  JwtLucidMcpCapabilityVerifier,
-} from './capability-verifier.js';
-import { READ_WORKSPACE_SNAPSHOT_TOOL } from './types.js';
+  LUCID_PRODUCT_MCP_TOOLS,
+  READ_WORKSPACE_SNAPSHOT_TOOL,
+  type LucidProductMcpToolName,
+} from './types.js';
 
 export const MCP_TEST_NOW = new Date('2026-08-10T05:00:00.000Z');
-export const MCP_TEST_NOW_SECONDS = Math.floor(MCP_TEST_NOW.getTime() / 1_000);
 
 export type CapabilityClaimOverrides = {
-  adopterId?: string;
   tenantId?: string;
   subjectId?: string;
   productSessionId?: string;
   runtimeSessionId?: string;
   invocationId?: string;
-  capabilityId?: string;
-  serverId?: string;
-  allowedTools?: string[];
-  contractVersion?: number;
-  workflow?: string;
-  issuedAt?: number;
-  expiresAt?: number;
+  allowedTools?: readonly string[];
 };
 
+/**
+ * Exercises Lucid's product MCP edge with the same released authority and
+ * verification services that production composition will consume.
+ */
 export class McpCapabilitySignerFixture {
   private constructor(
-    readonly jwks: JSONWebKeySet,
-    private readonly privateKey: Awaited<
-      ReturnType<typeof generateKeyPair>
-    >['privateKey'],
+    private readonly authority: ExecutionAuthority,
+    private readonly publicKey: webcrypto.CryptoKey,
   ) {}
 
   static async create(): Promise<McpCapabilitySignerFixture> {
-    const { privateKey, publicKey } = await generateKeyPair('ES256');
-    const publicJwk = await exportJWK(publicKey);
-    return new McpCapabilitySignerFixture(
-      { keys: [{ ...publicJwk, alg: 'ES256', kid: 'lucid-mcp-test-key' }] },
-      privateKey,
-    );
+    const keyPair = await webcrypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['sign', 'verify'],
+    ) as webcrypto.CryptoKeyPair;
+    let capabilitySequence = 0;
+    const authority = await JoseExecutionAuthority.create({
+      issuer: 'https://lucid.example.test',
+      adopterId: 'lucid-adopter',
+      executionAudience: 'urn:lucid:execution:test',
+      keyId: 'lucid-mcp-test-key',
+      executionTtlSeconds: 60,
+      mcp: {
+        audience: 'urn:lucid:mcp:test',
+        serverId: 'lucid-product',
+        ttlSeconds: 60,
+      },
+    }, keyPair, {
+      now: () => MCP_TEST_NOW,
+      createCapabilityId: () => `capability-${++capabilitySequence}`,
+    });
+    return new McpCapabilitySignerFixture(authority, keyPair.publicKey);
   }
 
   async sign(overrides: CapabilityClaimOverrides = {}): Promise<string> {
-    const issuedAt = overrides.issuedAt ?? MCP_TEST_NOW_SECONDS;
-    return await new SignJWT({
-      contractVersion: overrides.contractVersion ?? 1,
-      adopterId: overrides.adopterId ?? 'lucid-adopter',
-      tenantId: overrides.tenantId ?? 'tenant-a',
-      productSessionId: overrides.productSessionId ?? 'product-session-a',
+    const issued = await this.authority.issue({
+      scope: {
+        tenantId: overrides.tenantId ?? 'tenant-a',
+        subjectId: overrides.subjectId ?? 'subject-a',
+        productSessionId:
+          overrides.productSessionId ?? 'product-session-a',
+      },
       runtimeSessionId: overrides.runtimeSessionId
         ?? `runtime-session:${'a'.repeat(40)}`,
       invocationId: overrides.invocationId ?? 'invocation-001',
-      workflow: overrides.workflow ?? 'conversation-turn',
-      serverId: overrides.serverId ?? 'lucid-product',
-      allowedTools: overrides.allowedTools ?? [READ_WORKSPACE_SNAPSHOT_TOOL],
-    })
-      .setProtectedHeader({
-        alg: 'ES256',
-        kid: 'lucid-mcp-test-key',
-        typ: HEDDLE_MCP_CAPABILITY_TYPE,
-      })
-      .setIssuer('https://lucid.example.test')
-      .setAudience('urn:lucid:mcp:test')
-      .setSubject(overrides.subjectId ?? 'subject-a')
-      .setJti(overrides.capabilityId ?? 'capability-001')
-      .setIssuedAt(issuedAt)
-      .setExpirationTime(overrides.expiresAt ?? issuedAt + 60)
-      .sign(this.privateKey);
+      workflow: 'conversation-turn',
+      mcp: {
+        allowedTools: overrides.allowedTools
+          ?? [READ_WORKSPACE_SNAPSHOT_TOOL],
+      },
+    });
+    const capability = issued.mcpCapability();
+    if (!capability) {
+      throw new Error('The MCP test authority did not issue a capability.');
+    }
+    return capability;
   }
 
   verifier(now: () => Date = () => MCP_TEST_NOW) {
-    return new JwtLucidMcpCapabilityVerifier({
+    return new JwtMcpCapabilityVerifier<LucidProductMcpToolName>({
       issuer: 'https://lucid.example.test',
       audience: 'urn:lucid:mcp:test',
       jwksUrl: new URL('https://lucid.example.test/.well-known/jwks.json'),
-      jwtAlgorithms: ['ES256'],
       trustedAdopterId: 'lucid-adopter',
       serverId: 'lucid-product',
+      supportedTools: LUCID_PRODUCT_MCP_TOOLS,
       maxCapabilityAgeSeconds: 300,
       clockToleranceSeconds: 2,
     }, {
-      keyResolver: createLocalJWKSet(this.jwks),
+      keyResolver: async () => this.publicKey,
       now,
     });
   }
@@ -142,7 +149,7 @@ export function workspaceSnapshot(): DiscoveryWorkspaceSnapshot {
     },
     runtime: {
       model: 'test-model',
-      heddleVersion: '5.10.0',
+      heddleVersion: '5.11.0',
     },
   };
 }

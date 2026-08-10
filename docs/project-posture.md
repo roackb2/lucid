@@ -31,8 +31,9 @@ network mechanics.
 
 It is not deployed as a production multi-user service. The current static-token
 mode is suitable only for a private single-user pilot over TLS. A code-level
-external-host foundation now exists for signed conversation turns and one
-read-only product MCP tool, but it is not composed into the running server.
+external-host foundation now consumes the public Heddle adopter SDK for signed
+conversation turns and adds one Lucid-owned read-only product MCP tool, but it
+is not composed into the running server.
 Production identity, tenant isolation, abuse controls, metering, durable
 conversation lifecycle, and managed AgentCore evidence remain future work.
 
