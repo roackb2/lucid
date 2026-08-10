@@ -20,11 +20,17 @@ This directory contains only Lucid-owned behavior:
 
 | Path | Responsibility |
 | --- | --- |
-| `config.ts` | Validate the all-or-nothing hosted profile and remove invocation credentials from ambient environment state |
-| `signing-key.ts` | Load one owner-readable P-256 private JWK as a non-exportable signing key |
-| `conversation/` | Admit an authenticated Lucid participant, derive invocation identity, then use the fixed-policy turn service to mint authority and stream the provider-neutral host port |
-| `http-router.ts` | Publish public JWKS, mount product MCP, and expose the authenticated conversation SSE endpoint |
-| `mcp/` | Define Lucid's fixed tool policy, expose curated product tools over stateless Streamable HTTP, and bind verified scope to product projections |
+| `config.ts` | Validate Lucid's all-or-nothing hosted profile and select product identity, URLs, audiences, and limits |
+| `conversation/` | Admit an authenticated Lucid participant and derive product-owned scope, invocation identity, Runtime session, and deadline |
+| `http-router.ts` | Mount the package-owned HTTP and MCP services beside Lucid's tRPC routes |
+| `mcp/product-tools.ts` | Declare the exact Lucid tool names, schemas, descriptions, and product operations |
+| `mcp/workspace-projection-reader.ts` | Bind verified capability scope to Lucid's current workspace projection |
+
+`@roackb2/heddle-adopter` owns the ES256 key loader, non-enumerable direct
+credentials, authority and capability verification, hosted-turn
+orchestration, bounded Node HTTP/JWKS/SSE service, declarative JSON-tool
+registry, and stateless Streamable HTTP MCP lifecycle. Those implementations
+must not be copied back into Lucid.
 
 Do not recreate wrappers around the public SDK here. Composition should import
 its services and types directly, then inject Lucid-owned ports.
@@ -50,8 +56,8 @@ service issues one exact read-only MCP capability and invokes the configured
 host through the released strict direct HTTP client.
 
 Two deterministic integration boundaries remain deliberately distinct. The
-public adopter fixture proves the turn service and Lucid MCP contract without
-private host code. The startup-composition test crosses both real HTTP
+public adopter fixture proves the package turn service and Lucid MCP contract
+without private host code. The startup-composition test crosses both real HTTP
 boundaries and the official MCP SDK: participant request -> Lucid admission ->
 authority -> fake host -> Lucid MCP -> workspace projection -> terminal SSE.
 It also proves that an accepted host stream ending without a terminal is not

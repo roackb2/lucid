@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { HostedConversationTurnRunner } from '@roackb2/heddle-adopter/conversation';
 import dayjs from 'dayjs';
 import { principalHasRole } from '../../auth/request-principal.js';
 import { LOCAL_USER_ID } from '../../lucid/local-participant.js';
 import type {
   HostedConversationRequest,
   HostedConversationRequestService,
-  HostedConversationTurnRunner,
 } from './types.js';
 
 export class HostedConversationAuthorizationError extends Error {
@@ -23,7 +23,7 @@ type HostedConversationAdmissionPolicy = {
  *
  * This service owns product admission, stable subject/session identity,
  * invocation identity, and the bounded turn deadline. Authority minting and
- * host invocation remain in `HostedConversationTurnService`.
+ * host invocation remain in the public adopter conversation service.
  */
 export class HostedConversationAdmissionService
 implements HostedConversationRequestService {

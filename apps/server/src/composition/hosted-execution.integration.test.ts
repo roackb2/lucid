@@ -1,7 +1,6 @@
-import { webcrypto } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -16,9 +15,12 @@ import {
   MODEL_API_KEY_HEADER,
   type ExecutionHostStreamEvent,
 } from '@roackb2/heddle-adopter/contracts';
+import {
+  DirectExecutionHostCredentials,
+  generateExecutionAuthorityKeyFile,
+} from '@roackb2/heddle-adopter/node';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLucidAuthenticator } from '../auth/authenticator.js';
-import { HostedExecutionCredentials } from '../hosted-execution/config.js';
 import {
   HOSTED_CONVERSATION_TURNS_PATH,
   HOSTED_EXECUTION_JWKS_PATH,
@@ -85,7 +87,7 @@ describe('hosted execution composition', () => {
         mcpAudience: 'urn:lucid:mcp:test',
         mcpServerId: 'lucid_product',
         maxTurnMs: 60_000,
-        credentials: new HostedExecutionCredentials({
+        credentials: new DirectExecutionHostCredentials({
           localToken: LOCAL_TOKEN,
           modelApiKey: MODEL_API_KEY,
         }),
@@ -178,7 +180,7 @@ describe('hosted execution composition', () => {
         mcpAudience: 'urn:lucid:mcp:test',
         mcpServerId: 'lucid_product',
         maxTurnMs: 60_000,
-        credentials: new HostedExecutionCredentials({
+        credentials: new DirectExecutionHostCredentials({
           localToken: LOCAL_TOKEN,
           modelApiKey: MODEL_API_KEY,
         }),
@@ -380,12 +382,6 @@ async function writePrivateJwk(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lucid-hosted-composition-'));
   temporaryRoots.add(root);
   const path = join(root, 'private.jwk.json');
-  const keyPair = await webcrypto.subtle.generateKey(
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    true,
-    ['sign', 'verify'],
-  );
-  const jwk = await webcrypto.subtle.exportKey('jwk', keyPair.privateKey);
-  await writeFile(path, JSON.stringify(jwk), { mode: 0o600 });
+  await generateExecutionAuthorityKeyFile(path);
   return path;
 }

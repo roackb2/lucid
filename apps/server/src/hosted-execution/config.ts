@@ -4,16 +4,18 @@ import {
   OpaqueIdSchema,
   isSafeWebUrl,
 } from '@roackb2/heddle-adopter/contracts';
+import { DirectExecutionHostCredentials } from '@roackb2/heddle-adopter/node';
 import { z } from 'zod';
-import type {
-  HostedConversationModelCredentialProvider,
-} from './conversation/types.js';
 
 const ENABLED_ENV = 'LUCID_HOSTED_EXECUTION_ENABLED';
 const SECRET_ENV_NAMES = [
   'LUCID_HOSTED_EXECUTION_LOCAL_TOKEN',
   'LUCID_HOSTED_EXECUTION_MODEL_API_KEY',
 ] as const;
+const CREDENTIAL_ENV_NAMES = Object.freeze({
+  localToken: SECRET_ENV_NAMES[0],
+  modelApiKey: SECRET_ENV_NAMES[1],
+});
 
 const HostedExecutionEnvironmentSchema = z.object({
   LUCID_HOSTED_EXECUTION_ENABLED: z.literal('true'),
@@ -68,26 +70,6 @@ const HostedExecutionEnvironmentSchema = z.object({
   }
 });
 
-/** Credentials are non-enumerable so routine object inspection cannot leak them. */
-export class HostedExecutionCredentials
-implements HostedConversationModelCredentialProvider {
-  readonly #localToken: string;
-  readonly #modelApiKey: string;
-
-  constructor(input: { localToken: string; modelApiKey: string }) {
-    this.#localToken = input.localToken;
-    this.#modelApiKey = input.modelApiKey;
-  }
-
-  localToken(): string {
-    return this.#localToken;
-  }
-
-  async resolveModelApiKey(): Promise<string> {
-    return this.#modelApiKey;
-  }
-}
-
 export type HostedExecutionConfig = {
   publicBaseUrl: URL;
   hostBaseUrl: URL;
@@ -100,7 +82,7 @@ export type HostedExecutionConfig = {
   mcpAudience: string;
   mcpServerId: string;
   maxTurnMs: number;
-  credentials: HostedExecutionCredentials;
+  credentials: DirectExecutionHostCredentials;
 };
 
 /** Resolves the optional local direct-host profile and removes secrets from env. */
@@ -118,11 +100,10 @@ export function resolveHostedExecutionConfig(
   }
 
   const parsed = HostedExecutionEnvironmentSchema.parse(environment);
-  const credentials = new HostedExecutionCredentials({
-    localToken: parsed.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN,
-    modelApiKey: parsed.LUCID_HOSTED_EXECUTION_MODEL_API_KEY,
-  });
-  clearSecretEnvironment(environment);
+  const credentials = DirectExecutionHostCredentials.takeFromEnvironment(
+    environment,
+    CREDENTIAL_ENV_NAMES,
+  );
 
   return Object.freeze({
     publicBaseUrl: new URL(parsed.LUCID_HOSTED_EXECUTION_PUBLIC_URL),
@@ -150,10 +131,6 @@ function assertNoDisabledSecrets(environment: NodeJS.ProcessEnv): void {
       `Hosted execution credentials are configured while ${ENABLED_ENV} is false.`,
     );
   }
-}
-
-function clearSecretEnvironment(environment: NodeJS.ProcessEnv): void {
-  SECRET_ENV_NAMES.forEach((name) => delete environment[name]);
 }
 
 function isOriginUrl(url: URL): boolean {

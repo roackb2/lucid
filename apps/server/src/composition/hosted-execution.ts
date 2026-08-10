@@ -1,26 +1,29 @@
 import { JoseExecutionAuthority } from '@roackb2/heddle-adopter/authority';
+import { HostedConversationTurnService } from '@roackb2/heddle-adopter/conversation';
 import { DirectHttpExecutionHost, type ExecutionHost } from '@roackb2/heddle-adopter/http-sse';
 import { JwtMcpCapabilityVerifier } from '@roackb2/heddle-adopter/mcp';
+import { NodeStreamableHttpMcpService } from '@roackb2/heddle-adopter/mcp/node';
+import {
+  loadExecutionAuthorityKeyPairFromFile,
+  NodeExecutionAdopterHttpService,
+} from '@roackb2/heddle-adopter/node';
 import type { LucidAuthenticator } from '../auth/authenticator.js';
 import type { HostedExecutionConfig } from '../hosted-execution/config.js';
 import {
+  HostedConversationAuthorizationError,
   HostedConversationAdmissionService,
 } from '../hosted-execution/conversation/admission-service.js';
 import {
-  HostedConversationTurnService,
-} from '../hosted-execution/conversation/service.js';
-import {
   HOSTED_EXECUTION_JWKS_PATH,
+  HOSTED_CONVERSATION_TURNS_PATH,
   HostedExecutionHttpRouter,
 } from '../hosted-execution/http-router.js';
-import { LucidProductToolset } from '../hosted-execution/mcp/product-tools.js';
-import { StreamableHttpMcpService } from '../hosted-execution/mcp/streamable-http-service.js';
+import { createLucidProductToolset } from '../hosted-execution/mcp/product-tools.js';
 import {
   LUCID_PRODUCT_MCP_TOOLS,
   type LucidProductMcpToolName,
 } from '../hosted-execution/mcp/types.js';
 import { SingleWorkspaceProjectionReader } from '../hosted-execution/mcp/workspace-projection-reader.js';
-import { loadExecutionAuthorityKeyPair } from '../hosted-execution/signing-key.js';
 import type { DiscoveryWorkspaceSnapshot } from '../lucid/discovery-types.js';
 import { LOCAL_USER_ID } from '../lucid/local-participant.js';
 import type { LucidLogger } from '../logger.js';
@@ -39,7 +42,7 @@ export async function createHostedExecutionComposition(input: {
   executionHost?: ExecutionHost;
 }): Promise<HostedExecutionComposition> {
   const maxTurnSeconds = Math.ceil(input.config.maxTurnMs / 1_000);
-  const keyPair = await loadExecutionAuthorityKeyPair(
+  const keyPair = await loadExecutionAuthorityKeyPairFromFile(
     input.config.signingJwkPath,
   );
   const issuer = input.config.publicBaseUrl.origin;
@@ -74,19 +77,20 @@ export async function createHostedExecutionComposition(input: {
     subjectId: LOCAL_USER_ID,
     productSessionId: input.config.productSessionId,
   }, input.discoveryWorkspace);
-  const mcp = new StreamableHttpMcpService(
+  const mcp = new NodeStreamableHttpMcpService({
     capabilityVerifier,
-    new LucidProductToolset(workspaceReader),
-  );
+    toolset: createLucidProductToolset(workspaceReader),
+  });
   const executionHost = input.executionHost ?? new DirectHttpExecutionHost({
     baseUrl: input.config.hostBaseUrl,
     localToken: input.config.credentials.localToken(),
   });
-  const turns = new HostedConversationTurnService(
+  const turns = new HostedConversationTurnService({
     authority,
     executionHost,
-    input.config.credentials,
-  );
+    modelCredentials: input.config.credentials,
+    mcp: { allowedTools: LUCID_PRODUCT_MCP_TOOLS },
+  });
   const conversations = new HostedConversationAdmissionService(
     turns,
     {
@@ -95,13 +99,24 @@ export async function createHostedExecutionComposition(input: {
       maxTurnMs: input.config.maxTurnMs,
     },
   );
-  const http = new HostedExecutionHttpRouter(
-    input.authenticator,
+  const adopterHttp = new NodeExecutionAdopterHttpService({
     authority,
-    mcp,
+    authenticator: input.authenticator,
     conversations,
-    input.logger,
-  );
+    paths: {
+      jwks: HOSTED_EXECUTION_JWKS_PATH,
+      conversationTurns: HOSTED_CONVERSATION_TURNS_PATH,
+    },
+    projectError: (error) => (
+      error instanceof HostedConversationAuthorizationError
+        ? { statusCode: 403, message: error.message }
+        : undefined
+    ),
+    reportFailure: (failure) => {
+      input.logger.warn(failure, 'lucid.hosted_execution.request_failed');
+    },
+  });
+  const http = new HostedExecutionHttpRouter(adopterHttp, mcp, input.logger);
 
   return {
     http,

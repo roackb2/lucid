@@ -76,13 +76,14 @@ representative work.
 Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
 
-The server requires `@roackb2/heddle` 5.10 or newer because the merged
+The server requires `@roackb2/heddle` 5.13 because the merged
 PostgreSQL heartbeat adapter consumes the released public task administration,
 control-policy, and state-projector APIs. Downgrading to 5.9 makes the existing
 server source fail typechecking even though the hosted-execution boundary does
 not import Heddle directly. The external conversation foundation separately
-uses `@roackb2/heddle-adopter` 5.11 or newer for signed authority, product-edge
-MCP verification, and the versioned `ExecutionHost` client contract.
+uses `@roackb2/heddle-adopter` 5.13 for signing-key and credential handling,
+signed authority, Node HTTP/JWKS/SSE, product-edge MCP, conversation
+orchestration, and the versioned `ExecutionHost` client contract.
 
 `src/lucid` owns participants, mailbox events, findings, feedback, wake claims,
 and the service-owned store ports. Heddle owns provider

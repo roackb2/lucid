@@ -1,8 +1,10 @@
 /** Generates one local ES256 authority key outside version control. */
-import { webcrypto } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import {
+  generateExecutionAuthorityKeyFile,
+} from '@roackb2/heddle-adopter/node';
 
 await main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
@@ -22,19 +24,6 @@ async function main(): Promise<void> {
   });
   const outputPath = resolve(values.output);
   await mkdir(dirname(outputPath), { recursive: true, mode: 0o700 });
-  const keyPair = await webcrypto.subtle.generateKey(
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    true,
-    ['sign', 'verify'],
-  );
-  const privateJwk = await webcrypto.subtle.exportKey(
-    'jwk',
-    keyPair.privateKey,
-  );
-  await writeFile(
-    outputPath,
-    `${JSON.stringify(privateJwk)}\n`,
-    { encoding: 'utf8', flag: 'wx', mode: 0o600 },
-  );
+  await generateExecutionAuthorityKeyFile(outputPath);
   console.log(`Created private hosted-execution signing key at ${outputPath}.`);
 }

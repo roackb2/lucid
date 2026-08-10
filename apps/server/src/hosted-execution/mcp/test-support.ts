@@ -149,7 +149,7 @@ export function workspaceSnapshot(): DiscoveryWorkspaceSnapshot {
     },
     runtime: {
       model: 'test-model',
-      heddleVersion: '5.11.0',
+      heddleVersion: '5.13.0',
     },
   };
 }

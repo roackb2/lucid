@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  HostedExecutionCredentials,
-  resolveHostedExecutionConfig,
-} from './config.js';
+import { resolveHostedExecutionConfig } from './config.js';
 
 const LOCAL_TOKEN = 'local-token-'.padEnd(32, 'x');
 const MODEL_API_KEY = 'model-key-value';
@@ -31,18 +28,6 @@ describe('hosted execution config', () => {
     expect(environment.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN).toBeUndefined();
     expect(environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY).toBeUndefined();
     expect(JSON.stringify(config?.credentials)).toBe('{}');
-  });
-
-  it('does not expose credential values through routine object inspection', () => {
-    const credentials = new HostedExecutionCredentials({
-      localToken: LOCAL_TOKEN,
-      modelApiKey: MODEL_API_KEY,
-    });
-
-    expect(Object.keys(credentials)).toEqual([]);
-    expect(JSON.stringify(credentials)).toBe('{}');
-    expect(String(credentials)).not.toContain(LOCAL_TOKEN);
-    expect(String(credentials)).not.toContain(MODEL_API_KEY);
   });
 
   it('rejects credentials when the profile is disabled', () => {

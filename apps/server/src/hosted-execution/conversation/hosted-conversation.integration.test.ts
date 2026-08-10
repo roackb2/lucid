@@ -8,18 +8,21 @@ import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
+  HostedConversationTurnService,
+} from '@roackb2/heddle-adopter/conversation';
+import {
+  NodeStreamableHttpMcpService,
+} from '@roackb2/heddle-adopter/mcp/node';
+import {
   LocalExecutionHostContractFixture,
 } from '@roackb2/heddle-adopter/testing';
 import { describe, expect, it, vi } from 'vitest';
-import { LucidProductToolset } from '../mcp/product-tools.js';
+import { createLucidProductToolset } from '../mcp/product-tools.js';
 import {
   MCP_TEST_NOW,
   McpCapabilitySignerFixture,
   workspaceSnapshot,
 } from '../mcp/test-support.js';
-import {
-  StreamableHttpMcpService,
-} from '../mcp/streamable-http-service.js';
 import {
   READ_WORKSPACE_SNAPSHOT_TOOL,
   type LucidProductMcpToolName,
@@ -27,7 +30,6 @@ import {
 import {
   SingleWorkspaceProjectionReader,
 } from '../mcp/workspace-projection-reader.js';
-import { HostedConversationTurnService } from './service.js';
 
 describe('Lucid hosted conversation control-plane round trip', () => {
   it('mints authority, invokes the public contract, calls real MCP, and projects a terminal', async () => {
@@ -35,9 +37,9 @@ describe('Lucid hosted conversation control-plane round trip', () => {
     const authority = signer.authority;
     const issue = vi.spyOn(authority, 'issue');
     const source = { snapshot: vi.fn(async () => workspaceSnapshot()) };
-    const mcpService = new StreamableHttpMcpService<LucidProductMcpToolName>(
-      signer.verifier(),
-      new LucidProductToolset(
+    const mcpService = new NodeStreamableHttpMcpService<LucidProductMcpToolName>({
+      capabilityVerifier: signer.verifier(),
+      toolset: createLucidProductToolset(
         new SingleWorkspaceProjectionReader({
           tenantId: 'tenant-a',
           subjectId: 'subject-a',
@@ -45,8 +47,7 @@ describe('Lucid hosted conversation control-plane round trip', () => {
         }, source),
         { now: () => MCP_TEST_NOW },
       ),
-      { now: () => MCP_TEST_NOW },
-    );
+    });
     const { server: mcpHttpServer, endpoint: mcpEndpoint } = await startMcp(
       mcpService,
     );
@@ -96,11 +97,12 @@ describe('Lucid hosted conversation control-plane round trip', () => {
     const modelCredentials = {
       resolveModelApiKey: vi.fn(async () => modelApiKey),
     };
-    const service = new HostedConversationTurnService(
+    const service = new HostedConversationTurnService({
       authority,
-      hostFixture.createExecutionHost(),
+      executionHost: hostFixture.createExecutionHost(),
       modelCredentials,
-    );
+      mcp: { allowedTools: [READ_WORKSPACE_SNAPSHOT_TOOL] },
+    });
 
     try {
       const events = [];
@@ -172,7 +174,7 @@ describe('Lucid hosted conversation control-plane round trip', () => {
 });
 
 async function startMcp(
-  service: StreamableHttpMcpService<LucidProductMcpToolName>,
+  service: NodeStreamableHttpMcpService<LucidProductMcpToolName>,
 ): Promise<{ server: HttpServer; endpoint: URL }> {
   const server = createServer((request, response) => {
     void service.handle(request, response);

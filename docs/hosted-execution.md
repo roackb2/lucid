@@ -29,7 +29,7 @@ and exposes an authenticated participant conversation endpoint. It calls the
 configured host through the strict direct HTTP/SSE adapter without importing
 private host code or sending a database credential.
 
-The local control-plane contract test runs Lucid's
+The local control-plane contract test runs the package-owned
 `HostedConversationTurnService` through the public adopter contract fixture.
 It mints real execution and MCP authority, traverses the strict HTTP/SSE wire,
 calls Lucid's real local `read_workspace_snapshot` MCP tool, and observes one
@@ -37,11 +37,12 @@ clean terminal result. This proves the adopter-side composition without a
 model, Docker, AWS, or the private host; it does not replace those later
 evidence boundaries.
 
-The optional startup-composition test separately crosses Lucid HTTP, product
+The optional startup-composition test separately crosses the package-owned
+Node HTTP/JWKS/SSE and Streamable HTTP MCP services, Lucid product
 admission, the direct host wire, a fake host, official-SDK MCP discovery/call,
 and the participant-scoped workspace projection. It proves that the complete
-profile is wired without collapsing Lucid policy into the HTTP router or
-duplicating the public turn service. A real isolated Heddle container turn and
+profile is wired while Lucid owns only route mounting and product policy. A
+real isolated Heddle container turn and
 managed AgentCore remain unverified deployment evidence. Conversation replay
 and product history are also not durable yet.
 
