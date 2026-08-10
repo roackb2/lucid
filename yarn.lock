@@ -986,10 +986,10 @@
   resolved "https://registry.npmjs.org/@radix-ui/rect/-/rect-1.1.3.tgz#5a58fbae3deefb7f8cfe6ea314287d699eb694a9"
   integrity sha512-JtyZR+mqgBibTo8xea3B6ZRmzZiM/YeVBtUkas6zMuXjAlfIFIW2FgqeM9eLyvEaYX66vr6DJMK+4U6LV0KhNw==
 
-"@roackb2/heddle-adopter@5.11.0":
-  version "5.11.0"
-  resolved "https://registry.npmjs.org/@roackb2/heddle-adopter/-/heddle-adopter-5.11.0.tgz#8d633cd0f1389ca2c2391f871afc4ba2141e851a"
-  integrity sha512-j0bPvhOcVhWm0FgriynQnWHd+T5gOr7MPoHK0y8+1W5lG4+gNC94uqyQkNvfEurgy8lNUrWdPygFbY1ifKUJuQ==
+"@roackb2/heddle-adopter@5.12.0":
+  version "5.12.0"
+  resolved "https://registry.npmjs.org/@roackb2/heddle-adopter/-/heddle-adopter-5.12.0.tgz#c41f49d1e5e10f62a3286ac824d8b3c8df06302a"
+  integrity sha512-x4rtDYmZnBvnudGmB6oT8QjeZZnOk5yCugZLQQcFJRIKMzTQHwSUaj1wosFQX5nUwP4q5jDXOTbQq6E9zClrdw==
   dependencies:
     eventsource-parser "^3.1.0"
     jose "^6.2.8"

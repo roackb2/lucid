@@ -20,6 +20,7 @@ This directory contains only Lucid-owned behavior:
 
 | Path | Responsibility |
 | --- | --- |
+| `conversation/` | Issue fixed-policy authority and stream one provider-neutral hosted conversation turn |
 | `mcp/` | Define Lucid's fixed tool policy, expose curated product tools over stateless Streamable HTTP, and bind verified scope to product projections |
 
 Do not recreate wrappers around the public SDK here. Composition should import
@@ -36,7 +37,8 @@ action identities, and fenced settlement.
 
 ## Current integration state
 
-The released SDK and Lucid product MCP boundary are implemented, but ordinary
+The released SDK, hosted-conversation application service, local contract
+round trip, and Lucid product MCP boundary are implemented, but ordinary
 Lucid server startup does not compose or expose them yet. In particular, this
 slice does not load a deployment signing key, publish the JWKS route, mount the
 MCP route, expose a participant conversation endpoint, or invoke AgentCore.
@@ -62,5 +64,7 @@ managed Runtime invocation API. Neither adapter may receive a PostgreSQL URL.
   records.
 
 Read `mcp/README.md` before adding a product tool. Update
+`conversation/README.md` before changing the hosted turn's application
+responsibility. Update
 `docs/hosted-execution.md` whenever supported workflows, trust ownership, or
 deployment evidence changes.

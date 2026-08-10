@@ -28,6 +28,14 @@ exercise exact product scope and tool checks, official-SDK MCP discovery and
 calls, cancellation/cleanup, and secret exclusion. Lucid imports no private
 host package, and the host receives no database credential.
 
+The local control-plane integration also runs Lucid's
+`HostedConversationTurnService` through the public adopter contract fixture.
+It mints real execution and MCP authority, traverses the strict HTTP/SSE wire,
+calls Lucid's real local `read_workspace_snapshot` MCP tool, and observes one
+clean terminal result. This proves the adopter-side composition without a
+model, Docker, AWS, or the private host; it does not replace those later
+evidence boundaries.
+
 These pieces are not yet composed into ordinary server startup. There is no
 participant conversation endpoint, deployment key loader, public JWKS route,
 mounted MCP route, AgentCore SDK adapter, or durable conversation record yet.
@@ -100,8 +108,9 @@ public `ExecutionHost` port without exposing host internals.
 
 ## Next integration sequence
 
-1. Compose the authority, public JWKS route, fixed MCP route, scoped workspace
-   reader, and direct host adapter behind an explicit hosted-conversation
+1. Compose the already tested authority, hosted-conversation service, public
+   JWKS route, fixed MCP route, scoped workspace reader, and direct host adapter
+   behind an explicit hosted-conversation
    configuration. Load signing material from a reviewed secret boundary rather
    than source, Terraform state, or model-visible environment.
 2. Exercise one real local conversation against the private host: the host must
