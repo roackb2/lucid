@@ -658,6 +658,10 @@ describe('representative-agent heartbeat service', () => {
       expect(runner.wakes).toHaveLength(1);
       expect((await requireAgent(stores, USER_AGENT_ID)).lastSeenSequence)
         .toBe(principalInput.sequence);
+      // Product settlement happens inside the handler; Heddle transitions the
+      // task back to waiting only after that handler resolves.
+      expect((await recoveredHeartbeat.snapshot()).tasks[0]?.status)
+        .toBe('waiting');
     }, { interval: 10, timeout: 5_000 });
 
     expect(runner.wakes[0]).toMatchObject({
@@ -665,8 +669,6 @@ describe('representative-agent heartbeat service', () => {
       wakeNumber: claimed!.wakeNumber,
       horizonSequence: claimed!.horizonSequence,
     });
-    expect((await recoveredHeartbeat.snapshot()).tasks[0]?.status)
-      .toBe('waiting');
   });
 
   async function startServices(

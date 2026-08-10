@@ -30,9 +30,12 @@ execution. Most peer participants are synthetic and exist to exercise the
 network mechanics.
 
 It is not deployed as a production multi-user service. The current static-token
-mode is suitable only for a private single-user pilot over TLS. Production
-identity, tenant isolation, abuse controls, metering, and integration with an
-external execution host remain future work.
+mode is suitable only for a private single-user pilot over TLS. A code-level
+external-host foundation now consumes the public Heddle adopter SDK for signed
+conversation turns and adds one Lucid-owned read-only product MCP tool, but it
+is not composed into the running server.
+Production identity, tenant isolation, abuse controls, metering, durable
+conversation lifecycle, and managed AgentCore evidence remain future work.
 
 The architecture should therefore favor clean, testable ownership boundaries
 without prematurely optimizing for traffic or preserving obsolete local

@@ -19,7 +19,9 @@
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
-    "@roackb2/heddle": "5.9.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@roackb2/heddle": "5.11.0",
+    "@roackb2/heddle-adopter": "5.11.0",
     "@trpc/server": "11.16.0",
     "async-mutex": "0.5.0",
     "dayjs": "^1.11.20",

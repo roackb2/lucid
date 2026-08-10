@@ -1,9 +1,11 @@
 # Lucid server
 
 The server is the composition root for Lucid's PostgreSQL-backed
-delegated-discovery runtime. Both current execution-host selections run inside
-this process and use the same product and Heddle task authority. External
-Heddle execution is a separate, not-yet-wired boundary.
+delegated-discovery runtime. Both current representative execution-host
+selections run inside this process and use the same product and Heddle task
+authority. The separate `src/hosted-execution/` boundary now defines execution
+assertion issuance, a scoped product MCP service, and an outbound conversation
+host port, but ordinary startup does not compose or expose them yet.
 
 It owns:
 
@@ -32,6 +34,8 @@ bounded execution, and recovery predictable.
   task authority contracts over the same owned pool.
 - `src/composition/postgres-persistence.ts` composes the four product stores
   and Heddle task adapter, then owns their shared pool shutdown.
+- `src/hosted-execution/` owns the adopter-side authority, MCP, and external
+  conversation host ports without importing private host or AWS code.
 - `src/router.ts` exposes:
   - `discovery.snapshot`
   - `discovery.saveInterest`
@@ -63,12 +67,22 @@ authority for recovery. The optional scheduler host is useful for a
 single-process demo but does not change persistence or create a second task
 authority.
 
-Neither current host is a remote transport. See
-[`../../docs/hosted-execution.md`](../../docs/hosted-execution.md) before adding
-an external execution adapter, identity assertion, or MCP surface.
+Neither current representative host is a remote transport. See
+[`src/hosted-execution/README.md`](src/hosted-execution/README.md) and
+[`../../docs/hosted-execution.md`](../../docs/hosted-execution.md) before
+composing the external conversation boundary or extending it to autonomous
+representative work.
 
 Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
+
+The server requires `@roackb2/heddle` 5.10 or newer because the merged
+PostgreSQL heartbeat adapter consumes the released public task administration,
+control-policy, and state-projector APIs. Downgrading to 5.9 makes the existing
+server source fail typechecking even though the hosted-execution boundary does
+not import Heddle directly. The external conversation foundation separately
+uses `@roackb2/heddle-adopter` 5.11 or newer for signed authority, product-edge
+MCP verification, and the versioned `ExecutionHost` client contract.
 
 `src/lucid` owns participants, mailbox events, findings, feedback, wake claims,
 and the service-owned store ports. Heddle owns provider

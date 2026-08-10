@@ -11,8 +11,8 @@ product, not a developer SDK.
 2. [Architecture](architecture.md) maps the web app, services, PostgreSQL
    state, Heddle runtime, and authentication boundary.
 3. [Hosted execution](hosted-execution.md) records the external Heddle host,
-   identity, MCP, and database boundaries without claiming that remote
-   execution is already wired.
+   public adopter SDK, Lucid-owned product MCP boundary, database boundary, and
+   the remaining composition and managed-runtime evidence.
 4. [How it works](how-it-works.md) follows an interest through representative
    wakes, network messages, findings, feedback, pause, and recovery.
 5. [Coding conventions](coding-conventions.md) defines Lucid's vertical-slice
