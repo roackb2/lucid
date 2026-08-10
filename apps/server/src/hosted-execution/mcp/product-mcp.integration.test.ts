@@ -8,21 +8,29 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { McpCapabilityVerifier } from '@roackb2/heddle-adopter/mcp';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LucidProductMcpService } from './service.js';
+import { LucidProductToolset } from './product-tools.js';
 import {
   MCP_TEST_NOW,
   McpCapabilitySignerFixture,
   workspaceSnapshot,
 } from './test-support.js';
-import { READ_WORKSPACE_SNAPSHOT_TOOL } from './types.js';
+import {
+  StreamableHttpMcpService,
+} from './streamable-http-service.js';
+import {
+  READ_WORKSPACE_SNAPSHOT_TOOL,
+  type LucidProductMcpToolName,
+  type ScopedWorkspaceProjectionReader,
+} from './types.js';
 import {
   SingleWorkspaceProjectionReader,
 } from './workspace-projection-reader.js';
 
 let signer: McpCapabilitySignerFixture;
 let httpServer: HttpServer | undefined;
-let mcpService: LucidProductMcpService | undefined;
+let mcpService: ProductMcpService | undefined;
 let client: Client | undefined;
 let lastRequest: IncomingMessage | undefined;
 
@@ -43,7 +51,7 @@ afterEach(async () => {
   lastRequest = undefined;
 });
 
-describe('Lucid product MCP Streamable HTTP service', () => {
+describe('Lucid product tools over the generic MCP HTTP edge', () => {
   it('exposes the read-only workspace tool and derives all scope from claims', async () => {
     const observedScopes: unknown[] = [];
     const snapshot = workspaceSnapshot();
@@ -54,7 +62,7 @@ describe('Lucid product MCP Streamable HTTP service', () => {
       }),
     };
     const assertion = await signer.sign();
-    const endpoint = await startService(new LucidProductMcpService(
+    const endpoint = await startService(createProductMcpService(
       signer.verifier(),
       reader,
       { now: () => MCP_TEST_NOW },
@@ -100,7 +108,7 @@ describe('Lucid product MCP Streamable HTTP service', () => {
 
   it('rejects unknown signed tools before MCP discovery', async () => {
     const assertion = await signer.sign({ allowedTools: ['delete_workspace'] });
-    const endpoint = await startService(new LucidProductMcpService(
+    const endpoint = await startService(createProductMcpService(
       signer.verifier(),
       {
         readWorkspaceProjection: vi.fn(async () => workspaceSnapshot()),
@@ -136,7 +144,7 @@ describe('Lucid product MCP Streamable HTTP service', () => {
       productSessionId: 'product-session-a',
     }, source);
     const assertion = await signer.sign({ tenantId: 'tenant-b' });
-    const endpoint = await startService(new LucidProductMcpService(
+    const endpoint = await startService(createProductMcpService(
       signer.verifier(),
       reader,
       { now: () => MCP_TEST_NOW },
@@ -155,7 +163,7 @@ describe('Lucid product MCP Streamable HTTP service', () => {
 
   it('returns a safe tool error when the projection fails', async () => {
     const assertion = await signer.sign();
-    const endpoint = await startService(new LucidProductMcpService(
+    const endpoint = await startService(createProductMcpService(
       signer.verifier(),
       {
         readWorkspaceProjection: vi.fn(async () => {
@@ -184,7 +192,7 @@ describe('Lucid product MCP Streamable HTTP service', () => {
       readWorkspaceProjection: vi.fn(async () => workspaceSnapshot()),
     };
     const assertion = await signer.sign();
-    const endpoint = await startService(new LucidProductMcpService(
+    const endpoint = await startService(createProductMcpService(
       signer.verifier(() => currentTime),
       reader,
       { now: () => currentTime },
@@ -209,7 +217,7 @@ describe('Lucid product MCP Streamable HTTP service', () => {
       markStarted = resolve;
     });
     const assertion = await signer.sign();
-    const endpoint = await startService(new LucidProductMcpService(
+    const endpoint = await startService(createProductMcpService(
       signer.verifier(),
       {
         readWorkspaceProjection: vi.fn(async ({ signal }) => {
@@ -248,7 +256,7 @@ describe('Lucid product MCP Streamable HTTP service', () => {
 
   it('bounds request size before creating MCP resources', async () => {
     const assertion = await signer.sign();
-    const endpoint = await startService(new LucidProductMcpService(
+    const endpoint = await startService(createProductMcpService(
       signer.verifier(),
       { readWorkspaceProjection: vi.fn(async () => workspaceSnapshot()) },
       { maxBodyBytes: 32, now: () => MCP_TEST_NOW },
@@ -274,7 +282,7 @@ describe('Lucid product MCP Streamable HTTP service', () => {
 
   it('accepts case-insensitive standard authorization and JSON media types', async () => {
     const assertion = await signer.sign();
-    const endpoint = await startService(new LucidProductMcpService(
+    const endpoint = await startService(createProductMcpService(
       signer.verifier(),
       { readWorkspaceProjection: vi.fn(async () => workspaceSnapshot()) },
       { now: () => MCP_TEST_NOW },
@@ -300,7 +308,24 @@ describe('Lucid product MCP Streamable HTTP service', () => {
   });
 });
 
-async function startService(service: LucidProductMcpService): Promise<URL> {
+type ProductMcpService = StreamableHttpMcpService<LucidProductMcpToolName>;
+
+function createProductMcpService(
+  capabilityVerifier: McpCapabilityVerifier<LucidProductMcpToolName>,
+  workspaceReader: ScopedWorkspaceProjectionReader,
+  options: {
+    maxBodyBytes?: number;
+    now?: () => Date;
+  } = {},
+): ProductMcpService {
+  return new StreamableHttpMcpService(
+    capabilityVerifier,
+    new LucidProductToolset(workspaceReader, options),
+    options,
+  );
+}
+
+async function startService(service: ProductMcpService): Promise<URL> {
   mcpService = service;
   httpServer = createServer((request, response) => {
     lastRequest = request;

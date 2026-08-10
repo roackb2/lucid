@@ -4,18 +4,10 @@ import {
   StreamableHTTPServerTransport,
 } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
-  assertMcpCapabilityActive,
   McpCapabilityUnavailableError,
-  McpCapabilityVerificationError,
   type McpCapabilityVerifier,
   type VerifiedMcpCapability,
 } from '@roackb2/heddle-adopter/mcp';
-import { z } from 'zod';
-import {
-  READ_WORKSPACE_SNAPSHOT_TOOL,
-  type LucidProductMcpToolName,
-  type ScopedWorkspaceProjectionReader,
-} from './types.js';
 
 const DEFAULT_MAX_BODY_BYTES = 64 * 1_024;
 const MAX_CAPABILITY_CHARACTERS = 4_096;
@@ -27,6 +19,18 @@ type McpRequestResources = {
   closing?: Promise<void>;
 };
 
+export type McpToolRegistrationContext<TTool extends string> = {
+  server: McpServer;
+  capability: VerifiedMcpCapability<TTool>;
+  requestSignal: AbortSignal;
+};
+
+/** Product-owned tool registration plugged into the generic MCP HTTP edge. */
+export interface McpToolset<TTool extends string> {
+  readonly serverInfo: Readonly<{ name: string; version: string }>;
+  registerAllowedTools(context: McpToolRegistrationContext<TTool>): void;
+}
+
 class McpRequestBodyError extends Error {
   constructor(readonly statusCode: 400 | 413 | 415) {
     super('Invalid MCP request body.');
@@ -34,27 +38,24 @@ class McpRequestBodyError extends Error {
 }
 
 /**
- * Stateless Streamable HTTP edge for model-invokable Lucid product tools.
- * Every request re-verifies its bearer and owns isolated SDK resources.
+ * Generic stateless Streamable HTTP MCP edge.
+ *
+ * This service owns protocol concerns only. The injected toolset owns every
+ * model-visible tool name, schema, description, and product operation.
  */
-export class LucidProductMcpService {
+export class StreamableHttpMcpService<TTool extends string> {
   private readonly activeRequests = new Set<McpRequestResources>();
-  private readonly now: () => Date;
   private readonly maxBodyBytes: number;
 
   constructor(
-    private readonly capabilityVerifier:
-      McpCapabilityVerifier<LucidProductMcpToolName>,
-    private readonly workspaceReader: ScopedWorkspaceProjectionReader,
-    options: {
-      maxBodyBytes?: number;
-      now?: () => Date;
-    } = {},
+    private readonly capabilityVerifier: McpCapabilityVerifier<TTool>,
+    private readonly toolset: McpToolset<TTool>,
+    options: { maxBodyBytes?: number } = {},
   ) {
     this.maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
-    this.now = options.now ?? (() => new Date());
   }
 
+  /** Handles one authenticated, stateless MCP HTTP request. */
   async handle(
     request: IncomingMessage,
     response: ServerResponse,
@@ -77,15 +78,18 @@ export class LucidProductMcpService {
       return;
     }
 
-    let capability: VerifiedMcpCapability<LucidProductMcpToolName>;
+    let capability: VerifiedMcpCapability<TTool>;
     try {
       capability = await this.capabilityVerifier.verify(assertion);
     } catch (error) {
       request.resume();
       if (error instanceof McpCapabilityUnavailableError) {
-        writeJsonRpcError(response, 503, 'Authentication is temporarily unavailable.', {
-          'Retry-After': '1',
-        });
+        writeJsonRpcError(
+          response,
+          503,
+          'Authentication is temporarily unavailable.',
+          { 'Retry-After': '1' },
+        );
         return;
       }
       writeJsonRpcError(response, 401, 'Authentication failed.', {
@@ -106,7 +110,12 @@ export class LucidProductMcpService {
     }
 
     const abortController = new AbortController();
-    const server = this.createServer(capability, abortController.signal);
+    const server = new McpServer(this.toolset.serverInfo);
+    this.toolset.registerAllowedTools({
+      server,
+      capability,
+      requestSignal: abortController.signal,
+    });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -136,70 +145,6 @@ export class LucidProductMcpService {
     await Promise.all([...this.activeRequests].map((resources) => (
       this.closeRequest(resources)
     )));
-  }
-
-  private createServer(
-    capability: VerifiedMcpCapability<LucidProductMcpToolName>,
-    requestSignal: AbortSignal,
-  ): McpServer {
-    const server = new McpServer({
-      name: 'lucid-product',
-      version: '1.0.0',
-    });
-    const allowedTools = new Set(capability.allowedTools);
-    if (allowedTools.has(READ_WORKSPACE_SNAPSHOT_TOOL)) {
-      server.registerTool(
-        READ_WORKSPACE_SNAPSHOT_TOOL,
-        {
-          description:
-            'Read the participant-scoped Lucid workspace, current assignment, working direction, findings, and background-check status.',
-          inputSchema: z.object({}).strict(),
-          annotations: {
-            readOnlyHint: true,
-            destructiveHint: false,
-            idempotentHint: true,
-            openWorldHint: false,
-          },
-        },
-        async (_input, extra) => this.readWorkspace(
-          capability,
-          AbortSignal.any([requestSignal, extra.signal]),
-        ),
-      );
-    }
-    return server;
-  }
-
-  private async readWorkspace(
-    capability: VerifiedMcpCapability<LucidProductMcpToolName>,
-    signal: AbortSignal,
-  ) {
-    try {
-      signal.throwIfAborted();
-      assertMcpCapabilityActive(capability, this.now());
-      const snapshot = await this.workspaceReader.readWorkspaceProjection({
-        scope: capability.scope,
-        signal,
-      });
-      signal.throwIfAborted();
-      assertMcpCapabilityActive(capability, this.now());
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify(snapshot),
-        }],
-      };
-    } catch (error) {
-      const message = signal.aborted
-        ? 'Lucid workspace reading was cancelled.'
-        : error instanceof McpCapabilityVerificationError
-          ? 'Lucid MCP authority expired.'
-          : 'Lucid workspace projection is unavailable.';
-      return {
-        isError: true,
-        content: [{ type: 'text' as const, text: message }],
-      };
-    }
   }
 
   private async closeRequest(resources: McpRequestResources): Promise<void> {
