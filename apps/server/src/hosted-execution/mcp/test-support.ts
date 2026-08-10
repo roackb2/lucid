@@ -32,7 +32,7 @@ export type CapabilityClaimOverrides = {
  */
 export class McpCapabilitySignerFixture {
   private constructor(
-    private readonly authority: ExecutionAuthority,
+    readonly authority: ExecutionAuthority,
     private readonly publicKey: webcrypto.CryptoKey,
   ) {}
 
