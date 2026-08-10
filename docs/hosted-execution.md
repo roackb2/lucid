@@ -22,13 +22,14 @@ Lucid keeps only its domain boundary: an authenticated Streamable HTTP MCP
 service exposing `read_workspace_snapshot` for the configured singleton pilot
 and binding verified scope to the product workspace projection.
 
-The public package owns generic JWT/JWKS and ordered SSE conformance. Lucid's
-focused tests issue and verify authority through that released package, then
-exercise exact product scope and tool checks, official-SDK MCP discovery and
-calls, cancellation/cleanup, and secret exclusion. Lucid imports no private
-host package, and the host receives no database credential.
+The public package owns generic JWT/JWKS and ordered SSE conformance. When the
+complete hosted profile is explicitly enabled, Lucid startup now loads an
+owner-readable ES256 key, publishes public JWKS, mounts its product MCP edge,
+and exposes an authenticated participant conversation endpoint. It calls the
+configured host through the strict direct HTTP/SSE adapter without importing
+private host code or sending a database credential.
 
-The local control-plane integration also runs Lucid's
+The local control-plane contract test runs the package-owned
 `HostedConversationTurnService` through the public adopter contract fixture.
 It mints real execution and MCP authority, traverses the strict HTTP/SSE wire,
 calls Lucid's real local `read_workspace_snapshot` MCP tool, and observes one
@@ -36,11 +37,14 @@ clean terminal result. This proves the adopter-side composition without a
 model, Docker, AWS, or the private host; it does not replace those later
 evidence boundaries.
 
-These pieces are not yet composed into ordinary server startup. There is no
-participant conversation endpoint, deployment key loader, public JWKS route,
-mounted MCP route, AgentCore SDK adapter, or durable conversation record yet.
-The code therefore establishes the adopter contract without claiming that a
-hosted Lucid conversation is available.
+The optional startup-composition test separately crosses the package-owned
+Node HTTP/JWKS/SSE and Streamable HTTP MCP services, Lucid product
+admission, the direct host wire, a fake host, official-SDK MCP discovery/call,
+and the participant-scoped workspace projection. It proves that the complete
+profile is wired while Lucid owns only route mounting and product policy. A
+real isolated Heddle container turn and
+managed AgentCore remain unverified deployment evidence. Conversation replay
+and product history are also not durable yet.
 
 Lucid's representative workflow is also not connected to the external host. A
 representative wake still requires:
@@ -108,24 +112,19 @@ public `ExecutionHost` port without exposing host internals.
 
 ## Next integration sequence
 
-1. Compose the already tested authority, hosted-conversation service, public
-   JWKS route, fixed MCP route, scoped workspace reader, and direct host adapter
-   behind an explicit hosted-conversation
-   configuration. Load signing material from a reviewed secret boundary rather
-   than source, Terraform state, or model-visible environment.
-2. Exercise one real local conversation against the private host: the host must
+1. Exercise one real isolated conversation against the private host: the host must
    fetch JWKS, call `read_workspace_snapshot` through MCP, and return one clean
    terminal stream while swapped scope, expiry, cancellation, and ambiguous
    EOF fail closed.
-3. Add durable invocation/replay and browser streaming semantics before calling
+2. Add durable invocation/replay and browser streaming semantics before calling
    the conversation path a supported product surface.
-4. Apply checked-in migrations to the managed PostgreSQL project, deploy the
+3. Apply checked-in migrations to the managed PostgreSQL project, deploy the
    stateless Lucid backend, and verify the existing local representative story
    against that database.
-5. Only after separate resource-and-cost approval, deploy the host through the
+4. Only after separate resource-and-cost approval, deploy the host through the
    Terraform AgentCore template and repeat the managed header, stream,
    lifecycle, and tenant-isolation evidence.
-6. Add an `autonomous-task` contract before replacing Lucid's in-process
+5. Add an `autonomous-task` contract before replacing Lucid's in-process
    representative runner. Preserve PostgreSQL task/wake authority and expose
    stateful communication tools only with durable invocation-scoped policy.
 

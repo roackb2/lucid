@@ -148,6 +148,47 @@ loopback-only even in static-token mode. The bundled web app and simulator do
 not attach bearer tokens, so use development mode for their current local
 workflow.
 
+## Optional external Execution Host conversation
+
+Generate Lucid's ignored local signing key once:
+
+```bash
+yarn hosted:generate-key
+```
+
+Then enable the complete profile in `.env`. The raw local token must match the
+token whose SHA-256 digest is configured in the private Execution Host; the two
+audiences, adopter ID, MCP server ID, issuer, JWKS URL, and MCP URL must also
+match exactly. Lucid deletes the raw local token and model key from its process
+environment after startup and retains them only in non-enumerable credential
+objects for outbound calls.
+
+The participant endpoint is:
+
+```text
+POST /hosted-execution/conversation-turns
+Content-Type: application/json
+
+{"prompt":"Summarize my current Lucid workspace."}
+```
+
+It returns the versioned Execution Host SSE stream. Lucid additionally serves
+`GET /.well-known/jwks.json` and the authenticated
+`POST /hosted-execution/mcp` endpoint; neither endpoint exposes the signing
+key or database credential.
+
+An isolated Docker container cannot reach a host-machine Lucid server through
+`127.0.0.1`; that address is the container itself. For a real container smoke,
+set `LUCID_HOSTED_EXECUTION_PUBLIC_URL` to an HTTPS origin reachable from the
+container and configure the host's JWKS and MCP URLs from that same origin. If
+a tunnel or reverse proxy makes Lucid reachable beyond this machine, switch to
+`static-token` authentication; a loopback proxy must never turn arbitrary
+Internet callers into the development identity. Do not weaken the host's
+non-loopback TLS check or run its shell-enabled workstation natively just to
+avoid this boundary. The deterministic integration suite exercises the
+complete HTTP/JWKS/MCP/SSE composition without a model; the isolated-container
+smoke remains separate evidence.
+
 ## Checks
 
 Use a separate disposable PostgreSQL database for tests. The suite resets

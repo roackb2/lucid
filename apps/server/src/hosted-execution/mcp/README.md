@@ -23,18 +23,20 @@ The MCP endpoint has two deliberately separate layers. The Execution Host sees
 only the tools registered by the product layer; HTTP and MCP lifecycle methods
 are endpoint internals, not agent tools.
 
-| Layer | File | Responsibility | Visible to the model |
+| Layer | Owner | Responsibility | Visible to the model |
 | --- | --- | --- | --- |
-| Generic MCP edge | `streamable-http-service.ts` | Bearer extraction and redaction, capability verification, bounded JSON parsing, Streamable HTTP transport lifecycle, cancellation, safe protocol errors, and shutdown cleanup | No |
-| Lucid toolset | `product-tools.ts` | Exact tool names, descriptions, schemas, annotations, authorization-aware registration, and tool handlers | Yes |
+| Generic MCP edge | `@roackb2/heddle-adopter/mcp/node` | Bearer extraction and redaction, capability verification, bounded JSON parsing, Streamable HTTP transport lifecycle, cancellation, safe protocol errors, and shutdown cleanup | No |
+| Generic JSON tool registry | `@roackb2/heddle-adopter/mcp/node` | Capability admission, per-call lifetime checks, cancellation composition, safe failures, and JSON result projection | No |
+| Lucid tool definitions | `product-tools.ts` | Exact tool names, descriptions, schemas, annotations, failure messages, and product operations | Yes |
 | Lucid tool contract | `types.ts` | Fixed supported-tool union and product-owned projection ports | Only the registered tool schema |
 | Lucid projection adapter | `workspace-projection-reader.ts` | Bind verified capability scope to the current singleton workspace projection | No |
 
-`StreamableHttpMcpService.handle()` and `.close()` are generic server entrypoints.
-`LucidProductToolset.registerAllowedTools()` is the plug-in boundary between
-the layers. Methods named `register...Tool()` and `execute...Tool()` in
-`product-tools.ts` define the capabilities made available to the Execution
-Host. Currently that is only `read_workspace_snapshot`.
+`NodeStreamableHttpMcpService.handle()` and `.close()` are package-owned server
+entrypoints. `createLucidProductToolset()` is Lucid's plug-in boundary: each
+`defineNodeMcpJsonTool()` entry inside it is an actual capability made
+available to the Execution Host. Currently that is only
+`read_workspace_snapshot`. Helper methods inside the package service are MCP
+server internals and are never model-visible tools.
 
 `@roackb2/heddle-adopter/mcp` supplies the generic verifier for the dedicated
 `heddle-mcp-capability+jwt` signature, issuer, audience, age, deployment
@@ -52,9 +54,10 @@ binding, and Lucid's fixed supported-tool set using JWKS.
 - Add a tool name to `LUCID_PRODUCT_MCP_TOOLS` only with an equally explicit
   registration and handler in `product-tools.ts`, a least-privilege input
   schema, and a product-owned port.
-- Do not put product tool schemas or handlers in
-  `streamable-http-service.ts`. Do not put HTTP parsing, bearer handling, or SDK
-  transport cleanup in `product-tools.ts`.
+- Do not recreate package-owned HTTP parsing, bearer handling, capability
+  lifetime checks, JSON result projection, or SDK transport cleanup in Lucid.
+  Keep only product schemas, descriptions, and operations in
+  `product-tools.ts`.
 - Do not use `SingleWorkspaceProjectionReader` for a multi-tenant deployment.
   Replace it with a projection store that resolves workspace identity from the
   verified scope and proves cross-tenant denial.

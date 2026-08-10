@@ -20,8 +20,17 @@ This directory contains only Lucid-owned behavior:
 
 | Path | Responsibility |
 | --- | --- |
-| `conversation/` | Issue fixed-policy authority and stream one provider-neutral hosted conversation turn |
-| `mcp/` | Define Lucid's fixed tool policy, expose curated product tools over stateless Streamable HTTP, and bind verified scope to product projections |
+| `config.ts` | Validate Lucid's all-or-nothing hosted profile and select product identity, URLs, audiences, and limits |
+| `conversation/` | Admit an authenticated Lucid participant and derive product-owned scope, invocation identity, Runtime session, and deadline |
+| `http-router.ts` | Mount the package-owned HTTP and MCP services beside Lucid's tRPC routes |
+| `mcp/product-tools.ts` | Declare the exact Lucid tool names, schemas, descriptions, and product operations |
+| `mcp/workspace-projection-reader.ts` | Bind verified capability scope to Lucid's current workspace projection |
+
+`@roackb2/heddle-adopter` owns the ES256 key loader, non-enumerable direct
+credentials, authority and capability verification, hosted-turn
+orchestration, bounded Node HTTP/JWKS/SSE service, declarative JSON-tool
+registry, and stateless Streamable HTTP MCP lifecycle. Those implementations
+must not be copied back into Lucid.
 
 Do not recreate wrappers around the public SDK here. Composition should import
 its services and types directly, then inject Lucid-owned ports.
@@ -37,13 +46,24 @@ action identities, and fenced settlement.
 
 ## Current integration state
 
-The released SDK, hosted-conversation application service, local contract
-round trip, and Lucid product MCP boundary are implemented, but ordinary
-Lucid server startup does not compose or expose them yet. In particular, this
-slice does not load a deployment signing key, publish the JWKS route, mount the
-MCP route, expose a participant conversation endpoint, or invoke AgentCore.
-That wiring must land as one separately testable composition so a partially
-configured credential path cannot appear enabled.
+Ordinary server startup now composes this boundary only when
+`LUCID_HOSTED_EXECUTION_ENABLED=true` and the complete profile validates. It
+loads the signing key, publishes `/.well-known/jwks.json`, mounts
+`/hosted-execution/mcp`, and exposes
+`/hosted-execution/conversation-turns` as an authenticated SSE endpoint. The
+admission service derives product-owned identity and timing before the turn
+service issues one exact read-only MCP capability and invokes the configured
+host through the released strict direct HTTP client.
+
+Two deterministic integration boundaries remain deliberately distinct. The
+public adopter fixture proves the package turn service and Lucid MCP contract
+without private host code. The startup-composition test crosses both real HTTP
+boundaries and the official MCP SDK: participant request -> Lucid admission ->
+authority -> fake host -> Lucid MCP -> workspace projection -> terminal SSE.
+It also proves that an accepted host stream ending without a terminal is not
+converted into success. Neither test is evidence of a real Heddle model turn,
+container isolation, or managed AgentCore behavior; those remain deployment
+checks.
 
 The direct HTTP adapter is only for a loopback or reviewed HTTPS host. A future
 AgentCore adapter implements the same `ExecutionHost` port with SigV4 and the

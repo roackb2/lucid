@@ -3,7 +3,13 @@ import heddlePackage from '@roackb2/heddle/package.json' with { type: 'json' };
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import { createLucidAuthenticator } from './auth/authenticator.js';
 import { resolveLucidConfig } from './config.js';
+import {
+  createHostedExecutionComposition,
+} from './composition/hosted-execution.js';
 import { createPostgresPersistence } from './composition/postgres-persistence.js';
+import {
+  resolveHostedExecutionConfig,
+} from './hosted-execution/config.js';
 import { DiscoveryWorkspaceService } from './lucid/workspace/service.js';
 import {
   HeddleRepresentativeAgentRunner,
@@ -20,6 +26,10 @@ import {
 } from './runtime/representative-agent-execution-composition.js';
 
 const config = resolveLucidConfig();
+const hostedExecutionConfig = resolveHostedExecutionConfig(
+  process.env,
+  config.repoRoot,
+);
 const logger = createLucidLogger(config.logLevel);
 const authenticator = createLucidAuthenticator(config.authentication);
 const persistence = await createPostgresPersistence(config);
@@ -45,7 +55,6 @@ const heartbeats = new RepresentativeAgentHeartbeatService(
   executionHost,
 );
 await heartbeats.initialize();
-heartbeats.start();
 const discoveryWorkspace = new DiscoveryWorkspaceService(
   stores.workspace,
   heartbeats,
@@ -62,6 +71,15 @@ const participantNetwork = new ParticipantNetworkService(
     heddleVersion: heddlePackage.version,
   },
 );
+const hostedExecution = hostedExecutionConfig
+  ? await createHostedExecutionComposition({
+      config: hostedExecutionConfig,
+      authenticator,
+      discoveryWorkspace,
+      logger,
+    })
+  : undefined;
+heartbeats.start();
 
 const server = createHTTPServer({
   router: createAppRouter(discoveryWorkspace, participantNetwork),
@@ -98,6 +116,10 @@ const server = createHTTPServer({
       return;
     }
 
+    if (hostedExecution?.http.handle(request, response)) {
+      return;
+    }
+
     next();
   },
 });
@@ -109,6 +131,7 @@ server.listen(config.port, config.host, () => {
     address: `http://${config.host}:${config.port}`,
     databaseDriver: 'postgres',
     heartbeatHost: config.heartbeatHost,
+    hostedExecutionEnabled: Boolean(hostedExecution),
     model: config.model,
   }, 'lucid.server.ready');
 });
@@ -135,6 +158,7 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
     server.close((error) => resolve(error));
   });
   await heartbeats.stop();
+  await hostedExecution?.close();
 
   const closeError = await serverClosed;
   if (closeError) {

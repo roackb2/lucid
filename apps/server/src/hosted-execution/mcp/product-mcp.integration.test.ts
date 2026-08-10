@@ -9,16 +9,16 @@ import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { McpCapabilityVerifier } from '@roackb2/heddle-adopter/mcp';
+import {
+  NodeStreamableHttpMcpService,
+} from '@roackb2/heddle-adopter/mcp/node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LucidProductToolset } from './product-tools.js';
+import { createLucidProductToolset } from './product-tools.js';
 import {
   MCP_TEST_NOW,
   McpCapabilitySignerFixture,
   workspaceSnapshot,
 } from './test-support.js';
-import {
-  StreamableHttpMcpService,
-} from './streamable-http-service.js';
 import {
   READ_WORKSPACE_SNAPSHOT_TOOL,
   type LucidProductMcpToolName,
@@ -86,7 +86,7 @@ describe('Lucid product tools over the generic MCP HTTP edge', () => {
     });
     expect(result.isError).not.toBe(true);
     expect(JSON.stringify(result)).toContain('local-discovery-workspace');
-    expect(lastRequest?.headers.authorization).toBeUndefined();
+    expect(lastRequest?.headers.authorization).toBe('[REDACTED]');
     expect(rawHeader(lastRequest, 'authorization')).toBe('[REDACTED]');
     expect(observedScopes).toEqual([{
       adopterId: 'lucid-adopter',
@@ -206,7 +206,7 @@ describe('Lucid product tools over the generic MCP HTTP edge', () => {
     });
 
     expect(result).toMatchObject({ isError: true });
-    expect(JSON.stringify(result)).toContain('Lucid MCP authority expired.');
+    expect(JSON.stringify(result)).toContain('Product tool authority expired.');
     expect(reader.readWorkspaceProjection).not.toHaveBeenCalled();
   });
 
@@ -308,7 +308,7 @@ describe('Lucid product tools over the generic MCP HTTP edge', () => {
   });
 });
 
-type ProductMcpService = StreamableHttpMcpService<LucidProductMcpToolName>;
+type ProductMcpService = NodeStreamableHttpMcpService<LucidProductMcpToolName>;
 
 function createProductMcpService(
   capabilityVerifier: McpCapabilityVerifier<LucidProductMcpToolName>,
@@ -318,11 +318,13 @@ function createProductMcpService(
     now?: () => Date;
   } = {},
 ): ProductMcpService {
-  return new StreamableHttpMcpService(
+  return new NodeStreamableHttpMcpService({
     capabilityVerifier,
-    new LucidProductToolset(workspaceReader, options),
-    options,
-  );
+    toolset: createLucidProductToolset(workspaceReader, options),
+    ...(options.maxBodyBytes
+      ? { maxBodyBytes: options.maxBodyBytes }
+      : {}),
+  });
 }
 
 async function startService(service: ProductMcpService): Promise<URL> {

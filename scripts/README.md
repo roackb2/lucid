@@ -27,6 +27,23 @@ participant can replace the simulator without changing Lucid's network model.
 | `longitudinal-network-scenarios.ts` | Ordered development-only events for a multi-feedback-cycle product experiment |
 | `longitudinal-network-experiment.ts` | Phase CLI that advances external inputs without impersonating the local participant |
 | `participant-input.ts` | Free-form real or synthetic participant registration and input |
+| `generate-hosted-execution-key.ts` | Create one ignored, owner-readable ES256 key for the optional local Execution Host authority |
+
+## Hosted execution signing key
+
+Generate the default ignored local key once before enabling Lucid's external
+Execution Host profile:
+
+```bash
+yarn hosted:generate-key
+```
+
+The command creates
+`local/hosted-execution/es256-private.jwk.json` with owner-only permissions and
+refuses to overwrite an existing key. Use `--output` only when the matching
+`LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH` is also configured. The private JWK
+must never be committed, logged, copied into Terraform state, or mounted into
+the Execution Host; Lucid publishes only its derived public JWKS.
 
 ## Usage
 

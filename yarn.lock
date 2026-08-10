@@ -986,19 +986,20 @@
   resolved "https://registry.npmjs.org/@radix-ui/rect/-/rect-1.1.3.tgz#5a58fbae3deefb7f8cfe6ea314287d699eb694a9"
   integrity sha512-JtyZR+mqgBibTo8xea3B6ZRmzZiM/YeVBtUkas6zMuXjAlfIFIW2FgqeM9eLyvEaYX66vr6DJMK+4U6LV0KhNw==
 
-"@roackb2/heddle-adopter@5.12.0":
-  version "5.12.0"
-  resolved "https://registry.npmjs.org/@roackb2/heddle-adopter/-/heddle-adopter-5.12.0.tgz#c41f49d1e5e10f62a3286ac824d8b3c8df06302a"
-  integrity sha512-x4rtDYmZnBvnudGmB6oT8QjeZZnOk5yCugZLQQcFJRIKMzTQHwSUaj1wosFQX5nUwP4q5jDXOTbQq6E9zClrdw==
+"@roackb2/heddle-adopter@5.13.0":
+  version "5.13.0"
+  resolved "https://registry.npmjs.org/@roackb2/heddle-adopter/-/heddle-adopter-5.13.0.tgz#c9854e417ed44b4a93c7588a50a8a4e1332675c1"
+  integrity sha512-iokrDSrSv331LoQ5ppYFRIIExvlg+LikWMtLiCNuXi0E8RN3WEDw1eFs7qK/B5GUKGxrLh3/zkynLnBhGL1bsw==
   dependencies:
+    "@modelcontextprotocol/sdk" "^1.29.0"
     eventsource-parser "^3.1.0"
     jose "^6.2.8"
     zod "^4.3.6"
 
-"@roackb2/heddle@5.11.0":
-  version "5.11.0"
-  resolved "https://registry.npmjs.org/@roackb2/heddle/-/heddle-5.11.0.tgz#e1a2900d25a058eb0a98b9372cafa18f8c092376"
-  integrity sha512-v1BvPkGkA0w2EBZDDG8zcogVPdxD3xApXyp4+ikFv9/ctbnUuxIRYwrBITTubWA9bR4UgJhBqBvDD2RwLbv0kg==
+"@roackb2/heddle@5.13.0":
+  version "5.13.0"
+  resolved "https://registry.npmjs.org/@roackb2/heddle/-/heddle-5.13.0.tgz#107214754470e6119e30da114a4495d8c7f8274c"
+  integrity sha512-SgLBTGktXLsF2BXqC7J0Jlu63eqjJ/3YJPy4w6KTMMd5kQRUVmmOBlcFoeOV8J+AOY4/5ZPtE1PI7DR7N/jWyw==
   dependencies:
     "@anthropic-ai/sdk" "^0.54.0"
     "@fontsource-variable/inter" "^5.2.8"
