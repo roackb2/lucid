@@ -96,5 +96,8 @@ function createRuntimeSessionId(scope: {
       scope.productSessionId,
     ]))
     .digest('hex');
-  return `lucid-runtime-session:${digest}`;
+  // AgentCore request session IDs allow only alphanumerics and hyphens. Keep
+  // the stable product-derived digest while encoding it for that provider
+  // boundary rather than leaking a Lucid delimiter into the AWS request.
+  return `lucid-runtime-session-${digest}`;
 }
