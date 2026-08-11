@@ -8,7 +8,9 @@ RUN corepack enable \
   && corepack prepare yarn@1.22.22 --activate
 COPY package.json yarn.lock tsconfig.base.json ./
 COPY apps/server/package.json apps/server/tsconfig.json ./apps/server/
-RUN yarn install --frozen-lockfile --non-interactive
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn,sharing=locked \
+  yarn install --frozen-lockfile --non-interactive --prefer-offline \
+    --network-timeout 600000
 
 FROM build-dependencies AS build
 COPY apps/server/src ./apps/server/src
@@ -20,8 +22,9 @@ RUN corepack enable \
   && corepack prepare yarn@1.22.22 --activate
 COPY package.json yarn.lock ./
 COPY apps/server/package.json ./apps/server/package.json
-RUN yarn install --frozen-lockfile --non-interactive --production=true \
-  && yarn cache clean
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn,sharing=locked \
+  yarn install --frozen-lockfile --non-interactive --production=true \
+    --prefer-offline --network-timeout 600000
 
 FROM ${NODE_IMAGE} AS runtime
 RUN apt-get update \
