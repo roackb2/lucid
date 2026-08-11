@@ -9,7 +9,7 @@ describe('hosted execution config', () => {
     expect(resolveHostedExecutionConfig({}, '/repo')).toBeUndefined();
   });
 
-  it('parses the complete local profile and removes ambient credentials', async () => {
+  it('parses the complete direct profile and removes ambient credentials', async () => {
     const environment = enabledEnvironment();
 
     const config = resolveHostedExecutionConfig(environment, '/repo');
@@ -20,14 +20,50 @@ describe('hosted execution config', () => {
       productSessionId: 'local-discovery-workspace',
       mcpServerId: 'lucid_product',
       signingJwkPath: '/repo/local/authority.jwk.json',
+      transport: { mode: 'direct' },
     });
-    expect(config?.credentials.localToken()).toBe(LOCAL_TOKEN);
-    await expect(config?.credentials.resolveModelApiKey()).resolves.toBe(
+    expect(config?.transport.mode === 'direct'
+      ? config.transport.credentials.localToken()
+      : undefined).toBe(LOCAL_TOKEN);
+    await expect(config?.modelCredentials.resolveModelApiKey({
+      scope: {
+        tenantId: 'tenant',
+        subjectId: 'subject',
+        productSessionId: 'session',
+      },
+      invocationId: 'invocation',
+    })).resolves.toBe(
       MODEL_API_KEY,
     );
     expect(environment.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN).toBeUndefined();
     expect(environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY).toBeUndefined();
-    expect(JSON.stringify(config?.credentials)).toBe('{}');
+    expect(JSON.stringify(config?.modelCredentials)).toBe('{}');
+  });
+
+  it('parses the AgentCore profile without direct-host credentials', async () => {
+    const environment = agentCoreEnvironment();
+
+    const config = resolveHostedExecutionConfig(environment, '/repo');
+
+    expect(config).toMatchObject({
+      transport: {
+        mode: 'agentcore',
+        region: 'us-east-2',
+        runtimeArn:
+          'arn:aws:bedrock-agentcore:us-east-2:123456789012:runtime/example_runtime',
+        qualifier: 'pilot',
+      },
+    });
+    await expect(config?.modelCredentials.resolveModelApiKey({
+      scope: {
+        tenantId: 'tenant',
+        subjectId: 'subject',
+        productSessionId: 'session',
+      },
+      invocationId: 'invocation',
+    })).resolves.toBe(MODEL_API_KEY);
+    expect(environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY).toBeUndefined();
+    expect(JSON.stringify(config?.modelCredentials)).toBe('{}');
   });
 
   it('rejects credentials when the profile is disabled', () => {
@@ -50,9 +86,30 @@ describe('hosted execution config', () => {
       LUCID_HOSTED_EXECUTION_MCP_AUDIENCE:
         'urn:heddle-execution-host:lucid-local',
     }],
+    ['direct profile with AgentCore config', {
+      LUCID_HOSTED_EXECUTION_AGENTCORE_REGION: 'us-east-2',
+    }],
   ])('rejects %s', (_label, override) => {
     expect(() => resolveHostedExecutionConfig({
       ...enabledEnvironment(),
+      ...override,
+    }, '/repo')).toThrow();
+  });
+
+  it.each([
+    ['missing region', { LUCID_HOSTED_EXECUTION_AGENTCORE_REGION: undefined }],
+    ['missing Runtime ARN', {
+      LUCID_HOSTED_EXECUTION_AGENTCORE_RUNTIME_ARN: undefined,
+    }],
+    ['direct URL configured', {
+      LUCID_HOSTED_EXECUTION_HOST_URL: 'http://127.0.0.1:8080',
+    }],
+    ['direct token configured', {
+      LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: LOCAL_TOKEN,
+    }],
+  ])('rejects AgentCore profile with %s', (_label, override) => {
+    expect(() => resolveHostedExecutionConfig({
+      ...agentCoreEnvironment(),
       ...override,
     }, '/repo')).toThrow();
   });
@@ -66,5 +123,19 @@ function enabledEnvironment(): NodeJS.ProcessEnv {
     LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: LOCAL_TOKEN,
     LUCID_HOSTED_EXECUTION_MODEL_API_KEY: MODEL_API_KEY,
     LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH: 'local/authority.jwk.json',
+  };
+}
+
+function agentCoreEnvironment(): NodeJS.ProcessEnv {
+  const environment = enabledEnvironment();
+  delete environment.LUCID_HOSTED_EXECUTION_HOST_URL;
+  delete environment.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN;
+  return {
+    ...environment,
+    LUCID_HOSTED_EXECUTION_TRANSPORT: 'agentcore',
+    LUCID_HOSTED_EXECUTION_AGENTCORE_REGION: 'us-east-2',
+    LUCID_HOSTED_EXECUTION_AGENTCORE_RUNTIME_ARN:
+      'arn:aws:bedrock-agentcore:us-east-2:123456789012:runtime/example_runtime',
+    LUCID_HOSTED_EXECUTION_AGENTCORE_QUALIFIER: 'pilot',
   };
 }

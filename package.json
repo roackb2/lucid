@@ -19,8 +19,10 @@
     "server:dev": "yarn workspace @lucid/server dev",
     "server:build": "yarn workspace @lucid/server build",
     "server:start": "yarn workspace @lucid/server start",
+    "server:docker:build": "docker build --platform linux/arm64 --file apps/server/Dockerfile --tag lucid-server:local .",
     "server:db:generate": "yarn workspace @lucid/server db:generate",
     "server:db:migrate": "yarn workspace @lucid/server db:migrate",
+    "server:db:migrate:production": "yarn workspace @lucid/server db:migrate:production",
     "web:dev": "yarn workspace @lucid/web dev",
     "web:build": "yarn workspace @lucid/web build"
   },

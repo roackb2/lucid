@@ -9,6 +9,7 @@ import {
 } from '@roackb2/heddle-adopter/node';
 import type { LucidAuthenticator } from '../auth/authenticator.js';
 import type { HostedExecutionConfig } from '../hosted-execution/config.js';
+import { AgentCoreExecutionHost } from '../hosted-execution/agentcore/execution-host.js';
 import {
   HostedConversationAuthorizationError,
   HostedConversationAdmissionService,
@@ -33,7 +34,7 @@ export type HostedExecutionComposition = {
   close(): Promise<void>;
 };
 
-/** Composes the optional local direct-host profile as one all-or-nothing unit. */
+/** Composes one optional hosted-execution profile as an all-or-nothing unit. */
 export async function createHostedExecutionComposition(input: {
   config: HostedExecutionConfig;
   authenticator: LucidAuthenticator;
@@ -81,14 +82,29 @@ export async function createHostedExecutionComposition(input: {
     capabilityVerifier,
     toolset: createLucidProductToolset(workspaceReader),
   });
-  const executionHost = input.executionHost ?? new DirectHttpExecutionHost({
-    baseUrl: input.config.hostBaseUrl,
-    localToken: input.config.credentials.localToken(),
-  });
+  let ownedAgentCoreHost: AgentCoreExecutionHost | undefined;
+  let executionHost = input.executionHost;
+  if (!executionHost && input.config.transport.mode === 'direct') {
+    executionHost = new DirectHttpExecutionHost({
+      baseUrl: input.config.transport.baseUrl,
+      localToken: input.config.transport.credentials.localToken(),
+    });
+  }
+  if (!executionHost && input.config.transport.mode === 'agentcore') {
+    ownedAgentCoreHost = new AgentCoreExecutionHost({
+      region: input.config.transport.region,
+      runtimeArn: input.config.transport.runtimeArn,
+      qualifier: input.config.transport.qualifier,
+    });
+    executionHost = ownedAgentCoreHost;
+  }
+  if (!executionHost) {
+    throw new Error('Hosted execution transport could not be composed.');
+  }
   const turns = new HostedConversationTurnService({
     authority,
     executionHost,
-    modelCredentials: input.config.credentials,
+    modelCredentials: input.config.modelCredentials,
     mcp: { allowedTools: LUCID_PRODUCT_MCP_TOOLS },
   });
   const conversations = new HostedConversationAdmissionService(
@@ -120,6 +136,12 @@ export async function createHostedExecutionComposition(input: {
 
   return {
     http,
-    close: () => http.close(),
+    close: async () => {
+      try {
+        await http.close();
+      } finally {
+        ownedAgentCoreHost?.close();
+      }
+    },
   };
 }

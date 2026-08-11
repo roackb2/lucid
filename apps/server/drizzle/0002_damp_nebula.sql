@@ -1,0 +1,1 @@
+ALTER TABLE "lucid"."discovery_workspaces" ALTER COLUMN "background_checks_enabled" SET DEFAULT false;

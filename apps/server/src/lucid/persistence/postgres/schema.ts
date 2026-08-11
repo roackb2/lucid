@@ -39,7 +39,7 @@ export const postgresDiscoveryWorkspaces = lucidPostgresSchema.table(
     currentWake: bigint('current_wake', { mode: 'number' }).notNull(),
     backgroundChecksEnabled: boolean('background_checks_enabled')
       .notNull()
-      .default(true),
+      .default(false),
     createdAt: timestampColumn('created_at').notNull(),
     updatedAt: timestampColumn('updated_at').notNull(),
   },

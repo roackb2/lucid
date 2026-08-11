@@ -74,10 +74,13 @@ describe('hosted execution composition', () => {
       );
     });
     const executionHostOrigin = await listen(executionHostServer);
+    const credentials = new DirectExecutionHostCredentials({
+      localToken: LOCAL_TOKEN,
+      modelApiKey: MODEL_API_KEY,
+    });
     const composition = await createHostedExecutionComposition({
       config: {
         publicBaseUrl: lucidOrigin,
-        hostBaseUrl: executionHostOrigin,
         signingJwkPath: await writePrivateJwk(),
         adopterId: 'lucid-local',
         tenantId: 'lucid-local',
@@ -87,10 +90,12 @@ describe('hosted execution composition', () => {
         mcpAudience: 'urn:lucid:mcp:test',
         mcpServerId: 'lucid_product',
         maxTurnMs: 60_000,
-        credentials: new DirectExecutionHostCredentials({
-          localToken: LOCAL_TOKEN,
-          modelApiKey: MODEL_API_KEY,
-        }),
+        transport: {
+          mode: 'direct',
+          baseUrl: executionHostOrigin,
+          credentials,
+        },
+        modelCredentials: credentials,
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: {
@@ -167,10 +172,13 @@ describe('hosted execution composition', () => {
       void respondWithInterruptedStream(request, response);
     });
     const executionHostOrigin = await listen(executionHostServer);
+    const credentials = new DirectExecutionHostCredentials({
+      localToken: LOCAL_TOKEN,
+      modelApiKey: MODEL_API_KEY,
+    });
     const composition = await createHostedExecutionComposition({
       config: {
         publicBaseUrl: lucidOrigin,
-        hostBaseUrl: executionHostOrigin,
         signingJwkPath: await writePrivateJwk(),
         adopterId: 'lucid-local',
         tenantId: 'lucid-local',
@@ -180,10 +188,12 @@ describe('hosted execution composition', () => {
         mcpAudience: 'urn:lucid:mcp:test',
         mcpServerId: 'lucid_product',
         maxTurnMs: 60_000,
-        credentials: new DirectExecutionHostCredentials({
-          localToken: LOCAL_TOKEN,
-          modelApiKey: MODEL_API_KEY,
-        }),
+        transport: {
+          mode: 'direct',
+          baseUrl: executionHostOrigin,
+          credentials,
+        },
+        modelCredentials: credentials,
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },

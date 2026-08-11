@@ -70,6 +70,11 @@ worker attempt; see
 `../../../runtime/heartbeat/postgres/README.md`. There is no runtime backend
 selector or fallback database.
 
+A newly initialized workspace starts with background checks disabled. This is
+the cost-safe deployment default; an authenticated operator must explicitly
+resume representative work. The migration changes only the database default
+and does not overwrite the preference of an existing workspace.
+
 The full cross-store contract requires a disposable real PostgreSQL database:
 
 ```bash

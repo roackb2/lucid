@@ -189,6 +189,9 @@ avoid this boundary. The deterministic integration suite exercises the
 complete HTTP/JWKS/MCP/SSE composition without a model; the isolated-container
 smoke remains separate evidence.
 
+For the portable ARM64 image, AgentCore transport variables, and explicit
+hosted migration sequence, see [Deploying the Lucid pilot](deploying.md).
+
 ## Checks
 
 Use a separate disposable PostgreSQL database for tests. The suite resets

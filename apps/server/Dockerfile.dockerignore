@@ -1,0 +1,14 @@
+**
+!package.json
+!yarn.lock
+!tsconfig.base.json
+!apps/
+apps/**
+!apps/server/
+apps/server/**
+!apps/server/package.json
+!apps/server/tsconfig.json
+!apps/server/src/
+!apps/server/src/**
+!apps/server/drizzle/
+!apps/server/drizzle/**

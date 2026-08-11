@@ -21,6 +21,7 @@ This directory contains only Lucid-owned behavior:
 | Path | Responsibility |
 | --- | --- |
 | `config.ts` | Validate Lucid's all-or-nothing hosted profile and select product identity, URLs, audiences, and limits |
+| `agentcore/` | Invoke one configured AgentCore Runtime through the official AWS SDK while preserving the public request/SSE contract |
 | `conversation/` | Admit an authenticated Lucid participant and derive product-owned scope, invocation identity, Runtime session, and deadline |
 | `http-router.ts` | Mount the package-owned HTTP and MCP services beside Lucid's tRPC routes |
 | `mcp/product-tools.ts` | Declare the exact Lucid tool names, schemas, descriptions, and product operations |
@@ -53,7 +54,8 @@ loads the signing key, publishes `/.well-known/jwks.json`, mounts
 `/hosted-execution/conversation-turns` as an authenticated SSE endpoint. The
 admission service derives product-owned identity and timing before the turn
 service issues one exact read-only MCP capability and invokes the configured
-host through the released strict direct HTTP client.
+host through either the released strict direct HTTP client or Lucid's
+provider-specific AgentCore adapter.
 
 Two deterministic integration boundaries remain deliberately distinct. The
 public adopter fixture proves the package turn service and Lucid MCP contract
@@ -61,13 +63,17 @@ without private host code. The startup-composition test crosses both real HTTP
 boundaries and the official MCP SDK: participant request -> Lucid admission ->
 authority -> fake host -> Lucid MCP -> workspace projection -> terminal SSE.
 It also proves that an accepted host stream ending without a terminal is not
-converted into success. Neither test is evidence of a real Heddle model turn,
-container isolation, or managed AgentCore behavior; those remain deployment
-checks.
+converted into success. Focused AgentCore adapter tests prove SigV4 custom
+header placement, strict stream reuse, and cancellation propagation against a
+local AWS-protocol fixture. None of these tests is evidence of a real Heddle
+model turn, managed header forwarding, container isolation, or AgentCore
+lifecycle; those remain deployment checks.
 
-The direct HTTP adapter is only for a loopback or reviewed HTTPS host. A future
+The direct HTTP adapter is only for a loopback or reviewed HTTPS host. The
 AgentCore adapter implements the same `ExecutionHost` port with SigV4 and the
-managed Runtime invocation API. Neither adapter may receive a PostgreSQL URL.
+managed Runtime invocation API. It uses the AWS SDK credential chain and has
+no database or product-store dependency. Neither adapter may receive a
+PostgreSQL URL.
 
 ## Dependency rules
 
@@ -77,8 +83,9 @@ managed Runtime invocation API. Neither adapter may receive a PostgreSQL URL.
   strict event stream. It receives only short-lived authority and model access.
 - MCP exposes domain capabilities rather than database CRUD. It re-verifies
   every bearer independently instead of trusting the host's earlier decision.
-- No file in this boundary imports private execution-host code or AWS SDK
-  types. Provider-specific transports implement the public SDK port.
+- No file in this boundary imports private execution-host code.
+  Provider-specific transports are isolated behind the public SDK port; only
+  `agentcore/` may import AWS SDK types.
 - Compact JWTs, model credentials, database URLs, and private signing keys must
   not enter prompts, result projections, logs, errors, files, or durable replay
   records.

@@ -15,6 +15,13 @@
       "when": 1786186996841,
       "tag": "0001_certain_marauders",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786423769390,
+      "tag": "0002_damp_nebula",
+      "breakpoints": true
     }
   ]
 }

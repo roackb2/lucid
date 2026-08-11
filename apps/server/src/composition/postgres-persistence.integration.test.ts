@@ -5,6 +5,7 @@
  * and truncates only Lucid-owned tables between cases; it never creates or
  * destroys the database itself.
  */
+import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   LOCAL_USER_ID,
@@ -16,6 +17,7 @@ import {
   createPostgresTestStores,
   type PostgresTestStores,
 } from '../lucid/persistence/postgres/test-context.js';
+import { PostgresRepresentativeWakeStore } from '../lucid/representative/postgres-store.js';
 
 async function createStore(options?: { reset?: boolean }) {
   return await createPostgresTestStores({
@@ -165,6 +167,25 @@ describe('PostgreSQL persistence integration', () => {
   });
 
   describe('PostgreSQL Lucid adapter reconnect durability', () => {
+    it('creates a fresh workspace with background dispatch paused', async () => {
+      const fresh = await createStore();
+      try {
+        await fresh.database.orm.execute(
+          sql`truncate table lucid.discovery_workspaces restart identity cascade`,
+        );
+        const representative = new PostgresRepresentativeWakeStore(
+          fresh.database,
+        );
+
+        await representative.initialize();
+
+        expect((await representative.readWorkspace()).backgroundChecksEnabled)
+          .toBe(false);
+      } finally {
+        await fresh.database.close();
+      }
+    });
+
     it('preserves participant state after every connection closes', async () => {
       const first = await createStore();
       const interest = await first.stores.workspace.saveInterest(

@@ -4,8 +4,12 @@ import {
   OpaqueIdSchema,
   isSafeWebUrl,
 } from '@roackb2/heddle-adopter/contracts';
+import type {
+  HostedConversationModelCredentialProvider,
+} from '@roackb2/heddle-adopter/conversation';
 import { DirectExecutionHostCredentials } from '@roackb2/heddle-adopter/node';
 import { z } from 'zod';
+import { EnvironmentHostedModelCredentials } from './model-credentials.js';
 
 const ENABLED_ENV = 'LUCID_HOSTED_EXECUTION_ENABLED';
 const SECRET_ENV_NAMES = [
@@ -16,13 +20,33 @@ const CREDENTIAL_ENV_NAMES = Object.freeze({
   localToken: SECRET_ENV_NAMES[0],
   modelApiKey: SECRET_ENV_NAMES[1],
 });
+const AgentCoreRegionSchema = z.string().trim().min(1).max(64).regex(
+  /^[a-z]{2}(?:-[a-z0-9]+)+-\d+$/,
+  'must be an AWS region identifier',
+);
+const AgentCoreRuntimeArnSchema = z.string().trim().min(20).max(2_048).regex(
+  /^arn:[a-z0-9-]+:bedrock-agentcore:[a-z0-9-]+:\d{12}:runtime\/[A-Za-z0-9_-]+$/,
+  'must be an AgentCore Runtime ARN',
+);
+const AgentCoreQualifierSchema = z.string().trim().min(1).max(64).regex(
+  /^[A-Za-z0-9][A-Za-z0-9_-]*$/,
+  'must be an AgentCore endpoint qualifier',
+);
 
 const HostedExecutionEnvironmentSchema = z.object({
   LUCID_HOSTED_EXECUTION_ENABLED: z.literal('true'),
+  LUCID_HOSTED_EXECUTION_TRANSPORT: z.enum(['direct', 'agentcore'])
+    .default('direct'),
   LUCID_HOSTED_EXECUTION_PUBLIC_URL: z.url(),
-  LUCID_HOSTED_EXECUTION_HOST_URL: z.url(),
-  LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: z.string().trim().min(32).max(4_096),
+  LUCID_HOSTED_EXECUTION_HOST_URL: z.url().optional(),
+  LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: z.string().trim().min(32).max(4_096)
+    .optional(),
   LUCID_HOSTED_EXECUTION_MODEL_API_KEY: z.string().trim().min(8).max(4_096),
+  LUCID_HOSTED_EXECUTION_AGENTCORE_REGION: AgentCoreRegionSchema.optional(),
+  LUCID_HOSTED_EXECUTION_AGENTCORE_RUNTIME_ARN:
+    AgentCoreRuntimeArnSchema.optional(),
+  LUCID_HOSTED_EXECUTION_AGENTCORE_QUALIFIER:
+    AgentCoreQualifierSchema.optional(),
   LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH: z.string().trim().min(1),
   LUCID_HOSTED_EXECUTION_ADOPTER_ID: OpaqueIdSchema.default('lucid-local'),
   LUCID_HOSTED_EXECUTION_TENANT_ID: OpaqueIdSchema.default('lucid-local'),
@@ -49,13 +73,65 @@ const HostedExecutionEnvironmentSchema = z.object({
     });
   }
 
-  const hostUrl = new URL(environment.LUCID_HOSTED_EXECUTION_HOST_URL);
-  if (!isSafeWebUrl(hostUrl)) {
+  const hostUrl = environment.LUCID_HOSTED_EXECUTION_HOST_URL
+    ? new URL(environment.LUCID_HOSTED_EXECUTION_HOST_URL)
+    : undefined;
+  if (hostUrl && !isSafeWebUrl(hostUrl)) {
     context.addIssue({
       code: 'custom',
       path: ['LUCID_HOSTED_EXECUTION_HOST_URL'],
       message: 'must use HTTPS or loopback HTTP without credentials, query, or fragment',
     });
+  }
+
+  if (environment.LUCID_HOSTED_EXECUTION_TRANSPORT === 'direct') {
+    if (!hostUrl) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_HOSTED_EXECUTION_HOST_URL'],
+        message: 'is required for direct transport',
+      });
+    }
+    if (!environment.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_HOSTED_EXECUTION_LOCAL_TOKEN'],
+        message: 'is required for direct transport',
+      });
+    }
+    if (
+      environment.LUCID_HOSTED_EXECUTION_AGENTCORE_REGION
+      || environment.LUCID_HOSTED_EXECUTION_AGENTCORE_RUNTIME_ARN
+      || environment.LUCID_HOSTED_EXECUTION_AGENTCORE_QUALIFIER
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_HOSTED_EXECUTION_TRANSPORT'],
+        message: 'direct transport cannot include AgentCore configuration',
+      });
+    }
+  } else {
+    if (!environment.LUCID_HOSTED_EXECUTION_AGENTCORE_REGION) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_HOSTED_EXECUTION_AGENTCORE_REGION'],
+        message: 'is required for AgentCore transport',
+      });
+    }
+    if (!environment.LUCID_HOSTED_EXECUTION_AGENTCORE_RUNTIME_ARN) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_HOSTED_EXECUTION_AGENTCORE_RUNTIME_ARN'],
+        message: 'is required for AgentCore transport',
+      });
+    }
+    if (hostUrl || environment.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_HOSTED_EXECUTION_TRANSPORT'],
+        message: 'AgentCore transport cannot include direct-host configuration',
+      });
+    }
   }
 
   if (
@@ -70,9 +146,19 @@ const HostedExecutionEnvironmentSchema = z.object({
   }
 });
 
+export type HostedExecutionTransportConfig = {
+  mode: 'direct';
+  baseUrl: URL;
+  credentials: DirectExecutionHostCredentials;
+} | {
+  mode: 'agentcore';
+  region: string;
+  runtimeArn: string;
+  qualifier?: string;
+};
+
 export type HostedExecutionConfig = {
   publicBaseUrl: URL;
-  hostBaseUrl: URL;
   signingJwkPath: string;
   adopterId: string;
   tenantId: string;
@@ -82,10 +168,11 @@ export type HostedExecutionConfig = {
   mcpAudience: string;
   mcpServerId: string;
   maxTurnMs: number;
-  credentials: DirectExecutionHostCredentials;
+  transport: HostedExecutionTransportConfig;
+  modelCredentials: HostedConversationModelCredentialProvider;
 };
 
-/** Resolves the optional local direct-host profile and removes secrets from env. */
+/** Resolves one optional hosted profile and removes credentials from env. */
 export function resolveHostedExecutionConfig(
   environment: NodeJS.ProcessEnv = process.env,
   repoRoot: string,
@@ -100,14 +187,34 @@ export function resolveHostedExecutionConfig(
   }
 
   const parsed = HostedExecutionEnvironmentSchema.parse(environment);
-  const credentials = DirectExecutionHostCredentials.takeFromEnvironment(
-    environment,
-    CREDENTIAL_ENV_NAMES,
-  );
+  const directCredentials = parsed.LUCID_HOSTED_EXECUTION_TRANSPORT === 'direct'
+    ? DirectExecutionHostCredentials.takeFromEnvironment(
+        environment,
+        CREDENTIAL_ENV_NAMES,
+      )
+    : undefined;
+  const modelCredentials = directCredentials
+    ?? EnvironmentHostedModelCredentials.take(
+      environment,
+      CREDENTIAL_ENV_NAMES.modelApiKey,
+    );
+  const transport: HostedExecutionTransportConfig = directCredentials
+    ? {
+        mode: 'direct',
+        baseUrl: new URL(parsed.LUCID_HOSTED_EXECUTION_HOST_URL!),
+        credentials: directCredentials,
+      }
+    : {
+        mode: 'agentcore',
+        region: parsed.LUCID_HOSTED_EXECUTION_AGENTCORE_REGION!,
+        runtimeArn: parsed.LUCID_HOSTED_EXECUTION_AGENTCORE_RUNTIME_ARN!,
+        ...(parsed.LUCID_HOSTED_EXECUTION_AGENTCORE_QUALIFIER
+          ? { qualifier: parsed.LUCID_HOSTED_EXECUTION_AGENTCORE_QUALIFIER }
+          : {}),
+      };
 
   return Object.freeze({
     publicBaseUrl: new URL(parsed.LUCID_HOSTED_EXECUTION_PUBLIC_URL),
-    hostBaseUrl: new URL(parsed.LUCID_HOSTED_EXECUTION_HOST_URL),
     signingJwkPath: resolve(
       repoRoot,
       parsed.LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH,
@@ -120,7 +227,8 @@ export function resolveHostedExecutionConfig(
     mcpAudience: parsed.LUCID_HOSTED_EXECUTION_MCP_AUDIENCE,
     mcpServerId: parsed.LUCID_HOSTED_EXECUTION_MCP_SERVER_ID,
     maxTurnMs: parsed.LUCID_HOSTED_EXECUTION_MAX_TURN_MS,
-    credentials,
+    transport: Object.freeze(transport),
+    modelCredentials,
   });
 }
 
