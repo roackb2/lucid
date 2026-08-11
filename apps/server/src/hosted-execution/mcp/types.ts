@@ -16,6 +16,30 @@ export type LucidProductMcpToolName =
   typeof LUCID_PRODUCT_MCP_TOOLS[number];
 
 /**
+ * Model-facing workspace projection with explicit background-check gates.
+ *
+ * The product domain stores the operator gate on the workspace while the UI
+ * view also exposes the participant's task preference. Returning both legacy
+ * fields made one healthy paused state look contradictory to the agent.
+ */
+export type HostedWorkspaceProjection = Omit<
+  DiscoveryWorkspaceSnapshot,
+  'workspace' | 'backgroundChecks'
+> & {
+  workspace: Omit<
+    DiscoveryWorkspaceSnapshot['workspace'],
+    'backgroundChecksEnabled'
+  >;
+  backgroundChecks: Omit<
+    DiscoveryWorkspaceSnapshot['backgroundChecks'],
+    'enabled' | 'dispatchEnabled'
+  > & {
+    participantChecksEnabled: boolean;
+    operatorDispatchEnabled: boolean;
+  };
+};
+
+/**
  * Product-owned read port. Implementations must resolve the workspace from the
  * verified scope and must not accept identity as model-controlled tool input.
  */
