@@ -23,6 +23,9 @@ import type {
 
 const CONTENT_TYPE = 'application/json';
 const ACCEPT = 'text/event-stream';
+const MIN_RUNTIME_SESSION_ID_LENGTH = 33;
+const MAX_RUNTIME_SESSION_ID_LENGTH = 256;
+const RUNTIME_SESSION_ID_PATTERN = /^[A-Za-z0-9](?:-*[A-Za-z0-9])+$/;
 const WIRE_BRIDGE_URL = new URL('http://127.0.0.1/agentcore-bridge');
 const NON_FORWARDED_LOCAL_TOKEN = 'agentcore-bridge-token-never-forwarded';
 const SERVICE_ERROR_CODES = new Map<string, string>([
@@ -65,6 +68,7 @@ export class AgentCoreExecutionHost implements ExecutionHost {
   streamConversationTurn(
     input: ExecutionHostConversationTurn,
   ): AsyncIterable<ExecutionHostStreamEvent> {
+    assertAgentCoreRuntimeSessionId(input.runtimeSessionId);
     return this.#wire.streamConversationTurn(input);
   }
 
@@ -132,6 +136,16 @@ export class AgentCoreExecutionHost implements ExecutionHost {
         headers: { 'content-type': CONTENT_TYPE },
       });
     }
+  }
+}
+
+function assertAgentCoreRuntimeSessionId(value: string): void {
+  if (
+    value.length < MIN_RUNTIME_SESSION_ID_LENGTH
+    || value.length > MAX_RUNTIME_SESSION_ID_LENGTH
+    || !RUNTIME_SESSION_ID_PATTERN.test(value)
+  ) {
+    throw new Error('AgentCore runtime session ID is not provider-compatible.');
   }
 }
 

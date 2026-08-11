@@ -40,7 +40,7 @@ describe('HostedConversationAdmissionService', () => {
       deadlineAt: '2026-08-10T12:01:00.000Z',
     });
     expect(observed[0]?.runtimeSessionId).toMatch(
-      /^lucid-runtime-session:[a-f0-9]{64}$/,
+      /^lucid-runtime-session-[a-f0-9]{64}$/,
     );
   });
 

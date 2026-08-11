@@ -8,6 +8,8 @@ AWS `InvokeAgentRuntime` and delegates strict request/SSE validation to
 It owns:
 
 - AWS SDK configuration and default credential-chain usage;
+- validation of AgentCore's 33-256 character alphanumeric/hyphen Runtime
+  session-ID contract before an AWS request is sent;
 - one-attempt invocation semantics, because a disconnected streaming turn has
   ambiguous settlement and must not be replayed automatically;
 - command-scoped, SigV4-signed custom headers for execution authority, product

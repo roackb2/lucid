@@ -14,7 +14,7 @@ import {
 } from '@roackb2/heddle-adopter/http-sse';
 import { createServer, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentCoreExecutionHost } from './execution-host.js';
 import type { AgentCoreRuntimeClient } from './types.js';
 
@@ -136,6 +136,20 @@ describe('AgentCoreExecutionHost', () => {
     await expect(running).rejects.toBeInstanceOf(
       ExecutionHostInvocationCancelledError,
     );
+  });
+
+  it('rejects a provider-incompatible session ID before calling AWS', () => {
+    const send = vi.fn<AgentCoreRuntimeClient['send']>();
+    const host = new AgentCoreExecutionHost({
+      region: 'us-east-2',
+      runtimeArn: RUNTIME_ARN,
+      client: { send },
+    });
+
+    expect(() => host.streamConversationTurn(input({
+      runtimeSessionId: `runtime-session:${'a'.repeat(40)}`,
+    }))).toThrow('AgentCore runtime session ID is not provider-compatible.');
+    expect(send).not.toHaveBeenCalled();
   });
 });
 
