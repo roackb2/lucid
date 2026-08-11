@@ -16,11 +16,14 @@
     "start": "node dist/server.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
+    "db:migrate:production": "node dist/migrate.js",
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "3.1107.0",
     "@roackb2/heddle": "5.13.0",
     "@roackb2/heddle-adopter": "5.13.0",
+    "@smithy/protocol-http": "5.5.16",
     "@trpc/server": "11.16.0",
     "async-mutex": "0.5.0",
     "dayjs": "^1.11.20",

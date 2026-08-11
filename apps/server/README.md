@@ -35,7 +35,10 @@ bounded execution, and recovery predictable.
 - `src/composition/postgres-persistence.ts` composes the four product stores
   and Heddle task adapter, then owns their shared pool shutdown.
 - `src/hosted-execution/` owns the adopter-side authority, MCP, and external
-  conversation host ports without importing private host or AWS code.
+  conversation host ports without importing private host code. Its
+  `agentcore/` adapter is the only provider-specific AWS SDK boundary.
+- `src/health.ts` exposes process liveness at `GET /healthz`; it does not imply
+  database or external-provider readiness.
 - `src/router.ts` exposes:
   - `discovery.snapshot`
   - `discovery.saveInterest`
@@ -75,6 +78,11 @@ representative work.
 
 Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
+
+The production ARM64 image is built with `yarn server:docker:build`. Inside an
+image, run `node apps/server/dist/migrate.js` as a separate release step. See
+[`../../docs/deploying.md`](../../docs/deploying.md) for the generic
+configuration and deployment sequence.
 
 The server requires `@roackb2/heddle` 5.13 because the merged
 PostgreSQL heartbeat adapter consumes the released public task administration,

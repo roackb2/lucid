@@ -26,8 +26,9 @@ The public package owns generic JWT/JWKS and ordered SSE conformance. When the
 complete hosted profile is explicitly enabled, Lucid startup now loads an
 owner-readable ES256 key, publishes public JWKS, mounts its product MCP edge,
 and exposes an authenticated participant conversation endpoint. It calls the
-configured host through the strict direct HTTP/SSE adapter without importing
-private host code or sending a database credential.
+configured host through either the strict direct HTTP/SSE adapter or the
+AgentCore AWS SDK adapter without importing private host code or sending a
+database credential.
 
 The local control-plane contract test runs the package-owned
 `HostedConversationTurnService` through the public adopter contract fixture.
@@ -41,10 +42,12 @@ The optional startup-composition test separately crosses the package-owned
 Node HTTP/JWKS/SSE and Streamable HTTP MCP services, Lucid product
 admission, the direct host wire, a fake host, official-SDK MCP discovery/call,
 and the participant-scoped workspace projection. It proves that the complete
-profile is wired while Lucid owns only route mounting and product policy. A
-real isolated Heddle container turn and
-managed AgentCore remain unverified deployment evidence. Conversation replay
-and product history are also not durable yet.
+profile is wired while Lucid owns only route mounting and product policy.
+Lucid now also has a provider-specific AgentCore `ExecutionHost` adapter that
+signs the same portable request and consumes the same strict stream through
+the official AWS SDK. A real Heddle model turn, managed header forwarding,
+isolation, AgentCore lifecycle, and cost remain unverified deployment
+evidence. Conversation replay and product history are also not durable yet.
 
 Lucid's representative workflow is also not connected to the external host. A
 representative wake still requires:
@@ -119,11 +122,11 @@ public `ExecutionHost` port without exposing host internals.
 2. Add durable invocation/replay and browser streaming semantics before calling
    the conversation path a supported product surface.
 3. Apply checked-in migrations to the managed PostgreSQL project, deploy the
-   stateless Lucid backend, and verify the existing local representative story
-   against that database.
-4. Only after separate resource-and-cost approval, deploy the host through the
-   Terraform AgentCore template and repeat the managed header, stream,
-   lifecycle, and tenant-isolation evidence.
+   Lucid backend image, and verify the existing representative story against
+   that database while new workspaces remain paused by default.
+4. Only after separate resource-and-cost approval, select the AgentCore
+   transport and repeat the managed header, stream, lifecycle, and
+   tenant-isolation evidence.
 5. Add an `autonomous-task` contract before replacing Lucid's in-process
    representative runner. Preserve PostgreSQL task/wake authority and expose
    stateful communication tools only with durable invocation-scoped policy.

@@ -100,6 +100,11 @@ yarn dev
 Open [http://127.0.0.1:3080](http://127.0.0.1:3080). The API listens on
 `127.0.0.1:8081` by default.
 
+The portable ARM64 server image and generic hosted configuration are described
+in [`docs/deploying.md`](docs/deploying.md). Environment-specific account,
+database, secret, and Terraform values intentionally live outside this public
+repository.
+
 In a second terminal, create a small synthetic world and give every node one
 seeded observation:
 

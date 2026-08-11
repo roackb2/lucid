@@ -1,0 +1,1038 @@
+{
+  "id": "e39e00bd-49fd-4ed3-b879-26d5fefe3607",
+  "prevId": "a0b508bb-5247-45b6-835e-db521f070eb6",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "lucid.discovery_events": {
+      "name": "discovery_events",
+      "schema": "lucid",
+      "columns": {
+        "sequence": {
+          "name": "sequence",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wake_number": {
+          "name": "wake_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_agent_id": {
+          "name": "actor_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_agent_id": {
+          "name": "target_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_participant_id": {
+          "name": "target_participant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reply_to_sequence": {
+          "name": "reply_to_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "discovery_events_id_idx": {
+          "name": "discovery_events_id_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_idempotency_idx": {
+          "name": "discovery_events_idempotency_idx",
+          "columns": [
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_workspace_sequence_idx": {
+          "name": "discovery_events_workspace_sequence_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_actor_idx": {
+          "name": "discovery_events_actor_idx",
+          "columns": [
+            {
+              "expression": "actor_agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_target_agent_idx": {
+          "name": "discovery_events_target_agent_idx",
+          "columns": [
+            {
+              "expression": "target_agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_target_participant_idx": {
+          "name": "discovery_events_target_participant_idx",
+          "columns": [
+            {
+              "expression": "target_participant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_reply_idx": {
+          "name": "discovery_events_reply_idx",
+          "columns": [
+            {
+              "expression": "reply_to_sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_kind_sequence_idx": {
+          "name": "discovery_events_kind_sequence_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_metadata_gin_idx": {
+          "name": "discovery_events_metadata_gin_idx",
+          "columns": [
+            {
+              "expression": "metadata",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "discovery_events_workspace_id_discovery_workspaces_id_fk": {
+          "name": "discovery_events_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "discovery_events",
+          "tableTo": "discovery_workspaces",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "discovery_events_wake_nonnegative": {
+          "name": "discovery_events_wake_nonnegative",
+          "value": "\"lucid\".\"discovery_events\".\"wake_number\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.discovery_workspaces": {
+      "name": "discovery_workspaces",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "singleton": {
+          "name": "singleton",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "version_id": {
+          "name": "version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "current_wake": {
+          "name": "current_wake",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "background_checks_enabled": {
+          "name": "background_checks_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "discovery_workspaces_single_generation_idx": {
+          "name": "discovery_workspaces_single_generation_idx",
+          "columns": [
+            {
+              "expression": "singleton",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "discovery_workspaces_singleton_true": {
+          "name": "discovery_workspaces_singleton_true",
+          "value": "\"lucid\".\"discovery_workspaces\".\"singleton\" = true"
+        },
+        "discovery_workspaces_current_wake_nonnegative": {
+          "name": "discovery_workspaces_current_wake_nonnegative",
+          "value": "\"lucid\".\"discovery_workspaces\".\"current_wake\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.participants": {
+      "name": "participants",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registration_key": {
+          "name": "registration_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "private_context": {
+          "name": "private_context",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "context_consent_at": {
+          "name": "context_consent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "participants_workspace_idx": {
+          "name": "participants_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "participants_registration_key_idx": {
+          "name": "participants_registration_key_idx",
+          "columns": [
+            {
+              "expression": "registration_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "participants_workspace_id_discovery_workspaces_id_fk": {
+          "name": "participants_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "participants",
+          "tableTo": "discovery_workspaces",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "participants_kind_valid": {
+          "name": "participants_kind_valid",
+          "value": "\"lucid\".\"participants\".\"kind\" in ('human', 'synthetic')"
+        },
+        "participants_status_valid": {
+          "name": "participants_status_valid",
+          "value": "\"lucid\".\"participants\".\"status\" in ('active', 'disabled', 'retired')"
+        },
+        "participants_human_consent_required": {
+          "name": "participants_human_consent_required",
+          "value": "\"lucid\".\"participants\".\"kind\" <> 'human' or \"lucid\".\"participants\".\"context_consent_at\" is not null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.representative_agents": {
+      "name": "representative_agents",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_id": {
+          "name": "participant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instructions": {
+          "name": "instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_count": {
+          "name": "run_count",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mailbox_floor_sequence": {
+          "name": "mailbox_floor_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "last_seen_sequence": {
+          "name": "last_seen_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active_wake_id": {
+          "name": "active_wake_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_wake_claim_token": {
+          "name": "active_wake_claim_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_wake_number": {
+          "name": "active_wake_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_wake_horizon": {
+          "name": "active_wake_horizon",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_run_at": {
+          "name": "last_run_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "representative_agents_workspace_sort_idx": {
+          "name": "representative_agents_workspace_sort_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sort_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "representative_agents_participant_idx": {
+          "name": "representative_agents_participant_idx",
+          "columns": [
+            {
+              "expression": "participant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "representative_agents_workspace_id_discovery_workspaces_id_fk": {
+          "name": "representative_agents_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "representative_agents",
+          "tableTo": "discovery_workspaces",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "representative_agents_participant_id_participants_id_fk": {
+          "name": "representative_agents_participant_id_participants_id_fk",
+          "tableFrom": "representative_agents",
+          "tableTo": "participants",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "participant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "representative_agents_status_valid": {
+          "name": "representative_agents_status_valid",
+          "value": "\"lucid\".\"representative_agents\".\"status\" in ('idle', 'running', 'error')"
+        },
+        "representative_agents_counters_nonnegative": {
+          "name": "representative_agents_counters_nonnegative",
+          "value": "\"lucid\".\"representative_agents\".\"sort_order\" >= 0 and \"lucid\".\"representative_agents\".\"run_count\" >= 0 and \"lucid\".\"representative_agents\".\"mailbox_floor_sequence\" >= 0 and \"lucid\".\"representative_agents\".\"last_seen_sequence\" >= 0"
+        },
+        "representative_agents_wake_claim_complete": {
+          "name": "representative_agents_wake_claim_complete",
+          "value": "(\n        \"lucid\".\"representative_agents\".\"active_wake_id\" is null\n        and \"lucid\".\"representative_agents\".\"active_wake_claim_token\" is null\n        and \"lucid\".\"representative_agents\".\"active_wake_number\" is null\n        and \"lucid\".\"representative_agents\".\"active_wake_horizon\" is null\n      ) or (\n        \"lucid\".\"representative_agents\".\"active_wake_id\" is not null\n        and \"lucid\".\"representative_agents\".\"active_wake_claim_token\" is not null\n        and \"lucid\".\"representative_agents\".\"active_wake_number\" is not null\n        and \"lucid\".\"representative_agents\".\"active_wake_horizon\" is not null\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "heddle.heartbeat_run_records": {
+      "name": "heartbeat_run_records",
+      "schema": "heddle",
+      "columns": {
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "task_id": {
+          "name": "task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "execution_id": {
+          "name": "execution_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "record": {
+          "name": "record",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "heartbeat_run_records_execution_idx": {
+          "name": "heartbeat_run_records_execution_idx",
+          "columns": [
+            {
+              "expression": "namespace",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "execution_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "heartbeat_run_records_task_created_idx": {
+          "name": "heartbeat_run_records_task_created_idx",
+          "columns": [
+            {
+              "expression": "namespace",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "task_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "heartbeat_run_records_pk": {
+          "name": "heartbeat_run_records_pk",
+          "columns": [
+            "namespace",
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "heddle.heartbeat_tasks": {
+      "name": "heartbeat_tasks",
+      "schema": "heddle",
+      "columns": {
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "task_id": {
+          "name": "task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "task": {
+          "name": "task",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "next_run_at": {
+          "name": "next_run_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "execution_id": {
+          "name": "execution_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "execution_owner_id": {
+          "name": "execution_owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checkpoint": {
+          "name": "checkpoint",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "heartbeat_tasks_due_idx": {
+          "name": "heartbeat_tasks_due_idx",
+          "columns": [
+            {
+              "expression": "namespace",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "enabled",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "next_run_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "heartbeat_tasks_recovery_idx": {
+          "name": "heartbeat_tasks_recovery_idx",
+          "columns": [
+            {
+              "expression": "namespace",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lease_expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "heartbeat_tasks_pk": {
+          "name": "heartbeat_tasks_pk",
+          "columns": [
+            "namespace",
+            "task_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "heartbeat_tasks_status_valid": {
+          "name": "heartbeat_tasks_status_valid",
+          "value": "\"heddle\".\"heartbeat_tasks\".\"status\" in ('idle', 'running', 'waiting', 'blocked', 'complete', 'failed')"
+        },
+        "heartbeat_tasks_version_positive": {
+          "name": "heartbeat_tasks_version_positive",
+          "value": "\"heddle\".\"heartbeat_tasks\".\"version\" >= 1"
+        },
+        "heartbeat_tasks_execution_lease_complete": {
+          "name": "heartbeat_tasks_execution_lease_complete",
+          "value": "(\n        \"heddle\".\"heartbeat_tasks\".\"status\" = 'running'\n        and \"heddle\".\"heartbeat_tasks\".\"execution_id\" is not null\n        and \"heddle\".\"heartbeat_tasks\".\"execution_owner_id\" is not null\n        and \"heddle\".\"heartbeat_tasks\".\"lease_expires_at\" is not null\n      ) or (\n        \"heddle\".\"heartbeat_tasks\".\"status\" <> 'running'\n        and \"heddle\".\"heartbeat_tasks\".\"execution_id\" is null\n        and \"heddle\".\"heartbeat_tasks\".\"execution_owner_id\" is null\n        and \"heddle\".\"heartbeat_tasks\".\"lease_expires_at\" is null\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "lucid": "lucid",
+    "heddle": "heddle"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

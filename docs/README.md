@@ -20,6 +20,9 @@ product, not a developer SDK.
    rules.
 6. [Running locally](running-locally.md) covers setup, migrations, simulation,
    authentication modes, and checks.
+7. [Deploying](deploying.md) defines the portable ARM64 server image, generic
+   hosted configuration, explicit migration sequence, and managed-evidence
+   boundary.
 
 The root [README](../README.md) remains the quickest product tour. More
 detailed maintenance notes live beside the server, runtime, authentication,

@@ -607,7 +607,7 @@ implements RepresentativeWakeStore {
 
   private async insertWorkspace(
     transaction: LucidPostgresTransaction,
-    backgroundChecksEnabled = true,
+    backgroundChecksEnabled = false,
   ): Promise<void> {
     const rows = createInitialWorkspaceRows({
       now: dayjs().toISOString(),

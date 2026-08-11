@@ -10,6 +10,7 @@ import { createPostgresPersistence } from './composition/postgres-persistence.js
 import {
   resolveHostedExecutionConfig,
 } from './hosted-execution/config.js';
+import { handleHealthRequest } from './health.js';
 import { DiscoveryWorkspaceService } from './lucid/workspace/service.js';
 import {
   HeddleRepresentativeAgentRunner,
@@ -102,6 +103,10 @@ const server = createHTTPServer({
     }, 'lucid.request.failed');
   },
   middleware: (request, response, next) => {
+    if (handleHealthRequest(request, response)) {
+      return;
+    }
+
     response.setHeader('Access-Control-Allow-Origin', config.webOrigin);
     response.setHeader('Vary', 'Origin');
     response.setHeader(
