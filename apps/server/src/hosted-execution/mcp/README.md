@@ -7,9 +7,14 @@ verifies the short-lived adopter-signed MCP bearer on every stateless request.
 ## Current capability
 
 `read_workspace_snapshot` is the first honest conversation-turn capability. It
-returns the same participant-scoped projection used by Lucid's product UI and
-accepts no identity arguments. Tenant, subject, product session, Runtime
-session, and invocation scope come only from the verified capability.
+returns a participant-scoped projection derived from Lucid's product UI state
+and accepts no identity arguments. Its model-facing background-check fields are
+deliberately explicit: `participantChecksEnabled` is the participant's durable
+task preference, while `operatorDispatchEnabled` is the service-wide operator
+gate. The raw workspace persistence field is omitted so a healthy
+operator-paused state cannot appear contradictory. Tenant, subject, product
+session, Runtime session, and invocation scope come only from the verified
+capability.
 
 The existing representative communication tools are intentionally absent.
 They depend on a claimed wake, fixed event horizon, agent identity, action

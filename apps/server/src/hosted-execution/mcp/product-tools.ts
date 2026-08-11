@@ -5,6 +5,7 @@ import {
 import { z } from 'zod';
 import {
   READ_WORKSPACE_SNAPSHOT_TOOL,
+  type HostedWorkspaceProjection,
   type LucidProductMcpToolName,
   type ScopedWorkspaceProjectionReader,
 } from './types.js';
@@ -26,7 +27,7 @@ export function createLucidProductToolset(
     tools: [defineNodeMcpJsonTool({
       name: READ_WORKSPACE_SNAPSHOT_TOOL,
       description:
-        'Read the participant-scoped Lucid workspace, current assignment, working direction, findings, and background-check status.',
+        'Read the participant-scoped Lucid workspace, current assignment, working direction, findings, participant background-check preference, and operator dispatch gate.',
       inputSchema: z.object({}).strict(),
       annotations: {
         readOnlyHint: true,
@@ -36,12 +37,40 @@ export function createLucidProductToolset(
       },
       failureMessage: 'Lucid workspace projection is unavailable.',
       execute: async (_input, { capability, signal }) => (
-        await workspaceReader.readWorkspaceProjection({
-          scope: capability.scope,
-          signal,
-        })
+        toHostedWorkspaceProjection(
+          await workspaceReader.readWorkspaceProjection({
+            scope: capability.scope,
+            signal,
+          }),
+        )
       ),
     })],
     ...options,
   });
+}
+
+function toHostedWorkspaceProjection(
+  snapshot: Awaited<ReturnType<
+    ScopedWorkspaceProjectionReader['readWorkspaceProjection']
+  >>,
+): HostedWorkspaceProjection {
+  const {
+    backgroundChecksEnabled: _operatorDispatchEnabled,
+    ...workspace
+  } = snapshot.workspace;
+  const {
+    enabled: participantChecksEnabled,
+    dispatchEnabled: operatorDispatchEnabled,
+    ...backgroundChecks
+  } = snapshot.backgroundChecks;
+
+  return {
+    ...snapshot,
+    workspace,
+    backgroundChecks: {
+      ...backgroundChecks,
+      participantChecksEnabled,
+      operatorDispatchEnabled,
+    },
+  };
 }

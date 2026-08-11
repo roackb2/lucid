@@ -85,7 +85,12 @@ describe('Lucid product tools over the generic MCP HTTP edge', () => {
       arguments: {},
     });
     expect(result.isError).not.toBe(true);
-    expect(JSON.stringify(result)).toContain('local-discovery-workspace');
+    const serializedResult = JSON.stringify(result);
+    expect(serializedResult).toContain('local-discovery-workspace');
+    expect(serializedResult).toContain('participantChecksEnabled');
+    expect(serializedResult).toContain('operatorDispatchEnabled');
+    expect(serializedResult).not.toContain('backgroundChecksEnabled');
+    expect(serializedResult).not.toContain('dispatchEnabled');
     expect(lastRequest?.headers.authorization).toBe('[REDACTED]');
     expect(rawHeader(lastRequest, 'authorization')).toBe('[REDACTED]');
     expect(observedScopes).toEqual([{
