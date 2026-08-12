@@ -4,7 +4,9 @@ import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createStaticWebService } from './static-web-service.js';
+import {
+  createStaticSpaRequestHandler,
+} from './static-spa-request-handler.js';
 
 const roots = new Set<string>();
 const servers = new Set<ReturnType<typeof createServer>>();
@@ -22,7 +24,7 @@ afterEach(async () => {
   roots.clear();
 });
 
-describe('static web service', () => {
+describe('static SPA request handler', () => {
   it('serves HTML navigation and immutable built assets', async () => {
     const root = await createFixture();
     const origin = await listen(root);
@@ -66,7 +68,7 @@ describe('static web service', () => {
     const root = await mkdtemp(join(tmpdir(), 'lucid-static-web-empty-'));
     roots.add(root);
 
-    await expect(createStaticWebService(root)).rejects.toThrow(
+    await expect(createStaticSpaRequestHandler(root)).rejects.toThrow(
       'Lucid web root is missing index.html',
     );
   });
@@ -88,9 +90,9 @@ async function createFixture(): Promise<string> {
 }
 
 async function listen(root: string): Promise<URL> {
-  const web = await createStaticWebService(root);
+  const staticSpaRequestHandler = await createStaticSpaRequestHandler(root);
   const server = createServer((request, response) => {
-    if (web.handle(request, response)) {
+    if (staticSpaRequestHandler.tryServe(request, response)) {
       return;
     }
     response.statusCode = 405;

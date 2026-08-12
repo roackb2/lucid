@@ -6,18 +6,18 @@ import sirv from 'sirv';
 const ASSET_CACHE_CONTROL = 'public,max-age=31536000,immutable';
 const HTML_CACHE_CONTROL = 'no-cache';
 
-export type StaticWebService = {
-  handle: (request: IncomingMessage, response: ServerResponse) => boolean;
+export type StaticSpaRequestHandler = {
+  tryServe: (request: IncomingMessage, response: ServerResponse) => boolean;
 };
 
 /**
- * Serves one pre-built SPA from an explicitly configured directory. API and
- * health routing stay in the composition root; this boundary owns only files,
- * SPA navigation fallback, and browser cache policy.
+ * Adapts sirv to Lucid's raw HTTP composition root. Sirv owns static file
+ * delivery; this handler owns SPA navigation fallback and browser cache policy.
+ * API and health routing remain outside this boundary.
  */
-export async function createStaticWebService(
+export async function createStaticSpaRequestHandler(
   configuredRoot: string,
-): Promise<StaticWebService> {
+): Promise<StaticSpaRequestHandler> {
   const root = resolve(configuredRoot);
   const indexPath = join(root, 'index.html');
   const indexStats = await stat(indexPath).catch(() => undefined);
@@ -29,29 +29,31 @@ export async function createStaticWebService(
   const options = {
     dotfiles: false,
     etag: true,
-    setHeaders: setStaticHeaders,
+    setHeaders: setStaticSpaResponseHeaders,
   } as const;
-  const serveAsset = sirv(root, options);
-  const serveNavigation = sirv(root, {
+  const serveStaticAsset = sirv(root, options);
+  const serveSpaNavigation = sirv(root, {
     ...options,
     single: 'index.html',
   });
 
   return Object.freeze({
-    handle(request: IncomingMessage, response: ServerResponse) {
+    tryServe(request: IncomingMessage, response: ServerResponse) {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         return false;
       }
 
       const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-      const handler = extname(pathname) ? serveAsset : serveNavigation;
-      handler(request, response, () => writeNotFound(response));
+      const serve = extname(pathname)
+        ? serveStaticAsset
+        : serveSpaNavigation;
+      serve(request, response, () => writeStaticAssetNotFound(response));
       return true;
     },
   });
 }
 
-function setStaticHeaders(
+function setStaticSpaResponseHeaders(
   response: ServerResponse,
   pathname: string,
 ): void {
@@ -65,7 +67,7 @@ function setStaticHeaders(
   response.setHeader('X-Content-Type-Options', 'nosniff');
 }
 
-function writeNotFound(response: ServerResponse): void {
+function writeStaticAssetNotFound(response: ServerResponse): void {
   if (response.headersSent || response.destroyed) {
     return;
   }
