@@ -301,6 +301,7 @@ button:disabled {
 }
 
 .interest-card,
+.hosted-conversation-card,
 .recent-network-requests,
 .representative-note-card,
 .guidance-follow-through-card,
@@ -310,6 +311,133 @@ button:disabled {
   border: 1px solid var(--line);
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+.hosted-conversation-card {
+  scroll-margin-top: 90px;
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.hosted-conversation-form {
+  padding: 0 26px 22px;
+}
+
+.hosted-conversation-form > label {
+  display: block;
+  margin-bottom: 8px;
+  color: #3f4b45;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.hosted-conversation-form textarea {
+  width: 100%;
+  min-height: 112px;
+  padding: 13px 14px;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #fcfdfc;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.hosted-conversation-form textarea:focus {
+  border-color: rgba(23, 107, 91, 0.65);
+  outline: 0;
+  box-shadow: 0 0 0 4px rgba(23, 107, 91, 0.08);
+}
+
+.hosted-conversation-form > footer,
+.hosted-conversation-form > footer > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hosted-conversation-form > footer {
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.hosted-conversation-form > footer > span {
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.hosted-conversation-error {
+  margin: 9px 0 0;
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.hosted-conversation-result {
+  padding: 18px 26px 23px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.hosted-conversation-result > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.hosted-conversation-result > header > span {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.hosted-conversation-result > header > span.hosted-conversation-status--active {
+  background: #d38b45;
+}
+
+.hosted-conversation-question {
+  margin: 13px 0 0;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.hosted-conversation-answer {
+  margin-top: 14px;
+  padding: 15px 17px;
+  border-left: 3px solid var(--green);
+  border-radius: 0 11px 11px 0;
+  background: var(--green-pale);
+}
+
+.hosted-conversation-answer > span {
+  color: var(--green-dark);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.hosted-conversation-answer > p {
+  margin: 7px 0 0;
+  color: #30443a;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.hosted-conversation-empty {
+  margin: 0;
+  padding: 14px 26px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.6;
 }
 
 .interest-card {

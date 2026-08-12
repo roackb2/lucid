@@ -25,7 +25,11 @@ The primary path is:
 9. distinguish network waiting, delivered messages pending durable review,
    a reported finding, and a completed review with no new finding; and
 10. inspect up to five earlier disclosed requests for the current interest so
-    later checks do not erase completed silence, carried guidance, or findings.
+    later checks do not erase completed silence, carried guidance, or findings;
+    and
+11. ask one authenticated, cancellable hosted-agent question whose execution
+    runs in AgentCore and whose only initial product capability is the
+    participant-scoped workspace snapshot.
 
 The app intentionally does not render a global participant directory, event
 log, task list, reset control, or participant administration. Those are
@@ -37,6 +41,14 @@ router, not features of a participant's social-network experience.
 The browser calls tRPC through same-origin `/api/trpc`. Vite proxies that path
 to the local server; the production server serves the built SPA and API from
 one origin.
+
+Hosted questions use same-origin
+`/hosted-execution/conversation-turns` with the same tab-scoped participant
+credential. The browser validates the canonical
+`@roackb2/heddle-adopter` event schema and ordering, renders only safe progress
+labels, and releases the terminal answer only after clean stream completion.
+It never receives execution authority, model credentials, MCP capabilities,
+or database credentials.
 
 The deployed private pilot uses the server's participant static token. The
 access screen stores the supplied token only in `sessionStorage`, never in the
@@ -58,6 +70,8 @@ browser security controls.
 | `finding-card.tsx` | Show one finding, ambient/request origin, source attribution, causal messages, and private feedback |
 | `app-header.tsx` | Navigate the participant workspace and summarize local representative status |
 | `hosted-access.tsx` | Collect the private-pilot participant token without embedding it in the public build |
+| `hosted-conversation.tsx` | Submit and cancel one participant-scoped hosted turn and present safe progress plus the terminal answer |
+| `hosted-conversation-client.ts` | Authenticate the same-origin request and validate the ordered Heddle adopter SSE contract |
 | `use-discovery-workspace.ts` | Own the scoped tRPC query, mutations, cache, polling, and notifications |
 | `network-request-progress.ts` | Give every participant-facing surface consistent language for the server-derived request phase |
 

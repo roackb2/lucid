@@ -26,6 +26,7 @@ export function AppHeader({ snapshot }: AppHeaderProps) {
 
       <nav className="app-nav" aria-label="Workspace sections">
         <a href="#interest"><Search size={15} /> Interest</a>
+        <a href="#conversation">Ask</a>
         <a href="#findings">Findings</a>
       </nav>
 

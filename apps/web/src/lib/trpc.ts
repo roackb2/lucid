@@ -38,6 +38,11 @@ export function hasHostedAccessToken(): boolean {
   return Boolean(readHostedAccessToken());
 }
 
+/** Returns the same tab-scoped participant credential used by tRPC. */
+export function getHostedAccessToken(): string | undefined {
+  return readHostedAccessToken();
+}
+
 export function setHostedAccessToken(token: string): void {
   activeAccessToken = token.trim();
   try {

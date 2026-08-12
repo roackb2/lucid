@@ -9,6 +9,7 @@ import { BackgroundChecks } from '@/components/lucid/background-checks';
 import { GuidanceFollowThrough } from '@/components/lucid/guidance-follow-through';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { HostedAccess } from '@/components/lucid/hosted-access';
+import { HostedConversation } from '@/components/lucid/hosted-conversation';
 import { InterestComposer } from '@/components/lucid/interest-composer';
 import { RecentNetworkRequests } from '@/components/lucid/recent-network-requests';
 import { RepresentativeProgress } from '@/components/lucid/representative-progress';
@@ -141,6 +142,8 @@ export default function App() {
               onRunNow={() => discovery.runNow.mutate()}
               onRetry={() => discovery.retryCurrentWake.mutate()}
             />
+
+            <HostedConversation />
 
             <RecentNetworkRequests
               requests={snapshot.networkActivity?.previousRequests ?? []}
