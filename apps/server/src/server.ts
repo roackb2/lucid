@@ -25,7 +25,9 @@ import { createAppRouter } from './router.js';
 import {
   createRepresentativeAgentExecutionHost,
 } from './runtime/representative-agent-execution-composition.js';
-import { createStaticWebService } from './web/static-web-service.js';
+import {
+  createStaticSpaRequestHandler,
+} from './web/static-spa-request-handler.js';
 
 const TRPC_BASE_PATH = '/api/trpc/';
 
@@ -83,8 +85,8 @@ const hostedExecution = hostedExecutionConfig
       logger,
     })
   : undefined;
-const staticWeb = config.webRoot
-  ? await createStaticWebService(config.webRoot)
+const staticSpaRequestHandler = config.webRoot
+  ? await createStaticSpaRequestHandler(config.webRoot)
   : undefined;
 heartbeats.start();
 
@@ -137,7 +139,7 @@ const server = createHTTPServer({
       return;
     }
 
-    if (staticWeb?.handle(request, response)) {
+    if (staticSpaRequestHandler?.tryServe(request, response)) {
       return;
     }
 
@@ -159,7 +161,7 @@ server.listen(config.port, config.host, () => {
     heartbeatHost: config.heartbeatHost,
     hostedExecutionEnabled: Boolean(hostedExecution),
     model: config.model,
-    webEnabled: Boolean(staticWeb),
+    webEnabled: Boolean(staticSpaRequestHandler),
   }, 'lucid.server.ready');
 });
 
