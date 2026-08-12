@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"yarn server:dev\" \"yarn web:dev\"",
     "build": "yarn server:build && yarn web:build",
-    "test": "yarn workspace @lucid/server test && yarn test:simulator",
+    "test": "yarn workspace @lucid/server test && yarn workspace @lucid/web test && yarn test:simulator",
     "test:simulator": "tsx --test scripts/**/*.test.ts",
     "typecheck": "yarn workspace @lucid/server typecheck && yarn workspace @lucid/web typecheck && tsc -p tsconfig.scripts.json --noEmit",
     "simulate:network": "tsx scripts/network-simulator.ts",
