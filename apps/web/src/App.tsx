@@ -5,23 +5,91 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { AppHeader } from '@/components/lucid/app-header';
+import { GoogleSignIn } from '@/components/lucid/google-sign-in';
 import { BackgroundChecks } from '@/components/lucid/background-checks';
 import { GuidanceFollowThrough } from '@/components/lucid/guidance-follow-through';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { HostedAccess } from '@/components/lucid/hosted-access';
 import { HostedConversation } from '@/components/lucid/hosted-conversation';
 import { InterestComposer } from '@/components/lucid/interest-composer';
+import {
+  ParticipantOnboarding,
+  type ParticipantOnboardingInput,
+} from '@/components/lucid/participant-onboarding';
 import { RecentNetworkRequests } from '@/components/lucid/recent-network-requests';
 import { RepresentativeProgress } from '@/components/lucid/representative-progress';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
+import { useLucidAuth } from '@/auth/supabase-auth';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   hasHostedAccessToken,
   isAuthenticationRequired,
   setHostedAccessToken,
+  lucidClient,
 } from '@/lib/trpc';
 
 export default function App() {
+  const auth = useLucidAuth();
+
+  if (auth.mode === 'supabase') {
+    if (auth.status === 'loading') {
+      return <WorkspaceLoading />;
+    }
+    if (auth.status === 'signed-out') {
+      return <GoogleSignIn onSignIn={auth.signInWithGoogle} />;
+    }
+    return <AuthenticatedSupabaseApp onSignOut={auth.signOut} />;
+  }
+
+  return <LegacyWorkspaceApp />;
+}
+
+function AuthenticatedSupabaseApp({
+  onSignOut,
+}: {
+  onSignOut: () => Promise<void>;
+}) {
+  const queryClient = useQueryClient();
+  const identity = useQuery({
+    queryKey: ['identity', 'session'],
+    queryFn: () => lucidClient.identity.session.query(),
+    retry: false,
+  });
+  const enroll = useMutation({
+    mutationFn: (input: ParticipantOnboardingInput) => (
+      lucidClient.identity.enroll.mutate(input)
+    ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+    },
+  });
+
+  if (identity.isPending) {
+    return <WorkspaceLoading />;
+  }
+  if (!identity.data) {
+    return <ServiceUnavailable onRetry={() => identity.refetch()} />;
+  }
+  if (identity.data.status === 'onboarding-required') {
+    return (
+      <ParticipantOnboarding
+        enrollmentAllowed={identity.data.enrollmentAllowed}
+        onEnroll={async (input) => {
+          await enroll.mutateAsync(input);
+        }}
+        onSignOut={onSignOut}
+      />
+    );
+  }
+  return <WorkspaceApp onSignOut={onSignOut} />;
+}
+
+function LegacyWorkspaceApp() {
+  return <WorkspaceApp />;
+}
+
+function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
   const discovery = useDiscoveryWorkspace();
   const snapshot = discovery.snapshot.data;
 
@@ -44,24 +112,7 @@ export default function App() {
   }
 
   if (!snapshot) {
-    return (
-      <main className="fatal-state">
-        <CloudOff size={30} />
-        <p className="section-label">Service unavailable</p>
-        <h1>Lucid cannot reach the discovery service.</h1>
-        <p>
-          Start the local server and try again. Completed findings and Heddle
-          conversations remain on disk.
-        </p>
-        <Button
-          onClick={() => discovery.snapshot.refetch()}
-          variant="secondary"
-        >
-          <RefreshCw size={15} />
-          Try again
-        </Button>
-      </main>
-    );
+    return <ServiceUnavailable onRetry={() => discovery.snapshot.refetch()} />;
   }
 
   const backgroundChecks = snapshot.backgroundChecks;
@@ -86,7 +137,7 @@ export default function App() {
 
   return (
     <div className="workspace-shell">
-      <AppHeader snapshot={snapshot} />
+      <AppHeader snapshot={snapshot} onSignOut={onSignOut} />
 
       <main className="workspace">
         <section className="workspace-intro">
@@ -200,6 +251,24 @@ export default function App() {
         <span>Your view · durable checks · inspectable delivery paths</span>
       </footer>
     </div>
+  );
+}
+
+function ServiceUnavailable({ onRetry }: { onRetry: () => unknown }) {
+  return (
+    <main className="fatal-state">
+      <CloudOff size={30} />
+      <p className="section-label">Service unavailable</p>
+      <h1>Lucid cannot reach the discovery service.</h1>
+      <p>
+        Try again shortly. Completed findings and Heddle conversations remain
+        durable while the service recovers.
+      </p>
+      <Button onClick={() => void onRetry()} variant="secondary">
+        <RefreshCw size={15} />
+        Try again
+      </Button>
+    </main>
   );
 }
 

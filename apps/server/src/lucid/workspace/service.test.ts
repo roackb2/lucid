@@ -60,6 +60,7 @@ describe('discovery workspace service', () => {
       { model: 'test-model', heddleVersion: 'test' },
     );
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find useful long-running agent workflows.',
     );
     const source = await stores.network.registerParticipant({
@@ -98,6 +99,7 @@ describe('discovery workspace service', () => {
       metadata: { throughSequence: feedback.sequence, derived: true },
     });
     const guidanceSnapshot = await workspace.submitGuidance(
+      LOCAL_USER_ID,
       'Weak signals are useful again, but label them clearly.',
     );
     const guidance = guidanceSnapshot.guidanceFollowThrough?.guidance;
@@ -113,7 +115,7 @@ describe('discovery workspace service', () => {
       metadata: { throughSequence: guidance!.sequence, derived: true },
     });
 
-    await workspace.runNow();
+    await workspace.runNow(LOCAL_USER_ID);
 
     const check = (await stores.network.readNetworkDiagnostics()).events
       .findLast(({ kind }) => kind === 'check_requested');

@@ -6,8 +6,8 @@ Execution Host Runtime. This repository contains a portable server image and
 configuration contract. It contains no deployment-specific account IDs,
 database endpoints, credentials, Terraform state, or other environment data.
 
-This is a private single-user pilot posture, not a highly available or
-multi-user production architecture.
+This is a small multi-principal preview posture, not a highly available or
+production social-network architecture.
 
 ## Ownership map
 
@@ -57,7 +57,21 @@ The final image:
 - serves the compiled participant SPA and `/api/trpc/` from the same origin;
 - includes the compiled migration entrypoint and checked-in Drizzle
   migrations; and
-- contains no environment configuration or credentials.
+- contains no server credentials. Supabase browser values, when supplied, are
+  public build configuration embedded into the SPA.
+
+Supabase's browser project URL and publishable key are Vite build inputs rather
+than runtime secrets:
+
+```bash
+docker build --platform linux/arm64 \
+  --build-arg VITE_SUPABASE_URL=https://project-ref.supabase.co \
+  --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key \
+  --file apps/server/Dockerfile \
+  --tag lucid-server:local .
+```
+
+Never pass a Supabase service-role key or Google client secret to this build.
 
 The health route proves that the Node process can answer HTTP. It deliberately
 does not claim that PostgreSQL, AgentCore, or model providers are ready.
@@ -72,7 +86,7 @@ Required environment-specific inputs are:
 
 - a TLS PostgreSQL URL reachable from the server container;
 - a public HTTPS Lucid origin reachable from the Runtime;
-- static pilot participant/operator tokens;
+- the Supabase project URL plus a server-only break-glass operator token;
 - an owner-readable ES256 private JWK file;
 - model credentials;
 - product authority IDs and distinct execution/MCP audiences; and
@@ -104,6 +118,10 @@ For this demo stage, local Terraform apply and an intentionally manual image
 rollout are easier to audit than merge-triggered deployment. CI should build
 and verify the image; automatic apply can wait until rollback, secret
 management, and environment promotion are worth operating.
+
+Google provider configuration and the publishable browser key belong to the
+private deployment environment. The Google client secret stays only in
+Supabase; it is not an application, image, GitHub, or AWS secret.
 
 ## Evidence boundary
 

@@ -91,15 +91,16 @@ describe('representative-agent heartbeat service', () => {
     const { workspace } = await startServices(runner);
 
     await workspace.saveInterest(
+      LOCAL_USER_ID,
       'Look for products that connect knowledge held by different people.',
     );
     await vi.waitFor(async () => {
-      const snapshot = await workspace.snapshot();
+      const snapshot = await workspace.snapshot(LOCAL_USER_ID);
       expect(snapshot.findings.length).toBeGreaterThan(0);
       expect(snapshot.backgroundChecks.running).toBe(false);
     }, { interval: 10, timeout: 5_000 });
 
-    const snapshot = await workspace.snapshot();
+    const snapshot = await workspace.snapshot(LOCAL_USER_ID);
     const sourceIds = new Set(sources.map(({ participant }) => participant.id));
     expect(snapshot).not.toHaveProperty('agents');
     expect(snapshot).not.toHaveProperty('events');
@@ -190,8 +191,11 @@ describe('representative-agent heartbeat service', () => {
     const firstRunner = new CountingHeartbeatRunner();
     const first = await startServices(firstRunner);
 
-    const paused = await first.workspace.setBackgroundChecksEnabled(false);
-    await first.workspace.saveInterest('Keep this unread while I am paused.');
+    const paused = await first.workspace.setBackgroundChecksEnabled(LOCAL_USER_ID,false);
+    await first.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Keep this unread while I am paused.',
+    );
     const networkWhilePaused = await first.network.diagnostics();
     expect(paused.backgroundChecks.enabled).toBe(false);
     expect(networkWhilePaused.backgroundChecks.enabled).toBe(true);
@@ -210,10 +214,10 @@ describe('representative-agent heartbeat service', () => {
       secondHeartbeat,
       TEST_RUNTIME,
     );
-    expect((await resumedWorkspace.snapshot()).backgroundChecks.enabled)
+    expect((await resumedWorkspace.snapshot(LOCAL_USER_ID)).backgroundChecks.enabled)
       .toBe(false);
 
-    await resumedWorkspace.setBackgroundChecksEnabled(true);
+    await resumedWorkspace.setBackgroundChecksEnabled(LOCAL_USER_ID,true);
     await vi.waitFor(async () => {
       expect(secondRunner.agentIds).toContain(USER_AGENT_ID);
       expect((await requireAgent(stores, USER_AGENT_ID)).lastSeenSequence)
@@ -225,7 +229,7 @@ describe('representative-agent heartbeat service', () => {
     const peer = await registerSynthetic(stores, 'global-pause-peer');
     const first = await startServices(new CountingHeartbeatRunner());
 
-    await first.workspace.setBackgroundChecksEnabled(false);
+    await first.workspace.setBackgroundChecksEnabled(LOCAL_USER_ID,false);
     await first.heartbeat.setGlobalBackgroundChecksEnabled(false);
     await first.heartbeat.reconcileAgentTasks();
 
@@ -334,6 +338,7 @@ describe('representative-agent heartbeat service', () => {
       readRepresentativeWorkingContext,
     });
     await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Keep this assignment retryable after a context projection failure.',
     );
 
@@ -367,6 +372,7 @@ describe('representative-agent heartbeat service', () => {
     const { heartbeat, workspace } = await startServices(runner);
 
     await workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find a concrete example of a representative learning from feedback.',
     );
     await vi.waitFor(async () => {
@@ -384,13 +390,13 @@ describe('representative-agent heartbeat service', () => {
     const checkCount = diagnostics.events.filter(({ kind }) => (
       kind === 'check_requested'
     )).length;
-    await expect(workspace.runNow()).rejects.toThrow(
+    await expect(workspace.runNow(LOCAL_USER_ID)).rejects.toThrow(
       'needs to be retried before starting another check',
     );
     expect((await stores.network.readNetworkDiagnostics()).events.filter(
       ({ kind }) => kind === 'check_requested',
     )).toHaveLength(checkCount);
-    await expect(workspace.retryCurrentWake()).resolves.toBeDefined();
+    await expect(workspace.retryCurrentWake(LOCAL_USER_ID)).resolves.toBeDefined();
     expect((await stores.network.readNetworkDiagnostics()).events.filter(
       ({ kind }) => kind === 'check_requested',
     )).toHaveLength(checkCount);
@@ -398,6 +404,7 @@ describe('representative-agent heartbeat service', () => {
 
   it('rejects a guidance wake that does not revise the durable working note', async () => {
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find early signals about durable personal agents.',
     );
     const initialWake = await stores.representative.beginAgentWake(
@@ -424,6 +431,7 @@ describe('representative-agent heartbeat service', () => {
     const { heartbeat, workspace } = await startServices(runner);
 
     const withGuidance = await workspace.submitGuidance(
+      LOCAL_USER_ID,
       'Weak signals are useful again, but label them clearly.',
     );
     const guidance = withGuidance.guidanceFollowThrough?.guidance;
@@ -446,6 +454,7 @@ describe('representative-agent heartbeat service', () => {
   it('supplies Lucid working history without requiring an existing Heddle checkpoint', async () => {
     const source = await registerSynthetic(stores, 'context-source');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find concrete examples of preserving unfinished work.',
     );
     const sourceMessage = await stores.communication.appendCommunicationEvent({

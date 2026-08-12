@@ -17,7 +17,6 @@ import {
   ParticipantNetworkInputError,
   ParticipantNetworkService,
 } from './lucid/network/service.js';
-import { LOCAL_USER_ID } from './lucid/local-participant.js';
 import { trpc } from './trpc.js';
 
 const interestInputSchema = z.object({
@@ -68,6 +67,22 @@ const participantIdSchema = z.object({
   participantId: z.string().trim().min(1),
 });
 
+const participantEnrollmentSchema = z.object({
+  displayName: z.string().trim().min(1).max(80),
+  privateContext: z.string().trim().min(1).max(4_000),
+  contextApproved: z.literal(true),
+});
+
+const authenticatedProcedure = trpc.procedure.use(({ ctx, next }) => {
+  if (!ctx.principal) {
+    throw new TRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'Lucid authentication is required.',
+    });
+  }
+  return next({ ctx: { ...ctx, principal: ctx.principal } });
+});
+
 const participantProcedure = trpc.procedure.use(({ ctx, next }) => {
   if (!ctx.principal) {
     throw new TRPCError({
@@ -77,14 +92,22 @@ const participantProcedure = trpc.procedure.use(({ ctx, next }) => {
   }
   if (
     !principalHasRole(ctx.principal, 'participant')
-    || ctx.principal.participantId !== LOCAL_USER_ID
+    || !ctx.principal.participantId
   ) {
     throw new TRPCError({
       code: 'FORBIDDEN',
       message: 'This principal cannot access the discovery workspace.',
     });
   }
-  return next();
+  return next({
+    ctx: {
+      ...ctx,
+      principal: {
+        ...ctx.principal,
+        participantId: ctx.principal.participantId,
+      },
+    },
+  });
 });
 
 const operatorProcedure = trpc.procedure.use(({ ctx, next }) => {
@@ -116,6 +139,7 @@ const developmentOperatorProcedure = operatorProcedure.use(({ ctx, next }) => {
 export function createAppRouter(
   discoveryWorkspace: DiscoveryWorkspaceService,
   participantNetwork: ParticipantNetworkService,
+  options: { allowSelfEnrollment?: boolean } = {},
 ) {
   return trpc.router({
     system: trpc.router({
@@ -124,36 +148,74 @@ export function createAppRouter(
         service: 'lucid-discovery',
       })),
     }),
+    identity: trpc.router({
+      session: authenticatedProcedure.query(({ ctx }) => ({
+        status: ctx.principal.participantId
+          ? 'active' as const
+          : 'onboarding-required' as const,
+        participantId: ctx.principal.participantId,
+        enrollmentAllowed: options.allowSelfEnrollment === true,
+      })),
+      enroll: authenticatedProcedure
+        .input(participantEnrollmentSchema)
+        .mutation(({ ctx, input }) => {
+          const identity = ctx.principal.externalIdentity;
+          if (!options.allowSelfEnrollment || !identity) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'This deployment does not permit self-enrollment.',
+            });
+          }
+          return resolveParticipantNetworkError(
+            () => participantNetwork.enrollAuthenticatedParticipant({
+              ...identity,
+              ...input,
+            }),
+          );
+        }),
+    }),
     discovery: trpc.router({
-      snapshot: participantProcedure.query(() => discoveryWorkspace.snapshot()),
+      snapshot: participantProcedure.query(({ ctx }) => (
+        discoveryWorkspace.snapshot(ctx.principal.participantId)
+      )),
       saveInterest: participantProcedure
         .input(interestInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.saveInterest(input.content),
+        .mutation(({ ctx, input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.saveInterest(
+            ctx.principal.participantId,
+            input.content,
+          ),
         )),
-      runNow: participantProcedure.mutation(() => resolveDiscoveryError(
-        () => discoveryWorkspace.runNow(),
+      runNow: participantProcedure.mutation(({ ctx }) => resolveDiscoveryError(
+        () => discoveryWorkspace.runNow(ctx.principal.participantId),
       )),
-      retryCurrentWake: participantProcedure.mutation(() => resolveDiscoveryError(
-        () => discoveryWorkspace.retryCurrentWake(),
+      retryCurrentWake: participantProcedure.mutation(({ ctx }) => resolveDiscoveryError(
+        () => discoveryWorkspace.retryCurrentWake(ctx.principal.participantId),
       )),
       setBackgroundChecksEnabled: participantProcedure
         .input(backgroundChecksInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.setBackgroundChecksEnabled(input.enabled),
+        .mutation(({ ctx, input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.setBackgroundChecksEnabled(
+            ctx.principal.participantId,
+            input.enabled,
+          ),
         )),
       submitFeedback: participantProcedure
         .input(feedbackInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
+        .mutation(({ ctx, input }) => resolveDiscoveryError(
           () => discoveryWorkspace.submitFeedback(
+            ctx.principal.participantId,
             input.findingSequence,
             input.content,
           ),
         )),
       submitGuidance: participantProcedure
         .input(guidanceInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.submitGuidance(input.content),
+        .mutation(({ ctx, input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.submitGuidance(
+            ctx.principal.participantId,
+            input.content,
+          ),
         )),
     }),
     operator: trpc.router({

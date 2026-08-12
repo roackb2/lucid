@@ -15,6 +15,7 @@ import {
   index,
   jsonb,
   pgSchema,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -86,6 +87,35 @@ export const postgresParticipants = lucidPostgresSchema.table(
     check(
       'participants_human_consent_required',
       sql`${table.kind} <> 'human' or ${table.contextConsentAt} is not null`,
+    ),
+  ],
+);
+
+/** Immutable provider subject bindings; email is profile data, never identity. */
+export const postgresParticipantIdentityBindings = lucidPostgresSchema.table(
+  'participant_identity_bindings',
+  {
+    issuer: text('issuer').notNull(),
+    subject: text('subject').notNull(),
+    participantId: text('participant_id')
+      .notNull()
+      .references(() => postgresParticipants.id, { onDelete: 'cascade' }),
+    createdAt: timestampColumn('created_at').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'participant_identity_bindings_pk',
+      columns: [table.issuer, table.subject],
+    }),
+    uniqueIndex('participant_identity_bindings_participant_idx')
+      .on(table.participantId),
+    check(
+      'participant_identity_bindings_issuer_valid',
+      sql`char_length(${table.issuer}) between 1 and 512 and ${table.issuer} = btrim(${table.issuer})`,
+    ),
+    check(
+      'participant_identity_bindings_subject_valid',
+      sql`char_length(${table.subject}) between 1 and 512 and ${table.subject} = btrim(${table.subject})`,
     ),
   ],
 );
@@ -213,6 +243,7 @@ export const postgresDiscoveryEvents = lucidPostgresSchema.table(
 export const lucidPostgresTables = {
   discoveryWorkspaces: postgresDiscoveryWorkspaces,
   participants: postgresParticipants,
+  participantIdentityBindings: postgresParticipantIdentityBindings,
   representativeAgents: postgresRepresentativeAgents,
   discoveryEvents: postgresDiscoveryEvents,
 };

@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { HostedConversationTurnRunner } from '@roackb2/heddle-adopter/conversation';
 import dayjs from 'dayjs';
 import { principalHasRole } from '../../auth/request-principal.js';
-import { LOCAL_USER_ID } from '../../lucid/local-participant.js';
 import type {
   HostedConversationRequest,
   HostedConversationRequestService,
@@ -73,7 +72,7 @@ function requireParticipantSubject(
 ): string {
   if (
     !principalHasRole(input.principal, 'participant')
-    || input.principal.participantId !== LOCAL_USER_ID
+    || !input.principal.participantId
   ) {
     throw new HostedConversationAuthorizationError(
       'This principal cannot start a hosted Lucid conversation.',

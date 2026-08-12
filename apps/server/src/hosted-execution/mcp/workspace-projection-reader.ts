@@ -6,9 +6,9 @@ import type {
   ScopedWorkspaceProjectionReader,
 } from './types.js';
 
-export type SingleWorkspaceIdentity = Pick<
+export type ParticipantWorkspaceIdentity = Pick<
   McpInvocationScope,
-  'tenantId' | 'subjectId' | 'productSessionId'
+  'tenantId' | 'productSessionId'
 >;
 
 export class WorkspaceProjectionScopeError extends Error {
@@ -20,16 +20,16 @@ export class WorkspaceProjectionScopeError extends Error {
 }
 
 /**
- * Binds Lucid's current singleton workspace to one configured pilot identity.
- * This is an explicit single-tenant adapter; a multi-tenant product must replace
- * it with a store that resolves the workspace from the verified scope.
+ * Binds the shared Lucid network to the authenticated participant carried in a
+ * verified execution capability. The source performs the participant-scoped
+ * projection; tenant and product-session values stay deployment-owned.
  */
-export class SingleWorkspaceProjectionReader
+export class ParticipantWorkspaceProjectionReader
 implements ScopedWorkspaceProjectionReader {
   constructor(
-    private readonly identity: SingleWorkspaceIdentity,
+    private readonly identity: ParticipantWorkspaceIdentity,
     private readonly source: {
-      snapshot(): Promise<DiscoveryWorkspaceSnapshot>;
+      snapshot(participantId: string): Promise<DiscoveryWorkspaceSnapshot>;
     },
   ) {}
 
@@ -39,7 +39,7 @@ implements ScopedWorkspaceProjectionReader {
   }): Promise<DiscoveryWorkspaceSnapshot> {
     input.signal.throwIfAborted();
     this.assertScope(input.scope);
-    const snapshot = await this.source.snapshot();
+    const snapshot = await this.source.snapshot(input.scope.subjectId);
     input.signal.throwIfAborted();
     return snapshot;
   }
@@ -47,7 +47,6 @@ implements ScopedWorkspaceProjectionReader {
   private assertScope(scope: McpInvocationScope): void {
     if (
       scope.tenantId !== this.identity.tenantId
-      || scope.subjectId !== this.identity.subjectId
       || scope.productSessionId !== this.identity.productSessionId
     ) {
       throw new WorkspaceProjectionScopeError();

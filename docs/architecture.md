@@ -195,23 +195,23 @@ within a wake; independent representatives may run concurrently.
 
 ## Authentication and trust boundaries
 
-Two request authenticators exist:
+Three request authenticators exist:
 
 - `development` accepts only a loopback-bound server and maps the local socket
   to the seeded participant with participant and operator roles;
 - `static-token` accepts distinct high-entropy participant and operator bearer
-  tokens and is limited to a private single-user pilot over TLS.
+  tokens and is limited to a private single-user pilot over TLS; and
+- `supabase` verifies a Google-backed Supabase access token through the
+  project's JWKS, then resolves the exact `(issuer, subject)` to a durable
+  Lucid participant. Email and provider profile claims are never product
+  authorization.
 
-The current browser client sends no bearer token, so its supported local path
-is development mode. Static-token mode is presently an API/server boundary for
-a private pilot; a hosted browser sign-in and secure token-delivery flow still
-need to be designed.
-
-Static tokens are not a production identity system. A multi-user deployment
-must add an identity provider, derive tenant/participant scope on the server,
-and preserve the same domain-facing principal shape. Authorization headers,
-tokens, model credentials, database URLs, and private participant context must
-not be logged.
+The browser uses development mode without a credential on loopback, or sends
+its short-lived Supabase session in hosted mode. An authenticated but unbound
+subject can access only the identity/onboarding surface; participant routes and
+hosted execution require a durable binding. Authorization headers, tokens,
+model credentials, database URLs, and private participant context must not be
+logged.
 
 ## Deployment and process lifecycle
 

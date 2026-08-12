@@ -24,6 +24,7 @@ import type {
   ParticipantStatus,
   RegisterParticipantInput,
 } from '../discovery-types.js';
+import { participantStatusSchema } from '../discovery-types.js';
 import {
   LOCAL_USER_ID,
   USER_AGENT_ID,
@@ -37,6 +38,7 @@ import {
 import {
   postgresDiscoveryEvents as discoveryEvents,
   postgresDiscoveryWorkspaces as discoveryWorkspaces,
+  postgresParticipantIdentityBindings as participantIdentityBindings,
   postgresParticipants as participants,
   postgresRepresentativeAgents as representativeAgents,
 } from '../persistence/postgres/schema.js';
@@ -45,16 +47,99 @@ import { AGENT_PRINCIPAL_EVENT_KINDS } from '../representative/mailbox-policy.js
 import { LUCID_WORKSPACE_ID } from '../workspace/workspace-identity.js';
 import { toParticipantView } from './participant-visibility.js';
 import type {
+  AuthenticatedParticipantIdentity,
+  EnrollAuthenticatedParticipantInput,
   NetworkDiagnosticsStoreSnapshot,
   ParticipantNetworkStore,
   ParticipantWithAgent,
+  ResolvedParticipantIdentity,
 } from './store.js';
 
 const SNAPSHOT_EVENT_LIMIT = 220;
 
+type LucidPostgresTransaction = Parameters<
+  Parameters<PostgresDatabase['orm']['transaction']>[0]
+>[0];
+
+type NormalizedParticipantProfile = {
+  displayName: string;
+  privateContext: string;
+};
+
 export class PostgresParticipantNetworkStore
 implements ParticipantNetworkStore {
   constructor(private readonly database: PostgresDatabase) {}
+
+  async resolveParticipantIdentity(
+    identity: AuthenticatedParticipantIdentity,
+  ): Promise<ResolvedParticipantIdentity | undefined> {
+    const normalized = normalizeAuthenticatedIdentity(identity);
+    const [row] = await this.database.orm
+      .select({
+        participantId: participants.id,
+        status: participants.status,
+      })
+      .from(participantIdentityBindings)
+      .innerJoin(
+        participants,
+        eq(participants.id, participantIdentityBindings.participantId),
+      )
+      .where(and(
+        eq(participantIdentityBindings.issuer, normalized.issuer),
+        eq(participantIdentityBindings.subject, normalized.subject),
+        eq(participants.workspaceId, LUCID_WORKSPACE_ID),
+      ))
+      .limit(1);
+    return row
+      ? {
+          participantId: row.participantId,
+          status: participantStatusSchema.parse(row.status),
+        }
+      : undefined;
+  }
+
+  async enrollAuthenticatedParticipant(
+    input: EnrollAuthenticatedParticipantInput,
+  ): Promise<ParticipantWithAgent> {
+    const identity = normalizeAuthenticatedIdentity(input);
+    const profile = normalizeParticipantProfile(input);
+    if (!input.contextApproved) {
+      throw new Error(
+        'Confirm that the participant knowingly allowed this context to be used.',
+      );
+    }
+    const now = dayjs().toISOString();
+
+    return await this.database.orm.transaction(async (transaction) => {
+      await transaction.execute(sql`
+        select pg_advisory_xact_lock(
+          hashtext(${identity.issuer}),
+          hashtext(${identity.subject})
+        )
+      `);
+      const existing = await this.findParticipantWithAgentByIdentity(
+        transaction,
+        identity,
+      );
+      if (existing) {
+        return { ...existing, created: false };
+      }
+
+      const created = await this.createParticipantWithAgent(transaction, {
+        ...profile,
+        kind: 'human',
+        registrationKey: null,
+        contextConsentAt: now,
+        now,
+      });
+      await transaction.insert(participantIdentityBindings).values({
+        ...identity,
+        participantId: created.participant.id,
+        createdAt: now,
+      });
+      return { ...created, created: true };
+    });
+  }
 
   async readNetworkDiagnostics(): Promise<NetworkDiagnosticsStoreSnapshot> {
     const workspace = await this.requireWorkspace();
@@ -147,8 +232,6 @@ implements ParticipantNetworkStore {
     // Validate and normalize trusted ingress before opening the transaction so
     // a malformed simulator or future client cannot leave partial identity.
     const registrationKey = input.registrationKey.trim();
-    const displayName = input.displayName.trim();
-    const privateContext = input.privateContext.trim();
     if (!/^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,119}$/.test(registrationKey)) {
       throw new Error(
         'Registration key must contain 1 to 120 letters, numbers, dots, colons, underscores, or hyphens.',
@@ -159,16 +242,9 @@ implements ParticipantNetworkStore {
         'Confirm that the participant knowingly allowed this context to be used.',
       );
     }
-    if (!displayName || displayName.length > 80) {
-      throw new Error('Participant name must contain 1 to 80 characters.');
-    }
-    if (!privateContext || privateContext.length > 4_000) {
-      throw new Error('Participant context must contain 1 to 4,000 characters.');
-    }
+    const profile = normalizeParticipantProfile(input);
 
     const now = dayjs().toISOString();
-    const participantId = `participant_${randomUUID()}`;
-    const agentId = `agent_${randomUUID()}`;
 
     return await this.database.orm.transaction(async (transaction) => {
       // Serialize one stable registration identity across API instances. This
@@ -189,8 +265,8 @@ implements ParticipantNetworkStore {
         const participant = toParticipant(existingRow);
         if (
           participant.kind !== input.kind
-          || participant.displayName !== displayName
-          || participant.privateContext !== privateContext
+          || participant.displayName !== profile.displayName
+          || participant.privateContext !== profile.privateContext
         ) {
           throw new Error(
             `Registration key ${registrationKey} already belongs to a different participant profile.`,
@@ -213,94 +289,145 @@ implements ParticipantNetworkStore {
         };
       }
 
-      const [workspace] = await transaction
-        .select()
-        .from(discoveryWorkspaces)
-        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
-        .for('update')
-        .limit(1);
-      if (!workspace) {
-        throw new Error('Discovery workspace is missing.');
-      }
-      const [lastAgent] = await transaction
-        .select({ sortOrder: representativeAgents.sortOrder })
-        .from(representativeAgents)
-        .where(eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID))
-        .orderBy(desc(representativeAgents.sortOrder))
-        .limit(1);
-      const [latestEvent] = await transaction
-        .select({ sequence: discoveryEvents.sequence })
-        .from(discoveryEvents)
-        .where(eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID))
-        .orderBy(desc(discoveryEvents.sequence))
-        .limit(1);
-      // Participant, representative, initial mailbox floor, and audit event are
-      // one unit. The current tail prevents a new source from reading old mail.
-      const profile = createRepresentativeProfile({
-        id: agentId,
-        participantId,
-        displayName,
-        kind: input.kind,
-        sortOrder: (lastAgent?.sortOrder ?? 0) + 1,
-      });
-      const [participantRow] = await transaction
-        .insert(participants)
-        .values({
-          id: participantId,
-          workspaceId: LUCID_WORKSPACE_ID,
-          registrationKey,
-          kind: input.kind,
-          status: 'active',
-          displayName,
-          privateContext,
-          contextConsentAt: input.kind === 'human' ? now : null,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-      const [agentRow] = await transaction
-        .insert(representativeAgents)
-        .values({
-          ...profile,
-          workspaceId: LUCID_WORKSPACE_ID,
-          status: 'idle',
-          runCount: 0,
-          mailboxFloorSequence: latestEvent?.sequence ?? 0,
-          lastSeenSequence: latestEvent?.sequence ?? 0,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-      await transaction.insert(discoveryEvents).values({
-        id: `event_${randomUUID()}`,
-        workspaceId: LUCID_WORKSPACE_ID,
-        wakeNumber: workspace.currentWake,
-        kind: 'participant_added',
-        targetAgentId: agentId,
-        targetParticipantId: participantId,
-        title: `${displayName} joins the participant network`,
-        content:
-          'Trusted ingress registered private context and created one representative agent. The context itself is not included in this event.',
-        metadata: {
-          visibility: 'operator',
-          participantId,
-          agentId,
-          participantKind: input.kind,
-          contextConsentAt: input.kind === 'human' ? now : undefined,
-        },
-        createdAt: now,
-      });
-
-      if (!participantRow || !agentRow) {
-        throw new Error('PostgreSQL did not return the created participant.');
-      }
-
       return {
-        participant: toParticipant(participantRow),
-        agent: toAgent(agentRow),
+        ...await this.createParticipantWithAgent(transaction, {
+          ...profile,
+          registrationKey,
+          contextConsentAt: input.kind === 'human' ? now : null,
+          kind: input.kind,
+          now,
+        }),
         created: true,
       };
     });
+  }
+
+  private async findParticipantWithAgentByIdentity(
+    transaction: LucidPostgresTransaction,
+    identity: AuthenticatedParticipantIdentity,
+  ): Promise<ParticipantWithAgent | undefined> {
+    const [row] = await transaction
+      .select({
+        participant: participants,
+        agent: representativeAgents,
+      })
+      .from(participantIdentityBindings)
+      .innerJoin(
+        participants,
+        eq(participants.id, participantIdentityBindings.participantId),
+      )
+      .innerJoin(
+        representativeAgents,
+        eq(representativeAgents.participantId, participants.id),
+      )
+      .where(and(
+        eq(participantIdentityBindings.issuer, identity.issuer),
+        eq(participantIdentityBindings.subject, identity.subject),
+        eq(participants.workspaceId, LUCID_WORKSPACE_ID),
+      ))
+      .limit(1);
+    return row
+      ? { participant: toParticipant(row.participant), agent: toAgent(row.agent) }
+      : undefined;
+  }
+
+  private async createParticipantWithAgent(
+    transaction: LucidPostgresTransaction,
+    input: NormalizedParticipantProfile & {
+      registrationKey: string | null;
+      kind: RegisterParticipantInput['kind'];
+      contextConsentAt: string | null;
+      now: string;
+    },
+  ): Promise<ParticipantWithAgent> {
+    const participantId = `participant_${randomUUID()}`;
+    const agentId = `agent_${randomUUID()}`;
+    const [workspace] = await transaction
+      .select()
+      .from(discoveryWorkspaces)
+      .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+      .for('update')
+      .limit(1);
+    if (!workspace) {
+      throw new Error('Discovery workspace is missing.');
+    }
+    const [lastAgent] = await transaction
+      .select({ sortOrder: representativeAgents.sortOrder })
+      .from(representativeAgents)
+      .where(eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(desc(representativeAgents.sortOrder))
+      .limit(1);
+    const [latestEvent] = await transaction
+      .select({ sequence: discoveryEvents.sequence })
+      .from(discoveryEvents)
+      .where(eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(desc(discoveryEvents.sequence))
+      .limit(1);
+    // Participant, representative, initial mailbox floor, and audit event are
+    // one unit. The current tail prevents a new source from reading old mail.
+    const representativeProfile = createRepresentativeProfile({
+      id: agentId,
+      participantId,
+      displayName: input.displayName,
+      kind: input.kind,
+      sortOrder: (lastAgent?.sortOrder ?? 0) + 1,
+    });
+    const [participantRow] = await transaction
+      .insert(participants)
+      .values({
+        id: participantId,
+        workspaceId: LUCID_WORKSPACE_ID,
+        registrationKey: input.registrationKey,
+        kind: input.kind,
+        status: 'active',
+        displayName: input.displayName,
+        privateContext: input.privateContext,
+        contextConsentAt: input.contextConsentAt,
+        createdAt: input.now,
+        updatedAt: input.now,
+      })
+      .returning();
+    const [agentRow] = await transaction
+      .insert(representativeAgents)
+      .values({
+        ...representativeProfile,
+        workspaceId: LUCID_WORKSPACE_ID,
+        status: 'idle',
+        runCount: 0,
+        mailboxFloorSequence: latestEvent?.sequence ?? 0,
+        lastSeenSequence: latestEvent?.sequence ?? 0,
+        createdAt: input.now,
+        updatedAt: input.now,
+      })
+      .returning();
+    await transaction.insert(discoveryEvents).values({
+      id: `event_${randomUUID()}`,
+      workspaceId: LUCID_WORKSPACE_ID,
+      wakeNumber: workspace.currentWake,
+      kind: 'participant_added',
+      targetAgentId: agentId,
+      targetParticipantId: participantId,
+      title: `${input.displayName} joins the participant network`,
+      content:
+        'Trusted ingress registered private context and created one representative agent. The context itself is not included in this event.',
+      metadata: {
+        visibility: 'operator',
+        participantId,
+        agentId,
+        participantKind: input.kind,
+        contextConsentAt: input.contextConsentAt ?? undefined,
+      },
+      createdAt: input.now,
+    });
+
+    if (!participantRow || !agentRow) {
+      throw new Error('PostgreSQL did not return the created participant.');
+    }
+
+    return {
+      participant: toParticipant(participantRow),
+      agent: toAgent(agentRow),
+    };
   }
 
   async setParticipantStatus(
@@ -737,4 +864,32 @@ implements ParticipantNetworkStore {
       isUserAgent: agent.id === USER_AGENT_ID,
     };
   }
+}
+
+function normalizeAuthenticatedIdentity(
+  identity: AuthenticatedParticipantIdentity,
+): AuthenticatedParticipantIdentity {
+  const { issuer, subject } = identity;
+  if (!issuer || issuer.length > 512 || issuer !== issuer.trim()) {
+    throw new Error('Identity issuer must contain 1 to 512 characters.');
+  }
+  if (!subject || subject.length > 512 || subject !== subject.trim()) {
+    throw new Error('Identity subject must contain 1 to 512 characters.');
+  }
+  return { issuer, subject };
+}
+
+function normalizeParticipantProfile(input: {
+  displayName: string;
+  privateContext: string;
+}): NormalizedParticipantProfile {
+  const displayName = input.displayName.trim();
+  const privateContext = input.privateContext.trim();
+  if (!displayName || displayName.length > 80) {
+    throw new Error('Participant name must contain 1 to 80 characters.');
+  }
+  if (!privateContext || privateContext.length > 4_000) {
+    throw new Error('Participant context must contain 1 to 4,000 characters.');
+  }
+  return { displayName, privateContext };
 }

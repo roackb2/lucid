@@ -28,7 +28,7 @@ import {
   type LucidProductMcpToolName,
 } from '../mcp/types.js';
 import {
-  SingleWorkspaceProjectionReader,
+  ParticipantWorkspaceProjectionReader,
 } from '../mcp/workspace-projection-reader.js';
 
 describe('Lucid hosted conversation control-plane round trip', () => {
@@ -36,13 +36,14 @@ describe('Lucid hosted conversation control-plane round trip', () => {
     const signer = await McpCapabilitySignerFixture.create();
     const authority = signer.authority;
     const issue = vi.spyOn(authority, 'issue');
-    const source = { snapshot: vi.fn(async () => workspaceSnapshot()) };
+    const source = {
+      snapshot: vi.fn(async (_participantId: string) => workspaceSnapshot()),
+    };
     const mcpService = new NodeStreamableHttpMcpService<LucidProductMcpToolName>({
       capabilityVerifier: signer.verifier(),
       toolset: createLucidProductToolset(
-        new SingleWorkspaceProjectionReader({
+        new ParticipantWorkspaceProjectionReader({
           tenantId: 'tenant-a',
-          subjectId: 'subject-a',
           productSessionId: 'product-session-a',
         }, source),
         { now: () => MCP_TEST_NOW },

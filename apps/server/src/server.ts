@@ -37,9 +37,12 @@ const hostedExecutionConfig = resolveHostedExecutionConfig(
   config.repoRoot,
 );
 const logger = createLucidLogger(config.logLevel);
-const authenticator = createLucidAuthenticator(config.authentication);
 const persistence = await createPostgresPersistence(config);
 const { stores, taskAuthority } = persistence;
+const authenticator = createLucidAuthenticator(
+  config.authentication,
+  stores.network,
+);
 const agentRunner = new HeddleRepresentativeAgentRunner(
   stores.communication,
   config,
@@ -92,7 +95,10 @@ heartbeats.start();
 
 const server = createHTTPServer({
   basePath: TRPC_BASE_PATH,
-  router: createAppRouter(discoveryWorkspace, participantNetwork),
+  router: createAppRouter(discoveryWorkspace, participantNetwork, {
+    allowSelfEnrollment: config.authentication.mode === 'supabase'
+      && config.authentication.allowSelfEnrollment,
+  }),
   createContext: async ({ req }) => {
     const remoteAddress = req.socket.remoteAddress;
     return {

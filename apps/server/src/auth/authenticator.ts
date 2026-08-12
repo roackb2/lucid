@@ -1,6 +1,13 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { LOCAL_USER_ID } from '../lucid/local-participant.js';
+import type {
+  ParticipantIdentityReader,
+} from '../lucid/network/store.js';
 import type { LucidRequestPrincipal } from './request-principal.js';
+import {
+  createSupabaseAuthenticator,
+  type SupabaseAuthenticationConfig,
+} from './supabase-authenticator.js';
 
 export type LucidAuthenticationInput = {
   authorization?: string;
@@ -19,7 +26,8 @@ export type LucidAuthenticationConfig =
       mode: 'static-token';
       participantToken: string;
       operatorToken: string;
-    };
+    }
+  | SupabaseAuthenticationConfig;
 
 /**
  * Builds the request authenticator owned by the product HTTP boundary.
@@ -29,6 +37,7 @@ export type LucidAuthenticationConfig =
  */
 export function createLucidAuthenticator(
   config: LucidAuthenticationConfig,
+  identities?: ParticipantIdentityReader,
 ): LucidAuthenticator {
   if (config.mode === 'development') {
     return {
@@ -42,6 +51,13 @@ export function createLucidAuthenticator(
           : undefined
       ),
     };
+  }
+
+  if (config.mode === 'supabase') {
+    if (!identities) {
+      throw new Error('Supabase authentication requires the Lucid identity reader.');
+    }
+    return createSupabaseAuthenticator(config, identities);
   }
 
   return {

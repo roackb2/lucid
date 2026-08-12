@@ -13,10 +13,6 @@ import {
   or,
 } from 'drizzle-orm';
 import {
-  LOCAL_USER_ID,
-  USER_AGENT_ID,
-} from '../local-participant.js';
-import {
   type AppendDiscoveryEventInput,
   type Agent,
   type AgentView,
@@ -86,11 +82,13 @@ export class PostgresDiscoveryWorkspaceStore
 implements DiscoveryWorkspaceStore {
   constructor(private readonly database: PostgresDatabase) {}
 
-  async readSnapshot(): Promise<DiscoveryWorkspaceStoreSnapshot> {
+  async readSnapshot(
+    participantId: string,
+  ): Promise<DiscoveryWorkspaceStoreSnapshot> {
     const workspace = await this.requireWorkspace();
     const [user, representative] = await Promise.all([
-      this.requireParticipant(LOCAL_USER_ID),
-      this.requireUserAgent(),
+      this.requireParticipant(participantId),
+      this.requireParticipantAgent(participantId),
     ]);
     const workingContext = await this.readRepresentativeWorkingContext(
       representative.id,
@@ -100,7 +98,7 @@ implements DiscoveryWorkspaceStore {
       workspace,
       user: toParticipantView(user),
       representative: await this.toAgentView(representative, user),
-      interest: await this.findSavedInterest(),
+      interest: await this.findSavedInterest(participantId),
       workingNote: workingContext.workingNote,
       networkActivity: await this.readNetworkActivity(representative),
       guidanceFollowThrough: await this.readGuidanceFollowThrough(
@@ -160,30 +158,37 @@ implements DiscoveryWorkspaceStore {
     return toAgent(row);
   }
 
-  async requireUserAgent(): Promise<Agent> {
-    return await this.requireAgent(USER_AGENT_ID);
+  async requireParticipantAgent(participantId: string): Promise<Agent> {
+    return await this.requireAgentByParticipantId(participantId);
   }
 
-  async findSavedInterest(): Promise<DiscoveryEvent | undefined> {
+  async findSavedInterest(
+    participantId: string,
+  ): Promise<DiscoveryEvent | undefined> {
+    const representative = await this.requireParticipantAgent(participantId);
     const [row] = await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'interest_saved'),
-        eq(discoveryEvents.targetAgentId, USER_AGENT_ID),
-        eq(discoveryEvents.targetParticipantId, LOCAL_USER_ID),
+        eq(discoveryEvents.targetAgentId, representative.id),
+        eq(discoveryEvents.targetParticipantId, participantId),
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .limit(1);
     return row ? toDiscoveryEvent(row) : undefined;
   }
 
-  async saveInterest(content: string): Promise<DiscoveryEvent> {
+  async saveInterest(
+    participantId: string,
+    content: string,
+  ): Promise<DiscoveryEvent> {
+    const representative = await this.requireParticipantAgent(participantId);
     return await this.appendEvent({
       kind: 'interest_saved',
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      targetAgentId: representative.id,
+      targetParticipantId: participantId,
       title: 'You update what Lucid should look for',
       content,
       metadata: {
@@ -229,14 +234,17 @@ implements DiscoveryWorkspaceStore {
     });
   }
 
-  async saveGuidance(content: string): Promise<DiscoveryEvent> {
+  async saveGuidance(
+    participantId: string,
+    content: string,
+  ): Promise<DiscoveryEvent> {
     const normalizedContent = content.trim();
     if (!normalizedContent || normalizedContent.length > 1_600) {
       throw new Error('Guidance must contain 1 to 1,600 characters.');
     }
     const [interest, representative] = await Promise.all([
-      this.findSavedInterest(),
-      this.requireUserAgent(),
+      this.findSavedInterest(participantId),
+      this.requireParticipantAgent(participantId),
     ]);
     if (!interest) {
       throw new Error('Save an interest before refining the representative.');
@@ -1201,7 +1209,7 @@ implements DiscoveryWorkspaceStore {
         agent.lastSeenSequence,
         10_000,
       )).length,
-      isUserAgent: agent.id === USER_AGENT_ID,
+      isUserAgent: agent.participantId === participant.id,
     };
   }
 }

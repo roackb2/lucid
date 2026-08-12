@@ -139,14 +139,24 @@ LUCID_OPERATOR_TOKEN=use-a-distinct-operator-secret-of-32-characters
 ```
 
 Use this only for a private single-user API pilot over TLS. The current web app
-does not attach a bearer token, so static-token browser sign-in is not yet a
-complete hosted flow. A production multi-user deployment needs a real identity
-provider and server-derived tenant ownership.
+can attach this token through its legacy unlock screen, but this is not a
+multi-user identity system.
 
-Development participant administration and simulation routes remain
-loopback-only even in static-token mode. The bundled web app and simulator do
-not attach bearer tokens, so use development mode for their current local
-workflow.
+For a local Google/Supabase integration test, configure both the server and the
+Vite browser build:
+
+```dotenv
+LUCID_AUTH_MODE=supabase
+LUCID_SUPABASE_PROJECT_URL=https://project-ref.supabase.co
+LUCID_ALLOW_SELF_ENROLLMENT=true
+LUCID_OPERATOR_TOKEN=replace-with-a-server-only-32-character-secret
+VITE_SUPABASE_URL=https://project-ref.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=replace-with-a-publishable-browser-key
+```
+
+Add the local origin and `/auth/callback` URL to the provider's redirect
+allowlist. Development participant administration and simulation routes remain
+loopback-only in every authentication mode.
 
 ## Optional external Execution Host conversation
 

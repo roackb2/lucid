@@ -65,8 +65,10 @@ flowchart LR
 
 Every participant has the same basic shape: private context, changing private
 input, one representative, one mailbox, one durable Heddle task, and findings
-addressed back to that participant. The local web client is one projection of
-that model, not the world administrator.
+addressed back to that participant. The web client is one authenticated
+participant's projection of that model, not the world administrator. A hosted
+preview can use Google through Supabase; Lucid binds the verified provider
+subject to a durable participant instead of using email as identity.
 
 ## Responsibility boundaries
 

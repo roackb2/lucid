@@ -94,6 +94,7 @@ You represent an explicitly simulated test participant, not a real person or ext
   it('places prior findings, feedback, and the working note before unread events', async () => {
     const source = await registerSynthetic(stores, 'prompt-history-source');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find concrete examples of agents preserving unfinished work.',
     );
     const sourceMessage = await peerMessage(
@@ -134,7 +135,7 @@ You represent an explicitly simulated test participant, not a real person or ext
       laterMessage.sequence,
     );
     const prompt = buildAgentWakePrompt(
-      await stores.workspace.requireUserAgent(),
+      await stores.workspace.requireParticipantAgent(LOCAL_USER_ID),
       await requireLocalParticipant(stores),
       2,
       [laterMessage],
@@ -304,7 +305,7 @@ You represent an explicitly simulated test participant, not a real person or ext
     expect((await tools.get('finish_without_action')!.execute({
       reason: 'A third action exceeds the budget.',
     })).ok).toBe(false);
-    expect((await stores.workspace.readSnapshot()).workingNote).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).workingNote).toMatchObject({
       content: 'Remember the concrete visible source for later comparison.',
       metadata: expect.objectContaining({
         throughSequence: visible.sequence,
@@ -316,6 +317,7 @@ You represent an explicitly simulated test participant, not a real person or ext
   it('requires the assignment request before any other communication action', async () => {
     const source = await registerSynthetic(stores, 'required-request');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find teams using representative agents for long-running discovery.',
     );
     const peer = await peerMessage(
@@ -367,6 +369,7 @@ You represent an explicitly simulated test participant, not a real person or ext
 
   it('reuses a committed assignment request when the same wake retries', async () => {
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find concrete examples of durable representative-agent work.',
     );
     const firstTools = toolsByName(await createUserTools(
@@ -412,9 +415,11 @@ You represent an explicitly simulated test participant, not a real person or ext
 
   it('requires direct guidance to revise the working note before any action', async () => {
     await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find early signals about durable personal agents.',
     );
     const guidance = await stores.workspace.saveGuidance(
+      LOCAL_USER_ID,
       'Weak signals are useful again, but label them clearly.',
     );
     const tools = toolsByName(await createUserTools(
@@ -465,6 +470,7 @@ You represent an explicitly simulated test participant, not a real person or ext
   it('reconstructs retry budgets and gives invalid legacy wakes one repair slot', async () => {
     const source = await registerSynthetic(stores, 'retry-repair');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find concrete long-running representative-agent experiments.',
     );
     const peer = await peerMessage(
@@ -542,7 +548,7 @@ You represent an explicitly simulated test participant, not a real person or ext
         targetParticipantId: source.participant.id,
       }),
     );
-    expect((await stores.workspace.readSnapshot()).findings).toEqual([]);
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).findings).toEqual([]);
   });
 
   it('separates request replies from content provenance', async () => {
@@ -668,7 +674,7 @@ You represent an explicitly simulated test participant, not a real person or ext
       content: 'A relay must not turn one contribution into a new finding.',
       source_event_ids: [relayedMessage.sequence],
     })).ok).toBe(false);
-    expect((await stores.workspace.readSnapshot()).findings).toEqual([
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).findings).toEqual([
       expect.objectContaining({
         finding: expect.objectContaining({ title: 'New finding for You' }),
         sources: [expect.objectContaining({
@@ -687,6 +693,7 @@ You represent an explicitly simulated test participant, not a real person or ext
 
   it('allows one representative contribution per principal-initiated request thread', async () => {
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Start one bounded request thread.',
     );
     const firstWake = toolsByName(await createUserTools(
@@ -763,7 +770,7 @@ async function createUserTools(
 ) {
   return await new AgentCommunicationToolService(
     stores.communication,
-    await stores.workspace.requireUserAgent(),
+    await stores.workspace.requireParticipantAgent(LOCAL_USER_ID),
     await requireLocalParticipant(stores),
     wakeId,
     wakeNumber,

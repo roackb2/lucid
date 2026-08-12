@@ -24,6 +24,8 @@ bounded execution, and recovery predictable.
 
 - `src/server.ts` constructs the stores, runner, heartbeat host, workspace
   service, and HTTP server.
+- `src/auth/` verifies loopback, static-token, or Supabase sessions and maps
+  provider subjects to product-owned participant identities.
 - `src/migrate.ts` applies checked-in PostgreSQL product and Heddle migrations
   as an explicit deployment step.
 - `src/infrastructure/postgres/database.ts` owns the shared PostgreSQL pool and
@@ -44,6 +46,8 @@ bounded execution, and recovery predictable.
   separate HTML/immutable-asset cache policy. It is disabled when
   `LUCID_WEB_ROOT` is unset for split-process local development.
 - `src/router.ts` exposes:
+  - `identity.session`
+  - `identity.enroll`
   - `discovery.snapshot`
   - `discovery.saveInterest`
   - `discovery.runNow`

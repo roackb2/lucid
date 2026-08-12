@@ -43,15 +43,15 @@ export interface RepresentativeWorkingContextReader {
 
 export interface DiscoveryWorkspaceStore
 extends RepresentativeWorkingContextReader {
-  readSnapshot(): Promise<DiscoveryWorkspaceStoreSnapshot>;
-  requireUserAgent(): Promise<Agent>;
-  findSavedInterest(): Promise<DiscoveryEvent | undefined>;
-  saveInterest(content: string): Promise<DiscoveryEvent>;
+  readSnapshot(participantId: string): Promise<DiscoveryWorkspaceStoreSnapshot>;
+  requireParticipantAgent(participantId: string): Promise<Agent>;
+  findSavedInterest(participantId: string): Promise<DiscoveryEvent | undefined>;
+  saveInterest(participantId: string, content: string): Promise<DiscoveryEvent>;
   saveFeedback(
     participantId: string,
     findingSequence: number,
     content: string,
   ): Promise<DiscoveryEvent>;
-  saveGuidance(content: string): Promise<DiscoveryEvent>;
+  saveGuidance(participantId: string, content: string): Promise<DiscoveryEvent>;
   recordCheckRequest(input: RecordCheckRequestInput): Promise<DiscoveryEvent>;
 }

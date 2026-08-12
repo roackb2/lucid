@@ -164,14 +164,39 @@ button:disabled {
   color: var(--ink);
 }
 
+.app-header__actions,
 .service-status {
   display: inline-flex;
   align-items: center;
   justify-self: end;
+}
+
+.app-header__actions {
+  gap: 10px;
+}
+
+.service-status {
   gap: 7px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 650;
+}
+
+.app-header__sign-out {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.app-header__sign-out:hover {
+  background: var(--surface-muted);
+  color: var(--ink);
 }
 
 .service-status > span {
@@ -1750,7 +1775,8 @@ button:disabled {
   font-weight: 650;
 }
 
-.access-form input {
+.access-form input,
+.access-form textarea {
   width: 100%;
   padding: 12px 13px;
   border: 1px solid var(--line-strong);
@@ -1759,10 +1785,30 @@ button:disabled {
   color: var(--ink);
 }
 
-.access-form input:focus {
+.access-form textarea {
+  min-height: 130px;
+  resize: vertical;
+}
+
+.access-form input:focus,
+.access-form textarea:focus {
   border-color: rgba(23, 107, 91, 0.65);
   outline: 0;
   box-shadow: 0 0 0 4px rgba(23, 107, 91, 0.08);
+}
+
+.access-form label:has(input[type='checkbox']) {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 9px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.access-form input[type='checkbox'] {
+  width: 16px;
+  margin-top: 1px;
 }
 
 .access-form .button {

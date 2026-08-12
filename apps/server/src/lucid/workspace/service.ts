@@ -1,11 +1,10 @@
 /**
- * Application boundary for the local participant's discovery workspace.
+ * Application boundary for one authenticated participant's discovery workspace.
  *
  * This service deliberately returns a participant-scoped product projection.
  * Network registration, world diagnostics, and participant administration live
  * in ParticipantNetworkService and never leak into the main user snapshot.
  */
-import { LOCAL_USER_ID } from '../local-participant.js';
 import type { DiscoveryWorkspaceSnapshot } from '../discovery-types.js';
 import type {
   RepresentativeAgentHeartbeatService,
@@ -14,7 +13,7 @@ import type { DiscoveryWorkspaceStore } from './store.js';
 
 export class DiscoveryInputError extends Error {}
 
-/** Coordinates local-user commands with durable mailbox execution. */
+/** Coordinates participant commands with durable mailbox execution. */
 export class DiscoveryWorkspaceService {
   constructor(
     private readonly store: DiscoveryWorkspaceStore,
@@ -22,8 +21,8 @@ export class DiscoveryWorkspaceService {
     private readonly runtime: { model: string; heddleVersion: string },
   ) {}
 
-  async snapshot(): Promise<DiscoveryWorkspaceSnapshot> {
-    const workspace = await this.store.readSnapshot();
+  async snapshot(participantId: string): Promise<DiscoveryWorkspaceSnapshot> {
+    const workspace = await this.store.readSnapshot(participantId);
     const backgroundChecks = await this.heartbeats.snapshotForAgent(
       workspace.representative.id,
     );
@@ -34,15 +33,18 @@ export class DiscoveryWorkspaceService {
     };
   }
 
-  async saveInterest(content: string): Promise<DiscoveryWorkspaceSnapshot> {
-    await this.store.saveInterest(content);
-    const userAgent = await this.store.requireUserAgent();
+  async saveInterest(
+    participantId: string,
+    content: string,
+  ): Promise<DiscoveryWorkspaceSnapshot> {
+    await this.store.saveInterest(participantId, content);
+    const userAgent = await this.store.requireParticipantAgent(participantId);
     await this.heartbeats.triggerAgent(userAgent.id);
-    return await this.snapshot();
+    return await this.snapshot(participantId);
   }
 
-  async runNow(): Promise<DiscoveryWorkspaceSnapshot> {
-    const userAgent = await this.store.requireUserAgent();
+  async runNow(participantId: string): Promise<DiscoveryWorkspaceSnapshot> {
+    const userAgent = await this.store.requireParticipantAgent(participantId);
     const heartbeat = await this.heartbeats.snapshotForAgent(userAgent.id);
     if (!heartbeat.dispatchEnabled) {
       throw new DiscoveryInputError(
@@ -62,7 +64,7 @@ export class DiscoveryWorkspaceService {
         'The current assignment needs to be retried before starting another check.',
       );
     }
-    const interest = await this.store.findSavedInterest();
+    const interest = await this.store.findSavedInterest(participantId);
     if (!interest) {
       throw new DiscoveryInputError(
         'Save what Lucid should look for before running a check.',
@@ -125,11 +127,13 @@ ${interest.content}`,
           : 'Lucid could not queue a background check.',
       );
     }
-    return await this.snapshot();
+    return await this.snapshot(participantId);
   }
 
-  async retryCurrentWake(): Promise<DiscoveryWorkspaceSnapshot> {
-    const userAgent = await this.store.requireUserAgent();
+  async retryCurrentWake(
+    participantId: string,
+  ): Promise<DiscoveryWorkspaceSnapshot> {
+    const userAgent = await this.store.requireParticipantAgent(participantId);
     const heartbeat = await this.heartbeats.snapshotForAgent(userAgent.id);
     if (!heartbeat.dispatchEnabled) {
       throw new DiscoveryInputError(
@@ -154,13 +158,14 @@ ${interest.content}`,
     // event here would create a second request thread and hide the original
     // failure instead of repairing it.
     await this.heartbeats.triggerAgent(userAgent.id);
-    return await this.snapshot();
+    return await this.snapshot(participantId);
   }
 
   async setBackgroundChecksEnabled(
+    participantId: string,
     enabled: boolean,
   ): Promise<DiscoveryWorkspaceSnapshot> {
-    const userAgent = await this.store.requireUserAgent();
+    const userAgent = await this.store.requireParticipantAgent(participantId);
     try {
       if (!enabled) {
         // The durable Heddle task owns this participant's listening preference.
@@ -170,7 +175,7 @@ ${interest.content}`,
         await this.heartbeats.enableAgentTask(userAgent.id);
         await this.heartbeats.triggerAgent(userAgent.id);
       }
-      return await this.snapshot();
+      return await this.snapshot(participantId);
     } catch (error) {
       await this.heartbeats.reconcileAgentTasks();
       throw new DiscoveryInputError(
@@ -182,21 +187,25 @@ ${interest.content}`,
   }
 
   async submitFeedback(
+    participantId: string,
     findingSequence: number,
     content: string,
   ): Promise<DiscoveryWorkspaceSnapshot> {
     await this.store.saveFeedback(
-      LOCAL_USER_ID,
+      participantId,
       findingSequence,
       content,
     );
-    const userAgent = await this.store.requireUserAgent();
+    const userAgent = await this.store.requireParticipantAgent(participantId);
     await this.heartbeats.triggerAgent(userAgent.id);
-    return await this.snapshot();
+    return await this.snapshot(participantId);
   }
 
-  async submitGuidance(content: string): Promise<DiscoveryWorkspaceSnapshot> {
-    if (!(await this.store.findSavedInterest())) {
+  async submitGuidance(
+    participantId: string,
+    content: string,
+  ): Promise<DiscoveryWorkspaceSnapshot> {
+    if (!(await this.store.findSavedInterest(participantId))) {
       throw new DiscoveryInputError(
         'Save what Lucid should look for before refining its direction.',
       );
@@ -205,9 +214,9 @@ ${interest.content}`,
     // responsible for producing a separate agent-authored working-note
     // revision, and cannot consume this mailbox event until that revision is
     // durably recorded.
-    await this.store.saveGuidance(content);
-    const userAgent = await this.store.requireUserAgent();
+    await this.store.saveGuidance(participantId, content);
+    const userAgent = await this.store.requireParticipantAgent(participantId);
     await this.heartbeats.triggerAgent(userAgent.id);
-    return await this.snapshot();
+    return await this.snapshot(participantId);
   }
 }

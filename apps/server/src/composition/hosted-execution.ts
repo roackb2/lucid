@@ -24,9 +24,8 @@ import {
   LUCID_PRODUCT_MCP_TOOLS,
   type LucidProductMcpToolName,
 } from '../hosted-execution/mcp/types.js';
-import { SingleWorkspaceProjectionReader } from '../hosted-execution/mcp/workspace-projection-reader.js';
+import { ParticipantWorkspaceProjectionReader } from '../hosted-execution/mcp/workspace-projection-reader.js';
 import type { DiscoveryWorkspaceSnapshot } from '../lucid/discovery-types.js';
-import { LOCAL_USER_ID } from '../lucid/local-participant.js';
 import type { LucidLogger } from '../logger.js';
 
 export type HostedExecutionComposition = {
@@ -38,7 +37,9 @@ export type HostedExecutionComposition = {
 export async function createHostedExecutionComposition(input: {
   config: HostedExecutionConfig;
   authenticator: LucidAuthenticator;
-  discoveryWorkspace: { snapshot(): Promise<DiscoveryWorkspaceSnapshot> };
+  discoveryWorkspace: {
+    snapshot(participantId: string): Promise<DiscoveryWorkspaceSnapshot>;
+  };
   logger: LucidLogger;
   executionHost?: ExecutionHost;
 }): Promise<HostedExecutionComposition> {
@@ -73,9 +74,8 @@ export async function createHostedExecutionComposition(input: {
     maxCapabilityAgeSeconds: maxTurnSeconds,
     clockToleranceSeconds: 5,
   });
-  const workspaceReader = new SingleWorkspaceProjectionReader({
+  const workspaceReader = new ParticipantWorkspaceProjectionReader({
     tenantId: input.config.tenantId,
-    subjectId: LOCAL_USER_ID,
     productSessionId: input.config.productSessionId,
   }, input.discoveryWorkspace);
   const mcp = new NodeStreamableHttpMcpService({

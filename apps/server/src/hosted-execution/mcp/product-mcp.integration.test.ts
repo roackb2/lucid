@@ -25,7 +25,7 @@ import {
   type ScopedWorkspaceProjectionReader,
 } from './types.js';
 import {
-  SingleWorkspaceProjectionReader,
+  ParticipantWorkspaceProjectionReader,
 } from './workspace-projection-reader.js';
 
 let signer: McpCapabilitySignerFixture;
@@ -142,10 +142,11 @@ describe('Lucid product tools over the generic MCP HTTP edge', () => {
   });
 
   it('denies a cross-scope projection without leaking product data', async () => {
-    const source = { snapshot: vi.fn(async () => workspaceSnapshot()) };
-    const reader = new SingleWorkspaceProjectionReader({
+    const source = {
+      snapshot: vi.fn(async (_participantId: string) => workspaceSnapshot()),
+    };
+    const reader = new ParticipantWorkspaceProjectionReader({
       tenantId: 'tenant-a',
-      subjectId: 'subject-a',
       productSessionId: 'product-session-a',
     }, source);
     const assertion = await signer.sign({ tenantId: 'tenant-b' });

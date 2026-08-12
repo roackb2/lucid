@@ -62,7 +62,10 @@ describe('PostgreSQL persistence integration', () => {
     });
 
     it('allows only one process to claim the same representative wake', async () => {
-      await primary.workspace.saveInterest('Find one durable multi-host wake example.');
+      await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'Find one durable multi-host wake example.',
+      );
 
       const claims = await Promise.allSettled([
         primary.representative.beginAgentWake(USER_AGENT_ID, 'wake_primary'),
@@ -107,7 +110,10 @@ describe('PostgreSQL persistence integration', () => {
     });
 
     it('does not steal an active claim when another API process initializes', async () => {
-      await primary.workspace.saveInterest('Keep this wake owned by its active worker.');
+      await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'Keep this wake owned by its active worker.',
+      );
       const wake = await primary.representative.beginAgentWake(
         USER_AGENT_ID,
         'wake_owned',
@@ -129,7 +135,10 @@ describe('PostgreSQL persistence integration', () => {
     });
 
     it('rejects settlement from an earlier attempt after the wake is reclaimed', async () => {
-      await primary.workspace.saveInterest('Fence every late writer after a retry.');
+      await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'Fence every late writer after a retry.',
+      );
       const firstAttempt = await primary.representative.beginAgentWake(
         USER_AGENT_ID,
         'claim_first_attempt',
@@ -189,13 +198,14 @@ describe('PostgreSQL persistence integration', () => {
     it('preserves participant state after every connection closes', async () => {
       const first = await createStore();
       const interest = await first.stores.workspace.saveInterest(
+        LOCAL_USER_ID,
         'Remember this assignment across a complete pool restart.',
       );
       await first.database.close();
 
       const reopened = await createStore({ reset: false });
       try {
-        expect(await reopened.stores.workspace.findSavedInterest()).toEqual(
+        expect(await reopened.stores.workspace.findSavedInterest(LOCAL_USER_ID)).toEqual(
           interest,
         );
       } finally {

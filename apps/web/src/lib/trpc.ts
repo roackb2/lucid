@@ -10,6 +10,7 @@ import type { AppRouter } from '@lucid/server/router';
 const ACCESS_TOKEN_KEY = 'lucid.participant-access-token';
 const apiUrl = import.meta.env.VITE_LUCID_API_URL ?? '/api/trpc';
 let activeAccessToken: string | undefined;
+let sessionAccessToken: string | undefined;
 
 export const lucidClient = createTRPCClient<AppRouter>({
   links: [
@@ -43,6 +44,11 @@ export function getHostedAccessToken(): string | undefined {
   return readHostedAccessToken();
 }
 
+/** Installs the short-lived identity-provider session used by every API edge. */
+export function setSessionAccessToken(token: string | undefined): void {
+  sessionAccessToken = token?.trim() || undefined;
+}
+
 export function setHostedAccessToken(token: string): void {
   activeAccessToken = token.trim();
   try {
@@ -53,6 +59,9 @@ export function setHostedAccessToken(token: string): void {
 }
 
 function readHostedAccessToken(): string | undefined {
+  if (sessionAccessToken) {
+    return sessionAccessToken;
+  }
   if (activeAccessToken || typeof window === 'undefined') {
     return activeAccessToken;
   }

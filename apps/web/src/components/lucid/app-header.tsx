@@ -1,11 +1,12 @@
-import { Search } from 'lucide-react';
+import { LogOut, Search } from 'lucide-react';
 import type { DiscoverySnapshot } from '@/lib/trpc';
 
 type AppHeaderProps = {
   snapshot: DiscoverySnapshot;
+  onSignOut?: () => Promise<void>;
 };
 
-export function AppHeader({ snapshot }: AppHeaderProps) {
+export function AppHeader({ snapshot, onSignOut }: AppHeaderProps) {
   const isRunning = snapshot.backgroundChecks.running;
   const isEnabled = snapshot.backgroundChecks.enabled;
   const dispatchEnabled = snapshot.backgroundChecks.dispatchEnabled;
@@ -30,24 +31,37 @@ export function AppHeader({ snapshot }: AppHeaderProps) {
         <a href="#findings">Findings</a>
       </nav>
 
-      <div
-        className={`service-status ${
-          hasFailedWake
-            ? 'service-status--error'
-            : isRunning ? 'service-status--running' : ''
-        }`}
-        title={`Model: ${snapshot.runtime.model}`}
-      >
-        <span />
-        {hasFailedWake
-          ? 'Your agent needs attention'
-          : !dispatchEnabled
-          ? 'Hosted demo is paused'
-          : isRunning
-          ? 'Your agent is checking'
-          : isEnabled
-            ? 'Your agent is listening'
-            : 'Your agent is paused'}
+      <div className="app-header__actions">
+        <div
+          className={`service-status ${
+            hasFailedWake
+              ? 'service-status--error'
+              : isRunning ? 'service-status--running' : ''
+          }`}
+          title={`Model: ${snapshot.runtime.model}`}
+        >
+          <span />
+          {hasFailedWake
+            ? 'Your agent needs attention'
+            : !dispatchEnabled
+            ? 'Hosted demo is paused'
+            : isRunning
+            ? 'Your agent is checking'
+            : isEnabled
+              ? 'Your agent is listening'
+              : 'Your agent is paused'}
+        </div>
+        {onSignOut ? (
+          <button
+            aria-label="Sign out"
+            className="app-header__sign-out"
+            onClick={() => void onSignOut()}
+            title="Sign out"
+            type="button"
+          >
+            <LogOut size={16} />
+          </button>
+        ) : null}
       </div>
     </header>
   );

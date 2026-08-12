@@ -23,7 +23,36 @@ export type ParticipantWithAgent = {
   created?: boolean;
 };
 
-export interface ParticipantNetworkStore {
+/** Case-sensitive subject identity from a successfully verified provider token. */
+export type AuthenticatedParticipantIdentity = {
+  issuer: string;
+  subject: string;
+};
+
+/** First-time product profile attached to an authenticated human principal. */
+export type EnrollAuthenticatedParticipantInput =
+  AuthenticatedParticipantIdentity & {
+    displayName: string;
+    privateContext: string;
+    contextApproved: boolean;
+  };
+
+/** Product identity resolved without exposing provider claims downstream. */
+export type ResolvedParticipantIdentity = {
+  participantId: string;
+  status: ParticipantStatus;
+};
+
+export interface ParticipantIdentityReader {
+  resolveParticipantIdentity(
+    identity: AuthenticatedParticipantIdentity,
+  ): Promise<ResolvedParticipantIdentity | undefined>;
+}
+
+export interface ParticipantNetworkStore extends ParticipantIdentityReader {
+  enrollAuthenticatedParticipant(
+    input: EnrollAuthenticatedParticipantInput,
+  ): Promise<ParticipantWithAgent>;
   readNetworkDiagnostics(): Promise<NetworkDiagnosticsStoreSnapshot>;
   requireAgentByParticipantId(participantId: string): Promise<Agent>;
   registerParticipant(

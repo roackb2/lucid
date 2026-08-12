@@ -34,7 +34,7 @@ are endpoint internals, not agent tools.
 | Generic JSON tool registry | `@roackb2/heddle-adopter/mcp/node` | Capability admission, per-call lifetime checks, cancellation composition, safe failures, and JSON result projection | No |
 | Lucid tool definitions | `product-tools.ts` | Exact tool names, descriptions, schemas, annotations, failure messages, and product operations | Yes |
 | Lucid tool contract | `types.ts` | Fixed supported-tool union and product-owned projection ports | Only the registered tool schema |
-| Lucid projection adapter | `workspace-projection-reader.ts` | Bind verified capability scope to the current singleton workspace projection | No |
+| Lucid projection adapter | `workspace-projection-reader.ts` | Bind verified capability scope to that participant's projection in the shared network | No |
 
 `NodeStreamableHttpMcpService.handle()` and `.close()` are package-owned server
 entrypoints. `createLucidProductToolset()` is Lucid's plug-in boundary: each
@@ -63,8 +63,8 @@ binding, and Lucid's fixed supported-tool set using JWKS.
   lifetime checks, JSON result projection, or SDK transport cleanup in Lucid.
   Keep only product schemas, descriptions, and operations in
   `product-tools.ts`.
-- Do not use `SingleWorkspaceProjectionReader` for a multi-tenant deployment.
-  Replace it with a projection store that resolves workspace identity from the
-  verified scope and proves cross-tenant denial.
+- `ParticipantWorkspaceProjectionReader` derives the participant solely from
+  the verified capability subject. Keep tenant and product-session binding in
+  deployment configuration; never accept any of those selectors as tool input.
 - The Execution Host's allowlist is defense in depth. This endpoint must always
   verify and enforce the capability itself.

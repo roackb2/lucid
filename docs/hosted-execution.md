@@ -19,8 +19,8 @@ adopter machinery:
 - independent product-edge MCP capability verification.
 
 Lucid keeps only its domain boundary: an authenticated Streamable HTTP MCP
-service exposing `read_workspace_snapshot` for the configured singleton pilot
-and binding verified scope to the product workspace projection.
+service exposing `read_workspace_snapshot` and binding the verified execution
+subject to that participant's product projection.
 
 The public package owns generic JWT/JWKS and ordered SSE conformance. When the
 complete hosted profile is explicitly enabled, Lucid startup now loads an
@@ -43,11 +43,12 @@ Node HTTP/JWKS/SSE and Streamable HTTP MCP services, Lucid product
 admission, the direct host wire, a fake host, official-SDK MCP discovery/call,
 and the participant-scoped workspace projection. It proves that the complete
 profile is wired while Lucid owns only route mounting and product policy.
-Lucid now also has a provider-specific AgentCore `ExecutionHost` adapter that
+Lucid also has a provider-specific AgentCore `ExecutionHost` adapter that
 signs the same portable request and consumes the same strict stream through
-the official AWS SDK. A real Heddle model turn, managed header forwarding,
-isolation, AgentCore lifecycle, and cost remain unverified deployment
-evidence. Conversation replay and product history are also not durable yet.
+the official AWS SDK. A real managed Heddle turn and one bounded high-level
+session-isolation smoke have completed. These prove the research direction,
+not production security or compliance. Conversation replay and product history
+are also not durable yet.
 
 Lucid's representative workflow is also not connected to the external host. A
 representative wake still requires:
@@ -115,19 +116,13 @@ public `ExecutionHost` port without exposing host internals.
 
 ## Next integration sequence
 
-1. Exercise one real isolated conversation against the private host: the host must
-   fetch JWKS, call `read_workspace_snapshot` through MCP, and return one clean
-   terminal stream while swapped scope, expiry, cancellation, and ambiguous
-   EOF fail closed.
-2. Add durable invocation/replay and browser streaming semantics before calling
-   the conversation path a supported product surface.
-3. Apply checked-in migrations to the managed PostgreSQL project, deploy the
-   Lucid backend image, and verify the existing representative story against
-   that database while new workspaces remain paused by default.
-4. Only after separate resource-and-cost approval, select the AgentCore
-   transport and repeat the managed header, stream, lifecycle, and
-   tenant-isolation evidence.
-5. Add an `autonomous-task` contract before replacing Lucid's in-process
+1. Complete Google-backed participant enrollment and verify one signed-in
+   browser through Lucid, the managed Execution Host, and its scoped MCP tool.
+2. Sharpen the participant-facing social-product experience before adding
+   deeper infrastructure or compliance work.
+3. Add durable invocation/replay only when conversation history becomes a
+   supported product requirement.
+4. Add an `autonomous-task` contract before replacing Lucid's in-process
    representative runner. Preserve PostgreSQL task/wake authority and expose
    stateful communication tools only with durable invocation-scoped policy.
 

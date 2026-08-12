@@ -56,7 +56,7 @@ export const defineLucidStoreContract = (
   });
 
   it('starts with only the local participant and returns a scoped product view', async () => {
-    const product = await stores.workspace.readSnapshot();
+    const product = await stores.workspace.readSnapshot(LOCAL_USER_ID);
     const diagnostics = await stores.network.readNetworkDiagnostics();
 
     expect(product.workspace.currentWake).toBe(0);
@@ -192,7 +192,7 @@ export const defineLucidStoreContract = (
       metadata: { sourceEventIds: [sourceMessage.sequence] },
     });
 
-    const snapshot = await stores.workspace.readSnapshot();
+    const snapshot = await stores.workspace.readSnapshot(LOCAL_USER_ID);
     expect(snapshot.findings[0]).toMatchObject({
       origin: 'ambient-network',
       sources: [expect.objectContaining({
@@ -213,10 +213,11 @@ export const defineLucidStoreContract = (
   it('projects the latest participant-owned network request lifecycle', async () => {
     const source = await registerSynthetic(stores, 'request-source');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find a concrete example of long-running representative memory.',
     );
 
-    expect((await stores.workspace.readSnapshot()).networkActivity).toEqual({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toEqual({
       assignment: interest,
       previousRequests: [],
     });
@@ -233,7 +234,7 @@ export const defineLucidStoreContract = (
       USER_AGENT_ID,
       interest.sequence,
     )).toMatchObject({ sequence: request.sequence });
-    expect((await stores.workspace.readSnapshot()).networkActivity).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toMatchObject({
       assignment: { sequence: interest.sequence },
       request: { sequence: request.sequence },
       requestProgress: {
@@ -252,7 +253,7 @@ export const defineLucidStoreContract = (
       content: 'One operator lost rejection rules after a process restart.',
       metadata: { sourceEventIds: [request.sequence] },
     });
-    expect((await stores.workspace.readSnapshot()).networkActivity).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toMatchObject({
       request: { sequence: request.sequence },
       requestProgress: {
         phase: 'messages-pending-review',
@@ -281,7 +282,7 @@ export const defineLucidStoreContract = (
       responseWake!.claimToken,
       responseWake!.horizonSequence,
     );
-    expect((await stores.workspace.readSnapshot()).networkActivity).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toMatchObject({
       request: { sequence: request.sequence },
       requestProgress: {
         phase: 'reviewed-without-finding',
@@ -299,7 +300,7 @@ export const defineLucidStoreContract = (
       content: 'A peer described a specific long-running memory failure.',
       metadata: { sourceEventIds: [response.sequence] },
     });
-    expect((await stores.workspace.readSnapshot()).networkActivity).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toMatchObject({
       request: { sequence: request.sequence },
       requestProgress: {
         phase: 'finding-reported',
@@ -310,7 +311,7 @@ export const defineLucidStoreContract = (
         latestResponseAt: response.createdAt,
       },
     });
-    expect((await stores.workspace.readSnapshot()).findings[0]).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).findings[0]).toMatchObject({
       assignmentSequence: interest.sequence,
       origin: 'request-thread',
       outboundMessages: [expect.objectContaining({
@@ -324,7 +325,7 @@ export const defineLucidStoreContract = (
       title: 'Check the current assignment again',
       content: interest.content,
     });
-    expect((await stores.workspace.readSnapshot()).networkActivity).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toMatchObject({
       assignment: { sequence: interest.sequence },
       previousRequests: [{
         request: { sequence: request.sequence },
@@ -334,7 +335,7 @@ export const defineLucidStoreContract = (
         })],
       }],
     });
-    expect((await stores.workspace.readSnapshot()).networkActivity?.request)
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity?.request)
       .toBeUndefined();
 
     const refreshedRequest = await stores.communication.appendCommunicationEvent({
@@ -345,7 +346,7 @@ export const defineLucidStoreContract = (
       content: 'Who has a newer concrete example?',
       metadata: { sourceEventIds: [check.sequence] },
     });
-    expect((await stores.workspace.readSnapshot()).networkActivity).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toMatchObject({
       assignment: { sequence: interest.sequence },
       request: { sequence: refreshedRequest.sequence },
       requestProgress: {
@@ -363,6 +364,7 @@ export const defineLucidStoreContract = (
   it('preserves completed silence and guidance across later request cycles', async () => {
     const source = await registerSynthetic(stores, 'request-history');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find durable examples of participant-controlled representative work.',
     );
     const firstRequest = await stores.communication.appendCommunicationEvent({
@@ -399,6 +401,7 @@ export const defineLucidStoreContract = (
     );
 
     const guidance = await stores.workspace.saveGuidance(
+      LOCAL_USER_ID,
       'Only keep independently named examples with a participant-visible result.',
     );
     const guidedCheck = await stores.workspace.recordCheckRequest({
@@ -431,7 +434,7 @@ export const defineLucidStoreContract = (
       metadata: { sourceEventIds: [latestCheck.sequence] },
     });
 
-    expect((await stores.workspace.readSnapshot()).networkActivity).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toMatchObject({
       request: { sequence: latestRequest.sequence },
       previousRequests: [
         {
@@ -460,6 +463,7 @@ export const defineLucidStoreContract = (
 
   it('bounds previous request history to the five most recent cycles', async () => {
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Track a bounded sequence of network requests.',
     );
     const requests = [await stores.communication.appendCommunicationEvent({
@@ -488,7 +492,7 @@ export const defineLucidStoreContract = (
       }));
     }
 
-    const activity = (await stores.workspace.readSnapshot()).networkActivity;
+    const activity = (await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity;
     expect(activity?.request?.sequence).toBe(requests.at(-1)!.sequence);
     expect(activity?.previousRequests.map(({ request }) => request.sequence))
       .toEqual(requests.slice(1, -1).reverse().map(({ sequence }) => sequence));
@@ -497,6 +501,7 @@ export const defineLucidStoreContract = (
   it('projects retry-era duplicate requests as one lifecycle', async () => {
     const source = await registerSynthetic(stores, 'duplicate-request');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find one concrete example of deliberate completed silence.',
     );
     const request = await stores.communication.appendCommunicationEvent({
@@ -557,7 +562,7 @@ export const defineLucidStoreContract = (
       responseWake!.horizonSequence,
     );
 
-    expect((await stores.workspace.readSnapshot()).networkActivity).toMatchObject({
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toMatchObject({
       request: { sequence: request.sequence },
       requestProgress: {
         phase: 'finding-reported',
@@ -571,6 +576,7 @@ export const defineLucidStoreContract = (
     const origin = await registerSynthetic(stores, 'origin');
     const relay = await registerSynthetic(stores, 'relay');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find a concrete operator workflow for long-running agents.',
     );
     const request = await stores.communication.appendCommunicationEvent({
@@ -622,7 +628,7 @@ export const defineLucidStoreContract = (
       },
     });
 
-    const snapshot = await stores.workspace.readSnapshot();
+    const snapshot = await stores.workspace.readSnapshot(LOCAL_USER_ID);
     expect(snapshot.networkActivity).toMatchObject({
       requestProgress: {
         responseCount: 2,
@@ -655,6 +661,7 @@ export const defineLucidStoreContract = (
   it('projects participant-scoped working history at a retry-stable event horizon', async () => {
     const source = await registerSynthetic(stores, 'memory-source');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find products that preserve useful unfinished work.',
     );
     const firstNote = await stores.communication.appendCommunicationEvent({
@@ -717,7 +724,7 @@ export const defineLucidStoreContract = (
       sequence: revisedNote.sequence,
       content: 'Require a named workflow before reporting similar examples.',
     });
-    expect((await stores.workspace.readSnapshot()).workingNote).toEqual(
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).workingNote).toEqual(
       revisedNote,
     );
     expect(await stores.workspace.readRepresentativeWorkingContext(
@@ -733,6 +740,7 @@ export const defineLucidStoreContract = (
   it('keeps direct guidance private and traces the representative revision', async () => {
     const peer = await registerSynthetic(stores, 'guidance-peer');
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find early signals about durable personal agents.',
     );
     const priorNote = await stores.communication.appendCommunicationEvent({
@@ -745,6 +753,7 @@ export const defineLucidStoreContract = (
       metadata: { throughSequence: interest.sequence, derived: true },
     });
     const guidance = await stores.workspace.saveGuidance(
+      LOCAL_USER_ID,
       'Weak signals are useful again, but label them clearly.',
     );
 
@@ -768,7 +777,7 @@ export const defineLucidStoreContract = (
       sequence: guidance.sequence,
       content: guidance.content,
     }));
-    expect((await stores.workspace.readSnapshot()).guidanceFollowThrough)
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).guidanceFollowThrough)
       .toMatchObject({
         guidance: { sequence: guidance.sequence },
         priorWorkingNote: { sequence: priorNote.sequence },
@@ -794,7 +803,7 @@ export const defineLucidStoreContract = (
       USER_AGENT_ID,
       guidance.sequence,
     )).toBe(true);
-    expect((await stores.workspace.readSnapshot()).guidanceFollowThrough)
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).guidanceFollowThrough)
       .toMatchObject({
         guidance: { sequence: guidance.sequence },
         priorWorkingNote: { sequence: priorNote.sequence },
@@ -808,6 +817,7 @@ export const defineLucidStoreContract = (
   it('projects persisted follow-through after the latest feedback', async () => {
     const source = await registerSynthetic(stores, 'follow-through-source');
     await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find product decisions changed by context outside the builder workspace.',
     );
     const firstMessage = await stores.communication.appendCommunicationEvent({
@@ -831,7 +841,7 @@ export const defineLucidStoreContract = (
       'Only continue with a before-and-after decision and named mechanism.',
     );
 
-    expect((await stores.workspace.readSnapshot()).guidanceFollowThrough)
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).guidanceFollowThrough)
       .toMatchObject({
         guidance: { sequence: feedback.sequence },
         sourceFinding: { sequence: firstFinding.sequence },
@@ -886,7 +896,7 @@ export const defineLucidStoreContract = (
       metadata: { sourceEventIds: [response.sequence] },
     });
 
-    expect((await stores.workspace.readSnapshot()).guidanceFollowThrough)
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).guidanceFollowThrough)
       .toMatchObject({
         guidance: { sequence: feedback.sequence, content: feedback.content },
         sourceFinding: { sequence: firstFinding.sequence },
@@ -935,7 +945,7 @@ export const defineLucidStoreContract = (
       metadata: { sourceEventIds: [laterResponse.sequence] },
     });
 
-    expect((await stores.workspace.readSnapshot()).guidanceFollowThrough)
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).guidanceFollowThrough)
       .toMatchObject({
         request: {
           sequence: laterRequest.sequence,
@@ -951,7 +961,10 @@ export const defineLucidStoreContract = (
   });
 
   it('reuses a failed wake horizon and idempotency slots on retry', async () => {
-    await stores.workspace.saveInterest('Find one specific participant match.');
+    await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Find one specific participant match.',
+    );
     const firstWake = await stores.representative.beginAgentWake(
       USER_AGENT_ID,
       'wake_first',
@@ -1020,6 +1033,7 @@ export const defineLucidStoreContract = (
 
   it('recovers only the matching interrupted wake without consuming unread input', async () => {
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Keep this input unread until the wake succeeds.',
     );
     const claimed = await stores.representative.beginAgentWake(
@@ -1033,7 +1047,9 @@ export const defineLucidStoreContract = (
       USER_AGENT_ID,
       'different_execution',
     )).toBe(false);
-    expect((await stores.workspace.requireUserAgent()).status).toBe('running');
+    expect((await stores.workspace.requireParticipantAgent(
+      LOCAL_USER_ID,
+    )).status).toBe('running');
     expect(await stores.representative.recoverInterruptedAgentWake(
       USER_AGENT_ID,
       claimed!.claimToken,

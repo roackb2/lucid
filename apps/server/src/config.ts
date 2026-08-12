@@ -16,10 +16,12 @@ const environmentSchema = z.object({
     .default('info'),
   LUCID_WEB_ORIGIN: z.url().default('http://127.0.0.1:3080'),
   LUCID_WEB_ROOT: z.string().trim().min(1).optional(),
-  LUCID_AUTH_MODE: z.enum(['development', 'static-token'])
+  LUCID_AUTH_MODE: z.enum(['development', 'static-token', 'supabase'])
     .default('development'),
   LUCID_PARTICIPANT_TOKEN: z.string().trim().min(32).optional(),
   LUCID_OPERATOR_TOKEN: z.string().trim().min(32).optional(),
+  LUCID_SUPABASE_PROJECT_URL: z.url().optional(),
+  LUCID_ALLOW_SELF_ENROLLMENT: z.enum(['true', 'false']).default('false'),
   LUCID_STATE_ROOT: z.string().trim().min(1).optional(),
   LUCID_DATABASE_URL: z.string().trim().min(1),
   LUCID_MODEL: z.string().trim().min(1).default('gpt-5.4-mini'),
@@ -100,6 +102,22 @@ const environmentSchema = z.object({
       });
     }
   }
+  if (environment.LUCID_AUTH_MODE === 'supabase') {
+    if (!environment.LUCID_SUPABASE_PROJECT_URL) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_SUPABASE_PROJECT_URL'],
+        message: 'LUCID_SUPABASE_PROJECT_URL is required in Supabase mode.',
+      });
+    }
+    if (!environment.LUCID_OPERATOR_TOKEN) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_OPERATOR_TOKEN'],
+        message: 'LUCID_OPERATOR_TOKEN is required as break-glass access.',
+      });
+    }
+  }
   if (
     environment.LUCID_HEARTBEAT_RECOVERY_INTERVAL_MS
     >= environment.LUCID_HEARTBEAT_EXECUTION_LEASE_MS
@@ -152,14 +170,7 @@ export function resolveLucidConfig(): LucidConfig {
   const stateRoot = resolve(
     environment.LUCID_STATE_ROOT ?? join(LUCID_REPO_ROOT, 'local', 'discovery-home'),
   );
-  const authentication: LucidAuthenticationConfig =
-    environment.LUCID_AUTH_MODE === 'static-token'
-      ? {
-          mode: 'static-token',
-          participantToken: environment.LUCID_PARTICIPANT_TOKEN!,
-          operatorToken: environment.LUCID_OPERATOR_TOKEN!,
-        }
-      : { mode: 'development' };
+  const authentication = resolveAuthenticationConfig(environment);
 
   return {
     host: environment.HOST,
@@ -189,6 +200,27 @@ export function resolveLucidConfig(): LucidConfig {
       environment.LUCID_HEARTBEAT_INVOCATION_TIMEOUT_MS,
     preferApiKey: environment.LUCID_PREFER_API_KEY === 'true',
   };
+}
+
+function resolveAuthenticationConfig(
+  input: z.infer<typeof environmentSchema>,
+): LucidAuthenticationConfig {
+  if (input.LUCID_AUTH_MODE === 'static-token') {
+    return {
+      mode: 'static-token',
+      participantToken: input.LUCID_PARTICIPANT_TOKEN!,
+      operatorToken: input.LUCID_OPERATOR_TOKEN!,
+    };
+  }
+  if (input.LUCID_AUTH_MODE === 'supabase') {
+    return {
+      mode: 'supabase',
+      projectUrl: input.LUCID_SUPABASE_PROJECT_URL!,
+      operatorToken: input.LUCID_OPERATOR_TOKEN!,
+      allowSelfEnrollment: input.LUCID_ALLOW_SELF_ENROLLMENT === 'true',
+    };
+  }
+  return { mode: 'development' };
 }
 
 function isLoopbackHost(host: string): boolean {
