@@ -15,6 +15,7 @@ const environmentSchema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
   LUCID_WEB_ORIGIN: z.url().default('http://127.0.0.1:3080'),
+  LUCID_WEB_ROOT: z.string().trim().min(1).optional(),
   LUCID_AUTH_MODE: z.enum(['development', 'static-token'])
     .default('development'),
   LUCID_PARTICIPANT_TOKEN: z.string().trim().min(32).optional(),
@@ -128,6 +129,7 @@ export type LucidConfig = {
   port: number;
   logLevel: string;
   webOrigin: string;
+  webRoot?: string;
   authentication: LucidAuthenticationConfig;
   repoRoot: string;
   stateRoot: string;
@@ -164,6 +166,9 @@ export function resolveLucidConfig(): LucidConfig {
     port: environment.PORT,
     logLevel: environment.LOG_LEVEL,
     webOrigin: environment.LUCID_WEB_ORIGIN,
+    webRoot: environment.LUCID_WEB_ROOT
+      ? resolve(environment.LUCID_WEB_ROOT)
+      : undefined,
     authentication,
     repoRoot: LUCID_REPO_ROOT,
     stateRoot,

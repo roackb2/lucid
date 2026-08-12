@@ -1561,14 +1561,100 @@ button:disabled {
 }
 
 .loading-state,
-.fatal-state {
+.fatal-state,
+.access-state {
   display: grid;
-  min-height: 100vh;
+  min-height: 100dvh;
   place-content: center;
   justify-items: center;
   padding: 28px;
   color: var(--ink);
   text-align: center;
+}
+
+.access-card {
+  width: min(100%, 430px);
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+
+.access-card__icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 22px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.access-card h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 28px;
+  font-weight: 650;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.access-card > p:not(.section-label) {
+  margin: 13px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+.access-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.access-form label {
+  color: #3f4b45;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.access-form input {
+  width: 100%;
+  padding: 12px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fcfdfc;
+  color: var(--ink);
+}
+
+.access-form input:focus {
+  border-color: rgba(23, 107, 91, 0.65);
+  outline: 0;
+  box-shadow: 0 0 0 4px rgba(23, 107, 91, 0.08);
+}
+
+.access-form .button {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.access-form__error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.access-card .access-card__note {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 10px;
 }
 
 .loading-state h1,
@@ -1635,6 +1721,15 @@ button:disabled {
 }
 
 @media (max-width: 640px) {
+  .access-state {
+    place-content: start center;
+    padding: 24px 16px;
+  }
+
+  .access-card {
+    padding: 26px 22px;
+  }
+
   .app-header {
     min-height: 61px;
     padding: 0 16px;

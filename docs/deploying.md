@@ -54,6 +54,7 @@ The final image:
 - runs as the non-root `node` user under `tini`;
 - stores non-authoritative local Heddle artifacts under `/var/lib/lucid`;
 - exposes port `8081` and a process-liveness probe at `GET /healthz`;
+- serves the compiled participant SPA and `/api/trpc/` from the same origin;
 - includes the compiled migration entrypoint and checked-in Drizzle
   migrations; and
 - contains no environment configuration or credentials.

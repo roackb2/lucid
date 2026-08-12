@@ -10,6 +10,7 @@ host port only when its complete profile is explicitly enabled.
 It owns:
 
 - HTTP/tRPC transport and CORS policy;
+- optional same-origin serving of the pre-built participant SPA;
 - PostgreSQL pool lifecycle and checked-in Drizzle migrations;
 - construction of the service-owned product stores and Heddle task authority;
 - construction and startup of the selected representative execution host;
@@ -39,6 +40,9 @@ bounded execution, and recovery predictable.
   `agentcore/` adapter is the only provider-specific AWS SDK boundary.
 - `src/health.ts` exposes process liveness at `GET /healthz`; it does not imply
   database or external-provider readiness.
+- `src/web/` serves the configured production SPA with navigation fallback and
+  separate HTML/immutable-asset cache policy. It is disabled when
+  `LUCID_WEB_ROOT` is unset for split-process local development.
 - `src/router.ts` exposes:
   - `discovery.snapshot`
   - `discovery.saveInterest`
@@ -47,6 +51,11 @@ bounded execution, and recovery predictable.
   - `discovery.submitFeedback`
   - `discovery.resetWorkspace`
 - `src/config.ts` validates environment variables and resolves state paths.
+
+The tRPC transport is mounted at `/api/trpc/`. The production image builds and
+copies `apps/web/dist`, sets `LUCID_WEB_ROOT`, and serves both browser and API
+traffic from one origin. Vite proxies the same path to the local server during
+development.
 
 ## Composition and shutdown
 

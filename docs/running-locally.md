@@ -48,8 +48,8 @@ yarn server:db:migrate
 yarn dev
 ```
 
-Open [http://127.0.0.1:3080](http://127.0.0.1:3080). The API defaults to
-`http://127.0.0.1:8081`.
+Open [http://127.0.0.1:3080](http://127.0.0.1:3080). The server defaults to
+`http://127.0.0.1:8081`, with tRPC mounted at `/api/trpc/`.
 
 Migrations never run automatically during server startup. Run the migration
 command explicitly after pulling a change that adds a migration and before
@@ -232,4 +232,4 @@ accumulate until that representative resumes.
 If startup fails, first verify that PostgreSQL is reachable, the database URL
 is correct, and migrations were applied. If the web app loads but API calls
 are unauthorized, confirm the server is loopback-bound in development mode
-and that `VITE_LUCID_API_URL` points to the expected API origin.
+and that `VITE_LUCID_API_URL` points to the expected `/api/trpc` endpoint.
