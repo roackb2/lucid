@@ -1,8 +1,9 @@
-# Static web boundary
+# Static SPA request handler
 
-This service exposes the pre-built Lucid participant SPA from the same origin
-as the server. It owns file lookup, navigation fallback, cache headers, and a
-fail-fast startup check for `index.html`.
+This request handler exposes the pre-built Lucid participant SPA from the same
+origin as the server. `sirv` owns static file delivery, including content types,
+ETags, ranges, and streaming. This boundary owns only SPA navigation fallback,
+cache and security headers, and a fail-fast startup check for `index.html`.
 
 It does not own participant authentication, tRPC procedures, hosted execution,
 TLS, or product projections. The server composition root routes `/healthz`,
