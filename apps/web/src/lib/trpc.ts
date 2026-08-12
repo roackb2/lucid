@@ -1,13 +1,23 @@
-import { createTRPCClient, httpBatchLink } from '@trpc/client';
+import {
+  createTRPCClient,
+  httpBatchLink,
+  isTRPCClientError,
+} from '@trpc/client';
 import type { inferRouterOutputs } from '@trpc/server';
 import superjson from 'superjson';
 import type { AppRouter } from '@lucid/server/router';
 
-const apiUrl = import.meta.env.VITE_LUCID_API_URL ?? 'http://127.0.0.1:8081';
+const ACCESS_TOKEN_KEY = 'lucid.participant-access-token';
+const apiUrl = import.meta.env.VITE_LUCID_API_URL ?? '/api/trpc';
+let activeAccessToken: string | undefined;
 
 export const lucidClient = createTRPCClient<AppRouter>({
   links: [
     httpBatchLink({
+      headers: () => {
+        const token = readHostedAccessToken();
+        return token ? { authorization: `Bearer ${token}` } : {};
+      },
       transformer: superjson,
       url: apiUrl,
     }),
@@ -18,3 +28,34 @@ type RouterOutputs = inferRouterOutputs<AppRouter>;
 
 export type DiscoverySnapshot = RouterOutputs['discovery']['snapshot'];
 export type FindingView = DiscoverySnapshot['findings'][number];
+
+export function isAuthenticationRequired(error: unknown): boolean {
+  return isTRPCClientError<AppRouter>(error)
+    && error.data?.code === 'UNAUTHORIZED';
+}
+
+export function hasHostedAccessToken(): boolean {
+  return Boolean(readHostedAccessToken());
+}
+
+export function setHostedAccessToken(token: string): void {
+  activeAccessToken = token.trim();
+  try {
+    window.sessionStorage.setItem(ACCESS_TOKEN_KEY, activeAccessToken);
+  } catch {
+    // Some privacy modes disable storage. The active tab can still proceed.
+  }
+}
+
+function readHostedAccessToken(): string | undefined {
+  if (activeAccessToken || typeof window === 'undefined') {
+    return activeAccessToken;
+  }
+  try {
+    activeAccessToken = window.sessionStorage
+      .getItem(ACCESS_TOKEN_KEY)?.trim() || undefined;
+    return activeAccessToken;
+  } catch {
+    return undefined;
+  }
+}

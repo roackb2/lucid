@@ -18,7 +18,10 @@ await main().catch((error: unknown) => {
 async function main(): Promise<void> {
   const { values } = parseArgs({
     options: {
-      url: { type: 'string', default: 'http://127.0.0.1:8081' },
+      url: {
+        type: 'string',
+        default: 'http://127.0.0.1:8081/api/trpc',
+      },
       kind: { type: 'string', default: 'synthetic' },
       'registration-key': { type: 'string' },
       'display-name': { type: 'string' },

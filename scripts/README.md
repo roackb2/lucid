@@ -61,7 +61,8 @@ yarn simulate:network --seed local-demo --mode continuous --interval-ms 60000
 
 Options:
 
-- `--url`: server origin, default `http://127.0.0.1:8081`;
+- `--url`: tRPC endpoint, default
+  `http://127.0.0.1:8081/api/trpc`;
 - `--seed`: stable participant namespace and random-selection seed;
 - `--run-id`: stable idempotency namespace for an exactly repeatable run;
 - `--mode`: `once` or `continuous`;

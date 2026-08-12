@@ -8,15 +8,35 @@ import { AppHeader } from '@/components/lucid/app-header';
 import { BackgroundChecks } from '@/components/lucid/background-checks';
 import { GuidanceFollowThrough } from '@/components/lucid/guidance-follow-through';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
+import { HostedAccess } from '@/components/lucid/hosted-access';
 import { InterestComposer } from '@/components/lucid/interest-composer';
 import { RecentNetworkRequests } from '@/components/lucid/recent-network-requests';
 import { RepresentativeProgress } from '@/components/lucid/representative-progress';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
+import {
+  hasHostedAccessToken,
+  isAuthenticationRequired,
+  setHostedAccessToken,
+} from '@/lib/trpc';
 
 export default function App() {
   const discovery = useDiscoveryWorkspace();
   const snapshot = discovery.snapshot.data;
+
+  if (isAuthenticationRequired(discovery.snapshot.error)) {
+    return (
+      <HostedAccess
+        storedTokenRejected={hasHostedAccessToken()}
+        onUnlock={async (token) => {
+          setHostedAccessToken(token);
+          const result = await discovery.snapshot.refetch();
+          return Boolean(result.data)
+            && !isAuthenticationRequired(result.error);
+        }}
+      />
+    );
+  }
 
   if (discovery.snapshot.isPending) {
     return <WorkspaceLoading />;

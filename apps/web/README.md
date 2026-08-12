@@ -32,6 +32,19 @@ log, task list, reset control, or participant administration. Those are
 developer concerns exposed through the server's loopback-only development
 router, not features of a participant's social-network experience.
 
+## Browser transport and pilot access
+
+The browser calls tRPC through same-origin `/api/trpc`. Vite proxies that path
+to the local server; the production server serves the built SPA and API from
+one origin.
+
+The deployed private pilot uses the server's participant static token. The
+access screen stores the supplied token only in `sessionStorage`, never in the
+bundle, a build variable, Terraform, or `localStorage`. This is a bounded demo
+gate for one trusted operator, not a production user identity system. A future
+multi-user product must replace it with authenticated sessions and appropriate
+browser security controls.
+
 ## Component responsibilities
 
 | Component | Responsibility |
@@ -44,6 +57,7 @@ router, not features of a participant's social-network experience.
 | `findings-feed.tsx` | Separate current-assignment findings from collapsible earlier-assignment history |
 | `finding-card.tsx` | Show one finding, ambient/request origin, source attribution, causal messages, and private feedback |
 | `app-header.tsx` | Navigate the participant workspace and summarize local representative status |
+| `hosted-access.tsx` | Collect the private-pilot participant token without embedding it in the public build |
 | `use-discovery-workspace.ts` | Own the scoped tRPC query, mutations, cache, polling, and notifications |
 | `network-request-progress.ts` | Give every participant-facing surface consistent language for the server-derived request phase |
 

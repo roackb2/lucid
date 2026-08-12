@@ -16,7 +16,10 @@ import { NETWORK_SCENARIOS } from './network-scenarios.js';
 
 const { values } = parseArgs({
   options: {
-    url: { type: 'string', default: 'http://127.0.0.1:8081' },
+    url: {
+      type: 'string',
+      default: 'http://127.0.0.1:8081/api/trpc',
+    },
     'experiment-id': { type: 'string', default: 'local-longitudinal' },
     phase: { type: 'string', default: 'setup' },
     list: { type: 'boolean', default: false },

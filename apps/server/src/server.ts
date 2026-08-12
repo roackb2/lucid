@@ -25,6 +25,9 @@ import { createAppRouter } from './router.js';
 import {
   createRepresentativeAgentExecutionHost,
 } from './runtime/representative-agent-execution-composition.js';
+import { createStaticWebService } from './web/static-web-service.js';
+
+const TRPC_BASE_PATH = '/api/trpc/';
 
 const config = resolveLucidConfig();
 const hostedExecutionConfig = resolveHostedExecutionConfig(
@@ -80,9 +83,13 @@ const hostedExecution = hostedExecutionConfig
       logger,
     })
   : undefined;
+const staticWeb = config.webRoot
+  ? await createStaticWebService(config.webRoot)
+  : undefined;
 heartbeats.start();
 
 const server = createHTTPServer({
+  basePath: TRPC_BASE_PATH,
   router: createAppRouter(discoveryWorkspace, participantNetwork),
   createContext: async ({ req }) => {
     const remoteAddress = req.socket.remoteAddress;
@@ -125,7 +132,21 @@ const server = createHTTPServer({
       return;
     }
 
-    next();
+    if (isTrpcRequest(request.url)) {
+      next();
+      return;
+    }
+
+    if (staticWeb?.handle(request, response)) {
+      return;
+    }
+
+    response.writeHead(404, {
+      'Cache-Control': 'no-store',
+      'Content-Type': 'application/json; charset=utf-8',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    response.end(JSON.stringify({ error: 'Not found.' }));
   },
 });
 
@@ -138,6 +159,7 @@ server.listen(config.port, config.host, () => {
     heartbeatHost: config.heartbeatHost,
     hostedExecutionEnabled: Boolean(hostedExecution),
     model: config.model,
+    webEnabled: Boolean(staticWeb),
   }, 'lucid.server.ready');
 });
 
@@ -171,4 +193,10 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
     process.exitCode = 1;
   }
   await persistence.close();
+}
+
+function isTrpcRequest(requestUrl: string | undefined): boolean {
+  const pathname = new URL(requestUrl ?? '/', 'http://localhost').pathname;
+  return pathname === TRPC_BASE_PATH.slice(0, -1)
+    || pathname.startsWith(TRPC_BASE_PATH);
 }

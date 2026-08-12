@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   lucidClient,
+  isAuthenticationRequired,
   type DiscoverySnapshot,
 } from '@/lib/trpc';
 
@@ -21,7 +22,9 @@ export function useDiscoveryWorkspace() {
     refetchInterval: (query) => (
       query.state.data?.backgroundChecks.running ? 700 : 4_000
     ),
-    retry: 2,
+    retry: (failureCount, error) => (
+      !isAuthenticationRequired(error) && failureCount < 2
+    ),
   });
 
   const installSnapshot = (nextSnapshot: DiscoverySnapshot) => {

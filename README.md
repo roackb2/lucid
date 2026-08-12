@@ -98,7 +98,7 @@ yarn dev
 ```
 
 Open [http://127.0.0.1:3080](http://127.0.0.1:3080). The API listens on
-`127.0.0.1:8081` by default.
+`127.0.0.1:8081/api/trpc` by default.
 
 The portable ARM64 server image and generic hosted configuration are described
 in [`docs/deploying.md`](docs/deploying.md). Environment-specific account,

@@ -12,5 +12,8 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 3080,
+    proxy: {
+      '/api/trpc': 'http://127.0.0.1:8081',
+    },
   },
 })
