@@ -9,7 +9,14 @@ import {
   Send,
   Square,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
+import {
+  mergeHostedConversationProgress,
+  presentHostedConversationActivity,
+  type HostedConversationProgressItem,
+} from '@/components/lucid/hosted-conversation-progress';
 import {
   streamHostedConversation,
 } from '@/lib/hosted-conversation-client';
@@ -22,6 +29,7 @@ export function HostedConversation() {
   const [submittedPrompt, setSubmittedPrompt] = useState('');
   const [answer, setAnswer] = useState('');
   const [status, setStatus] = useState('Ready');
+  const [progress, setProgress] = useState<HostedConversationProgressItem[]>([]);
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
   const active = useRef<AbortController | undefined>(undefined);
@@ -45,6 +53,7 @@ export function HostedConversation() {
     active.current = controller;
     setSubmittedPrompt(candidate);
     setAnswer('');
+    setProgress([]);
     setError('');
     setRunning(true);
     setStatus('Starting an isolated agent workspace');
@@ -57,7 +66,15 @@ export function HostedConversation() {
         if (item.kind === 'accepted') {
           setStatus('Agent workspace ready');
         } else if (item.kind === 'activity') {
-          setStatus(describeActivity(item.activity));
+          const presentation = presentHostedConversationActivity(item.activity);
+          setStatus(presentation.status);
+          const progressItem = presentation.progress;
+          if (progressItem) {
+            setProgress((current) => mergeHostedConversationProgress(
+              current,
+              progressItem,
+            ));
+          }
         } else if (item.kind === 'result') {
           setAnswer(
             item.result.summary
@@ -152,18 +169,52 @@ export function HostedConversation() {
       </form>
 
       {submittedPrompt || answer || running ? (
-        <section className="hosted-conversation-result" aria-live="polite">
-          <header>
+        <section className="hosted-conversation-result">
+          <header aria-live="polite">
             <span className={running ? 'hosted-conversation-status--active' : ''} />
             <strong>{status}</strong>
           </header>
           {submittedPrompt ? (
             <p className="hosted-conversation-question">{submittedPrompt}</p>
           ) : null}
+          {progress.length > 0 ? (
+            <section
+              className="hosted-conversation-progress"
+              aria-label="Live agent activity"
+              aria-live="polite"
+            >
+              <h3>Live agent activity</h3>
+              <ol>
+                {progress.map((item) => (
+                  <li data-kind={item.kind} key={item.id}>
+                    <span aria-hidden="true" />
+                    <p>{item.text}</p>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
           {answer ? (
             <div className="hosted-conversation-answer">
               <span>Agent</span>
-              <p>{answer}</p>
+              <ReactMarkdown
+                components={{
+                  a: ({ children, ...properties }) => (
+                    <a
+                      {...properties}
+                      rel="noreferrer noopener"
+                      target="_blank"
+                    >
+                      {children}
+                    </a>
+                  ),
+                }}
+                disallowedElements={['img']}
+                remarkPlugins={[remarkGfm]}
+                skipHtml
+              >
+                {answer}
+              </ReactMarkdown>
             </div>
           ) : null}
         </section>
@@ -186,25 +237,4 @@ function describeOutcome(
     error: 'Could not complete',
     interrupted: 'Interrupted',
   }[outcome];
-}
-
-function describeActivity(activity: unknown): string {
-  if (!activity || typeof activity !== 'object' || !('type' in activity)) {
-    return 'Agent is working';
-  }
-  const type = activity.type;
-  if (type === 'tool.calling' || type === 'tool.completed') {
-    return 'Reading your Lucid workspace';
-  }
-  if (
-    type === 'assistant.stream'
-    || type === 'assistant.commentary'
-    || type === 'reasoning.summary'
-  ) {
-    return 'Composing the answer';
-  }
-  if (type === 'loop.finished') {
-    return 'Finishing the turn';
-  }
-  return 'Agent is working';
 }
