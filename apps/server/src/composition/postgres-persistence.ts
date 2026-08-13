@@ -28,6 +28,12 @@ import type {
 import {
   PostgresHeartbeatTaskStore,
 } from '../runtime/heartbeat/postgres/task-store.js';
+import {
+  PostgresHostedConversationTurnStore,
+} from '../hosted-execution/conversation/postgres-store.js';
+import type {
+  HostedConversationTurnStore,
+} from '../hosted-execution/conversation/store.js';
 
 export type PostgresPersistence = {
   stores: {
@@ -35,6 +41,7 @@ export type PostgresPersistence = {
     network: UserNetworkStore;
     agent: AgentWakeStore;
     communication: AgentCommunicationStore;
+    conversation: HostedConversationTurnStore;
   };
   taskAuthority: AgentHeartbeatTaskAuthority;
   close: () => Promise<void>;
@@ -57,6 +64,7 @@ export async function createPostgresPersistence(
         network: new PostgresUserNetworkStore(database),
         agent,
         communication: new PostgresAgentCommunicationStore(database),
+        conversation: new PostgresHostedConversationTurnStore(database),
       },
       taskAuthority: new PostgresHeartbeatTaskStore({
         database,

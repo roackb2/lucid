@@ -17,6 +17,9 @@ import {
   UserNetworkInputError,
   UserNetworkService,
 } from './lucid/network/service.js';
+import type {
+  HostedConversationHistoryReader,
+} from './hosted-execution/conversation/history-service.js';
 import { trpc } from './trpc.js';
 
 const interestInputSchema = z.object({
@@ -139,6 +142,7 @@ const developmentOperatorProcedure = operatorProcedure.use(({ ctx, next }) => {
 export function createAppRouter(
   discoveryWorkspace: DiscoveryWorkspaceService,
   userNetwork: UserNetworkService,
+  conversationHistory: HostedConversationHistoryReader,
   options: { allowSelfEnrollment?: boolean } = {},
 ) {
   return trpc.router({
@@ -217,6 +221,11 @@ export function createAppRouter(
             input.content,
           ),
         )),
+    }),
+    hostedConversation: trpc.router({
+      recent: userProcedure.query(({ ctx }) => (
+        conversationHistory.recentForUser(ctx.principal.userId)
+      )),
     }),
     operator: trpc.router({
       backgroundChecks: operatorProcedure.query(() => (

@@ -30,12 +30,13 @@ bounded execution, and recovery predictable.
   as an explicit deployment step.
 - `src/infrastructure/postgres/database.ts` owns the shared PostgreSQL pool and
   migration mechanism without importing product schemas.
-- `src/lucid/{workspace,network,agent}/postgres-store.ts` and
-  `src/lucid/agent/communication/postgres-store.ts` implement four
+- `src/lucid/{workspace,network,agent}/postgres-store.ts`,
+  `src/lucid/agent/communication/postgres-store.ts`, and
+  `src/hosted-execution/conversation/postgres-store.ts` implement five
   service-owned store ports with their use-case transactions.
 - `src/runtime/heartbeat/postgres/task-store.ts` implements Heddle's public
   task authority contracts over the same owned pool.
-- `src/composition/postgres-persistence.ts` composes the four product stores
+- `src/composition/postgres-persistence.ts` composes the five product stores
   and Heddle task adapter, then owns their shared pool shutdown.
 - `src/hosted-execution/` owns the adopter-side authority, MCP, and external
   conversation host ports without importing private host code. Its
@@ -54,6 +55,7 @@ bounded execution, and recovery predictable.
   - `discovery.setBackgroundChecksEnabled`
   - `discovery.submitFeedback`
   - `discovery.resetWorkspace`
+  - `hostedConversation.recent`
 - `src/config.ts` validates environment variables and resolves state paths.
 
 The tRPC transport is mounted at `/api/trpc/`. The production image builds and

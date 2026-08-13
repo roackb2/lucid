@@ -12,7 +12,27 @@ product application code, not another agent loop or transport adapter.
 - requiring the authenticated local user role and product identity;
 - deriving the fixed Lucid tenant, subject, and product-session scope;
 - assigning a unique invocation ID and stable Runtime session ID; and
-- bounding the turn with the configured deadline.
+- bounding the turn with the configured deadline; and
+- ordering the user-visible product record before managed execution events
+  are released to the browser.
+
+`HostedConversationHistoryService` and its service-local store own:
+
+- one durable `requested` record before authority, model, or AWS work starts;
+- monotonic `running` and terminal lifecycle settlement;
+- storing the run ID before `accepted` and settling before any terminal event;
+- truthful `completed`, `max_steps`, `failed`, `cancelled`, and `interrupted`
+  product states;
+- expiry reconciliation for open records left by process failure; and
+- the authenticated user's newest 20-turn history view.
+
+Only the prompt, bounded public terminal Markdown or a closed set of
+Lucid-owned error codes, product IDs, and lifecycle timestamps are stored.
+Activity events, hidden reasoning, tool inputs/results, assertions,
+capabilities, model keys, traces, provider error codes, and thrown error
+messages are deliberately excluded. Only an explicit terminal cancellation
+event becomes `cancelled`; an HTTP disconnect or service shutdown is
+`interrupted` because the shared request signal cannot prove user intent.
 
 The package-owned `HostedConversationTurnService` owns:
 
@@ -21,11 +41,11 @@ The package-owned `HostedConversationTurnService` owns:
 - resolving the model credential through a narrow secret-provider port; and
 - forwarding the provider-neutral ordered event stream to its caller.
 
-It does not own:
+The package-owned service does not own:
 
 - browser authentication, tenant lookup, or authorization;
 - HTTP routes, JWKS or MCP route registration, or AWS SigV4;
-- durable invocation uniqueness, replay, retry, or result projection;
+- Lucid's durable result projection, replay, or retry;
 - the Heddle loop, isolated workspace, or process lifecycle; or
 - agent heartbeat task/wake claims and settlement.
 
@@ -45,5 +65,8 @@ managed-runtime tests remain separate evidence boundaries.
 credential types come directly from the public package.
 
 `admission-service.test.ts` independently fixes the user, session, ID,
-deadline, and cancellation behavior so composition tests do not become the
-only description of Lucid's admission policy.
+deadline, persistence-before-yield ordering, failure, cancellation, and
+interruption behavior so composition tests do not become the only description
+of Lucid's admission policy. `postgres-store.integration.test.ts` verifies
+real PostgreSQL durability, user isolation, the 20-turn bound, and settlement
+fencing.

@@ -28,6 +28,9 @@ import {
 } from '../hosted-execution/http-router.js';
 import { workspaceSnapshot } from '../hosted-execution/mcp/test-support.js';
 import { READ_WORKSPACE_SNAPSHOT_TOOL } from '../hosted-execution/mcp/types.js';
+import {
+  createTestConversationHistory,
+} from '../hosted-execution/conversation/history.test-support.js';
 import { createLucidLogger } from '../logger.js';
 import { createHostedExecutionComposition } from './hosted-execution.js';
 
@@ -101,6 +104,7 @@ describe('hosted execution composition', () => {
       discoveryWorkspace: {
         snapshot: async () => workspaceSnapshot(),
       },
+      conversationHistory: createTestConversationHistory().history,
       logger: createLucidLogger('silent'),
     });
     handleLucidRequest = (request, response) => {
@@ -197,6 +201,7 @@ describe('hosted execution composition', () => {
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
+      conversationHistory: createTestConversationHistory().history,
       logger: createLucidLogger('silent'),
     });
     handleLucidRequest = (request, response) => {

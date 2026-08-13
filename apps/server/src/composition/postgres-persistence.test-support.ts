@@ -17,12 +17,16 @@ import type {
   AgentWakeStore,
 } from '../lucid/agent/store.js';
 import type { DiscoveryWorkspaceStore } from '../lucid/workspace/store.js';
+import type {
+  HostedConversationTurnStore,
+} from '../hosted-execution/conversation/store.js';
 
 export type LucidStoreSet = {
   workspace: DiscoveryWorkspaceStore;
   network: UserNetworkStore;
   agent: AgentWakeStore;
   communication: AgentCommunicationStore;
+  conversation: HostedConversationTurnStore;
 };
 
 export type LucidStoreContractOptions = {

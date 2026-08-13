@@ -14,6 +14,9 @@ import {
   HostedConversationAuthorizationError,
   HostedConversationAdmissionService,
 } from '../hosted-execution/conversation/admission-service.js';
+import type {
+  HostedConversationHistoryService,
+} from '../hosted-execution/conversation/history-service.js';
 import {
   HOSTED_EXECUTION_JWKS_PATH,
   HOSTED_CONVERSATION_TURNS_PATH,
@@ -41,6 +44,7 @@ export async function createHostedExecutionComposition(input: {
     snapshot(userId: string): Promise<DiscoveryWorkspaceSnapshot>;
   };
   logger: LucidLogger;
+  conversationHistory: HostedConversationHistoryService;
   executionHost?: ExecutionHost;
 }): Promise<HostedExecutionComposition> {
   const maxTurnSeconds = Math.ceil(input.config.maxTurnMs / 1_000);
@@ -109,6 +113,7 @@ export async function createHostedExecutionComposition(input: {
   });
   const conversations = new HostedConversationAdmissionService(
     turns,
+    input.conversationHistory,
     {
       tenantId: input.config.tenantId,
       productSessionId: input.config.productSessionId,

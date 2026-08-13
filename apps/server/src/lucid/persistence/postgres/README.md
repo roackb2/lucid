@@ -3,7 +3,8 @@
 This directory owns only the product schema, policy-free record codecs, and the
 disposable real-PostgreSQL fixture shared by adapter tests. Concrete stores and
 their Drizzle queries live beside the workspace, user-network,
-agent-wake, and agent-communication services that own those use cases.
+agent-wake, agent-communication, and hosted-conversation services that own
+those use cases.
 This directory must never grow back into a central product repository.
 
 ## Responsibilities
@@ -12,7 +13,7 @@ This directory must never grow back into a central product repository.
 | --- | --- |
 | `schema.ts` | Declares product tables and constraints in the `lucid` schema |
 | `records.ts` | Decodes and normalizes PostgreSQL records without owning queries or domain policy |
-| `test-context.ts` | Constructs the four named stores over the disposable PostgreSQL fixture |
+| `test-context.ts` | Constructs the five named stores over the disposable PostgreSQL fixture |
 
 The services receive narrow store ports through
 `composition/postgres-persistence.ts`. PostgreSQL driver, query-builder, and
@@ -103,6 +104,10 @@ files run serially because they share fixed schema names.
   nullable unique idempotency key for retry-safe agent side effects and a
   nullable `reply_to_sequence` for conversation routing. Content provenance is
   recorded separately in `metadata.sourceEventIds`.
+- `hosted_conversation_turns` is the field-bounded user-facing projection of
+  direct hosted questions. The product query exposes the newest 20 per user.
+  It stores public terminal Markdown and lifecycle status, not execution
+  activity, credentials, traces, hidden reasoning, or tool data.
 
 The agent working note is also stored as an immutable discovery
 event (`agent_note_updated`) rather than a mutable profile column.
@@ -171,6 +176,8 @@ discovery_workspaces 1 ── * users
 users         1 ── 1 agents
 discovery_workspaces 1 ── * agents
 discovery_workspaces 1 ── * discovery_events
+discovery_workspaces 1 ── * hosted_conversation_turns
+users                 1 ── * hosted_conversation_turns
 
 agents.id   ──> logical Heddle task ID
 discovery_events actor/target/reply ──> delivery and conversation references

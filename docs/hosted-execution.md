@@ -47,8 +47,10 @@ Lucid also has a provider-specific AgentCore `ExecutionHost` adapter that
 signs the same portable request and consumes the same strict stream through
 the official AWS SDK. A real managed Heddle turn and one bounded high-level
 session-isolation smoke have completed. These prove the research direction,
-not production security or compliance. Conversation replay and product history
-are also not durable yet.
+not production security or compliance. Lucid now exposes the authenticated
+user's newest 20 direct prompts and truthful durable terminal projections. It
+does not persist activity, tool payloads, credentials, traces, or hidden
+reasoning, and it does not yet provide replay or continuation.
 
 Lucid's agent workflow is also not connected to the external host. A
 agent wake still requires:
@@ -120,8 +122,8 @@ public `ExecutionHost` port without exposing host internals.
    browser through Lucid, the managed Execution Host, and its scoped MCP tool.
 2. Sharpen the user-facing social-product experience before adding
    deeper infrastructure or compliance work.
-3. Add durable invocation/replay only when conversation history becomes a
-   supported product requirement.
+3. Treat the bounded durable terminal history as the product authority; add
+   replay or continuation only for a separately selected user question.
 4. Add an `autonomous-task` contract before replacing Lucid's in-process
    agent runner. Preserve PostgreSQL task/wake authority and expose
    stateful communication tools only with durable invocation-scoped policy.

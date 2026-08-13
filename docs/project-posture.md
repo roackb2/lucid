@@ -34,9 +34,10 @@ network. The server can verify Supabase Google sessions and map an immutable
 provider subject to one durable Lucid user; static tokens remain only a
 private-pilot adapter. The external-host foundation is composed into the
 running server and has completed one managed AgentCore conversation and one
-bounded high-level session-isolation smoke. Abuse controls, metering, durable
-conversation history, account recovery, and broader product maturity remain
-future work.
+bounded high-level session-isolation smoke. Abuse controls, metering, account
+recovery, and broader product maturity remain future work. Direct
+hosted conversations now have a bounded, user-scoped durable product record;
+this is terminal history, not replay or raw execution tracing.
 
 The architecture should therefore favor clean, testable ownership boundaries
 without prematurely optimizing for traffic or preserving obsolete local

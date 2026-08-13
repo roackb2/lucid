@@ -44,6 +44,40 @@ describe('Lucid router authorization', () => {
     expect(snapshot).toHaveBeenCalledWith('local-user');
   });
 
+  it('lists hosted conversation history only for the server-derived user', async () => {
+    const anonymous = createCaller({
+      requestId: 'anonymous-history',
+      remoteAddress: '127.0.0.1',
+    });
+    await expect(anonymous.caller.hostedConversation.recent())
+      .rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    const unbound = createCaller({
+      requestId: 'unbound-history',
+      remoteAddress: '127.0.0.1',
+      principal: {
+        subject: 'provider-subject-without-product-user',
+        roles: ['user'],
+      },
+    });
+    await expect(unbound.caller.hostedConversation.recent())
+      .rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(unbound.recentConversations).not.toHaveBeenCalled();
+
+    const user = createCaller({
+      requestId: 'user-history',
+      remoteAddress: '203.0.113.10',
+      principal: {
+        subject: 'replaceable-provider-subject',
+        userId: 'local-user',
+        roles: ['user'],
+      },
+    });
+    await expect(user.caller.hostedConversation.recent())
+      .resolves.toEqual([]);
+    expect(user.recentConversations).toHaveBeenCalledWith('local-user');
+  });
+
   it('lets a verified unbound identity enroll only when deployment permits it', async () => {
     const context: LucidRequestContext = {
       requestId: 'new-google-user',
@@ -165,6 +199,7 @@ function createCaller(
   const enrollAuthenticatedUser = vi.fn(async () => ({
     userId: 'user_avery',
   }));
+  const recentConversations = vi.fn(async () => []);
   const discoveryWorkspace = {
     snapshot,
   } as unknown as DiscoveryWorkspaceService;
@@ -177,6 +212,7 @@ function createCaller(
   const caller = createAppRouter(
     discoveryWorkspace,
     userNetwork,
+    { recentForUser: recentConversations },
     options,
   ).createCaller(context);
   return {
@@ -186,5 +222,6 @@ function createCaller(
     backgroundChecks,
     setGlobalBackgroundChecksEnabled,
     enrollAuthenticatedUser,
+    recentConversations,
   };
 }

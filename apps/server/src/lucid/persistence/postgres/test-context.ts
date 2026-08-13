@@ -9,6 +9,9 @@ import {
 } from '../../agent/communication/postgres-store.js';
 import { PostgresAgentWakeStore } from '../../agent/postgres-store.js';
 import { PostgresDiscoveryWorkspaceStore } from '../../workspace/postgres-store.js';
+import {
+  PostgresHostedConversationTurnStore,
+} from '../../../hosted-execution/conversation/postgres-store.js';
 
 export type PostgresTestStores = {
   database: PostgresDatabase;
@@ -17,6 +20,7 @@ export type PostgresTestStores = {
     network: PostgresUserNetworkStore;
     agent: PostgresAgentWakeStore;
     communication: PostgresAgentCommunicationStore;
+    conversation: PostgresHostedConversationTurnStore;
   };
 };
 
@@ -45,6 +49,7 @@ export async function createPostgresTestStores(options: {
       network: new PostgresUserNetworkStore(database),
       agent,
       communication: new PostgresAgentCommunicationStore(database),
+      conversation: new PostgresHostedConversationTurnStore(database),
     };
     return {
       database,
