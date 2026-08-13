@@ -123,13 +123,13 @@ export function FindingCard({
             ) : null}
             {directSourcesDiffer && finding.sources.length ? (
               <section>
-                <h4>Messages your representative directly used</h4>
+                <h4>Messages your agent directly used</h4>
                 <SourceMessageList sources={finding.sources} />
               </section>
             ) : null}
             {finding.outboundMessages.length ? (
               <section>
-                <h4>What your representative shared while looking</h4>
+                <h4>What your agent shared while looking</h4>
                 <ul>
                   {finding.outboundMessages.map((message) => (
                     <li key={message.id}>
@@ -142,7 +142,7 @@ export function FindingCard({
             ) : null}
             <p className="source-caveat">
               Originating contributions collapse cited relays back to the
-              participant messages behind them. Event references establish
+              user messages behind them. Event references establish
               provenance and delivery, not whether content is true or useful.
             </p>
           </div>
@@ -156,21 +156,21 @@ export function FindingCard({
             <strong>Your feedback</strong>
           </div>
           <p>{finding.feedback.content}</p>
-          <small>Your representative receives this during its next wake.</small>
+          <small>Your agent receives this during its next wake.</small>
         </section>
       ) : (
         <form className="finding-feedback" onSubmit={submitFeedback}>
           <label htmlFor={`finding-feedback-${finding.finding.sequence}`}>
             {finding.noMatch
               ? 'Was reporting no match the right choice?'
-              : 'Was this useful? Tell your representative what it understood or missed.'}
+              : 'Was this useful? Tell your agent what it understood or missed.'}
           </label>
           <div>
             <textarea
               id={`finding-feedback-${finding.finding.sequence}`}
               maxLength={1_600}
               onChange={(event) => setFeedbackDraft(event.target.value)}
-              placeholder="Feedback remains private to your representative..."
+              placeholder="Feedback remains private to your agent..."
               rows={3}
               value={feedbackDraft}
             />
@@ -190,25 +190,25 @@ export function FindingCard({
 }
 
 function describeSourceMix(sources: FindingSource[]): string {
-  const participants = new Map(sources.flatMap(({ attribution }) => (
-    attribution ? [[attribution.participantId, attribution] as const] : []
+  const users = new Map(sources.flatMap(({ attribution }) => (
+    attribution ? [[attribution.userId, attribution] as const] : []
   )));
   const sourceKinds = new Set(
-    [...participants.values()].map(({ participantKind }) => participantKind),
+    [...users.values()].map(({ userKind }) => userKind),
   );
 
   if (sourceKinds.has('human') && sourceKinds.has('synthetic')) {
-    return 'Human and synthetic participants';
+    return 'Human and synthetic users';
   }
   if (sourceKinds.has('human')) {
-    return participants.size === 1
-      ? '1 human participant'
-      : `${participants.size} human participants`;
+    return users.size === 1
+      ? '1 human user'
+      : `${users.size} human users`;
   }
   if (sourceKinds.has('synthetic')) {
-    return participants.size === 1
-      ? '1 synthetic participant'
-      : `${participants.size} synthetic participants`;
+    return users.size === 1
+      ? '1 synthetic user'
+      : `${users.size} synthetic users`;
   }
   return sources.length ? 'Network contribution' : 'No originating contribution';
 }
@@ -222,9 +222,9 @@ function SourceMessageList({ sources }: { sources: FindingSource[] }) {
           <div>
             <div className="source-message__identity">
               <strong>
-                {attribution?.participantDisplayName
+                {attribution?.userDisplayName
                   ?? attribution?.agentName
-                  ?? 'Network participant'}
+                  ?? 'Network user'}
               </strong>
               <SourceKindBadge source={{ message, attribution }} />
             </div>
@@ -237,7 +237,7 @@ function SourceMessageList({ sources }: { sources: FindingSource[] }) {
 }
 
 function SourceKindBadge({ source }: { source: FindingSource }) {
-  const kind = source.attribution?.participantKind;
+  const kind = source.attribution?.userKind;
   if (!kind) {
     return null;
   }
@@ -247,7 +247,7 @@ function SourceKindBadge({ source }: { source: FindingSource }) {
         ? 'source-badge source-badge--real'
         : 'source-badge'
     }>
-      {kind === 'human' ? 'Human participant' : 'Synthetic participant'}
+      {kind === 'human' ? 'Human user' : 'Synthetic user'}
     </span>
   );
 }

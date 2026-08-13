@@ -27,7 +27,7 @@ export function createLucidProductToolset(
     tools: [defineNodeMcpJsonTool({
       name: READ_WORKSPACE_SNAPSHOT_TOOL,
       description:
-        'Read the participant-scoped Lucid workspace, current assignment, working direction, findings, participant background-check preference, and operator dispatch gate.',
+        'Read the user-scoped Lucid workspace, current assignment, working direction, findings, user background-check preference, and operator dispatch gate.',
       inputSchema: z.object({}).strict(),
       annotations: {
         readOnlyHint: true,
@@ -59,7 +59,7 @@ function toHostedWorkspaceProjection(
     ...workspace
   } = snapshot.workspace;
   const {
-    enabled: participantChecksEnabled,
+    enabled: userChecksEnabled,
     dispatchEnabled: operatorDispatchEnabled,
     ...backgroundChecks
   } = snapshot.backgroundChecks;
@@ -69,7 +69,7 @@ function toHostedWorkspaceProjection(
     workspace,
     backgroundChecks: {
       ...backgroundChecks,
-      participantChecksEnabled,
+      userChecksEnabled,
       operatorDispatchEnabled,
     },
   };

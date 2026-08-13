@@ -2,7 +2,7 @@
 
 This application boundary lets Lucid act as an adopter control plane for an
 external Heddle Execution Host without importing the private host repository.
-It is deliberately separate from representative heartbeat execution, which
+It is deliberately separate from agent heartbeat execution, which
 still runs in process and retains its PostgreSQL task and wake authorities.
 
 ## Services
@@ -22,7 +22,7 @@ This directory contains only Lucid-owned behavior:
 | --- | --- |
 | `config.ts` | Validate Lucid's all-or-nothing hosted profile and select product identity, URLs, audiences, and limits |
 | `agentcore/` | Invoke one configured AgentCore Runtime through the official AWS SDK while preserving the public request/SSE contract |
-| `conversation/` | Admit an authenticated Lucid participant and derive product-owned scope, invocation identity, Runtime session, and deadline |
+| `conversation/` | Admit an authenticated Lucid user and derive product-owned scope, invocation identity, Runtime session, and deadline |
 | `http-router.ts` | Mount the package-owned HTTP and MCP services beside Lucid's tRPC routes |
 | `mcp/product-tools.ts` | Declare the exact Lucid tool names, schemas, descriptions, and product operations |
 | `mcp/workspace-projection-reader.ts` | Bind verified capability scope to Lucid's current workspace projection |
@@ -41,7 +41,7 @@ The first supported product capability is the read-only
 product-authorized application service supplies tenant, subject, session, and
 the fixed Lucid tool policy; untrusted or model-controlled input cannot choose
 that authority or an MCP destination. Stateful
-representative communication tools remain behind the wake-local runner until
+agent communication tools remain behind the wake-local runner until
 an autonomous-task wire contract can preserve task claims, mailbox horizons,
 action identities, and fenced settlement.
 
@@ -60,7 +60,7 @@ provider-specific AgentCore adapter.
 Two deterministic integration boundaries remain deliberately distinct. The
 public adopter fixture proves the package turn service and Lucid MCP contract
 without private host code. The startup-composition test crosses both real HTTP
-boundaries and the official MCP SDK: participant request -> Lucid admission ->
+boundaries and the official MCP SDK: user request -> Lucid admission ->
 authority -> fake host -> Lucid MCP -> workspace projection -> terminal SSE.
 It also proves that an accepted host stream ending without a terminal is not
 converted into success. Focused AgentCore adapter tests prove SigV4 custom

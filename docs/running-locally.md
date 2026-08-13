@@ -1,7 +1,7 @@
 # Running Lucid locally
 
 Local development runs the web app, API, PostgreSQL authorities, network
-simulator, and representative workers on one machine. PostgreSQL is the only
+simulator, and agent workers on one machine. PostgreSQL is the only
 supported durable backend.
 
 ## Requirements
@@ -70,7 +70,7 @@ commits, logs, screenshots, or shell history that will be shared.
 
 ## Create a small network
 
-A fresh workspace contains only the local participant and representative.
+A fresh workspace contains only the local user and agent.
 With Lucid running, use a second terminal to register synthetic peers and send
 one seeded observation to each:
 
@@ -87,7 +87,7 @@ yarn simulate:network \
   --interval-ms 60000
 ```
 
-The same seed reuses participant identities. Add `--run-id` when a retry must
+The same seed reuses user identities. Add `--run-id` when a retry must
 reuse the same idempotent input events. Without it, a new invocation produces
 new observations.
 
@@ -99,14 +99,14 @@ yarn simulate:learning --experiment-id local-learning --phase setup
 ```
 
 The simulator calls only loopback development APIs. It does not connect to the
-database, run Heddle directly, save the local participant's interest, submit
+database, run Heddle directly, save the local user's interest, submit
 their feedback, or decide whether a finding is useful.
 
 ## Execution topology
 
 The default `targeted` host uses a bounded in-process dispatcher and one-shot
 workers over the PostgreSQL Heddle task authority. Its maximum independent
-representative concurrency is controlled by:
+agent concurrency is controlled by:
 
 ```dotenv
 LUCID_HEARTBEAT_MAX_CONCURRENCY=3
@@ -126,27 +126,37 @@ shorter than the lease.
 ## Authentication modes
 
 `development` is the supported local browser mode. A loopback request becomes
-the seeded local participant and operator, so the web app needs no client-side
+the seeded local user and operator, so the web app needs no client-side
 secret.
 
-`static-token` accepts separate participant and operator bearer tokens of at
+`static-token` accepts separate user and operator bearer tokens of at
 least 32 characters:
 
 ```dotenv
 LUCID_AUTH_MODE=static-token
-LUCID_PARTICIPANT_TOKEN=replace-with-at-least-32-random-characters
+LUCID_USER_TOKEN=replace-with-at-least-32-random-characters
 LUCID_OPERATOR_TOKEN=use-a-distinct-operator-secret-of-32-characters
 ```
 
 Use this only for a private single-user API pilot over TLS. The current web app
-does not attach a bearer token, so static-token browser sign-in is not yet a
-complete hosted flow. A production multi-user deployment needs a real identity
-provider and server-derived tenant ownership.
+can attach this token through its legacy unlock screen, but this is not a
+multi-user identity system.
 
-Development participant administration and simulation routes remain
-loopback-only even in static-token mode. The bundled web app and simulator do
-not attach bearer tokens, so use development mode for their current local
-workflow.
+For a local Google/Supabase integration test, configure both the server and the
+Vite browser build:
+
+```dotenv
+LUCID_AUTH_MODE=supabase
+LUCID_SUPABASE_PROJECT_URL=https://project-ref.supabase.co
+LUCID_ALLOW_SELF_ENROLLMENT=true
+LUCID_OPERATOR_TOKEN=replace-with-a-server-only-32-character-secret
+VITE_SUPABASE_URL=https://project-ref.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=replace-with-a-publishable-browser-key
+```
+
+Add the local origin and `/auth/callback` URL to the provider's redirect
+allowlist. Development user administration and simulation routes remain
+loopback-only in every authentication mode.
 
 ## Optional external Execution Host conversation
 
@@ -163,7 +173,7 @@ match exactly. Lucid deletes the raw local token and model key from its process
 environment after startup and retains them only in non-enumerable credential
 objects for outbound calls.
 
-The participant endpoint is:
+The user endpoint is:
 
 ```text
 POST /hosted-execution/conversation-turns
@@ -225,9 +235,9 @@ execution artifacts; durable product, task, checkpoint, lease, and run state
 remain in PostgreSQL.
 
 Stop `yarn dev` with `Ctrl-C`. The server stops HTTP admission and
-representative work before closing PostgreSQL. Pausing a representative in the
+agent work before closing PostgreSQL. Pausing a agent in the
 web app is different from stopping the process: pause is durable and mail can
-accumulate until that representative resumes.
+accumulate until that agent resumes.
 
 If startup fails, first verify that PostgreSQL is reachable, the database URL
 is correct, and migrations were applied. If the web app loads but API calls

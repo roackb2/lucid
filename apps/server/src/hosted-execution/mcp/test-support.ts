@@ -103,7 +103,7 @@ export class McpCapabilitySignerFixture {
 }
 
 export function workspaceSnapshot(): DiscoveryWorkspaceSnapshot {
-  const participant = {
+  const user = {
     id: 'local-user',
     workspaceId: 'local-discovery-workspace',
     kind: 'human' as const,
@@ -121,23 +121,23 @@ export function workspaceSnapshot(): DiscoveryWorkspaceSnapshot {
       createdAt: '2026-08-10T00:00:00.000Z',
       updatedAt: '2026-08-10T00:00:00.000Z',
     },
-    user: participant,
-    representative: {
+    user: user,
+    agent: {
       id: 'user-agent',
       workspaceId: 'local-discovery-workspace',
-      participantId: 'local-user',
+      userId: 'local-user',
       sortOrder: 0,
       name: 'Lucid',
-      role: 'Your representative',
+      role: 'Your agent',
       color: '#176b5b',
-      purpose: 'Represent the participant.',
+      purpose: 'Represent the user.',
       status: 'idle',
       runCount: 1,
       createdAt: '2026-08-10T00:00:00.000Z',
       updatedAt: '2026-08-10T00:00:00.000Z',
-      participant,
+      user,
       unreadCount: 0,
-      isUserAgent: true,
+      isCurrentUserAgent: true,
     },
     findings: [],
     backgroundChecks: {

@@ -1,7 +1,7 @@
 # Lucid server
 
 The server is the composition root for Lucid's PostgreSQL-backed
-delegated-discovery runtime. Both current representative execution-host
+delegated-discovery runtime. Both current agent execution-host
 selections run inside this process and use the same product and Heddle task
 authority. The optional `src/hosted-execution/` boundary composes execution
 assertion issuance, a scoped product MCP service, and an outbound conversation
@@ -10,26 +10,28 @@ host port only when its complete profile is explicitly enabled.
 It owns:
 
 - HTTP/tRPC transport and CORS policy;
-- optional same-origin serving of the pre-built participant SPA;
+- optional same-origin serving of the pre-built user SPA;
 - PostgreSQL pool lifecycle and checked-in Drizzle migrations;
 - construction of the service-owned product stores and Heddle task authority;
-- construction and startup of the selected representative execution host;
+- construction and startup of the selected agent execution host;
 - graceful shutdown ordering.
 
 The server does not decide whether a message is true or useful. It makes
-participant identity, event visibility, delivery order, source references,
+user identity, event visibility, delivery order, source references,
 bounded execution, and recovery predictable.
 
 ## Entrypoints
 
 - `src/server.ts` constructs the stores, runner, heartbeat host, workspace
   service, and HTTP server.
+- `src/auth/` verifies loopback, static-token, or Supabase sessions and maps
+  provider subjects to product-owned user identities.
 - `src/migrate.ts` applies checked-in PostgreSQL product and Heddle migrations
   as an explicit deployment step.
 - `src/infrastructure/postgres/database.ts` owns the shared PostgreSQL pool and
   migration mechanism without importing product schemas.
-- `src/lucid/{workspace,network,representative}/postgres-store.ts` and
-  `src/lucid/representative/communication/postgres-store.ts` implement four
+- `src/lucid/{workspace,network,agent}/postgres-store.ts` and
+  `src/lucid/agent/communication/postgres-store.ts` implement four
   service-owned store ports with their use-case transactions.
 - `src/runtime/heartbeat/postgres/task-store.ts` implements Heddle's public
   task authority contracts over the same owned pool.
@@ -44,6 +46,8 @@ bounded execution, and recovery predictable.
   separate HTML/immutable-asset cache policy. It is disabled when
   `LUCID_WEB_ROOT` is unset for split-process local development.
 - `src/router.ts` exposes:
+  - `identity.session`
+  - `identity.enroll`
   - `discovery.snapshot`
   - `discovery.saveInterest`
   - `discovery.runNow`
@@ -79,11 +83,11 @@ authority for recovery. The optional scheduler host is useful for a
 single-process demo but does not change persistence or create a second task
 authority.
 
-Neither current representative host is a remote transport. See
+Neither current agent host is a remote transport. See
 [`src/hosted-execution/README.md`](src/hosted-execution/README.md) and
 [`../../docs/hosted-execution.md`](../../docs/hosted-execution.md) before
 composing the external conversation boundary or extending it to autonomous
-representative work.
+agent work.
 
 Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
@@ -102,11 +106,11 @@ uses `@roackb2/heddle-adopter` 5.13 for signing-key and credential handling,
 signed authority, Node HTTP/JWKS/SSE, product-edge MCP, conversation
 orchestration, and the versioned `ExecutionHost` client contract.
 
-`src/lucid` owns participants, mailbox events, findings, feedback, wake claims,
+`src/lucid` owns users, mailbox events, findings, feedback, wake claims,
 and the service-owned store ports. Heddle owns provider
 credentials, unattended approval policy, execution cancellation, checkpoints,
 run requests, and task settlement. It is integrated through
-`HeddleRepresentativeAgentRunner` and `RepresentativeAgentHeartbeatService`.
+`HeddleAgentRunner` and `AgentHeartbeatService`.
 
 Read [`src/infrastructure/postgres/README.md`](src/infrastructure/postgres/README.md)
 before changing pool or migration infrastructure,

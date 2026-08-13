@@ -19,7 +19,7 @@ export type LucidProductMcpToolName =
  * Model-facing workspace projection with explicit background-check gates.
  *
  * The product domain stores the operator gate on the workspace while the UI
- * view also exposes the participant's task preference. Returning both legacy
+ * view also exposes the user's task preference. Returning both legacy
  * fields made one healthy paused state look contradictory to the agent.
  */
 export type HostedWorkspaceProjection = Omit<
@@ -34,7 +34,7 @@ export type HostedWorkspaceProjection = Omit<
     DiscoveryWorkspaceSnapshot['backgroundChecks'],
     'enabled' | 'dispatchEnabled'
   > & {
-    participantChecksEnabled: boolean;
+    userChecksEnabled: boolean;
     operatorDispatchEnabled: boolean;
   };
 };

@@ -13,7 +13,7 @@ product, not a developer SDK.
 3. [Hosted execution](hosted-execution.md) records the external Heddle host,
    public adopter SDK, Lucid-owned product MCP boundary, database boundary, and
    the remaining composition and managed-runtime evidence.
-4. [How it works](how-it-works.md) follows an interest through representative
+4. [How it works](how-it-works.md) follows an interest through agent
    wakes, network messages, findings, feedback, pause, and recovery.
 5. [Coding conventions](coding-conventions.md) defines Lucid's vertical-slice
    Hexagonal Architecture, storage ports, PostgreSQL adapters, and dependency

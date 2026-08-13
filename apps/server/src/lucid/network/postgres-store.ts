@@ -1,4 +1,4 @@
-/** PostgreSQL adapter for trusted participant-network administration. */
+/** PostgreSQL adapter for trusted user-network administration. */
 import { randomUUID } from 'node:crypto';
 import dayjs from 'dayjs';
 import {
@@ -20,59 +20,144 @@ import type {
   AppendDiscoveryEventInput,
   DiscoveryEvent,
   DiscoveryWorkspace,
-  Participant,
-  ParticipantStatus,
-  RegisterParticipantInput,
+  User,
+  UserStatus,
+  RegisterUserInput,
 } from '../discovery-types.js';
+import { userStatusSchema } from '../discovery-types.js';
 import {
   LOCAL_USER_ID,
-  USER_AGENT_ID,
-} from '../local-participant.js';
+  LOCAL_AGENT_ID,
+} from '../local-user.js';
 import {
   toAgent,
   toDiscoveryEvent,
   toDiscoveryWorkspace,
-  toParticipant,
+  toUser,
 } from '../persistence/postgres/records.js';
 import {
   postgresDiscoveryEvents as discoveryEvents,
   postgresDiscoveryWorkspaces as discoveryWorkspaces,
-  postgresParticipants as participants,
-  postgresRepresentativeAgents as representativeAgents,
+  postgresUserIdentityBindings as userIdentityBindings,
+  postgresUsers as users,
+  postgresAgents as agents,
 } from '../persistence/postgres/schema.js';
-import { createRepresentativeProfile } from '../representative-profile.js';
-import { AGENT_PRINCIPAL_EVENT_KINDS } from '../representative/mailbox-policy.js';
+import { createAgentProfile } from '../agent-profile.js';
+import { AGENT_PRINCIPAL_EVENT_KINDS } from '../agent/mailbox-policy.js';
 import { LUCID_WORKSPACE_ID } from '../workspace/workspace-identity.js';
-import { toParticipantView } from './participant-visibility.js';
+import { toUserView } from './user-visibility.js';
 import type {
+  AuthenticatedUserIdentity,
+  EnrollAuthenticatedUserInput,
   NetworkDiagnosticsStoreSnapshot,
-  ParticipantNetworkStore,
-  ParticipantWithAgent,
+  UserNetworkStore,
+  UserWithAgent,
+  ResolvedUserIdentity,
 } from './store.js';
 
 const SNAPSHOT_EVENT_LIMIT = 220;
 
-export class PostgresParticipantNetworkStore
-implements ParticipantNetworkStore {
+type LucidPostgresTransaction = Parameters<
+  Parameters<PostgresDatabase['orm']['transaction']>[0]
+>[0];
+
+type NormalizedUserProfile = {
+  displayName: string;
+  privateContext: string;
+};
+
+export class PostgresUserNetworkStore
+implements UserNetworkStore {
   constructor(private readonly database: PostgresDatabase) {}
+
+  async resolveUserIdentity(
+    identity: AuthenticatedUserIdentity,
+  ): Promise<ResolvedUserIdentity | undefined> {
+    const normalized = normalizeAuthenticatedIdentity(identity);
+    const [row] = await this.database.orm
+      .select({
+        userId: users.id,
+        status: users.status,
+      })
+      .from(userIdentityBindings)
+      .innerJoin(
+        users,
+        eq(users.id, userIdentityBindings.userId),
+      )
+      .where(and(
+        eq(userIdentityBindings.issuer, normalized.issuer),
+        eq(userIdentityBindings.subject, normalized.subject),
+        eq(users.workspaceId, LUCID_WORKSPACE_ID),
+      ))
+      .limit(1);
+    return row
+      ? {
+          userId: row.userId,
+          status: userStatusSchema.parse(row.status),
+        }
+      : undefined;
+  }
+
+  async enrollAuthenticatedUser(
+    input: EnrollAuthenticatedUserInput,
+  ): Promise<UserWithAgent> {
+    const identity = normalizeAuthenticatedIdentity(input);
+    const profile = normalizeUserProfile(input);
+    if (!input.contextApproved) {
+      throw new Error(
+        'Confirm that the user knowingly allowed this context to be used.',
+      );
+    }
+    const now = dayjs().toISOString();
+
+    return await this.database.orm.transaction(async (transaction) => {
+      await transaction.execute(sql`
+        select pg_advisory_xact_lock(
+          hashtext(${identity.issuer}),
+          hashtext(${identity.subject})
+        )
+      `);
+      const existing = await this.findUserWithAgentByIdentity(
+        transaction,
+        identity,
+      );
+      if (existing) {
+        return { ...existing, created: false };
+      }
+
+      const created = await this.createUserWithAgent(transaction, {
+        ...profile,
+        kind: 'human',
+        registrationKey: null,
+        contextConsentAt: now,
+        now,
+      });
+      await transaction.insert(userIdentityBindings).values({
+        ...identity,
+        userId: created.user.id,
+        createdAt: now,
+      });
+      return { ...created, created: true };
+    });
+  }
 
   async readNetworkDiagnostics(): Promise<NetworkDiagnosticsStoreSnapshot> {
     const workspace = await this.requireWorkspace();
-    const [participantList, agentList] = await Promise.all([
-      this.listParticipants(),
+    const [userList, agentList] = await Promise.all([
+      this.listUsers(),
       this.listAgents(),
     ]);
-    const participantById = new Map(
-      participantList.map((participant) => [participant.id, participant]),
+    const userById = new Map(
+      userList.map((user) => [user.id, user]),
     );
     const agents = await Promise.all(agentList.map(async (agent) => {
-      const participant = participantById.get(agent.participantId);
-      if (!participant) {
+      const user = userById.get(agent.userId);
+      if (!user) {
         throw new Error(
-          `Participant ${agent.participantId} is missing for agent ${agent.id}.`,
+          `User ${agent.userId} is missing for agent ${agent.id}.`,
         );
       }
-      return await this.toAgentView(agent, participant);
+      return await this.toAgentView(agent, user);
     }));
     const events = (await this.database.orm
       .select()
@@ -85,70 +170,68 @@ implements ParticipantNetworkStore {
 
     return {
       workspace,
-      participants: participantList.map(toParticipantView),
+      users: userList.map(toUserView),
       agents,
       events,
     };
   }
 
-  private async listParticipants(): Promise<Participant[]> {
+  private async listUsers(): Promise<User[]> {
     return (await this.database.orm
       .select()
-      .from(participants)
-      .where(eq(participants.workspaceId, LUCID_WORKSPACE_ID))
-      .orderBy(asc(participants.createdAt)))
-      .map(toParticipant);
+      .from(users)
+      .where(eq(users.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(asc(users.createdAt)))
+      .map(toUser);
   }
 
   private async listAgents(): Promise<Agent[]> {
     return (await this.database.orm
       .select()
-      .from(representativeAgents)
-      .where(eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID))
-      .orderBy(asc(representativeAgents.sortOrder)))
+      .from(agents)
+      .where(eq(agents.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(asc(agents.sortOrder)))
       .map(toAgent);
   }
 
-  private async requireParticipant(id: string): Promise<Participant> {
+  private async requireUser(id: string): Promise<User> {
     const [row] = await this.database.orm
       .select()
-      .from(participants)
+      .from(users)
       .where(and(
-        eq(participants.workspaceId, LUCID_WORKSPACE_ID),
-        eq(participants.id, id),
+        eq(users.workspaceId, LUCID_WORKSPACE_ID),
+        eq(users.id, id),
       ))
       .limit(1);
     if (!row) {
-      throw new Error(`Participant not found: ${id}`);
+      throw new Error(`User not found: ${id}`);
     }
-    return toParticipant(row);
+    return toUser(row);
   }
 
-  async requireAgentByParticipantId(participantId: string): Promise<Agent> {
+  async requireAgentByUserId(userId: string): Promise<Agent> {
     const [row] = await this.database.orm
       .select()
-      .from(representativeAgents)
+      .from(agents)
       .where(and(
-        eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(representativeAgents.participantId, participantId),
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.userId, userId),
       ))
       .limit(1);
     if (!row) {
       throw new Error(
-        `Representative agent not found for participant: ${participantId}`,
+        `Agent not found for user: ${userId}`,
       );
     }
     return toAgent(row);
   }
 
-  async registerParticipant(
-    input: RegisterParticipantInput,
-  ): Promise<ParticipantWithAgent> {
+  async registerUser(
+    input: RegisterUserInput,
+  ): Promise<UserWithAgent> {
     // Validate and normalize trusted ingress before opening the transaction so
     // a malformed simulator or future client cannot leave partial identity.
     const registrationKey = input.registrationKey.trim();
-    const displayName = input.displayName.trim();
-    const privateContext = input.privateContext.trim();
     if (!/^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,119}$/.test(registrationKey)) {
       throw new Error(
         'Registration key must contain 1 to 120 letters, numbers, dots, colons, underscores, or hyphens.',
@@ -156,158 +239,202 @@ implements ParticipantNetworkStore {
     }
     if (input.kind === 'human' && !input.contextApproved) {
       throw new Error(
-        'Confirm that the participant knowingly allowed this context to be used.',
+        'Confirm that the user knowingly allowed this context to be used.',
       );
     }
-    if (!displayName || displayName.length > 80) {
-      throw new Error('Participant name must contain 1 to 80 characters.');
-    }
-    if (!privateContext || privateContext.length > 4_000) {
-      throw new Error('Participant context must contain 1 to 4,000 characters.');
-    }
+    const profile = normalizeUserProfile(input);
 
     const now = dayjs().toISOString();
-    const participantId = `participant_${randomUUID()}`;
-    const agentId = `agent_${randomUUID()}`;
 
     return await this.database.orm.transaction(async (transaction) => {
       // Serialize one stable registration identity across API instances. This
-      // makes participant + representative creation one idempotent unit rather
+      // makes user + agent creation one idempotent unit rather
       // than relying on a pre-insert existence check.
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtext(${registrationKey}))`,
       );
       const [existingRow] = await transaction
         .select()
-        .from(participants)
+        .from(users)
         .where(and(
-          eq(participants.workspaceId, LUCID_WORKSPACE_ID),
-          eq(participants.registrationKey, registrationKey),
+          eq(users.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.registrationKey, registrationKey),
         ))
         .limit(1);
       if (existingRow) {
-        const participant = toParticipant(existingRow);
+        const user = toUser(existingRow);
         if (
-          participant.kind !== input.kind
-          || participant.displayName !== displayName
-          || participant.privateContext !== privateContext
+          user.kind !== input.kind
+          || user.displayName !== profile.displayName
+          || user.privateContext !== profile.privateContext
         ) {
           throw new Error(
-            `Registration key ${registrationKey} already belongs to a different participant profile.`,
+            `Registration key ${registrationKey} already belongs to a different user profile.`,
           );
         }
         const [existingAgent] = await transaction
           .select()
-          .from(representativeAgents)
-          .where(eq(representativeAgents.participantId, participant.id))
+          .from(agents)
+          .where(eq(agents.userId, user.id))
           .limit(1);
         if (!existingAgent) {
           throw new Error(
-            `Representative agent not found for participant: ${participant.id}`,
+            `Agent not found for user: ${user.id}`,
           );
         }
         return {
-          participant,
+          user,
           agent: toAgent(existingAgent),
           created: false,
         };
       }
 
-      const [workspace] = await transaction
-        .select()
-        .from(discoveryWorkspaces)
-        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
-        .for('update')
-        .limit(1);
-      if (!workspace) {
-        throw new Error('Discovery workspace is missing.');
-      }
-      const [lastAgent] = await transaction
-        .select({ sortOrder: representativeAgents.sortOrder })
-        .from(representativeAgents)
-        .where(eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID))
-        .orderBy(desc(representativeAgents.sortOrder))
-        .limit(1);
-      const [latestEvent] = await transaction
-        .select({ sequence: discoveryEvents.sequence })
-        .from(discoveryEvents)
-        .where(eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID))
-        .orderBy(desc(discoveryEvents.sequence))
-        .limit(1);
-      // Participant, representative, initial mailbox floor, and audit event are
-      // one unit. The current tail prevents a new source from reading old mail.
-      const profile = createRepresentativeProfile({
-        id: agentId,
-        participantId,
-        displayName,
-        kind: input.kind,
-        sortOrder: (lastAgent?.sortOrder ?? 0) + 1,
-      });
-      const [participantRow] = await transaction
-        .insert(participants)
-        .values({
-          id: participantId,
-          workspaceId: LUCID_WORKSPACE_ID,
-          registrationKey,
-          kind: input.kind,
-          status: 'active',
-          displayName,
-          privateContext,
-          contextConsentAt: input.kind === 'human' ? now : null,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-      const [agentRow] = await transaction
-        .insert(representativeAgents)
-        .values({
-          ...profile,
-          workspaceId: LUCID_WORKSPACE_ID,
-          status: 'idle',
-          runCount: 0,
-          mailboxFloorSequence: latestEvent?.sequence ?? 0,
-          lastSeenSequence: latestEvent?.sequence ?? 0,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-      await transaction.insert(discoveryEvents).values({
-        id: `event_${randomUUID()}`,
-        workspaceId: LUCID_WORKSPACE_ID,
-        wakeNumber: workspace.currentWake,
-        kind: 'participant_added',
-        targetAgentId: agentId,
-        targetParticipantId: participantId,
-        title: `${displayName} joins the participant network`,
-        content:
-          'Trusted ingress registered private context and created one representative agent. The context itself is not included in this event.',
-        metadata: {
-          visibility: 'operator',
-          participantId,
-          agentId,
-          participantKind: input.kind,
-          contextConsentAt: input.kind === 'human' ? now : undefined,
-        },
-        createdAt: now,
-      });
-
-      if (!participantRow || !agentRow) {
-        throw new Error('PostgreSQL did not return the created participant.');
-      }
-
       return {
-        participant: toParticipant(participantRow),
-        agent: toAgent(agentRow),
+        ...await this.createUserWithAgent(transaction, {
+          ...profile,
+          registrationKey,
+          contextConsentAt: input.kind === 'human' ? now : null,
+          kind: input.kind,
+          now,
+        }),
         created: true,
       };
     });
   }
 
-  async setParticipantStatus(
-    participantId: string,
-    status: Extract<ParticipantStatus, 'active' | 'disabled'>,
-  ): Promise<ParticipantWithAgent> {
-    this.assertManageableParticipant(participantId);
+  private async findUserWithAgentByIdentity(
+    transaction: LucidPostgresTransaction,
+    identity: AuthenticatedUserIdentity,
+  ): Promise<UserWithAgent | undefined> {
+    const [row] = await transaction
+      .select({
+        user: users,
+        agent: agents,
+      })
+      .from(userIdentityBindings)
+      .innerJoin(
+        users,
+        eq(users.id, userIdentityBindings.userId),
+      )
+      .innerJoin(
+        agents,
+        eq(agents.userId, users.id),
+      )
+      .where(and(
+        eq(userIdentityBindings.issuer, identity.issuer),
+        eq(userIdentityBindings.subject, identity.subject),
+        eq(users.workspaceId, LUCID_WORKSPACE_ID),
+      ))
+      .limit(1);
+    return row
+      ? { user: toUser(row.user), agent: toAgent(row.agent) }
+      : undefined;
+  }
+
+  private async createUserWithAgent(
+    transaction: LucidPostgresTransaction,
+    input: NormalizedUserProfile & {
+      registrationKey: string | null;
+      kind: RegisterUserInput['kind'];
+      contextConsentAt: string | null;
+      now: string;
+    },
+  ): Promise<UserWithAgent> {
+    const userId = `user_${randomUUID()}`;
+    const agentId = `agent_${randomUUID()}`;
+    const [workspace] = await transaction
+      .select()
+      .from(discoveryWorkspaces)
+      .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+      .for('update')
+      .limit(1);
+    if (!workspace) {
+      throw new Error('Discovery workspace is missing.');
+    }
+    const [lastAgent] = await transaction
+      .select({ sortOrder: agents.sortOrder })
+      .from(agents)
+      .where(eq(agents.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(desc(agents.sortOrder))
+      .limit(1);
+    const [latestEvent] = await transaction
+      .select({ sequence: discoveryEvents.sequence })
+      .from(discoveryEvents)
+      .where(eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(desc(discoveryEvents.sequence))
+      .limit(1);
+    // User, agent, initial mailbox floor, and audit event are
+    // one unit. The current tail prevents a new source from reading old mail.
+    const agentProfile = createAgentProfile({
+      id: agentId,
+      userId,
+      displayName: input.displayName,
+      kind: input.kind,
+      sortOrder: (lastAgent?.sortOrder ?? 0) + 1,
+    });
+    const [userRow] = await transaction
+      .insert(users)
+      .values({
+        id: userId,
+        workspaceId: LUCID_WORKSPACE_ID,
+        registrationKey: input.registrationKey,
+        kind: input.kind,
+        status: 'active',
+        displayName: input.displayName,
+        privateContext: input.privateContext,
+        contextConsentAt: input.contextConsentAt,
+        createdAt: input.now,
+        updatedAt: input.now,
+      })
+      .returning();
+    const [agentRow] = await transaction
+      .insert(agents)
+      .values({
+        ...agentProfile,
+        workspaceId: LUCID_WORKSPACE_ID,
+        status: 'idle',
+        runCount: 0,
+        mailboxFloorSequence: latestEvent?.sequence ?? 0,
+        lastSeenSequence: latestEvent?.sequence ?? 0,
+        createdAt: input.now,
+        updatedAt: input.now,
+      })
+      .returning();
+    await transaction.insert(discoveryEvents).values({
+      id: `event_${randomUUID()}`,
+      workspaceId: LUCID_WORKSPACE_ID,
+      wakeNumber: workspace.currentWake,
+      kind: 'user_added',
+      targetAgentId: agentId,
+      targetUserId: userId,
+      title: `${input.displayName} joins the user network`,
+      content:
+        'Trusted ingress registered private context and created one agent. The context itself is not included in this event.',
+      metadata: {
+        visibility: 'operator',
+        userId,
+        agentId,
+        userKind: input.kind,
+        contextConsentAt: input.contextConsentAt ?? undefined,
+      },
+      createdAt: input.now,
+    });
+
+    if (!userRow || !agentRow) {
+      throw new Error('PostgreSQL did not return the created user.');
+    }
+
+    return {
+      user: toUser(userRow),
+      agent: toAgent(agentRow),
+    };
+  }
+
+  async setUserStatus(
+    userId: string,
+    status: Extract<UserStatus, 'active' | 'disabled'>,
+  ): Promise<UserWithAgent> {
+    this.assertManageableUser(userId);
     const now = dayjs().toISOString();
 
     return await this.database.orm.transaction(async (transaction) => {
@@ -320,35 +447,35 @@ implements ParticipantNetworkStore {
       if (!workspace) {
         throw new Error('Discovery workspace is missing.');
       }
-      const [participantRow] = await transaction
+      const [userRow] = await transaction
         .select()
-        .from(participants)
+        .from(users)
         .where(and(
-          eq(participants.workspaceId, LUCID_WORKSPACE_ID),
-          eq(participants.id, participantId),
+          eq(users.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.id, userId),
         ))
         .for('update')
         .limit(1);
-      if (!participantRow) {
-        throw new Error(`Participant not found: ${participantId}`);
+      if (!userRow) {
+        throw new Error(`User not found: ${userId}`);
       }
-      const participant = toParticipant(participantRow);
-      if (participant.status === 'retired') {
-        throw new Error('A retired participant cannot be re-enabled.');
+      const user = toUser(userRow);
+      if (user.status === 'retired') {
+        throw new Error('A retired user cannot be re-enabled.');
       }
       const [agentRow] = await transaction
         .select()
-        .from(representativeAgents)
-        .where(eq(representativeAgents.participantId, participantId))
+        .from(agents)
+        .where(eq(agents.userId, userId))
         .for('update')
         .limit(1);
       if (!agentRow) {
         throw new Error(
-          `Representative agent not found for participant: ${participantId}`,
+          `Agent not found for user: ${userId}`,
         );
       }
-      if (participant.status === status) {
-        return { participant, agent: toAgent(agentRow) };
+      if (user.status === status) {
+        return { user, agent: toAgent(agentRow) };
       }
 
       // Resuming accepts only messages created after this transaction. Pausing
@@ -359,13 +486,13 @@ implements ParticipantNetworkStore {
         .where(eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID))
         .orderBy(desc(discoveryEvents.sequence))
         .limit(1);
-      const [updatedParticipantRow] = await transaction
-        .update(participants)
+      const [updatedUserRow] = await transaction
+        .update(users)
         .set({ status, updatedAt: now })
-        .where(eq(participants.id, participantId))
+        .where(eq(users.id, userId))
         .returning();
       const [updatedAgentRow] = await transaction
-        .update(representativeAgents)
+        .update(agents)
         .set({
           status: 'idle',
           mailboxFloorSequence: status === 'active'
@@ -380,7 +507,7 @@ implements ParticipantNetworkStore {
           activeWakeHorizon: null,
           updatedAt: now,
         })
-        .where(eq(representativeAgents.id, agentRow.id))
+        .where(eq(agents.id, agentRow.id))
         .returning();
       // Persist lifecycle state and its operator audit record atomically.
       await transaction.insert(discoveryEvents).values({
@@ -388,38 +515,38 @@ implements ParticipantNetworkStore {
         workspaceId: LUCID_WORKSPACE_ID,
         wakeNumber: workspace.currentWake,
         kind: status === 'active'
-          ? 'participant_enabled'
-          : 'participant_disabled',
+          ? 'user_enabled'
+          : 'user_disabled',
         targetAgentId: agentRow.id,
-        targetParticipantId: participantId,
-        title: `${participant.displayName} is ${status}`,
+        targetUserId: userId,
+        title: `${user.displayName} is ${status}`,
         content: status === 'active'
-          ? 'The representative can receive new messages and run background checks again.'
-          : 'The representative is paused and will not receive messages created while disabled.',
+          ? 'The agent can receive new messages and run background checks again.'
+          : 'The agent is paused and will not receive messages created while disabled.',
         metadata: {
           visibility: 'operator',
-          participantId,
+          userId,
           agentId: agentRow.id,
           status,
         },
         createdAt: now,
       });
 
-      if (!updatedParticipantRow || !updatedAgentRow) {
-        throw new Error('Participant lifecycle update did not persist.');
+      if (!updatedUserRow || !updatedAgentRow) {
+        throw new Error('User lifecycle update did not persist.');
       }
 
       return {
-        participant: toParticipant(updatedParticipantRow),
+        user: toUser(updatedUserRow),
         agent: toAgent(updatedAgentRow),
       };
     });
   }
 
-  async retireParticipant(
-    participantId: string,
-  ): Promise<ParticipantWithAgent> {
-    this.assertManageableParticipant(participantId);
+  async retireUser(
+    userId: string,
+  ): Promise<UserWithAgent> {
+    this.assertManageableUser(userId);
     const now = dayjs().toISOString();
 
     return await this.database.orm.transaction(async (transaction) => {
@@ -432,32 +559,32 @@ implements ParticipantNetworkStore {
       if (!workspace) {
         throw new Error('Discovery workspace is missing.');
       }
-      const [participantRow] = await transaction
+      const [userRow] = await transaction
         .select()
-        .from(participants)
+        .from(users)
         .where(and(
-          eq(participants.workspaceId, LUCID_WORKSPACE_ID),
-          eq(participants.id, participantId),
+          eq(users.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.id, userId),
         ))
         .for('update')
         .limit(1);
-      if (!participantRow) {
-        throw new Error(`Participant not found: ${participantId}`);
+      if (!userRow) {
+        throw new Error(`User not found: ${userId}`);
       }
-      const participant = toParticipant(participantRow);
+      const user = toUser(userRow);
       const [agentRow] = await transaction
         .select()
-        .from(representativeAgents)
-        .where(eq(representativeAgents.participantId, participantId))
+        .from(agents)
+        .where(eq(agents.userId, userId))
         .for('update')
         .limit(1);
       if (!agentRow) {
         throw new Error(
-          `Representative agent not found for participant: ${participantId}`,
+          `Agent not found for user: ${userId}`,
         );
       }
-      if (participant.status === 'retired') {
-        return { participant, agent: toAgent(agentRow) };
+      if (user.status === 'retired') {
+        return { user, agent: toAgent(agentRow) };
       }
       const [latestEvent] = await transaction
         .select({ sequence: discoveryEvents.sequence })
@@ -467,17 +594,17 @@ implements ParticipantNetworkStore {
         .limit(1);
       // Retirement is irreversible in this workspace generation: scrub private
       // context in the same transaction that closes the mailbox and records it.
-      const [updatedParticipantRow] = await transaction
-        .update(participants)
+      const [updatedUserRow] = await transaction
+        .update(users)
         .set({
           status: 'retired',
           privateContext: '',
           updatedAt: now,
         })
-        .where(eq(participants.id, participantId))
+        .where(eq(users.id, userId))
         .returning();
       const [updatedAgentRow] = await transaction
-        .update(representativeAgents)
+        .update(agents)
         .set({
           status: 'idle',
           mailboxFloorSequence:
@@ -489,21 +616,21 @@ implements ParticipantNetworkStore {
           activeWakeHorizon: null,
           updatedAt: now,
         })
-        .where(eq(representativeAgents.id, agentRow.id))
+        .where(eq(agents.id, agentRow.id))
         .returning();
       await transaction.insert(discoveryEvents).values({
         id: `event_${randomUUID()}`,
         workspaceId: LUCID_WORKSPACE_ID,
         wakeNumber: workspace.currentWake,
-        kind: 'participant_retired',
+        kind: 'user_retired',
         targetAgentId: agentRow.id,
-        targetParticipantId: participantId,
-        title: `${participant.displayName} is retired`,
+        targetUserId: userId,
+        title: `${user.displayName} is retired`,
         content:
           'Private context was removed from future use. Historical message attribution remains available for the operator audit trail.',
         metadata: {
           visibility: 'operator',
-          participantId,
+          userId,
           agentId: agentRow.id,
           status: 'retired',
           privateContextRemoved: true,
@@ -511,32 +638,32 @@ implements ParticipantNetworkStore {
         createdAt: now,
       });
 
-      if (!updatedParticipantRow || !updatedAgentRow) {
-        throw new Error('Participant retirement did not persist.');
+      if (!updatedUserRow || !updatedAgentRow) {
+        throw new Error('User retirement did not persist.');
       }
 
       return {
-        participant: toParticipant(updatedParticipantRow),
+        user: toUser(updatedUserRow),
         agent: toAgent(updatedAgentRow),
       };
     });
   }
 
-  async saveParticipantInput(
-    participantId: string,
+  async saveUserInput(
+    userId: string,
     content: string,
     idempotencyKey: string,
   ): Promise<DiscoveryEvent> {
-    const participant = await this.requireParticipant(participantId);
-    if (participant.status !== 'active') {
+    const user = await this.requireUser(userId);
+    if (user.status !== 'active') {
       throw new Error(
-        `Participant input requires an active participant: ${participantId}`,
+        `User input requires an active user: ${userId}`,
       );
     }
-    const agent = await this.requireAgentByParticipantId(participantId);
+    const agent = await this.requireAgentByUserId(userId);
     const normalizedContent = content.trim();
     if (!normalizedContent || normalizedContent.length > 1_600) {
-      throw new Error('Participant input must contain 1 to 1,600 characters.');
+      throw new Error('User input must contain 1 to 1,600 characters.');
     }
     const normalizedIdempotencyKey = idempotencyKey.trim();
     if (
@@ -547,18 +674,18 @@ implements ParticipantNetworkStore {
     }
 
     return await this.appendEvent({
-      kind: 'participant_input',
+      kind: 'user_input',
       targetAgentId: agent.id,
-      targetParticipantId: participant.id,
+      targetUserId: user.id,
       idempotencyKey: normalizedIdempotencyKey,
-      title: `${participant.displayName} provides new private input`,
+      title: `${user.displayName} provides new private input`,
       content: normalizedContent,
       metadata: {
-        visibility: 'participant-and-agent',
-        source: participant.kind === 'synthetic'
+        visibility: 'user-and-agent',
+        source: user.kind === 'synthetic'
           ? 'network-simulator'
-          : 'participant',
-        participantKind: participant.kind,
+          : 'user',
+        userKind: user.kind,
       },
     });
   }
@@ -574,7 +701,7 @@ implements ParticipantNetworkStore {
       return [];
     }
     // The caller may request older history, but it can never bypass the join or
-    // resume floor established for this participant.
+    // resume floor established for this user.
     const visibleAfterSequence = Math.max(
       afterSequence,
       agent.mailboxFloorSequence,
@@ -636,7 +763,7 @@ implements ParticipantNetworkStore {
           kind: input.kind,
           actorAgentId: input.actorAgentId,
           targetAgentId: input.targetAgentId,
-          targetParticipantId: input.targetParticipantId,
+          targetUserId: input.targetUserId,
           replyToSequence: input.replyToSequence,
           idempotencyKey: input.idempotencyKey,
           title: input.title,
@@ -688,33 +815,33 @@ implements ParticipantNetworkStore {
   private async findActiveAgent(agentId: string): Promise<Agent | undefined> {
     const [row] = await this.database.orm
       .select({
-        participantStatus: participants.status,
-        agent: representativeAgents,
+        userStatus: users.status,
+        agent: agents,
       })
-      .from(representativeAgents)
+      .from(agents)
       .innerJoin(
-        participants,
-        eq(participants.id, representativeAgents.participantId),
+        users,
+        eq(users.id, agents.userId),
       )
       .where(and(
-        eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(representativeAgents.id, agentId),
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.id, agentId),
       ))
       .limit(1);
-    return row?.participantStatus === 'active'
+    return row?.userStatus === 'active'
       ? toAgent(row.agent)
       : undefined;
   }
 
-  private assertManageableParticipant(participantId: string): void {
-    if (participantId === LOCAL_USER_ID) {
-      throw new Error('The local user participant cannot be disabled or retired.');
+  private assertManageableUser(userId: string): void {
+    if (userId === LOCAL_USER_ID) {
+      throw new Error('The local user cannot be disabled or retired.');
     }
   }
 
   private async toAgentView(
     agent: Agent,
-    participant: Participant,
+    user: User,
   ): Promise<AgentView> {
     const {
       instructions: _instructions,
@@ -728,13 +855,41 @@ implements ParticipantNetworkStore {
     } = agent;
     return {
       ...view,
-      participant: toParticipantView(participant),
+      user: toUserView(user),
       unreadCount: (await this.listEventsVisibleToAgent(
         agent.id,
         agent.lastSeenSequence,
         10_000,
       )).length,
-      isUserAgent: agent.id === USER_AGENT_ID,
+      isCurrentUserAgent: agent.id === LOCAL_AGENT_ID,
     };
   }
+}
+
+function normalizeAuthenticatedIdentity(
+  identity: AuthenticatedUserIdentity,
+): AuthenticatedUserIdentity {
+  const { issuer, subject } = identity;
+  if (!issuer || issuer.length > 512 || issuer !== issuer.trim()) {
+    throw new Error('Identity issuer must contain 1 to 512 characters.');
+  }
+  if (!subject || subject.length > 512 || subject !== subject.trim()) {
+    throw new Error('Identity subject must contain 1 to 512 characters.');
+  }
+  return { issuer, subject };
+}
+
+function normalizeUserProfile(input: {
+  displayName: string;
+  privateContext: string;
+}): NormalizedUserProfile {
+  const displayName = input.displayName.trim();
+  const privateContext = input.privateContext.trim();
+  if (!displayName || displayName.length > 80) {
+    throw new Error('User name must contain 1 to 80 characters.');
+  }
+  if (!privateContext || privateContext.length > 4_000) {
+    throw new Error('User context must contain 1 to 4,000 characters.');
+  }
+  return { displayName, privateContext };
 }

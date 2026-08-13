@@ -1,9 +1,16 @@
-export type LucidRequestRole = 'participant' | 'operator';
+export type LucidRequestRole = 'user' | 'operator';
+
+/** Verified upstream subject used only to resolve a durable Lucid identity. */
+export type LucidExternalIdentity = {
+  issuer: string;
+  subject: string;
+};
 
 /** Identity established by the HTTP authentication adapter, never by input. */
 export type LucidRequestPrincipal = {
   subject: string;
-  participantId?: string;
+  externalIdentity?: LucidExternalIdentity;
+  userId?: string;
   roles: readonly LucidRequestRole[];
 };
 

@@ -7,16 +7,16 @@ verifies the short-lived adopter-signed MCP bearer on every stateless request.
 ## Current capability
 
 `read_workspace_snapshot` is the first honest conversation-turn capability. It
-returns a participant-scoped projection derived from Lucid's product UI state
+returns a user-scoped projection derived from Lucid's product UI state
 and accepts no identity arguments. Its model-facing background-check fields are
-deliberately explicit: `participantChecksEnabled` is the participant's durable
+deliberately explicit: `userChecksEnabled` is the user's durable
 task preference, while `operatorDispatchEnabled` is the service-wide operator
 gate. The raw workspace persistence field is omitted so a healthy
 operator-paused state cannot appear contradictory. Tenant, subject, product
 session, Runtime session, and invocation scope come only from the verified
 capability.
 
-The existing representative communication tools are intentionally absent.
+The existing agent communication tools are intentionally absent.
 They depend on a claimed wake, fixed event horizon, agent identity, action
 budget, provenance checks, and idempotent mutation state. Exposing them as
 ordinary stateless functions would weaken those invariants. They can move here
@@ -34,7 +34,7 @@ are endpoint internals, not agent tools.
 | Generic JSON tool registry | `@roackb2/heddle-adopter/mcp/node` | Capability admission, per-call lifetime checks, cancellation composition, safe failures, and JSON result projection | No |
 | Lucid tool definitions | `product-tools.ts` | Exact tool names, descriptions, schemas, annotations, failure messages, and product operations | Yes |
 | Lucid tool contract | `types.ts` | Fixed supported-tool union and product-owned projection ports | Only the registered tool schema |
-| Lucid projection adapter | `workspace-projection-reader.ts` | Bind verified capability scope to the current singleton workspace projection | No |
+| Lucid projection adapter | `workspace-projection-reader.ts` | Bind verified capability scope to that user's projection in the shared network | No |
 
 `NodeStreamableHttpMcpService.handle()` and `.close()` are package-owned server
 entrypoints. `createLucidProductToolset()` is Lucid's plug-in boundary: each
@@ -63,8 +63,8 @@ binding, and Lucid's fixed supported-tool set using JWKS.
   lifetime checks, JSON result projection, or SDK transport cleanup in Lucid.
   Keep only product schemas, descriptions, and operations in
   `product-tools.ts`.
-- Do not use `SingleWorkspaceProjectionReader` for a multi-tenant deployment.
-  Replace it with a projection store that resolves workspace identity from the
-  verified scope and proves cross-tenant denial.
+- `UserWorkspaceProjectionReader` derives the user solely from
+  the verified capability subject. Keep tenant and product-session binding in
+  deployment configuration; never accept any of those selectors as tool input.
 - The Execution Host's allowlist is defense in depth. This endpoint must always
   verify and enforce the capability itself.

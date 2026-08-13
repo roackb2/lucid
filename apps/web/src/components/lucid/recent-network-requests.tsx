@@ -1,9 +1,9 @@
 /**
- * Participant-facing history of earlier disclosed network requests.
+ * User-facing history of earlier disclosed network requests.
  *
  * This component deliberately renders the bounded projection supplied by the
  * server. It must not reconstruct a global event log or present empty
- * heartbeat wakes as meaningful work performed for the participant.
+ * heartbeat wakes as meaningful work performed for the user.
  */
 import dayjs from 'dayjs';
 import {
@@ -43,7 +43,7 @@ export function RecentNetworkRequests({
         <div>
           <p className="section-label">Recent checks</p>
           <h2 id="recent-network-requests-title">
-            What your representative tried before this
+            What your agent tried before this
           </h2>
           <p>
             Earlier requests stay visible so a new check does not erase what

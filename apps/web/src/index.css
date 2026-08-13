@@ -164,14 +164,39 @@ button:disabled {
   color: var(--ink);
 }
 
+.app-header__actions,
 .service-status {
   display: inline-flex;
   align-items: center;
   justify-self: end;
+}
+
+.app-header__actions {
+  gap: 10px;
+}
+
+.service-status {
   gap: 7px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 650;
+}
+
+.app-header__sign-out {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.app-header__sign-out:hover {
+  background: var(--surface-muted);
+  color: var(--ink);
 }
 
 .service-status > span {
@@ -303,7 +328,7 @@ button:disabled {
 .interest-card,
 .hosted-conversation-card,
 .recent-network-requests,
-.representative-note-card,
+.agent-note-card,
 .guidance-follow-through-card,
 .finding-card,
 .sidebar-card,
@@ -625,7 +650,7 @@ button:disabled {
   line-height: 1.55;
 }
 
-.representative-note-card {
+.agent-note-card {
   overflow: hidden;
   border-radius: 18px;
 }
@@ -635,7 +660,7 @@ button:disabled {
   border-radius: 18px;
 }
 
-.representative-note {
+.agent-note {
   margin: 0 26px 24px 78px;
   padding: 16px 18px;
   border-left: 3px solid var(--green);
@@ -643,7 +668,7 @@ button:disabled {
   background: var(--green-pale);
 }
 
-.representative-note p {
+.agent-note p {
   margin: 0;
   color: #30443a;
   font-size: 13px;
@@ -651,14 +676,14 @@ button:disabled {
   white-space: pre-wrap;
 }
 
-.representative-note small {
+.agent-note small {
   display: block;
   margin-top: 11px;
   color: var(--faint);
   font-size: 9px;
 }
 
-.representative-note footer {
+.agent-note footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -666,7 +691,7 @@ button:disabled {
   margin-top: 11px;
 }
 
-.representative-note footer small {
+.agent-note footer small {
   margin-top: 0;
 }
 
@@ -728,7 +753,7 @@ button:disabled {
   font-size: 9px;
 }
 
-.representative-note--empty {
+.agent-note--empty {
   border-left-color: var(--line-strong);
   background: var(--surface-soft);
 }
@@ -1750,7 +1775,8 @@ button:disabled {
   font-weight: 650;
 }
 
-.access-form input {
+.access-form input,
+.access-form textarea {
   width: 100%;
   padding: 12px 13px;
   border: 1px solid var(--line-strong);
@@ -1759,10 +1785,30 @@ button:disabled {
   color: var(--ink);
 }
 
-.access-form input:focus {
+.access-form textarea {
+  min-height: 130px;
+  resize: vertical;
+}
+
+.access-form input:focus,
+.access-form textarea:focus {
   border-color: rgba(23, 107, 91, 0.65);
   outline: 0;
   box-shadow: 0 0 0 4px rgba(23, 107, 91, 0.08);
+}
+
+.access-form label:has(input[type='checkbox']) {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 9px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.access-form input[type='checkbox'] {
+  width: 16px;
+  margin-top: 1px;
 }
 
 .access-form .button {
@@ -1929,11 +1975,11 @@ button:disabled {
     margin: 0 18px 18px;
   }
 
-  .representative-note {
+  .agent-note {
     margin: 0 18px 20px;
   }
 
-  .representative-note footer,
+  .agent-note footer,
   .guidance-form > footer {
     align-items: stretch;
     flex-direction: column;

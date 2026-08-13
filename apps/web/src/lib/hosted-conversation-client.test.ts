@@ -26,13 +26,13 @@ describe('hosted conversation browser client', () => {
     };
 
     expect(await collect(streamHostedConversation({
-      accessToken: 'participant-token-value',
+      accessToken: 'user-token-value',
       prompt: '  summarize my workspace  ',
       fetch: request,
     }))).toEqual(events);
     expect(requestCount).toBe(1);
     expect(new Headers(observedInit?.headers).get('authorization'))
-      .toBe('Bearer participant-token-value');
+      .toBe('Bearer user-token-value');
     expect(observedInit?.body).toBe(JSON.stringify({
       prompt: 'summarize my workspace',
     }));
@@ -43,7 +43,7 @@ describe('hosted conversation browser client', () => {
       event(0, { kind: 'accepted' }),
     ]);
     await expect(collect(streamHostedConversation({
-      accessToken: 'participant-token-value',
+      accessToken: 'user-token-value',
       prompt: 'summarize',
       fetch: request as typeof fetch,
     }))).rejects.toThrow('stopped before returning a final answer');
@@ -58,7 +58,7 @@ describe('hosted conversation browser client', () => {
       }),
     ]);
     await expect(collect(streamHostedConversation({
-      accessToken: 'participant-token-value',
+      accessToken: 'user-token-value',
       prompt: 'summarize',
       fetch: request as typeof fetch,
     }))).rejects.toBeInstanceOf(HostedConversationClientError);
@@ -72,7 +72,7 @@ describe('hosted conversation browser client', () => {
       headers: { 'Content-Type': 'application/json' },
     });
     await expect(collect(streamHostedConversation({
-      accessToken: 'participant-token-value',
+      accessToken: 'user-token-value',
       prompt: 'summarize',
       fetch: request as typeof fetch,
     }))).rejects.toThrow('Hosted execution is currently unavailable.');
@@ -83,7 +83,7 @@ describe('hosted conversation browser client', () => {
     controller.abort();
 
     await expect(collect(streamHostedConversation({
-      accessToken: 'participant-token-value',
+      accessToken: 'user-token-value',
       prompt: 'summarize',
       signal: controller.signal,
     }))).rejects.toMatchObject({ name: 'AbortError' });

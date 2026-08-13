@@ -1,29 +1,29 @@
-# Lucid representative runtime
+# Lucid agent runtime
 
-This directory owns the execution-host boundary around Lucid's representative
-agents. It does not own participants, mailbox visibility, findings, task-state
+This directory owns the execution-host boundary around Lucid's agent
+agents. It does not own users, mailbox visibility, findings, task-state
 transitions, or PostgreSQL persistence.
 
 ## Responsibilities
 
 | File | Responsibility |
 | --- | --- |
-| `representative-task-invocation.ts` | Defines the internal boundary for one locally routed task invocation |
-| `representative-agent-worker.ts` | Runs exactly one routed task through Heddle's targeted execution API |
-| `in-process-representative-task-dispatcher.ts` | Provides durable-notification acceleration, due-task polling fallback, bounded delivery, local cancellation, and graceful shutdown |
-| `representative-agent-execution-host.ts` | Provides the shared lifecycle seam for Heddle's long-lived scheduler and request-routed targeted execution |
-| `representative-agent-execution-composition.ts` | Selects the configured topology and wires task authority, product gate, worker runtime, and redacted telemetry |
+| `agent-task-invocation.ts` | Defines the internal boundary for one locally routed task invocation |
+| `agent-worker.ts` | Runs exactly one routed task through Heddle's targeted execution API |
+| `in-process-agent-task-dispatcher.ts` | Provides durable-notification acceleration, due-task polling fallback, bounded delivery, local cancellation, and graceful shutdown |
+| `agent-execution-host.ts` | Provides the shared lifecycle seam for Heddle's long-lived scheduler and request-routed targeted execution |
+| `agent-execution-composition.ts` | Selects the configured topology and wires task authority, product gate, worker runtime, and redacted telemetry |
 
 ## Execution boundary
 
-Lucid must persist participant or mailbox input before requesting a Heddle task
+Lucid must persist user or mailbox input before requesting a Heddle task
 run. The resulting `HeartbeatTaskRunRequestSignal` may be passed to
-`InProcessRepresentativeTaskDispatcher.notify()` for low latency. Polling the
+`InProcessAgentTaskDispatcher.notify()` for low latency. Polling the
 durable task catalog remains the correctness fallback when notification is
 lost, when a periodic task becomes due, or when the API process restarts.
 
-Every delivery calls a `RepresentativeTaskInvocationTarget` with one task ID.
-`RepresentativeAgentWorker` delegates direct lookup, the final due check,
+Every delivery calls a `AgentTaskInvocationTarget` with one task ID.
+`AgentWorker` delegates direct lookup, the final due check,
 execution claim, checkpoint handling, and claim-fenced settlement to
 `HeartbeatSchedulerService.runTask()`. It performs no global scan,
 subscription, polling, or recovery.
@@ -38,9 +38,9 @@ The dispatcher applies a cooperative wall-clock timeout to every invocation.
 The local worker observes the abort signal directly and must settle before
 shutdown can close persistence.
 
-`RepresentativeAgentExecutionHost` is the domain-facing composition seam.
-`LongLivedRepresentativeAgentExecutionHost` preserves the supported Heddle
-scheduler path for zero-setup local mode. `TargetedRepresentativeAgentExecutionHost`
+`AgentExecutionHost` is the domain-facing composition seam.
+`LongLivedAgentExecutionHost` preserves the supported Heddle
+scheduler path for zero-setup local mode. `TargetedAgentExecutionHost`
 uses the dispatcher to run bounded workers without changing heartbeat-domain
 policy.
 
@@ -64,11 +64,11 @@ The dispatcher tracks at most one active invocation per task in this process.
 `cancelTask()` aborts and awaits that local invocation but does not disable the
 durable Heddle task. The caller must coordinate durable task lifecycle through
 the Heddle task authority. Any future external execution adapter must stop and
-await its specifically owned invocation before participant disable or
+await its specifically owned invocation before user disable or
 retirement can safely move Lucid's mailbox eligibility boundary.
 
 Both execution hosts classify a durable `running` task without matching local
-ownership as `not-owned`. Participant disable, retirement, and reset must fail
+ownership as `not-owned`. User disable, retirement, and reset must fail
 closed on that result. Stopping an entire remote runtime session is not a safe
 substitute unless the adapter can prove that session owns the exact task
 invocation and await its Heddle settlement.
@@ -80,10 +80,10 @@ flag. The dispatcher checks it before scans and before admitting pending work.
 The Lucid wake handler must check the same durable flag again before claiming a
 mailbox because the operator may pause after dispatch admission.
 
-Global pause is admission policy, not participant preference. It leaves every
+Global pause is admission policy, not user preference. It leaves every
 Heddle task's `enabled` field unchanged, continues accepting durable run
 requests, aborts and awaits only locally owned work, and resumes with an
-immediate correctness scan. Participant pause remains a one-task cancellation
+immediate correctness scan. User pause remains a one-task cancellation
 followed by a Heddle administration update.
 
 Shutdown stops polling and admission first, aborts active work by default,

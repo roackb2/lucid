@@ -9,15 +9,15 @@ import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   LOCAL_USER_ID,
-  USER_AGENT_ID,
-} from '../lucid/local-participant.js';
+  LOCAL_AGENT_ID,
+} from '../lucid/local-user.js';
 import { defineLucidStoreContract } from './postgres-persistence.test-support.js';
 import type { PostgresDatabase } from '../infrastructure/postgres/database.js';
 import {
   createPostgresTestStores,
   type PostgresTestStores,
 } from '../lucid/persistence/postgres/test-context.js';
-import { PostgresRepresentativeWakeStore } from '../lucid/representative/postgres-store.js';
+import { PostgresAgentWakeStore } from '../lucid/agent/postgres-store.js';
 
 async function createStore(options?: { reset?: boolean }) {
   return await createPostgresTestStores({
@@ -61,12 +61,15 @@ describe('PostgreSQL persistence integration', () => {
       secondaryDatabase = undefined;
     });
 
-    it('allows only one process to claim the same representative wake', async () => {
-      await primary.workspace.saveInterest('Find one durable multi-host wake example.');
+    it('allows only one process to claim the same agent wake', async () => {
+      await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'Find one durable multi-host wake example.',
+      );
 
       const claims = await Promise.allSettled([
-        primary.representative.beginAgentWake(USER_AGENT_ID, 'wake_primary'),
-        secondary.representative.beginAgentWake(USER_AGENT_ID, 'wake_secondary'),
+        primary.agent.beginAgentWake(LOCAL_AGENT_ID, 'wake_primary'),
+        secondary.agent.beginAgentWake(LOCAL_AGENT_ID, 'wake_secondary'),
       ]);
       const successfulClaims = claims.flatMap((claim) => (
         claim.status === 'fulfilled' && claim.value ? [claim.value] : []
@@ -79,7 +82,7 @@ describe('PostgreSQL persistence integration', () => {
       expect(rejectedClaims).toHaveLength(1);
       expect(String((rejectedClaims[0] as PromiseRejectedResult).reason))
         .toContain('already running');
-      expect((await requireAgent(primary.representative, USER_AGENT_ID)).status)
+      expect((await requireAgent(primary.agent, LOCAL_AGENT_ID)).status)
         .toBe('running');
     });
 
@@ -88,12 +91,12 @@ describe('PostgreSQL persistence integration', () => {
       const content = 'Both processes are retrying the same durable side effect.';
 
       const [first, second] = await Promise.all([
-        primary.network.saveParticipantInput(
+        primary.network.saveUserInput(
           LOCAL_USER_ID,
           content,
           idempotencyKey,
         ),
-        secondary.network.saveParticipantInput(
+        secondary.network.saveUserInput(
           LOCAL_USER_ID,
           content,
           idempotencyKey,
@@ -107,40 +110,46 @@ describe('PostgreSQL persistence integration', () => {
     });
 
     it('does not steal an active claim when another API process initializes', async () => {
-      await primary.workspace.saveInterest('Keep this wake owned by its active worker.');
-      const wake = await primary.representative.beginAgentWake(
-        USER_AGENT_ID,
+      await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'Keep this wake owned by its active worker.',
+      );
+      const wake = await primary.agent.beginAgentWake(
+        LOCAL_AGENT_ID,
         'wake_owned',
       );
 
-      await secondary.representative.initialize();
+      await secondary.agent.initialize();
 
       expect(wake).toBeDefined();
-      expect((await requireAgent(secondary.representative, USER_AGENT_ID)))
+      expect((await requireAgent(secondary.agent, LOCAL_AGENT_ID)))
         .toMatchObject({
         status: 'running',
         activeWakeId: wake!.wakeId,
       });
-      await expect(secondary.representative.beginAgentWake(
-        USER_AGENT_ID,
+      await expect(secondary.agent.beginAgentWake(
+        LOCAL_AGENT_ID,
         'wake_stolen',
       ))
         .rejects.toThrow('already running');
     });
 
     it('rejects settlement from an earlier attempt after the wake is reclaimed', async () => {
-      await primary.workspace.saveInterest('Fence every late writer after a retry.');
-      const firstAttempt = await primary.representative.beginAgentWake(
-        USER_AGENT_ID,
+      await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'Fence every late writer after a retry.',
+      );
+      const firstAttempt = await primary.agent.beginAgentWake(
+        LOCAL_AGENT_ID,
         'claim_first_attempt',
       );
-      await primary.representative.failAgentWake(
-        USER_AGENT_ID,
+      await primary.agent.failAgentWake(
+        LOCAL_AGENT_ID,
         firstAttempt!.claimToken,
       );
 
-      const retry = await secondary.representative.beginAgentWake(
-        USER_AGENT_ID,
+      const retry = await secondary.agent.beginAgentWake(
+        LOCAL_AGENT_ID,
         'claim_retry_attempt',
       );
 
@@ -149,16 +158,16 @@ describe('PostgreSQL persistence integration', () => {
         claimToken: 'claim_retry_attempt',
         horizonSequence: firstAttempt!.horizonSequence,
       });
-      await expect(primary.representative.completeAgentWake(
-        USER_AGENT_ID,
+      await expect(primary.agent.completeAgentWake(
+        LOCAL_AGENT_ID,
         firstAttempt!.claimToken,
         firstAttempt!.horizonSequence,
       )).rejects.toThrow('no longer owned');
-      await expect(primary.representative.failAgentWake(
-        USER_AGENT_ID,
+      await expect(primary.agent.failAgentWake(
+        LOCAL_AGENT_ID,
         firstAttempt!.claimToken,
       )).rejects.toThrow('no longer owned');
-      expect(await requireAgent(secondary.representative, USER_AGENT_ID))
+      expect(await requireAgent(secondary.agent, LOCAL_AGENT_ID))
         .toMatchObject({
           status: 'running',
           activeWakeClaimToken: retry!.claimToken,
@@ -173,29 +182,30 @@ describe('PostgreSQL persistence integration', () => {
         await fresh.database.orm.execute(
           sql`truncate table lucid.discovery_workspaces restart identity cascade`,
         );
-        const representative = new PostgresRepresentativeWakeStore(
+        const agent = new PostgresAgentWakeStore(
           fresh.database,
         );
 
-        await representative.initialize();
+        await agent.initialize();
 
-        expect((await representative.readWorkspace()).backgroundChecksEnabled)
+        expect((await agent.readWorkspace()).backgroundChecksEnabled)
           .toBe(false);
       } finally {
         await fresh.database.close();
       }
     });
 
-    it('preserves participant state after every connection closes', async () => {
+    it('preserves user state after every connection closes', async () => {
       const first = await createStore();
       const interest = await first.stores.workspace.saveInterest(
+        LOCAL_USER_ID,
         'Remember this assignment across a complete pool restart.',
       );
       await first.database.close();
 
       const reopened = await createStore({ reset: false });
       try {
-        expect(await reopened.stores.workspace.findSavedInterest()).toEqual(
+        expect(await reopened.stores.workspace.findSavedInterest(LOCAL_USER_ID)).toEqual(
           interest,
         );
       } finally {
@@ -206,14 +216,14 @@ describe('PostgreSQL persistence integration', () => {
 });
 
 async function requireAgent(
-  representative: PostgresTestStores['stores']['representative'],
+  agentStore: PostgresTestStores['stores']['agent'],
   agentId: string,
 ) {
-  const agent = (await representative.listAgents()).find(
+  const agent = (await agentStore.listAgents()).find(
     ({ id }) => id === agentId,
   );
   if (!agent) {
-    throw new Error(`Representative agent not found: ${agentId}`);
+    throw new Error(`Agent not found: ${agentId}`);
   }
   return agent;
 }

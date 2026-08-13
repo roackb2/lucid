@@ -14,6 +14,10 @@ RUN --mount=type=cache,target=/usr/local/share/.cache/yarn,sharing=locked \
     --network-timeout 600000
 
 FROM build-dependencies AS build
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_PUBLISHABLE_KEY
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
+  VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
 COPY apps/server/src ./apps/server/src
 COPY apps/web/index.html apps/web/postcss.config.cjs apps/web/tailwind.config.js apps/web/vite.config.ts ./apps/web/
 COPY apps/web/src ./apps/web/src

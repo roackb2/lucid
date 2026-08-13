@@ -16,10 +16,12 @@ const environmentSchema = z.object({
     .default('info'),
   LUCID_WEB_ORIGIN: z.url().default('http://127.0.0.1:3080'),
   LUCID_WEB_ROOT: z.string().trim().min(1).optional(),
-  LUCID_AUTH_MODE: z.enum(['development', 'static-token'])
+  LUCID_AUTH_MODE: z.enum(['development', 'static-token', 'supabase'])
     .default('development'),
-  LUCID_PARTICIPANT_TOKEN: z.string().trim().min(32).optional(),
+  LUCID_USER_TOKEN: z.string().trim().min(32).optional(),
   LUCID_OPERATOR_TOKEN: z.string().trim().min(32).optional(),
+  LUCID_SUPABASE_PROJECT_URL: z.url().optional(),
+  LUCID_ALLOW_SELF_ENROLLMENT: z.enum(['true', 'false']).default('false'),
   LUCID_STATE_ROOT: z.string().trim().min(1).optional(),
   LUCID_DATABASE_URL: z.string().trim().min(1),
   LUCID_MODEL: z.string().trim().min(1).default('gpt-5.4-mini'),
@@ -42,6 +44,7 @@ const environmentSchema = z.object({
     .default(3),
   LUCID_HEARTBEAT_HOST: z.enum(['scheduler', 'targeted']).optional(),
   LUCID_HEARTBEAT_NAMESPACE: z.string().trim().min(1).max(200)
+    // Stable database namespace; changing it would create a second task catalog.
     .default('lucid:representatives'),
   LUCID_HEARTBEAT_EXECUTION_LEASE_MS: z.coerce
     .number()
@@ -74,11 +77,11 @@ const environmentSchema = z.object({
     });
   }
   if (environment.LUCID_AUTH_MODE === 'static-token') {
-    if (!environment.LUCID_PARTICIPANT_TOKEN) {
+    if (!environment.LUCID_USER_TOKEN) {
       context.addIssue({
         code: 'custom',
-        path: ['LUCID_PARTICIPANT_TOKEN'],
-        message: 'LUCID_PARTICIPANT_TOKEN is required in static-token mode.',
+        path: ['LUCID_USER_TOKEN'],
+        message: 'LUCID_USER_TOKEN is required in static-token mode.',
       });
     }
     if (!environment.LUCID_OPERATOR_TOKEN) {
@@ -89,14 +92,30 @@ const environmentSchema = z.object({
       });
     }
     if (
-      environment.LUCID_PARTICIPANT_TOKEN
+      environment.LUCID_USER_TOKEN
       && environment.LUCID_OPERATOR_TOKEN
-      && environment.LUCID_PARTICIPANT_TOKEN === environment.LUCID_OPERATOR_TOKEN
+      && environment.LUCID_USER_TOKEN === environment.LUCID_OPERATOR_TOKEN
     ) {
       context.addIssue({
         code: 'custom',
         path: ['LUCID_OPERATOR_TOKEN'],
-        message: 'Participant and operator tokens must be distinct.',
+        message: 'User and operator tokens must be distinct.',
+      });
+    }
+  }
+  if (environment.LUCID_AUTH_MODE === 'supabase') {
+    if (!environment.LUCID_SUPABASE_PROJECT_URL) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_SUPABASE_PROJECT_URL'],
+        message: 'LUCID_SUPABASE_PROJECT_URL is required in Supabase mode.',
+      });
+    }
+    if (!environment.LUCID_OPERATOR_TOKEN) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LUCID_OPERATOR_TOKEN'],
+        message: 'LUCID_OPERATOR_TOKEN is required as break-glass access.',
       });
     }
   }
@@ -152,14 +171,7 @@ export function resolveLucidConfig(): LucidConfig {
   const stateRoot = resolve(
     environment.LUCID_STATE_ROOT ?? join(LUCID_REPO_ROOT, 'local', 'discovery-home'),
   );
-  const authentication: LucidAuthenticationConfig =
-    environment.LUCID_AUTH_MODE === 'static-token'
-      ? {
-          mode: 'static-token',
-          participantToken: environment.LUCID_PARTICIPANT_TOKEN!,
-          operatorToken: environment.LUCID_OPERATOR_TOKEN!,
-        }
-      : { mode: 'development' };
+  const authentication = resolveAuthenticationConfig(environment);
 
   return {
     host: environment.HOST,
@@ -189,6 +201,27 @@ export function resolveLucidConfig(): LucidConfig {
       environment.LUCID_HEARTBEAT_INVOCATION_TIMEOUT_MS,
     preferApiKey: environment.LUCID_PREFER_API_KEY === 'true',
   };
+}
+
+function resolveAuthenticationConfig(
+  input: z.infer<typeof environmentSchema>,
+): LucidAuthenticationConfig {
+  if (input.LUCID_AUTH_MODE === 'static-token') {
+    return {
+      mode: 'static-token',
+      userToken: input.LUCID_USER_TOKEN!,
+      operatorToken: input.LUCID_OPERATOR_TOKEN!,
+    };
+  }
+  if (input.LUCID_AUTH_MODE === 'supabase') {
+    return {
+      mode: 'supabase',
+      projectUrl: input.LUCID_SUPABASE_PROJECT_URL!,
+      operatorToken: input.LUCID_OPERATOR_TOKEN!,
+      allowSelfEnrollment: input.LUCID_ALLOW_SELF_ENROLLMENT === 'true',
+    };
+  }
+  return { mode: 'development' };
 }
 
 function isLoopbackHost(host: string): boolean {

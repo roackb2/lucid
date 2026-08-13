@@ -22,6 +22,20 @@
       "when": 1786423769390,
       "tag": "0002_damp_nebula",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786560326313,
+      "tag": "0003_nifty_vision",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786585892525,
+      "tag": "0004_clumsy_shatterstar",
+      "breakpoints": true
     }
   ]
 }

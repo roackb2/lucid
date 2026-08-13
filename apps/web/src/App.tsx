@@ -5,23 +5,91 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { AppHeader } from '@/components/lucid/app-header';
+import { GoogleSignIn } from '@/components/lucid/google-sign-in';
 import { BackgroundChecks } from '@/components/lucid/background-checks';
 import { GuidanceFollowThrough } from '@/components/lucid/guidance-follow-through';
 import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { HostedAccess } from '@/components/lucid/hosted-access';
 import { HostedConversation } from '@/components/lucid/hosted-conversation';
 import { InterestComposer } from '@/components/lucid/interest-composer';
+import {
+  UserOnboarding,
+  type UserOnboardingInput,
+} from '@/components/lucid/user-onboarding';
 import { RecentNetworkRequests } from '@/components/lucid/recent-network-requests';
-import { RepresentativeProgress } from '@/components/lucid/representative-progress';
+import { AgentProgress } from '@/components/lucid/agent-progress';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
+import { useLucidAuth } from '@/auth/supabase-auth';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   hasHostedAccessToken,
   isAuthenticationRequired,
   setHostedAccessToken,
+  lucidClient,
 } from '@/lib/trpc';
 
 export default function App() {
+  const auth = useLucidAuth();
+
+  if (auth.mode === 'supabase') {
+    if (auth.status === 'loading') {
+      return <WorkspaceLoading />;
+    }
+    if (auth.status === 'signed-out') {
+      return <GoogleSignIn onSignIn={auth.signInWithGoogle} />;
+    }
+    return <AuthenticatedSupabaseApp onSignOut={auth.signOut} />;
+  }
+
+  return <LegacyWorkspaceApp />;
+}
+
+function AuthenticatedSupabaseApp({
+  onSignOut,
+}: {
+  onSignOut: () => Promise<void>;
+}) {
+  const queryClient = useQueryClient();
+  const identity = useQuery({
+    queryKey: ['identity', 'session'],
+    queryFn: () => lucidClient.identity.session.query(),
+    retry: false,
+  });
+  const enroll = useMutation({
+    mutationFn: (input: UserOnboardingInput) => (
+      lucidClient.identity.enroll.mutate(input)
+    ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+    },
+  });
+
+  if (identity.isPending) {
+    return <WorkspaceLoading />;
+  }
+  if (!identity.data) {
+    return <ServiceUnavailable onRetry={() => identity.refetch()} />;
+  }
+  if (identity.data.status === 'onboarding-required') {
+    return (
+      <UserOnboarding
+        enrollmentAllowed={identity.data.enrollmentAllowed}
+        onEnroll={async (input) => {
+          await enroll.mutateAsync(input);
+        }}
+        onSignOut={onSignOut}
+      />
+    );
+  }
+  return <WorkspaceApp onSignOut={onSignOut} />;
+}
+
+function LegacyWorkspaceApp() {
+  return <WorkspaceApp />;
+}
+
+function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
   const discovery = useDiscoveryWorkspace();
   const snapshot = discovery.snapshot.data;
 
@@ -44,33 +112,16 @@ export default function App() {
   }
 
   if (!snapshot) {
-    return (
-      <main className="fatal-state">
-        <CloudOff size={30} />
-        <p className="section-label">Service unavailable</p>
-        <h1>Lucid cannot reach the discovery service.</h1>
-        <p>
-          Start the local server and try again. Completed findings and Heddle
-          conversations remain on disk.
-        </p>
-        <Button
-          onClick={() => discovery.snapshot.refetch()}
-          variant="secondary"
-        >
-          <RefreshCw size={15} />
-          Try again
-        </Button>
-      </main>
-    );
+    return <ServiceUnavailable onRetry={() => discovery.snapshot.refetch()} />;
   }
 
   const backgroundChecks = snapshot.backgroundChecks;
-  const representativeTask = backgroundChecks.tasks.find(
-    ({ agentId }) => agentId === snapshot.representative.id,
+  const agentTask = backgroundChecks.tasks.find(
+    ({ agentId }) => agentId === snapshot.agent.id,
   );
   const hasFailedWake = Boolean(
-    snapshot.representative.status === 'error'
-    || representativeTask?.status === 'failed',
+    snapshot.agent.status === 'error'
+    || agentTask?.status === 'failed',
   );
   const currentAssignmentSequence = snapshot.interest?.sequence;
   const currentFindings = currentAssignmentSequence
@@ -86,13 +137,13 @@ export default function App() {
 
   return (
     <div className="workspace-shell">
-      <AppHeader snapshot={snapshot} />
+      <AppHeader snapshot={snapshot} onSignOut={onSignOut} />
 
       <main className="workspace">
         <section className="workspace-intro">
           <div>
             <p className="section-label">Your discovery workspace</p>
-            <h1>Give your representative an ongoing assignment.</h1>
+            <h1>Give your agent an ongoing assignment.</h1>
             <p>
               It keeps your interest, earlier findings, and guidance in view
               while listening for something genuinely new from the network.
@@ -135,7 +186,7 @@ export default function App() {
               isRunningNow={discovery.runNow.isPending}
               isRetrying={discovery.retryCurrentWake.isPending}
               lastCheckedAt={backgroundChecks.lastRunAt}
-              failedTask={hasFailedWake ? representativeTask : undefined}
+              failedTask={hasFailedWake ? agentTask : undefined}
               onSaveInterest={(content) => (
                 discovery.saveInterest.mutateAsync(content)
               )}
@@ -149,7 +200,7 @@ export default function App() {
               requests={snapshot.networkActivity?.previousRequests ?? []}
             />
 
-            <RepresentativeProgress
+            <AgentProgress
               isSubmittingGuidance={discovery.submitGuidance.isPending}
               onGuidance={async (content) => {
                 await discovery.submitGuidance.mutateAsync(content);
@@ -190,7 +241,7 @@ export default function App() {
 
           <aside className="workspace-sidebar">
             <HowChecksWork />
-            <ParticipantPerspective />
+            <UserPerspective />
           </aside>
         </div>
       </main>
@@ -200,6 +251,24 @@ export default function App() {
         <span>Your view · durable checks · inspectable delivery paths</span>
       </footer>
     </div>
+  );
+}
+
+function ServiceUnavailable({ onRetry }: { onRetry: () => unknown }) {
+  return (
+    <main className="fatal-state">
+      <CloudOff size={30} />
+      <p className="section-label">Service unavailable</p>
+      <h1>Lucid cannot reach the discovery service.</h1>
+      <p>
+        Try again shortly. Completed findings and Heddle conversations remain
+        durable while the service recovers.
+      </p>
+      <Button onClick={() => void onRetry()} variant="secondary">
+        <RefreshCw size={15} />
+        Try again
+      </Button>
+    </main>
   );
 }
 
@@ -213,7 +282,7 @@ function HowChecksWork() {
       <ol className="how-it-works">
         <li>
           <span>1</span>
-          <p><strong>You save an interest.</strong> The full text stays private to your representative.</p>
+          <p><strong>You save an interest.</strong> The full text stays private to your agent.</p>
         </li>
         <li>
           <span>2</span>
@@ -229,22 +298,22 @@ function HowChecksWork() {
         </li>
       </ol>
       <p className="prototype-note">
-        Empty wakes do not call the model. Your representative acts only when
-        it has unread input or another participant’s message.
+        Empty wakes do not call the model. Your agent acts only when
+        it has unread input or another user’s message.
       </p>
     </section>
   );
 }
 
-function ParticipantPerspective() {
+function UserPerspective() {
   return (
     <section className="sidebar-card">
       <header>
         <Network size={17} />
-        <h2>A participant’s view</h2>
+        <h2>A user’s view</h2>
       </header>
       <p className="prototype-note">
-        There is no global participant directory here. Other representatives
+        There is no global user directory here. Other agents
         become visible only when their messages contribute to one of your
         findings.
       </p>

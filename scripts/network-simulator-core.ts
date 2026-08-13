@@ -1,7 +1,7 @@
 /**
  * Development simulator orchestration boundary.
  *
- * This module creates exogenous participant input through Lucid's public
+ * This module creates exogenous user input through Lucid's public
  * development ingress. It never imports a database adapter, Heddle task store,
  * or product-initialization fixture, so the simulated world remains replaceable
  * tooling rather than product behavior.
@@ -10,40 +10,40 @@ import { createHash } from 'node:crypto';
 import seedrandom from 'seedrandom';
 import type { NetworkScenario } from './network-scenarios.js';
 
-export type ParticipantRegistration = {
+export type UserRegistration = {
   created: boolean;
-  participantId: string;
-  representativeAgentId: string;
+  userId: string;
+  agentId: string;
   displayName: string;
   kind: 'human' | 'synthetic';
 };
 
-export type ParticipantInputReceipt = {
-  participantId: string;
-  representativeAgentId: string;
+export type UserInputReceipt = {
+  userId: string;
+  agentId: string;
   eventId: string;
   sequence: number;
 };
 
 export interface NetworkSimulatorApi {
-  registerParticipant(input: {
+  registerUser(input: {
     registrationKey: string;
     kind: 'synthetic';
     displayName: string;
     privateContext: string;
-  }): Promise<ParticipantRegistration>;
-  submitParticipantInput(input: {
-    participantId: string;
+  }): Promise<UserRegistration>;
+  submitUserInput(input: {
+    userId: string;
     content: string;
     idempotencyKey: string;
-  }): Promise<ParticipantInputReceipt>;
+  }): Promise<UserInputReceipt>;
 }
 
 export type SimulationEvent = {
   scenarioKey: string;
   displayName: string;
   content: string;
-  receipt: ParticipantInputReceipt;
+  receipt: UserInputReceipt;
 };
 
 export type LongitudinalNetworkPhase = {
@@ -63,7 +63,7 @@ export type LongitudinalSimulationEvent = SimulationEvent & {
 
 type RegisteredScenario = {
   scenario: NetworkScenario;
-  participant: ParticipantRegistration;
+  user: UserRegistration;
 };
 
 export async function registerScenarioNetwork(
@@ -74,7 +74,7 @@ export async function registerScenarioNetwork(
   const namespace = digest(seed).slice(0, 16);
   return await Promise.all(scenarios.map(async (scenario) => ({
     scenario,
-    participant: await api.registerParticipant({
+    user: await api.registerUser({
       registrationKey: `lucid-sim:${namespace}:${scenario.key}`,
       kind: 'synthetic',
       displayName: scenario.displayName,
@@ -91,14 +91,14 @@ export async function runSimulationPass(
   const registered = await registerScenarioNetwork(api, scenarios, options.seed);
   const random = seedrandom(`${options.seed}:${options.runId}`);
 
-  return await Promise.all(registered.map(async ({ scenario, participant }) => {
+  return await Promise.all(registered.map(async ({ scenario, user }) => {
     const inputIndex = Math.floor(random() * scenario.inputs.length);
     const content = scenario.inputs[inputIndex];
     if (!content) {
       throw new Error(`Scenario has no input at index ${inputIndex}: ${scenario.key}`);
     }
-    const receipt = await api.submitParticipantInput({
-      participantId: participant.participantId,
+    const receipt = await api.submitUserInput({
+      userId: user.userId,
       content,
       idempotencyKey: inputKey(scenario.key, options),
     });
@@ -128,8 +128,8 @@ export async function runSimulationTick(
   if (!content) {
     throw new Error(`Scenario has no inputs: ${selected.scenario.key}`);
   }
-  const receipt = await api.submitParticipantInput({
-    participantId: selected.participant.participantId,
+  const receipt = await api.submitUserInput({
+    userId: selected.user.userId,
     content,
     idempotencyKey: inputKey(selected.scenario.key, options),
   });
@@ -176,8 +176,8 @@ export async function runLongitudinalPhase(
     if (!selected) {
       throw new Error(`Scenario was not registered: ${input.scenarioKey}`);
     }
-    const receipt = await api.submitParticipantInput({
-      participantId: selected.participant.participantId,
+    const receipt = await api.submitUserInput({
+      userId: selected.user.userId,
       content: input.content,
       idempotencyKey: [
         'lucid-learning',

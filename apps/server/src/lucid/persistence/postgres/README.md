@@ -2,8 +2,8 @@
 
 This directory owns only the product schema, policy-free record codecs, and the
 disposable real-PostgreSQL fixture shared by adapter tests. Concrete stores and
-their Drizzle queries live beside the workspace, participant-network,
-representative-wake, and agent-communication services that own those use cases.
+their Drizzle queries live beside the workspace, user-network,
+agent-wake, and agent-communication services that own those use cases.
 This directory must never grow back into a central product repository.
 
 ## Responsibilities
@@ -17,8 +17,8 @@ This directory must never grow back into a central product repository.
 The services receive narrow store ports through
 `composition/postgres-persistence.ts`. PostgreSQL driver, query-builder, and
 transaction types do not leak into services, the Heddle runner, or tRPC. Do
-not replace these ports with table-shaped CRUD stores: participant lifecycle,
-mailbox floors, event visibility, wake claims, and participant read models
+not replace these ports with table-shaped CRUD stores: user lifecycle,
+mailbox floors, event visibility, wake claims, and user read models
 deliberately cross table boundaries within their owning service-local adapter.
 
 The cross-store behavioral and contention suite lives at
@@ -72,7 +72,7 @@ selector or fallback database.
 
 A newly initialized workspace starts with background checks disabled. This is
 the cost-safe deployment default; an authenticated operator must explicitly
-resume representative work. The migration changes only the database default
+resume agent work. The migration changes only the database default
 and does not overwrite the preference of an existing workspace.
 
 The full cross-store contract requires a disposable real PostgreSQL database:
@@ -93,25 +93,25 @@ files run serially because they share fixed schema names.
 
 - `discovery_workspaces` identifies one local network generation, its
   monotonic wake number, and the internal global scheduler master state.
-- `participants` stores the human or explicit synthetic subject represented,
+- `users` stores the human or explicit synthetic subject represented,
   including a stable nullable registration key, lifecycle status,
   approved-context timestamp, and private background visible only to its own
   agent.
-- `representative_agents` stores execution status, delivery cursor, mailbox
+- `agents` stores execution status, delivery cursor, mailbox
   floor, and the active wake's durable ID, number, and fixed event horizon.
 - `discovery_events` is the append-only product and mailbox history. It has a
   nullable unique idempotency key for retry-safe agent side effects and a
   nullable `reply_to_sequence` for conversation routing. Content provenance is
   recorded separately in `metadata.sourceEventIds`.
 
-The representative working note is also stored as an immutable discovery
-event (`representative_note_updated`) rather than a mutable profile column.
+The agent working note is also stored as an immutable discovery
+event (`agent_note_updated`) rather than a mutable profile column.
 The latest event is the current projection; older revisions remain inspectable.
 Each revision records the claimed source horizon and uses one wake-stable
 idempotency key. Queries for agent execution are bounded by event sequence so a
 retry cannot observe its own post-horizon writes as new starting context.
 
-The participant-facing guidance follow-through view is another read model, not
+The user-facing guidance follow-through view is another read model, not
 stored learning state. It selects the latest direct guidance or finding
 feedback on the current assignment, the prior note or source finding, the
 latest later working-note revision whose claimed horizon includes that
@@ -120,10 +120,10 @@ replying to that check, and any finding whose reply thread includes that
 request. Missing steps remain missing; the workspace store never infers
 successful understanding or usefulness.
 
-The participant-facing request-progress view is also derived state. A response
-whose event sequence is beyond the representative's durable cursor is pending
+The user-facing request-progress view is also derived state. A response
+whose event sequence is beyond the agent's durable cursor is pending
 review. Once every delivered response is behind that cursor, the workspace
-store checks whether a participant-scoped finding cites the same request thread.
+store checks whether a user-scoped finding cites the same request thread.
 The result is either a reported finding or a completed review without one. The
 completion timestamp comes from the persisted wake whose fixed horizon covered
 the latest response; no confidence, relevance, or model-authored completion
@@ -139,51 +139,51 @@ that did not publish, unrelated traffic, and requests from older interests are
 omitted.
 
 Direct guidance is an immutable `guidance_saved` event. It preserves the raw
-participant instruction and references the note visible when it was entered;
-the representative produces a separate `representative_note_updated` event.
-This separation keeps participant intent distinct from the agent's
+user instruction and references the note visible when it was entered;
+the agent produces a separate `agent_note_updated` event.
+This separation keeps user intent distinct from the agent's
 interpretation and requires no schema migration because event kind is stored as
 validated text.
 
-A participant answers "whose context and intent does this agent represent?"
+A user answers "whose context and intent does this agent represent?"
 A saved interest answers "what does the local user want the agent to notice
-now?" and remains a private event rather than a participant field.
+now?" and remains a private event rather than a user field.
 
 The mailbox floor is distinct from the delivery cursor. The cursor records
 successfully processed mail; the floor enforces that a newly joined or resumed
-participant cannot request messages from before its current eligibility
-boundary. Renewed participant consent replaces `private_context` and
+user cannot request messages from before its current eligibility
+boundary. Renewed user consent replaces `private_context` and
 `context_consent_at` atomically with a text-free audit event. Retiring a
-participant scrubs `private_context` but keeps its row and representative
+user scrubs `private_context` but keeps its row and agent
 identity for append-only historical attribution.
 
 No Lucid product store encrypts `private_context` at the application layer. The
 field is private because ordinary product/diagnostic projections and agent
 visibility exclude it from every non-owner, not because the underlying storage
 is cryptographically protected. Trusted ingress may replace it through the
-participant-network port; it is never part of the participant-scoped workspace
+user-network port; it is never part of the user-scoped workspace
 snapshot.
 
 ## Relations
 
 ```text
-discovery_workspaces 1 ── * participants
-participants         1 ── 1 representative_agents
-discovery_workspaces 1 ── * representative_agents
+discovery_workspaces 1 ── * users
+users         1 ── 1 agents
+discovery_workspaces 1 ── * agents
 discovery_workspaces 1 ── * discovery_events
 
-representative_agents.id   ──> logical Heddle task ID
+agents.id   ──> logical Heddle task ID
 discovery_events actor/target/reply ──> delivery and conversation references
 discovery_events metadata source IDs  ──> content provenance references
 ```
 
-Workspace and participant ownership use foreign keys. Event actor, recipient,
+Workspace and user ownership use foreign keys. Event actor, recipient,
 reply, and provenance identifiers remain append-only logical references
 validated by the owning store adapter. A reply determines which request should
 receive a response; a source determines which earlier content was repeated or
 used. Keeping them separate prevents delivery paths from being presented as
 independent corroboration.
 
-`participants.registration_key` is unique when present. The stable local user
+`users.registration_key` is unique when present. The stable local user
 uses `local-user`; dynamic callers provide their own idempotent namespace. The
 internal UUID remains the mailbox and relation identity.

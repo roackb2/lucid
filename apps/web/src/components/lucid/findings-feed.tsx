@@ -99,19 +99,19 @@ function describeEmptyInbox(input: {
     return {
       title: 'Checking available messages…',
       description:
-        'A finding will appear only if participant agents return a specific connection. You decide whether it is useful.',
+        'A finding will appear only if agents return a specific connection. You decide whether it is useful.',
     };
   }
   if (!input.backgroundChecksEnabled) {
     return {
       title: 'Background checks are paused',
       description:
-        'Resume background checks when you want your representative to process new messages.',
+        'Resume background checks when you want your agent to process new messages.',
     };
   }
   return {
     title: 'Waiting for something relevant',
     description:
-      'You can leave this workspace. Lucid will keep the interest and show what another representative brings back without deciding its value for you.',
+      'You can leave this workspace. Lucid will keep the interest and show what another agent brings back without deciding its value for you.',
   };
 }

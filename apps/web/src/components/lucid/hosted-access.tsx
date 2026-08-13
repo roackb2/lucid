@@ -21,7 +21,7 @@ export function HostedAccess({
     event.preventDefault();
     const candidate = token.trim();
     if (candidate.length < 32) {
-      setError('Paste the full participant access token.');
+      setError('Paste the full user access token.');
       return;
     }
 
@@ -43,16 +43,16 @@ export function HostedAccess({
         <p className="section-label">Private pilot</p>
         <h1 id="access-heading">Open your Lucid workspace.</h1>
         <p>
-          Enter the participant token configured for this demo. Lucid keeps it
+          Enter the user token configured for this demo. Lucid keeps it
           only in this browser tab and sends it directly to the same-origin API.
         </p>
         <form className="access-form" onSubmit={submit}>
-          <label htmlFor="participant-access-token">Participant access token</label>
+          <label htmlFor="user-access-token">User access token</label>
           <input
-            aria-describedby={error ? 'participant-access-error' : undefined}
+            aria-describedby={error ? 'user-access-error' : undefined}
             aria-invalid={Boolean(error)}
             autoComplete="current-password"
-            id="participant-access-token"
+            id="user-access-token"
             minLength={32}
             onChange={(event) => setToken(event.target.value)}
             placeholder="Paste access token"
@@ -64,7 +64,7 @@ export function HostedAccess({
           {error ? (
             <p
               className="access-form__error"
-              id="participant-access-error"
+              id="user-access-error"
               role="alert"
             >
               {error}

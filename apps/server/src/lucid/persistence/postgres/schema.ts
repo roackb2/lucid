@@ -1,7 +1,7 @@
 /**
  * PostgreSQL persistence model for Lucid's shared hosted workspace.
  *
- * The `lucid` schema contains product-owned participant, representative, and
+ * The `lucid` schema contains product-owned user, agent, and
  * immutable event state. The runtime heartbeat adapter owns the separate
  * `heddle` schema through Heddle's released remote-store contracts; this
  * module deliberately declares no Heddle internals.
@@ -15,6 +15,7 @@ import {
   index,
   jsonb,
   pgSchema,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -57,8 +58,8 @@ export const postgresDiscoveryWorkspaces = lucidPostgresSchema.table(
   ],
 );
 
-export const postgresParticipants = lucidPostgresSchema.table(
-  'participants',
+export const postgresUsers = lucidPostgresSchema.table(
+  'users',
   {
     id: text('id').primaryKey(),
     workspaceId: text('workspace_id')
@@ -76,22 +77,51 @@ export const postgresParticipants = lucidPostgresSchema.table(
     updatedAt: timestampColumn('updated_at').notNull(),
   },
   (table) => [
-    index('participants_workspace_idx').on(table.workspaceId),
-    uniqueIndex('participants_registration_key_idx').on(table.registrationKey),
-    check('participants_kind_valid', sql`${table.kind} in ('human', 'synthetic')`),
+    index('users_workspace_idx').on(table.workspaceId),
+    uniqueIndex('users_registration_key_idx').on(table.registrationKey),
+    check('users_kind_valid', sql`${table.kind} in ('human', 'synthetic')`),
     check(
-      'participants_status_valid',
+      'users_status_valid',
       sql`${table.status} in ('active', 'disabled', 'retired')`,
     ),
     check(
-      'participants_human_consent_required',
+      'users_human_consent_required',
       sql`${table.kind} <> 'human' or ${table.contextConsentAt} is not null`,
     ),
   ],
 );
 
-export const postgresRepresentativeAgents = lucidPostgresSchema.table(
-  'representative_agents',
+/** Immutable provider subject bindings; email is profile data, never identity. */
+export const postgresUserIdentityBindings = lucidPostgresSchema.table(
+  'user_identity_bindings',
+  {
+    issuer: text('issuer').notNull(),
+    subject: text('subject').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => postgresUsers.id, { onDelete: 'cascade' }),
+    createdAt: timestampColumn('created_at').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'user_identity_bindings_pk',
+      columns: [table.issuer, table.subject],
+    }),
+    uniqueIndex('user_identity_bindings_user_idx')
+      .on(table.userId),
+    check(
+      'user_identity_bindings_issuer_valid',
+      sql`char_length(${table.issuer}) between 1 and 512 and ${table.issuer} = btrim(${table.issuer})`,
+    ),
+    check(
+      'user_identity_bindings_subject_valid',
+      sql`char_length(${table.subject}) between 1 and 512 and ${table.subject} = btrim(${table.subject})`,
+    ),
+  ],
+);
+
+export const postgresAgents = lucidPostgresSchema.table(
+  'agents',
   {
     id: text('id').primaryKey(),
     workspaceId: text('workspace_id')
@@ -99,9 +129,9 @@ export const postgresRepresentativeAgents = lucidPostgresSchema.table(
       .references(() => postgresDiscoveryWorkspaces.id, {
         onDelete: 'cascade',
       }),
-    participantId: text('participant_id')
+    userId: text('user_id')
       .notNull()
-      .references(() => postgresParticipants.id, { onDelete: 'cascade' }),
+      .references(() => postgresUsers.id, { onDelete: 'cascade' }),
     sortOrder: bigint('sort_order', { mode: 'number' }).notNull(),
     name: text('name').notNull(),
     role: text('role').notNull(),
@@ -124,22 +154,22 @@ export const postgresRepresentativeAgents = lucidPostgresSchema.table(
     updatedAt: timestampColumn('updated_at').notNull(),
   },
   (table) => [
-    index('representative_agents_workspace_sort_idx').on(
+    index('agents_workspace_sort_idx').on(
       table.workspaceId,
       table.sortOrder,
     ),
-    uniqueIndex('representative_agents_participant_idx')
-      .on(table.participantId),
+    uniqueIndex('agents_user_idx')
+      .on(table.userId),
     check(
-      'representative_agents_status_valid',
+      'agents_status_valid',
       sql`${table.status} in ('idle', 'running', 'error')`,
     ),
     check(
-      'representative_agents_counters_nonnegative',
+      'agents_counters_nonnegative',
       sql`${table.sortOrder} >= 0 and ${table.runCount} >= 0 and ${table.mailboxFloorSequence} >= 0 and ${table.lastSeenSequence} >= 0`,
     ),
     check(
-      'representative_agents_wake_claim_complete',
+      'agents_wake_claim_complete',
       sql`(
         ${table.activeWakeId} is null
         and ${table.activeWakeClaimToken} is null
@@ -169,7 +199,7 @@ export const postgresDiscoveryEvents = lucidPostgresSchema.table(
     kind: text('kind').notNull(),
     actorAgentId: text('actor_agent_id'),
     targetAgentId: text('target_agent_id'),
-    targetParticipantId: text('target_participant_id'),
+    targetUserId: text('target_user_id'),
     replyToSequence: bigint('reply_to_sequence', { mode: 'number' }),
     idempotencyKey: text('idempotency_key'),
     title: text('title').notNull(),
@@ -192,8 +222,8 @@ export const postgresDiscoveryEvents = lucidPostgresSchema.table(
       table.targetAgentId,
       table.sequence,
     ),
-    index('discovery_events_target_participant_idx').on(
-      table.targetParticipantId,
+    index('discovery_events_target_user_idx').on(
+      table.targetUserId,
       table.sequence,
     ),
     index('discovery_events_reply_idx').on(
@@ -212,7 +242,8 @@ export const postgresDiscoveryEvents = lucidPostgresSchema.table(
 
 export const lucidPostgresTables = {
   discoveryWorkspaces: postgresDiscoveryWorkspaces,
-  participants: postgresParticipants,
-  representativeAgents: postgresRepresentativeAgents,
+  users: postgresUsers,
+  userIdentityBindings: postgresUserIdentityBindings,
+  agents: postgresAgents,
   discoveryEvents: postgresDiscoveryEvents,
 };

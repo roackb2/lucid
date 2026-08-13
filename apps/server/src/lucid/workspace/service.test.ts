@@ -12,11 +12,11 @@ import {
   createPostgresTestStores,
   type PostgresTestStores,
 } from '../persistence/postgres/test-context.js';
-import { LOCAL_USER_ID, USER_AGENT_ID } from '../local-participant.js';
+import { LOCAL_USER_ID, LOCAL_AGENT_ID } from '../local-user.js';
 import { DiscoveryWorkspaceService } from './service.js';
 import type {
-  RepresentativeAgentHeartbeatService,
-} from '../representative/heartbeat-service.js';
+  AgentHeartbeatService,
+} from '../agent/heartbeat-service.js';
 
 describe('discovery workspace service', () => {
   let database: PostgresDatabase;
@@ -30,7 +30,7 @@ describe('discovery workspace service', () => {
   });
 
   beforeEach(async () => {
-    await stores.representative.reset({ backgroundChecksEnabled: true });
+    await stores.agent.reset({ backgroundChecksEnabled: true });
   });
 
   afterAll(async () => database.close());
@@ -44,8 +44,8 @@ describe('discovery workspace service', () => {
         running: false,
         intervalMs: 60_000,
         tasks: [{
-          taskId: 'lucid-representative-user-agent',
-          agentId: USER_AGENT_ID,
+          taskId: 'lucid-agent-user-agent',
+          agentId: LOCAL_AGENT_ID,
           enabled: true,
           status: 'waiting' as const,
           progress: 'Waiting for the next wake.',
@@ -53,16 +53,17 @@ describe('discovery workspace service', () => {
         }],
       }),
       triggerAgent,
-    } as unknown as RepresentativeAgentHeartbeatService;
+    } as unknown as AgentHeartbeatService;
     const workspace = new DiscoveryWorkspaceService(
       stores.workspace,
       heartbeats,
       { model: 'test-model', heddleVersion: 'test' },
     );
     const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
       'Find useful long-running agent workflows.',
     );
-    const source = await stores.network.registerParticipant({
+    const source = await stores.network.registerUser({
       registrationKey: 'test:manual-check-source',
       kind: 'synthetic',
       displayName: 'Workflow operator',
@@ -71,14 +72,14 @@ describe('discovery workspace service', () => {
     const sourceMessage = await stores.communication.appendCommunicationEvent({
       kind: 'direct_message',
       actorAgentId: source.agent.id,
-      targetAgentId: USER_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
       title: 'An earlier network lead',
       content: 'A support operator keeps unresolved cases across daily wakes.',
     });
     const finding = await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'A possible workflow',
       content: 'A support workflow may be relevant.',
       metadata: { sourceEventIds: [sourceMessage.sequence] },
@@ -89,36 +90,37 @@ describe('discovery workspace service', () => {
       'Only continue when the lead names the actual handoff and recovery steps.',
     );
     const priorNote = await stores.communication.appendCommunicationEvent({
-      kind: 'representative_note_updated',
-      actorAgentId: USER_AGENT_ID,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      kind: 'agent_note_updated',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Lucid updates its private working note',
       content: 'Look for named support handoffs and recovery behavior.',
       metadata: { throughSequence: feedback.sequence, derived: true },
     });
     const guidanceSnapshot = await workspace.submitGuidance(
+      LOCAL_USER_ID,
       'Weak signals are useful again, but label them clearly.',
     );
     const guidance = guidanceSnapshot.guidanceFollowThrough?.guidance;
     expect(guidance).toBeDefined();
     const note = await stores.communication.appendCommunicationEvent({
-      kind: 'representative_note_updated',
-      actorAgentId: USER_AGENT_ID,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      kind: 'agent_note_updated',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Lucid updates its private working note',
       content:
         'Accept clearly labeled weak signals; do not require the exact mechanism.',
       metadata: { throughSequence: guidance!.sequence, derived: true },
     });
 
-    await workspace.runNow();
+    await workspace.runNow(LOCAL_USER_ID);
 
     const check = (await stores.network.readNetworkDiagnostics()).events
       .findLast(({ kind }) => kind === 'check_requested');
     expect(check).toMatchObject({
-      targetAgentId: USER_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
       metadata: {
         interestSequence: interest.sequence,
         workingNoteSequence: note.sequence,
@@ -138,7 +140,7 @@ describe('discovery workspace service', () => {
       .toBeLessThan(check!.content.indexOf(interest.content));
     expect(priorNote.content).not.toBe(note.content);
     expect(triggerAgent).toHaveBeenCalledTimes(2);
-    expect(triggerAgent).toHaveBeenNthCalledWith(1, USER_AGENT_ID);
-    expect(triggerAgent).toHaveBeenNthCalledWith(2, USER_AGENT_ID);
+    expect(triggerAgent).toHaveBeenNthCalledWith(1, LOCAL_AGENT_ID);
+    expect(triggerAgent).toHaveBeenNthCalledWith(2, LOCAL_AGENT_ID);
   });
 });

@@ -1,7 +1,7 @@
 # Lucid delegated-discovery domain
 
-This directory owns participant identity, mailboxes, findings, and the bridge
-to durable representative execution. It is separate from tRPC transport,
+This directory owns user identity, mailboxes, findings, and the bridge
+to durable agent execution. It is separate from tRPC transport,
 PostgreSQL's concrete lifecycle, the React product projection, and development
 simulation scenarios.
 
@@ -9,21 +9,21 @@ simulation scenarios.
 
 | Directory | Responsibility |
 | --- | --- |
-| `workspace/` | Local participant actions, scoped projection, primary and secondary projection ports, workspace identity, and PostgreSQL adapter |
-| `network/` | Trusted participant ingress, lifecycle, diagnostics, participant visibility, its store port, and PostgreSQL adapter |
-| `representative/` | Heddle task reconciliation, mailbox wake settlement, mailbox policy, its store port, PostgreSQL adapter, and runner composition |
-| `representative/communication/` | Agent-visible communication tools, their store port, and PostgreSQL visibility/provenance adapter |
+| `workspace/` | Local user actions, scoped projection, primary and secondary projection ports, workspace identity, and PostgreSQL adapter |
+| `network/` | Trusted user ingress, lifecycle, diagnostics, user visibility, its store port, and PostgreSQL adapter |
+| `agent/` | Heddle task reconciliation, mailbox wake settlement, mailbox policy, its store port, PostgreSQL adapter, and runner composition |
+| `agent/communication/` | Agent-visible communication tools, their store port, and PostgreSQL visibility/provenance adapter |
 | `persistence/postgres/` | Shared product schema, policy-free record decoding, and the disposable PostgreSQL test fixture; no product store implementation |
-| `agent-prompts.ts` | Generic representative identity plus bounded longitudinal wake context |
-| `representative-profile.ts` | Generic representative profile for dynamically registered participants |
-| `local-participant.ts` | Stable local participant and representative identity |
+| `agent-prompts.ts` | Generic agent identity plus bounded longitudinal wake context |
+| `agent-profile.ts` | Generic agent profile for dynamically registered users |
+| `local-user.ts` | Stable local user and agent identity |
 | `discovery-types.ts` | Persisted records, scoped product views, and development diagnostics |
 
 Primary store interfaces and their PostgreSQL implementations live beside the
 service that owns them. Each adapter keeps the complete multi-table transaction
 for its owning use case; the split is by behavior, never by table. The workspace
-slice also exports `RepresentativeWorkingContextReader` as an explicitly
-secondary projection port consumed by representative wake orchestration.
+slice also exports `AgentWorkingContextReader` as an explicitly
+secondary projection port consumed by agent wake orchestration.
 Composition constructs all adapters over one pool and exposes only the narrow
 ports required by each service. Concrete adapters never import one another.
 
@@ -31,7 +31,7 @@ See [`../../../../docs/coding-conventions.md`](../../../../docs/coding-conventio
 for the vertical-slice Hexagonal Architecture rules contributors must follow.
 
 Names describe engineering responsibilities. `Wake` means one claimed
-heartbeat execution; `task`, `mailbox`, `event`, `finding`, and `participant`
+heartbeat execution; `task`, `mailbox`, `event`, `finding`, and `user`
 retain their ordinary infrastructure meanings.
 
 ## Product view versus network operations
@@ -39,21 +39,21 @@ retain their ordinary infrastructure meanings.
 `DiscoveryWorkspaceService.snapshot()` is the user-facing projection. It
 contains only:
 
-- the local participant and representative;
-- that participant's current interest, private working note, and findings;
-- the current assignment and its representative's shared request plus
+- the local user and agent;
+- that user's current interest, private working note, and findings;
+- the current assignment and its agent's shared request plus
   durable delivery/review phase, delivered-message counts, and collapsed
   originating-contributor counts;
 - up to five earlier requests published for that same assignment, each with
   its durable phase, explicitly carried guidance, and linked findings;
 - direct-message and collapsed originating-source attribution attached to
   those findings;
-- that representative's Heddle task status.
+- that agent's Heddle task status.
 
-It never returns the global participant list, agent list, event log, private
+It never returns the global user list, agent list, event log, private
 context, registration keys, or unrelated task state.
 
-`ParticipantNetworkService.diagnostics()` is a world-wide developer
+`UserNetworkService.diagnostics()` is a world-wide developer
 projection. The tRPC layer exposes it only through the loopback-only
 `development` router. This is a local trust boundary, not a substitute for
 authentication in a deployed service.
@@ -63,33 +63,33 @@ authentication in a deployed service.
 | Record | Meaning |
 | --- | --- |
 | `DiscoveryWorkspace` | One local network generation and global scheduler master state |
-| `Participant` | A human or explicit synthetic principal with stable registration identity and private context |
-| `Agent` | The executable representative, delivery cursor, and optional active wake |
+| `User` | A human or explicit synthetic principal with stable registration identity and private context |
+| `Agent` | The executable agent, delivery cursor, and optional active wake |
 | `DiscoveryEvent` | Append-only principal input, communication, result, feedback, and lifecycle history |
-| `RepresentativeWorkingContext` | Bounded principal input, prior findings/feedback, and the latest derived working note at one event horizon |
+| `AgentWorkingContext` | Bounded principal input, prior findings/feedback, and the latest derived working note at one event horizon |
 
-Every participant has one representative. Every representative can receive its
+Every user has one agent. Every agent can receive its
 principal's changing private input and report findings to that same principal.
-The current web app shows only the local participant, but the storage and
+The current web app shows only the local user, but the storage and
 execution model is symmetric.
 
 ## Ownership
 
 Lucid owns:
 
-- participant/representative identity and registration idempotency;
-- human context consent and participant lifecycle;
+- user/agent identity and registration idempotency;
+- human context consent and user lifecycle;
 - private principal input and mailbox visibility;
 - atomic wake claims with one fixed unread-event horizon;
 - mailbox floors for join and lifecycle boundaries;
 - a two-action budget per wake;
-- one representative contribution per principal-initiated request thread;
+- one agent contribution per principal-initiated request thread;
 - direct addressing only to active peers encountered through visible delivery;
 - findings backed by visible peer-authored messages;
-- participant-scoped findings, feedback, and source attribution;
-- participant-scoped longitudinal context and a replaceable ordinary-language
+- user-scoped findings, feedback, and source attribution;
+- user-scoped longitudinal context and a replaceable ordinary-language
   working note derived from immutable history;
-- successful assignment settlement only after the representative publishes a
+- successful assignment settlement only after the agent publishes a
   shared request citing every unread interest/check trigger;
 - request-first tool prerequisites and retry-reconstructed action budgets;
 - durable cursors and event/action idempotency keys.
@@ -116,9 +116,9 @@ module imports simulator scenarios.
 ## Registration and private input
 
 Network ingress uses a caller-provided `registrationKey`. Reusing the same key
-with the same kind, name, and private context returns the original participant;
-reusing it with a conflicting profile fails. Participant identity,
-representative identity, join mailbox floor, and a text-free audit event are
+with the same kind, name, and private context returns the original user;
+reusing it with a conflicting profile fails. User identity,
+agent identity, join mailbox floor, and a text-free audit event are
 created in one PostgreSQL transaction.
 
 Human registration and later context replacement require explicit approval.
@@ -126,15 +126,15 @@ Synthetic registration is explicitly labelled and requires no fictional
 consent. Private context is excluded from normal product and diagnostic
 projections.
 
-`saveParticipantInput()` appends a private `participant_input` addressed only
-to that participant's representative before requesting a Heddle run. If the
+`saveUserInput()` appends a private `user_input` addressed only
+to that user's agent before requesting a Heddle run. If the
 process fails after persistence but before the run request, the unread mailbox
 remains recoverable by startup or a later trigger.
 
 ## Mailbox and heartbeat lifecycle
 
 1. Principal input or peer communication is appended durably.
-2. Principal input requests its own representative's Heddle task. A new shared
+2. Principal input requests its own agent's Heddle task. A new shared
    request fans out once to active peers, a response requests only the agent it
    answers, and an ambient contribution waits for normal scheduled listening.
    Requests while a task is busy coalesce into one follow-up generation.
@@ -149,7 +149,7 @@ remains recoverable by startup or a later trigger.
    it after a checkpoint. The tool service also reconstructs its action count
    from persisted events instead of resetting the ordinal in memory.
 6. A direct-guidance wake exposes no communication or no-action operation
-   until the representative rewrites its private working note. The final
+   until the agent rewrites its private working note. The final
    heartbeat postcondition verifies the same durable revision before cursor
    advancement.
 7. An interest/check wake exposes no other communication operation until a
@@ -160,7 +160,7 @@ remains recoverable by startup or a later trigger.
    exception; newly claimed wakes cannot enter that invalid state.
 9. Successful execution appends completion and advances the cursor only to the
    original horizon. Later mail remains unread.
-10. Newly addressed representatives receive durable run requests without
+10. Newly addressed agents receive durable run requests without
    rescanning every unread mailbox or recursively rebroadcasting responses.
 
 An empty due task calls `context.skip()` before model execution. It creates a
@@ -173,10 +173,10 @@ thread while the current wake is failed. `retryCurrentWake()` instead asks
 Heddle to continue the fixed checkpoint without appending new mailbox input.
 There is no separate synchronous agent route.
 
-## Participant and task lifecycle
+## User and task lifecycle
 
-- `active`: the participant is routable and eligible for new mail;
-- `disabled`: task-scoped cancellation settles the representative before the
+- `active`: the user is routable and eligible for new mail;
+- `disabled`: task-scoped cancellation settles the agent before the
   mailbox eligibility floor moves; messages during this period are skipped;
 - re-enable: the floor advances to the current event tail, then the task is
   enabled for future mail;
@@ -184,13 +184,13 @@ There is no separate synchronous agent route.
   removed while historical attribution remains.
 
 The local workspace Pause control is intentionally different: it disables only
-the local representative's durable Heddle task while leaving the participant
+the local agent's durable Heddle task while leaving the user
 active. Mail accumulates, the preference survives restart in Heddle's task
-store, and Resume enables and triggers the same task. Other participant nodes
+store, and Resume enables and triggers the same task. Other user nodes
 continue running.
 
 The workspace-level background flag is a durable operator dispatch gate, not
-the normal participant product control. Global pause preserves every task's
+the normal user product control. Global pause preserves every task's
 personal `enabled` preference, continues to persist/coalesce run intent,
 cancels and awaits only locally owned active work, and dispatches pending
 enabled tasks after resume. Every admitted wake rereads this durable gate
@@ -202,26 +202,26 @@ Agents do not invoke one another's runtime. They append serialized events:
 
 - `post_shared_message` publishes a minimal request, response, or ambient
   contribution. Only a root request immediately fans out to all peers;
-- `send_direct_message` appears only when the current representative has
+- `send_direct_message` appears only when the current agent has
   encountered an active peer as the actor of a visible event;
-- `report_finding` is available to every representative and addresses the
-  finding only to that representative's own participant;
-- `update_working_note` replaces that representative's private derived note at
+- `report_finding` is available to every agent and addresses the
+  finding only to that agent's own user;
+- `update_working_note` replaces that agent's private derived note at
   most once per wake without consuming a communication action; and
 - `finish_without_action` records an internal outcome without fabricating a
-  participant-facing result.
+  user-facing result.
 
 Shared communication provides initial discovery without exposing a directory.
 Direct addressing can narrow later communication but cannot enumerate unknown
-participants.
+users.
 
-The participant-facing `networkActivity` projection remains anchored to the
+The user-facing `networkActivity` projection remains anchored to the
 latest saved assignment. A manual check is an execution nudge and does not
 replace that assignment in the UI. Its published message does become the
 latest request shown within that assignment. The projection shows only the
-request that this participant's own representative published and aggregate
+request that this user's own agent published and aggregate
 reply timing/counts. Its request progress has four factual phases: waiting for
-the first network reply, delivered replies beyond the representative's durable
+the first network reply, delivered replies beyond the agent's durable
 cursor, a completed review with a linked finding, or a completed review without
 a linked finding. The last phase is deliberate silence, not pending work. It is
 derived from persisted delivery, wake completion, cursor and request-thread
@@ -230,7 +230,7 @@ facts rather than an agent-authored status or relevance score.
 `networkActivity.previousRequests` preserves up to five earlier published
 request cycles under that same saved assignment, newest first. Each item is
 derived from the assignment or manual-check trigger, the first durable request
-for that trigger, its transport-derived phase, any participant guidance whose
+for that trigger, its transport-derived phase, any user guidance whose
 sequence the check explicitly carried, and findings linked through that
 request thread. A new check may become current before it publishes a request;
 the earlier history still remains visible. Empty scheduled wakes, unpublished
@@ -238,23 +238,23 @@ failed attempts, earlier assignments, and unrelated network events are never
 included.
 
 The projection separates delivered messages from recursively resolved
-originating contributions and participants, so a relay cannot masquerade as
+originating contributions and users, so a relay cannot masquerade as
 corroboration. It does not expose unrelated message content or the global
 network. Counts indicate transport and provenance, not truth or value.
 
-Each participant-facing finding carries its assignment sequence and one
+Each user-facing finding carries its assignment sequence and one
 delivery-path origin: `request-thread` when the reply chain includes a message
-the representative sent, or `ambient-network` when existing peer mail produced
+the agent sent, or `ambient-network` when existing peer mail produced
 the finding. These labels explain how delivery happened; they do not score the
 finding or claim that a request caused useful information to exist.
 
 `replyToSequence` preserves conversation routing; `source_event_ids` preserve
 content provenance. Findings expose both the messages cited directly and the
 earliest peer contributions behind relays. These fields certify neither truth
-nor usefulness. A representative can act at most twice per wake and contribute
+nor usefulness. A agent can act at most twice per wake and contribute
 to one principal-initiated request thread only once across later wakes.
 
-The optional `guidanceFollowThrough` projection makes the latest participant
+The optional `guidanceFollowThrough` projection makes the latest user
 correction inspectable without creating a learning score. Guidance can be
 attached to a finding or entered directly against the current working note. It
 contains only persisted events: the guidance, its source finding or prior note,
@@ -265,15 +265,15 @@ projection distinguishes pending delivery/review from a completed review with
 no new finding. Absent events are rendered as pending or quiet product state,
 not model success.
 
-## Longitudinal representative context
+## Longitudinal agent context
 
 Heddle checkpoints preserve runtime transcript continuity, but Lucid does not
 use a checkpoint as its only product-memory contract. Before every model run,
 the workspace store projects history through the claimed wake horizon:
 
-- the latest saved interest plus recent participant inputs and direct guidance;
-- recent participant-scoped findings and any feedback attached to them; and
-- the latest `representative_note_updated` event.
+- the latest saved interest plus recent user inputs and direct guidance;
+- recent user-scoped findings and any feedback attached to them; and
+- the latest `agent_note_updated` event.
 
 The event-sequence bound is important on retry. A finding or working note
 written by a failed attempt has a sequence after that attempt's source horizon,
@@ -296,11 +296,11 @@ expires, Heddle claim-fenced recovery returns the task to a runnable state and
 passes that exact interrupted execution ID to Lucid. Lucid releases only the
 matching product wake claim; a stale recovery cannot release a newer worker.
 
-Participant disable/retire uses Heddle task-scoped cancellation. A `not-owned`
+User disable/retire uses Heddle task-scoped cancellation. A `not-owned`
 or `not-found` cancellation blocks the domain mutation because another runtime
 could still retain old private context. Unrelated agents continue running.
 
-Independent representatives execute concurrently up to
+Independent agents execute concurrently up to
 `LUCID_HEARTBEAT_MAX_CONCURRENCY`. Each wake keeps tool concurrency at one so
 dependent writes and the action budget remain ordered.
 

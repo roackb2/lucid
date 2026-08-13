@@ -2,24 +2,24 @@
 import {
   agentStatusSchema,
   discoveryEventKindSchema,
-  participantKindSchema,
-  participantStatusSchema,
+  userKindSchema,
+  userStatusSchema,
   type Agent,
   type DiscoveryEvent,
   type DiscoveryWorkspace,
-  type Participant,
+  type User,
 } from '../../discovery-types.js';
 import {
   postgresDiscoveryEvents,
   postgresDiscoveryWorkspaces,
-  postgresParticipants,
-  postgresRepresentativeAgents,
+  postgresUsers,
+  postgresAgents,
 } from './schema.js';
 
-type AgentRow = typeof postgresRepresentativeAgents.$inferSelect;
+type AgentRow = typeof postgresAgents.$inferSelect;
 type DiscoveryEventRow = typeof postgresDiscoveryEvents.$inferSelect;
 type DiscoveryWorkspaceRow = typeof postgresDiscoveryWorkspaces.$inferSelect;
-type ParticipantRow = typeof postgresParticipants.$inferSelect;
+type UserRow = typeof postgresUsers.$inferSelect;
 
 export function toAgent(row: AgentRow): Agent {
   return {
@@ -33,12 +33,12 @@ export function toAgent(row: AgentRow): Agent {
   };
 }
 
-export function toParticipant(row: ParticipantRow): Participant {
+export function toUser(row: UserRow): User {
   return {
     ...row,
     registrationKey: row.registrationKey ?? undefined,
-    kind: participantKindSchema.parse(row.kind),
-    status: participantStatusSchema.parse(row.status),
+    kind: userKindSchema.parse(row.kind),
+    status: userStatusSchema.parse(row.status),
     contextConsentAt: row.contextConsentAt ?? undefined,
   };
 }
@@ -49,7 +49,7 @@ export function toDiscoveryEvent(row: DiscoveryEventRow): DiscoveryEvent {
     kind: discoveryEventKindSchema.parse(row.kind),
     actorAgentId: row.actorAgentId ?? undefined,
     targetAgentId: row.targetAgentId ?? undefined,
-    targetParticipantId: row.targetParticipantId ?? undefined,
+    targetUserId: row.targetUserId ?? undefined,
     replyToSequence: row.replyToSequence ?? undefined,
     idempotencyKey: row.idempotencyKey ?? undefined,
     metadata: row.metadata ?? {},

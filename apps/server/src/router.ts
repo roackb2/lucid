@@ -1,5 +1,5 @@
 /**
- * tRPC transport boundary for participant-scoped discovery, a narrow operator
+ * tRPC transport boundary for user-scoped discovery, a narrow operator
  * surface, and loopback-only development ingress. Sequencing and compensation
  * remain in domain services.
  */
@@ -14,10 +14,9 @@ import {
   DiscoveryWorkspaceService,
 } from './lucid/workspace/service.js';
 import {
-  ParticipantNetworkInputError,
-  ParticipantNetworkService,
+  UserNetworkInputError,
+  UserNetworkService,
 } from './lucid/network/service.js';
-import { LOCAL_USER_ID } from './lucid/local-participant.js';
 import { trpc } from './trpc.js';
 
 const interestInputSchema = z.object({
@@ -37,7 +36,7 @@ const backgroundChecksInputSchema = z.object({
   enabled: z.boolean(),
 });
 
-const participantRegistrationSchema = z.discriminatedUnion('kind', [
+const userRegistrationSchema = z.discriminatedUnion('kind', [
   z.object({
     registrationKey: z.string().trim().min(1).max(120),
     kind: z.literal('synthetic'),
@@ -53,22 +52,38 @@ const participantRegistrationSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
-const participantInputSchema = z.object({
-  participantId: z.string().trim().min(1),
+const userInputSchema = z.object({
+  userId: z.string().trim().min(1),
   content: z.string().trim().min(1).max(1_600),
   idempotencyKey: z.string().trim().min(1).max(160),
 });
 
-const participantEnabledInputSchema = z.object({
-  participantId: z.string().trim().min(1),
+const userEnabledInputSchema = z.object({
+  userId: z.string().trim().min(1),
   enabled: z.boolean(),
 });
 
-const participantIdSchema = z.object({
-  participantId: z.string().trim().min(1),
+const userIdSchema = z.object({
+  userId: z.string().trim().min(1),
 });
 
-const participantProcedure = trpc.procedure.use(({ ctx, next }) => {
+const userEnrollmentSchema = z.object({
+  displayName: z.string().trim().min(1).max(80),
+  privateContext: z.string().trim().min(1).max(4_000),
+  contextApproved: z.literal(true),
+});
+
+const authenticatedProcedure = trpc.procedure.use(({ ctx, next }) => {
+  if (!ctx.principal) {
+    throw new TRPCError({
+      code: 'UNAUTHORIZED',
+      message: 'Lucid authentication is required.',
+    });
+  }
+  return next({ ctx: { ...ctx, principal: ctx.principal } });
+});
+
+const userProcedure = trpc.procedure.use(({ ctx, next }) => {
   if (!ctx.principal) {
     throw new TRPCError({
       code: 'UNAUTHORIZED',
@@ -76,15 +91,23 @@ const participantProcedure = trpc.procedure.use(({ ctx, next }) => {
     });
   }
   if (
-    !principalHasRole(ctx.principal, 'participant')
-    || ctx.principal.participantId !== LOCAL_USER_ID
+    !principalHasRole(ctx.principal, 'user')
+    || !ctx.principal.userId
   ) {
     throw new TRPCError({
       code: 'FORBIDDEN',
       message: 'This principal cannot access the discovery workspace.',
     });
   }
-  return next();
+  return next({
+    ctx: {
+      ...ctx,
+      principal: {
+        ...ctx.principal,
+        userId: ctx.principal.userId,
+      },
+    },
+  });
 });
 
 const operatorProcedure = trpc.procedure.use(({ ctx, next }) => {
@@ -115,7 +138,8 @@ const developmentOperatorProcedure = operatorProcedure.use(({ ctx, next }) => {
 
 export function createAppRouter(
   discoveryWorkspace: DiscoveryWorkspaceService,
-  participantNetwork: ParticipantNetworkService,
+  userNetwork: UserNetworkService,
+  options: { allowSelfEnrollment?: boolean } = {},
 ) {
   return trpc.router({
     system: trpc.router({
@@ -124,77 +148,115 @@ export function createAppRouter(
         service: 'lucid-discovery',
       })),
     }),
+    identity: trpc.router({
+      session: authenticatedProcedure.query(({ ctx }) => ({
+        status: ctx.principal.userId
+          ? 'active' as const
+          : 'onboarding-required' as const,
+        userId: ctx.principal.userId,
+        enrollmentAllowed: options.allowSelfEnrollment === true,
+      })),
+      enroll: authenticatedProcedure
+        .input(userEnrollmentSchema)
+        .mutation(({ ctx, input }) => {
+          const identity = ctx.principal.externalIdentity;
+          if (!options.allowSelfEnrollment || !identity) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: 'This deployment does not permit self-enrollment.',
+            });
+          }
+          return resolveUserNetworkError(
+            () => userNetwork.enrollAuthenticatedUser({
+              ...identity,
+              ...input,
+            }),
+          );
+        }),
+    }),
     discovery: trpc.router({
-      snapshot: participantProcedure.query(() => discoveryWorkspace.snapshot()),
-      saveInterest: participantProcedure
+      snapshot: userProcedure.query(({ ctx }) => (
+        discoveryWorkspace.snapshot(ctx.principal.userId)
+      )),
+      saveInterest: userProcedure
         .input(interestInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.saveInterest(input.content),
+        .mutation(({ ctx, input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.saveInterest(
+            ctx.principal.userId,
+            input.content,
+          ),
         )),
-      runNow: participantProcedure.mutation(() => resolveDiscoveryError(
-        () => discoveryWorkspace.runNow(),
+      runNow: userProcedure.mutation(({ ctx }) => resolveDiscoveryError(
+        () => discoveryWorkspace.runNow(ctx.principal.userId),
       )),
-      retryCurrentWake: participantProcedure.mutation(() => resolveDiscoveryError(
-        () => discoveryWorkspace.retryCurrentWake(),
+      retryCurrentWake: userProcedure.mutation(({ ctx }) => resolveDiscoveryError(
+        () => discoveryWorkspace.retryCurrentWake(ctx.principal.userId),
       )),
-      setBackgroundChecksEnabled: participantProcedure
+      setBackgroundChecksEnabled: userProcedure
         .input(backgroundChecksInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.setBackgroundChecksEnabled(input.enabled),
+        .mutation(({ ctx, input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.setBackgroundChecksEnabled(
+            ctx.principal.userId,
+            input.enabled,
+          ),
         )),
-      submitFeedback: participantProcedure
+      submitFeedback: userProcedure
         .input(feedbackInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
+        .mutation(({ ctx, input }) => resolveDiscoveryError(
           () => discoveryWorkspace.submitFeedback(
+            ctx.principal.userId,
             input.findingSequence,
             input.content,
           ),
         )),
-      submitGuidance: participantProcedure
+      submitGuidance: userProcedure
         .input(guidanceInputSchema)
-        .mutation(({ input }) => resolveDiscoveryError(
-          () => discoveryWorkspace.submitGuidance(input.content),
+        .mutation(({ ctx, input }) => resolveDiscoveryError(
+          () => discoveryWorkspace.submitGuidance(
+            ctx.principal.userId,
+            input.content,
+          ),
         )),
     }),
     operator: trpc.router({
       backgroundChecks: operatorProcedure.query(() => (
-        participantNetwork.backgroundChecks()
+        userNetwork.backgroundChecks()
       )),
       setGlobalBackgroundChecksEnabled: operatorProcedure
         .input(backgroundChecksInputSchema)
         .mutation(({ input }) => (
-          participantNetwork.setGlobalBackgroundChecksEnabled(input.enabled)
+          userNetwork.setGlobalBackgroundChecksEnabled(input.enabled)
         )),
     }),
     development: trpc.router({
-      registerParticipant: developmentOperatorProcedure
-        .input(participantRegistrationSchema)
-        .mutation(({ input }) => resolveParticipantNetworkError(
-          () => participantNetwork.registerParticipant(input),
+      registerUser: developmentOperatorProcedure
+        .input(userRegistrationSchema)
+        .mutation(({ input }) => resolveUserNetworkError(
+          () => userNetwork.registerUser(input),
         )),
-      submitParticipantInput: developmentOperatorProcedure
-        .input(participantInputSchema)
-        .mutation(({ input }) => resolveParticipantNetworkError(
-          () => participantNetwork.submitParticipantInput(input),
+      submitUserInput: developmentOperatorProcedure
+        .input(userInputSchema)
+        .mutation(({ input }) => resolveUserNetworkError(
+          () => userNetwork.submitUserInput(input),
         )),
-      setParticipantEnabled: developmentOperatorProcedure
-        .input(participantEnabledInputSchema)
-        .mutation(({ input }) => resolveParticipantNetworkError(
-          () => participantNetwork.setParticipantEnabled(
-            input.participantId,
+      setUserEnabled: developmentOperatorProcedure
+        .input(userEnabledInputSchema)
+        .mutation(({ input }) => resolveUserNetworkError(
+          () => userNetwork.setUserEnabled(
+            input.userId,
             input.enabled,
           ),
         )),
-      retireParticipant: developmentOperatorProcedure
-        .input(participantIdSchema)
-        .mutation(({ input }) => resolveParticipantNetworkError(
-          () => participantNetwork.retireParticipant(input.participantId),
+      retireUser: developmentOperatorProcedure
+        .input(userIdSchema)
+        .mutation(({ input }) => resolveUserNetworkError(
+          () => userNetwork.retireUser(input.userId),
         )),
       diagnostics: developmentOperatorProcedure.query(() => (
-        participantNetwork.diagnostics()
+        userNetwork.diagnostics()
       )),
       reset: developmentOperatorProcedure.mutation(() => (
-        participantNetwork.reset()
+        userNetwork.reset()
       )),
     }),
   });
@@ -218,13 +280,13 @@ async function resolveDiscoveryError<T>(
   }
 }
 
-async function resolveParticipantNetworkError<T>(
+async function resolveUserNetworkError<T>(
   operation: () => T | Promise<T>,
 ): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof ParticipantNetworkInputError) {
+    if (error instanceof UserNetworkInputError) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: error.message,

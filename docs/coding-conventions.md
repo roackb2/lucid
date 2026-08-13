@@ -21,7 +21,7 @@ lucid/network/
 - `service.ts` implements application behavior and depends only on the store
   port.
 - `store.ts` defines the smallest domain-named interface required by that
-  service, such as `ParticipantNetworkStore`.
+  service, such as `UserNetworkStore`.
 - `postgres-store.ts` implements that port with the real Drizzle queries,
   transactions, locks, and projections owned by the service.
 - `types.ts`, when needed, contains domain values and transport-independent
@@ -36,14 +36,14 @@ the concrete adapter.
 
 A secondary projection port belongs to the slice that owns the projection,
 even when another service consumes it. For example, the workspace slice exports
-`RepresentativeWorkingContextReader`; representative wake orchestration imports
+`AgentWorkingContextReader`; agent wake orchestration imports
 that port, and composition injects the workspace adapter. The consuming service
 never imports the concrete adapter.
 
 Use `Store` for these ports rather than `Repository`. Most Lucid persistence
 operations are use-case transactions or read projections, not DDD aggregate
 collection operations. Do not add an `I` prefix. Name the concrete adapter for
-its technology, for example `PostgresParticipantNetworkStore`.
+its technology, for example `PostgresUserNetworkStore`.
 
 ## Dependency direction
 
@@ -65,8 +65,8 @@ must not depend on adapters.
 ## Transactions belong to use cases
 
 A transaction that touches several tables still belongs to one service when it
-enforces one of that service's use cases. Participant registration, mailbox wake
-claiming, and participant-scoped projections are intentionally not decomposed
+enforces one of that service's use cases. User registration, mailbox wake
+claiming, and user-scoped projections are intentionally not decomposed
 into table-shaped CRUD stores.
 
 Put the complete transaction in the owning service's PostgreSQL adapter. Do not
@@ -85,12 +85,12 @@ Shared PostgreSQL code is limited to mechanisms without Lucid product policy:
 - disposable real-PostgreSQL test setup; and
 - policy-free row and metadata codecs used by several adapters.
 
-Mailbox visibility, participant authorization, event causality, wake
+Mailbox visibility, user authorization, event causality, wake
 settlement, read-model selection, and lifecycle rules are not shared database
 infrastructure. Keep their queries in the service that owns the rule. A shared
 helper must have multiple real consumers, a policy-free name, and no imports
 from service implementations; otherwise prefer the local code. Domain policy
-such as mailbox-visible event kinds or participant projection belongs in a
+such as mailbox-visible event kinds or user projection belongs in a
 named domain module, not in shared PostgreSQL records.
 
 ## Testing conventions

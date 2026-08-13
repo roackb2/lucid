@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { HostedConversationTurnRunner } from '@roackb2/heddle-adopter/conversation';
 import dayjs from 'dayjs';
 import { principalHasRole } from '../../auth/request-principal.js';
-import { LOCAL_USER_ID } from '../../lucid/local-participant.js';
 import type {
   HostedConversationRequest,
   HostedConversationRequestService,
@@ -47,7 +46,7 @@ implements HostedConversationRequestService {
   async *streamTurn(
     input: HostedConversationRequest,
   ): ReturnType<HostedConversationRequestService['streamTurn']> {
-    const subjectId = requireParticipantSubject(input);
+    const subjectId = requireUserSubject(input);
     input.signal.throwIfAborted();
     const scope = {
       tenantId: this.#policy.tenantId,
@@ -68,20 +67,20 @@ implements HostedConversationRequestService {
   }
 }
 
-function requireParticipantSubject(
+function requireUserSubject(
   input: HostedConversationRequest,
 ): string {
   if (
-    !principalHasRole(input.principal, 'participant')
-    || input.principal.participantId !== LOCAL_USER_ID
+    !principalHasRole(input.principal, 'user')
+    || !input.principal.userId
   ) {
     throw new HostedConversationAuthorizationError(
       'This principal cannot start a hosted Lucid conversation.',
     );
   }
-  // The participant ID is Lucid's stable product subject. Authentication
+  // The user ID is Lucid's stable product subject. Authentication
   // adapter labels may change without changing hosted conversation ownership.
-  return input.principal.participantId;
+  return input.principal.userId;
 }
 
 function createRuntimeSessionId(scope: {

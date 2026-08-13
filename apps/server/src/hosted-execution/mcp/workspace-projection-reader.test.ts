@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { McpInvocationScope } from '@roackb2/heddle-adopter/mcp';
 import {
-  SingleWorkspaceProjectionReader,
+  UserWorkspaceProjectionReader,
   WorkspaceProjectionScopeError,
 } from './workspace-projection-reader.js';
 import { workspaceSnapshot } from './test-support.js';
@@ -16,13 +16,12 @@ const SCOPE: McpInvocationScope = {
   workflow: 'conversation-turn',
 };
 
-describe('single workspace MCP projection reader', () => {
-  it('reads only when verified product scope matches the configured workspace', async () => {
+describe('user workspace MCP projection reader', () => {
+  it('reads the verified user when deployment scope matches', async () => {
     const snapshot = workspaceSnapshot();
     const source = { snapshot: vi.fn(async () => snapshot) };
-    const reader = new SingleWorkspaceProjectionReader({
+    const reader = new UserWorkspaceProjectionReader({
       tenantId: SCOPE.tenantId,
-      subjectId: SCOPE.subjectId,
       productSessionId: SCOPE.productSessionId,
     }, source);
 
@@ -30,18 +29,16 @@ describe('single workspace MCP projection reader', () => {
       scope: SCOPE,
       signal: new AbortController().signal,
     })).resolves.toBe(snapshot);
-    expect(source.snapshot).toHaveBeenCalledOnce();
+    expect(source.snapshot).toHaveBeenCalledWith(SCOPE.subjectId);
   });
 
   it.each([
     ['tenantId', 'tenant-b'],
-    ['subjectId', 'subject-b'],
     ['productSessionId', 'product-session-b'],
   ] as const)('denies a mismatched %s before reading product data', async (field, value) => {
     const source = { snapshot: vi.fn(async () => workspaceSnapshot()) };
-    const reader = new SingleWorkspaceProjectionReader({
+    const reader = new UserWorkspaceProjectionReader({
       tenantId: SCOPE.tenantId,
-      subjectId: SCOPE.subjectId,
       productSessionId: SCOPE.productSessionId,
     }, source);
 
@@ -55,14 +52,13 @@ describe('single workspace MCP projection reader', () => {
   it('checks cancellation before and after the underlying projection read', async () => {
     const controller = new AbortController();
     const source = {
-      snapshot: vi.fn(async () => {
+      snapshot: vi.fn(async (_userId: string) => {
         controller.abort(new Error('cancelled during read'));
         return workspaceSnapshot();
       }),
     };
-    const reader = new SingleWorkspaceProjectionReader({
+    const reader = new UserWorkspaceProjectionReader({
       tenantId: SCOPE.tenantId,
-      subjectId: SCOPE.subjectId,
       productSessionId: SCOPE.productSessionId,
     }, source);
 

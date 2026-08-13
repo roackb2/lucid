@@ -37,7 +37,7 @@ export function HostedConversation() {
       return;
     }
     if (!accessToken) {
-      setError('Reopen the workspace with your participant access token.');
+      setError('Reopen the workspace with your user access token.');
       return;
     }
 
@@ -98,7 +98,7 @@ export function HostedConversation() {
         </span>
         <div>
           <p className="section-label">Hosted conversation</p>
-          <h2 className="text-balance">Ask your representative directly.</h2>
+          <h2 className="text-balance">Ask your agent directly.</h2>
           <p className="text-pretty">
             A Heddle agent runs in an isolated AgentCore workspace and can read
             only the Lucid capabilities granted for this turn.
@@ -162,7 +162,7 @@ export function HostedConversation() {
           ) : null}
           {answer ? (
             <div className="hosted-conversation-answer">
-              <span>Representative</span>
+              <span>Agent</span>
               <p>{answer}</p>
             </div>
           ) : null}
@@ -170,7 +170,7 @@ export function HostedConversation() {
       ) : (
         <p className="hosted-conversation-empty text-pretty">
           Start with a bounded read-only question. The first pilot capability
-          lets the agent inspect your participant-scoped workspace snapshot.
+          lets the agent inspect your user-scoped workspace snapshot.
         </p>
       )}
     </section>

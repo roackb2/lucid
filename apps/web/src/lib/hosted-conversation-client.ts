@@ -36,7 +36,7 @@ export async function* streamHostedConversation(
   const accessToken = input.accessToken.trim();
   if (!prompt || !accessToken) {
     throw new HostedConversationClientError(
-      'A prompt and participant access token are required.',
+      'A prompt and user access token are required.',
     );
   }
   input.signal?.throwIfAborted();
@@ -272,6 +272,6 @@ async function readPublicError(response: Response): Promise<string> {
 
 function fallbackError(status: number): string {
   return status === 401
-    ? 'Your participant access token was not accepted.'
+    ? 'Your user access token was not accepted.'
     : 'Lucid could not start the hosted conversation.';
 }

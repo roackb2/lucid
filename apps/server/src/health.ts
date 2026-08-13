@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 export const LUCID_HEALTH_PATH = '/healthz';
 
 /**
- * Exposes process liveness without authenticating a participant or implying
+ * Exposes process liveness without authenticating a user or implying
  * that PostgreSQL and external execution dependencies are ready.
  */
 export function handleHealthRequest(

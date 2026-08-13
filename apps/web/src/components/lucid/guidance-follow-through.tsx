@@ -1,5 +1,5 @@
 /**
- * Participant-facing projection of persisted events after the latest guidance.
+ * User-facing projection of persisted events after the latest guidance.
  * It shows observable follow-through without interpreting whether the agent
  * learned correctly or assigning a quality score.
  */
@@ -38,7 +38,7 @@ export function GuidanceFollowThrough({
         </div>
         <div>
           <p className="section-label">Since your guidance</p>
-          <h2>What changed in the representative’s work</h2>
+          <h2>What changed in the agent’s work</h2>
           <p>
             These are stored events, not an AI claim that it understood you
             correctly. You can compare what you said with what it carried
@@ -79,7 +79,7 @@ export function GuidanceFollowThrough({
           icon={<NotebookPen size={15} />}
           title={activity.workingNote
             ? 'The private working note changed'
-            : 'Waiting for the representative to update its working note'}
+            : 'Waiting for the agent to update its working note'}
           timestamp={activity.workingNote?.createdAt}
         >
           <p>
@@ -98,7 +98,7 @@ export function GuidanceFollowThrough({
         >
           <p>
             {activity.request?.content
-              ?? 'Run a check now when you want the representative to pursue the revised direction immediately.'}
+              ?? 'Run a check now when you want the agent to pursue the revised direction immediately.'}
           </p>
         </FollowThroughStep>
 
@@ -122,7 +122,7 @@ export function GuidanceFollowThrough({
               ?? requestProgressCopy?.description
               ?? (activity.request
                 ? 'The request exists, but its delivery state is not available yet.'
-                : 'This step stays pending until the representative sends a revised request.')}
+                : 'This step stays pending until the agent sends a revised request.')}
           </p>
           {!activity.resultingFinding && requestProgressCopy ? (
             <p className="follow-through-context">

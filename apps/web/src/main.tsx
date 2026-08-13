@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
+import { LucidAuthProvider } from './auth/supabase-auth';
 import App from './App';
 import './index.css';
 
@@ -23,13 +24,15 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
-      <Toaster
-        closeButton
-        position="bottom-right"
-        richColors
-        theme="light"
-      />
+      <LucidAuthProvider>
+        <App />
+        <Toaster
+          closeButton
+          position="bottom-right"
+          richColors
+          theme="light"
+        />
+      </LucidAuthProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

@@ -6,21 +6,21 @@ Execution Host Runtime. This repository contains a portable server image and
 configuration contract. It contains no deployment-specific account IDs,
 database endpoints, credentials, Terraform state, or other environment data.
 
-This is a private single-user pilot posture, not a highly available or
-multi-user production architecture.
+This is a small multi-principal preview posture, not a highly available or
+production social-network architecture.
 
 ## Ownership map
 
 ```mermaid
 flowchart LR
-  Client["Participant client"] --> Server["Lucid server container"]
+  Client["User client"] --> Server["Lucid server container"]
   Server --> Postgres[("Managed PostgreSQL")]
   Server --> AgentCore["Heddle Execution Host on AgentCore Runtime"]
   AgentCore --> MCP["Lucid scoped MCP endpoint"]
   MCP --> Server
 ```
 
-- Lucid owns participant authentication, product authorization, signed
+- Lucid owns user authentication, product authorization, signed
   invocation authority, PostgreSQL data, and the exact MCP tools exposed to a
   turn.
 - The private Execution Host owns the Heddle loop and isolated shell
@@ -54,10 +54,24 @@ The final image:
 - runs as the non-root `node` user under `tini`;
 - stores non-authoritative local Heddle artifacts under `/var/lib/lucid`;
 - exposes port `8081` and a process-liveness probe at `GET /healthz`;
-- serves the compiled participant SPA and `/api/trpc/` from the same origin;
+- serves the compiled user SPA and `/api/trpc/` from the same origin;
 - includes the compiled migration entrypoint and checked-in Drizzle
   migrations; and
-- contains no environment configuration or credentials.
+- contains no server credentials. Supabase browser values, when supplied, are
+  public build configuration embedded into the SPA.
+
+Supabase's browser project URL and publishable key are Vite build inputs rather
+than runtime secrets:
+
+```bash
+docker build --platform linux/arm64 \
+  --build-arg VITE_SUPABASE_URL=https://project-ref.supabase.co \
+  --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key \
+  --file apps/server/Dockerfile \
+  --tag lucid-server:local .
+```
+
+Never pass a Supabase service-role key or Google client secret to this build.
 
 The health route proves that the Node process can answer HTTP. It deliberately
 does not claim that PostgreSQL, AgentCore, or model providers are ready.
@@ -72,7 +86,7 @@ Required environment-specific inputs are:
 
 - a TLS PostgreSQL URL reachable from the server container;
 - a public HTTPS Lucid origin reachable from the Runtime;
-- static pilot participant/operator tokens;
+- the Supabase project URL plus a server-only break-glass operator token;
 - an owner-readable ES256 private JWK file;
 - model credentials;
 - product authority IDs and distinct execution/MCP audiences; and
@@ -104,6 +118,10 @@ For this demo stage, local Terraform apply and an intentionally manual image
 rollout are easier to audit than merge-triggered deployment. CI should build
 and verify the image; automatic apply can wait until rollback, secret
 management, and environment promotion are worth operating.
+
+Google provider configuration and the publishable browser key belong to the
+private deployment environment. The Google client secret stays only in
+Supabase; it is not an application, image, GitHub, or AWS secret.
 
 ## Evidence boundary
 

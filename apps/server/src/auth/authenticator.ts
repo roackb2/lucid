@@ -1,6 +1,13 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { LOCAL_USER_ID } from '../lucid/local-participant.js';
+import { LOCAL_USER_ID } from '../lucid/local-user.js';
+import type {
+  UserIdentityReader,
+} from '../lucid/network/store.js';
 import type { LucidRequestPrincipal } from './request-principal.js';
+import {
+  createSupabaseAuthenticator,
+  type SupabaseAuthenticationConfig,
+} from './supabase-authenticator.js';
 
 export type LucidAuthenticationInput = {
   authorization?: string;
@@ -17,9 +24,10 @@ export type LucidAuthenticationConfig =
   | { mode: 'development' }
   | {
       mode: 'static-token';
-      participantToken: string;
+      userToken: string;
       operatorToken: string;
-    };
+    }
+  | SupabaseAuthenticationConfig;
 
 /**
  * Builds the request authenticator owned by the product HTTP boundary.
@@ -29,6 +37,7 @@ export type LucidAuthenticationConfig =
  */
 export function createLucidAuthenticator(
   config: LucidAuthenticationConfig,
+  identities?: UserIdentityReader,
 ): LucidAuthenticator {
   if (config.mode === 'development') {
     return {
@@ -36,12 +45,19 @@ export function createLucidAuthenticator(
         isLoopbackAddress(remoteAddress)
           ? {
               subject: 'development:local-user',
-              participantId: LOCAL_USER_ID,
-              roles: ['participant', 'operator'],
+              userId: LOCAL_USER_ID,
+              roles: ['user', 'operator'],
             }
           : undefined
       ),
     };
+  }
+
+  if (config.mode === 'supabase') {
+    if (!identities) {
+      throw new Error('Supabase authentication requires the Lucid identity reader.');
+    }
+    return createSupabaseAuthenticator(config, identities);
   }
 
   return {
@@ -53,15 +69,15 @@ export function createLucidAuthenticator(
       if (tokensEqual(token, config.operatorToken)) {
         return {
           subject: 'static-token:operator',
-          participantId: LOCAL_USER_ID,
-          roles: ['participant', 'operator'],
+          userId: LOCAL_USER_ID,
+          roles: ['user', 'operator'],
         };
       }
-      if (tokensEqual(token, config.participantToken)) {
+      if (tokensEqual(token, config.userToken)) {
         return {
-          subject: 'static-token:participant',
-          participantId: LOCAL_USER_ID,
-          roles: ['participant'],
+          subject: 'static-token:user',
+          userId: LOCAL_USER_ID,
+          roles: ['user'],
         };
       }
       return undefined;
