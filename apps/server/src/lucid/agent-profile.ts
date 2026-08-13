@@ -1,21 +1,21 @@
 /**
- * Creates the system-owned representative profile for a network participant.
+ * Creates the system-owned agent profile for a network user.
  * Principals and development scenarios provide ordinary private context, never
  * executable system instructions.
  */
-import type { Agent, ParticipantKind } from './discovery-types.js';
+import type { Agent, UserKind } from './discovery-types.js';
 
-const REPRESENTATIVE_COLORS = [
+const AGENT_COLORS = [
   '#765b91',
   '#426d78',
   '#8a6543',
   '#7a5964',
 ] as const;
 
-type RepresentativeProfile = Pick<
+type AgentProfile = Pick<
   Agent,
   | 'id'
-  | 'participantId'
+  | 'userId'
   | 'sortOrder'
   | 'name'
   | 'role'
@@ -25,27 +25,27 @@ type RepresentativeProfile = Pick<
 >;
 
 /** Applies one maintained representation policy to human and simulated nodes. */
-export function createRepresentativeProfile(input: {
+export function createAgentProfile(input: {
   id: string;
-  participantId: string;
+  userId: string;
   displayName: string;
-  kind: ParticipantKind;
+  kind: UserKind;
   sortOrder: number;
-}): RepresentativeProfile {
+}): AgentProfile {
   const provenance = input.kind === 'human'
-    ? 'a human participant whose context was knowingly supplied'
-    : 'an explicitly simulated participant';
+    ? 'a human user whose context was knowingly supplied'
+    : 'an explicitly simulated user';
 
   return {
     id: input.id,
-    participantId: input.participantId,
+    userId: input.userId,
     sortOrder: input.sortOrder,
-    name: `${input.displayName}'s representative`,
+    name: `${input.displayName}'s agent`,
     role: input.kind === 'human'
-      ? 'Participant representative'
-      : 'Simulated representative',
-    color: REPRESENTATIVE_COLORS[
-      (input.sortOrder - 1) % REPRESENTATIVE_COLORS.length
+      ? 'Personal agent'
+      : 'Simulated agent',
+    color: AGENT_COLORS[
+      (input.sortOrder - 1) % AGENT_COLORS.length
     ]!,
     purpose:
       `Represent ${input.displayName}'s private context and changing inputs. Share only the smallest detail needed for a specific connection, and bring peer-sourced findings back to ${input.displayName}.`,

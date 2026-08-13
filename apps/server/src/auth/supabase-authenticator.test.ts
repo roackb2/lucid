@@ -1,7 +1,7 @@
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import { describe, expect, it, vi } from 'vitest';
 import type { FetchImplementation } from 'jose';
-import type { ParticipantIdentityReader } from '../lucid/network/store.js';
+import type { UserIdentityReader } from '../lucid/network/store.js';
 import { createSupabaseAuthenticator } from './supabase-authenticator.js';
 
 const PROJECT_URL = 'https://project-ref.supabase.co';
@@ -11,13 +11,13 @@ const OPERATOR_TOKEN = 'operator-token-with-at-least-thirty-two-characters';
 describe('Supabase request authentication', () => {
   it('resolves a verified provider subject through Lucid product identity', async () => {
     const fixture = await createJwtFixture();
-    const resolveParticipantIdentity = vi.fn(async () => ({
-      participantId: 'participant_avery',
+    const resolveUserIdentity = vi.fn(async () => ({
+      userId: 'user_avery',
       status: 'active' as const,
     }));
     const authenticator = createAuthenticator(
       fixture.fetch,
-      { resolveParticipantIdentity },
+      { resolveUserIdentity },
     );
 
     const token = await fixture.sign({ subject: 'subject-avery' });
@@ -26,10 +26,10 @@ describe('Supabase request authentication', () => {
     })).resolves.toEqual({
       subject: `${ISSUER}:subject-avery`,
       externalIdentity: { issuer: ISSUER, subject: 'subject-avery' },
-      participantId: 'participant_avery',
-      roles: ['participant'],
+      userId: 'user_avery',
+      roles: ['user'],
     });
-    expect(resolveParticipantIdentity).toHaveBeenCalledWith({
+    expect(resolveUserIdentity).toHaveBeenCalledWith({
       issuer: ISSUER,
       subject: 'subject-avery',
     });
@@ -38,7 +38,7 @@ describe('Supabase request authentication', () => {
   it('keeps a valid but unbound subject outside product authorization', async () => {
     const fixture = await createJwtFixture();
     const authenticator = createAuthenticator(fixture.fetch, {
-      resolveParticipantIdentity: async () => undefined,
+      resolveUserIdentity: async () => undefined,
     });
 
     await expect(authenticator.authenticate({
@@ -51,10 +51,10 @@ describe('Supabase request authentication', () => {
 
   it('rejects invalid audience and anonymous sessions before identity lookup', async () => {
     const fixture = await createJwtFixture();
-    const resolveParticipantIdentity = vi.fn(async () => undefined);
+    const resolveUserIdentity = vi.fn(async () => undefined);
     const authenticator = createAuthenticator(
       fixture.fetch,
-      { resolveParticipantIdentity },
+      { resolveUserIdentity },
     );
 
     await expect(authenticator.authenticate({
@@ -69,27 +69,27 @@ describe('Supabase request authentication', () => {
         anonymous: true,
       })}`,
     })).resolves.toBeUndefined();
-    expect(resolveParticipantIdentity).not.toHaveBeenCalled();
+    expect(resolveUserIdentity).not.toHaveBeenCalled();
   });
 
   it('retains a separate break-glass operator credential', async () => {
     const fixture = await createJwtFixture();
     const authenticator = createAuthenticator(fixture.fetch, {
-      resolveParticipantIdentity: async () => undefined,
+      resolveUserIdentity: async () => undefined,
     });
 
     await expect(authenticator.authenticate({
       authorization: `Bearer ${OPERATOR_TOKEN}`,
     })).resolves.toMatchObject({
-      participantId: 'local-user',
-      roles: ['participant', 'operator'],
+      userId: 'local-user',
+      roles: ['user', 'operator'],
     });
   });
 });
 
 function createAuthenticator(
   fetch: FetchImplementation,
-  identities: ParticipantIdentityReader,
+  identities: UserIdentityReader,
 ) {
   return createSupabaseAuthenticator({
     mode: 'supabase',

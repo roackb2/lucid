@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DiscoveryWorkspaceService } from './lucid/workspace/service.js';
-import type { ParticipantNetworkService } from './lucid/network/service.js';
+import type { UserNetworkService } from './lucid/network/service.js';
 import { createAppRouter } from './router.js';
 import type { LucidRequestContext } from './trpc.js';
 
 describe('Lucid router authorization', () => {
-  it('rejects anonymous and participant principals without a durable binding', async () => {
+  it('rejects anonymous and user principals without a durable binding', async () => {
     const { caller, snapshot } = createCaller({
       requestId: 'anonymous',
       remoteAddress: '127.0.0.1',
@@ -18,8 +18,8 @@ describe('Lucid router authorization', () => {
       requestId: 'forged',
       remoteAddress: '127.0.0.1',
       principal: {
-        subject: 'participant:someone-else',
-        roles: ['participant'],
+        subject: 'user:someone-else',
+        roles: ['user'],
       },
     });
     await expect(unbound.caller.discovery.snapshot()).rejects.toMatchObject({
@@ -29,14 +29,14 @@ describe('Lucid router authorization', () => {
     expect(unbound.snapshot).not.toHaveBeenCalled();
   });
 
-  it('passes only the server-derived participant into discovery', async () => {
+  it('passes only the server-derived user into discovery', async () => {
     const { caller, snapshot } = createCaller({
-      requestId: 'participant',
+      requestId: 'user',
       remoteAddress: '203.0.113.10',
       principal: {
-        subject: 'participant:local-user',
-        participantId: 'local-user',
-        roles: ['participant'],
+        subject: 'user:local-user',
+        userId: 'local-user',
+        roles: ['user'],
       },
     });
 
@@ -73,8 +73,8 @@ describe('Lucid router authorization', () => {
       displayName: 'Avery',
       privateContext: 'Find useful information about durable agent systems.',
       contextApproved: true,
-    })).resolves.toEqual({ participantId: 'participant_avery' });
-    expect(enabled.enrollAuthenticatedParticipant).toHaveBeenCalledWith({
+    })).resolves.toEqual({ userId: 'user_avery' });
+    expect(enabled.enrollAuthenticatedUser).toHaveBeenCalledWith({
       issuer: 'https://project.supabase.co/auth/v1',
       subject: 'subject-a',
       displayName: 'Avery',
@@ -84,16 +84,16 @@ describe('Lucid router authorization', () => {
   });
 
   it('requires both operator role and loopback for development routes', async () => {
-    const participant = createCaller({
-      requestId: 'participant-only',
+    const user = createCaller({
+      requestId: 'user-only',
       remoteAddress: '127.0.0.1',
       principal: {
-        subject: 'participant:local-user',
-        participantId: 'local-user',
-        roles: ['participant'],
+        subject: 'user:local-user',
+        userId: 'local-user',
+        roles: ['user'],
       },
     });
-    await expect(participant.caller.development.diagnostics())
+    await expect(user.caller.development.diagnostics())
       .rejects.toMatchObject({ code: 'FORBIDDEN' });
 
     const remoteOperator = createCaller({
@@ -121,16 +121,16 @@ describe('Lucid router authorization', () => {
   });
 
   it('allows only an authenticated operator to control the global dispatch gate', async () => {
-    const participant = createCaller({
-      requestId: 'participant-only',
+    const user = createCaller({
+      requestId: 'user-only',
       remoteAddress: '203.0.113.10',
       principal: {
-        subject: 'participant:local-user',
-        participantId: 'local-user',
-        roles: ['participant'],
+        subject: 'user:local-user',
+        userId: 'local-user',
+        roles: ['user'],
       },
     });
-    await expect(participant.caller.operator.backgroundChecks())
+    await expect(user.caller.operator.backgroundChecks())
       .rejects.toMatchObject({ code: 'FORBIDDEN' });
 
     const remoteOperator = createCaller({
@@ -162,21 +162,21 @@ function createCaller(
   const setGlobalBackgroundChecksEnabled = vi.fn(async (enabled: boolean) => ({
     enabled,
   }));
-  const enrollAuthenticatedParticipant = vi.fn(async () => ({
-    participantId: 'participant_avery',
+  const enrollAuthenticatedUser = vi.fn(async () => ({
+    userId: 'user_avery',
   }));
   const discoveryWorkspace = {
     snapshot,
   } as unknown as DiscoveryWorkspaceService;
-  const participantNetwork = {
+  const userNetwork = {
     diagnostics,
     backgroundChecks,
     setGlobalBackgroundChecksEnabled,
-    enrollAuthenticatedParticipant,
-  } as unknown as ParticipantNetworkService;
+    enrollAuthenticatedUser,
+  } as unknown as UserNetworkService;
   const caller = createAppRouter(
     discoveryWorkspace,
-    participantNetwork,
+    userNetwork,
     options,
   ).createCaller(context);
   return {
@@ -185,6 +185,6 @@ function createCaller(
     snapshot,
     backgroundChecks,
     setGlobalBackgroundChecksEnabled,
-    enrollAuthenticatedParticipant,
+    enrollAuthenticatedUser,
   };
 }

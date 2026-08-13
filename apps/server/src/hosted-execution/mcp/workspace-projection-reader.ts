@@ -6,7 +6,7 @@ import type {
   ScopedWorkspaceProjectionReader,
 } from './types.js';
 
-export type ParticipantWorkspaceIdentity = Pick<
+export type UserWorkspaceIdentity = Pick<
   McpInvocationScope,
   'tenantId' | 'productSessionId'
 >;
@@ -20,16 +20,16 @@ export class WorkspaceProjectionScopeError extends Error {
 }
 
 /**
- * Binds the shared Lucid network to the authenticated participant carried in a
- * verified execution capability. The source performs the participant-scoped
+ * Binds the shared Lucid network to the authenticated user carried in a
+ * verified execution capability. The source performs the user-scoped
  * projection; tenant and product-session values stay deployment-owned.
  */
-export class ParticipantWorkspaceProjectionReader
+export class UserWorkspaceProjectionReader
 implements ScopedWorkspaceProjectionReader {
   constructor(
-    private readonly identity: ParticipantWorkspaceIdentity,
+    private readonly identity: UserWorkspaceIdentity,
     private readonly source: {
-      snapshot(participantId: string): Promise<DiscoveryWorkspaceSnapshot>;
+      snapshot(userId: string): Promise<DiscoveryWorkspaceSnapshot>;
     },
   ) {}
 

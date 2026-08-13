@@ -7,49 +7,49 @@ import {
   type RunHeartbeatTaskResult,
 } from '@roackb2/heddle/advanced';
 import type {
-  RepresentativeTaskInvocation,
-  RepresentativeTaskInvocationTarget,
-} from './representative-task-invocation.js';
+  AgentTaskInvocation,
+  AgentTaskInvocationTarget,
+} from './agent-task-invocation.js';
 
-type RepresentativeTaskCatalog = Pick<
+type AgentTaskCatalog = Pick<
   HeartbeatTargetedTaskStore,
   'listTasks'
 >;
 
-export type RepresentativeTaskDispatchDecision =
+export type AgentTaskDispatchDecision =
   | { kind: 'complete-delivery' }
   | { kind: 'retry-transiently'; delayMs: number }
   | { kind: 'wait-for-durable-schedule' };
 
-export type RepresentativeTaskDispatchOutcome = {
+export type AgentTaskDispatchOutcome = {
   taskId: string;
   invocationId: string;
   runRequestGeneration?: number;
   result: RunHeartbeatTaskResult;
-  decision: RepresentativeTaskDispatchDecision;
+  decision: AgentTaskDispatchDecision;
 };
 
-export type RepresentativeTaskDispatchError = {
+export type AgentTaskDispatchError = {
   phase: 'global-gate' | 'poll' | 'invoke';
   error: unknown;
   taskId?: string;
   invocationId?: string;
 };
 
-export type RepresentativeTaskNotificationResult = {
+export type AgentTaskNotificationResult = {
   taskId: string;
   status: 'queued' | 'coalesced' | 'not-managed' | 'not-running';
 };
 
-export type RepresentativeTaskCancellationResult = {
+export type AgentTaskCancellationResult = {
   taskId: string;
   disposition: 'cancelled' | 'not-active';
   invocationId?: string;
 };
 
-export type InProcessRepresentativeTaskDispatcherOptions = {
-  store: RepresentativeTaskCatalog;
-  target: RepresentativeTaskInvocationTarget;
+export type InProcessAgentTaskDispatcherOptions = {
+  store: AgentTaskCatalog;
+  target: AgentTaskInvocationTarget;
   taskIdPrefix: string;
   pollIntervalMs: number;
   maxConcurrentInvocations: number;
@@ -64,15 +64,15 @@ export type InProcessRepresentativeTaskDispatcherOptions = {
     taskId: string,
     runRequestGeneration: number | undefined,
   ) => string;
-  onOutcome?: (outcome: RepresentativeTaskDispatchOutcome) => void;
-  onError?: (error: RepresentativeTaskDispatchError) => void;
+  onOutcome?: (outcome: AgentTaskDispatchOutcome) => void;
+  onError?: (error: AgentTaskDispatchError) => void;
 };
 
 type DispatcherState = 'idle' | 'running' | 'stopping' | 'stopped';
 type DrainDisposition = 'drained' | 'paused' | 'saturated' | 'stopped';
 
 type ActiveInvocation = {
-  invocation: RepresentativeTaskInvocation;
+  invocation: AgentTaskInvocation;
   controller: AbortController;
   promise: Promise<void>;
   suppressRetry: boolean;
@@ -92,7 +92,7 @@ const DEFAULT_CONTENTION_RETRY_MS = 1_000;
  * for a process crash between persistence and notification. Each delivery is
  * still one targeted invocation; Heddle performs the authoritative due claim.
  */
-export class InProcessRepresentativeTaskDispatcher {
+export class InProcessAgentTaskDispatcher {
   private readonly semaphore: Semaphore;
   private readonly pending = new Map<string, PendingInvocation>();
   private readonly active = new Map<string, ActiveInvocation>();
@@ -104,7 +104,7 @@ export class InProcessRepresentativeTaskDispatcher {
   private admissionPaused = false;
 
   constructor(
-    private readonly options: InProcessRepresentativeTaskDispatcherOptions,
+    private readonly options: InProcessAgentTaskDispatcherOptions,
   ) {
     assertPositiveInteger(options.pollIntervalMs, 'pollIntervalMs');
     assertPositiveInteger(
@@ -117,7 +117,7 @@ export class InProcessRepresentativeTaskDispatcher {
       'contentionRetryMs',
     );
     if (!options.taskIdPrefix.trim()) {
-      throw new Error('Representative task dispatcher requires a task ID prefix.');
+      throw new Error('Agent task dispatcher requires a task ID prefix.');
     }
     this.semaphore = new Semaphore(options.maxConcurrentInvocations);
   }
@@ -128,7 +128,7 @@ export class InProcessRepresentativeTaskDispatcher {
       return;
     }
     if (this.state !== 'idle') {
-      throw new Error('A stopped representative task dispatcher cannot restart.');
+      throw new Error('A stopped agent task dispatcher cannot restart.');
     }
     this.state = 'running';
     this.schedulePoll(0);
@@ -187,7 +187,7 @@ export class InProcessRepresentativeTaskDispatcher {
    */
   notify(
     request: HeartbeatTaskRunRequestSignal,
-  ): RepresentativeTaskNotificationResult {
+  ): AgentTaskNotificationResult {
     if (!this.isManagedTask(request.taskId)) {
       return { taskId: request.taskId, status: 'not-managed' };
     }
@@ -208,7 +208,7 @@ export class InProcessRepresentativeTaskDispatcher {
   async cancelTask(
     taskId: string,
     reason: string,
-  ): Promise<RepresentativeTaskCancellationResult> {
+  ): Promise<AgentTaskCancellationResult> {
     const normalizedReason = requireCancellationReason(reason);
 
     const removedPending = this.pending.delete(taskId);
@@ -261,7 +261,7 @@ export class InProcessRepresentativeTaskDispatcher {
     if (options.cancelActive !== false) {
       active.forEach((invocation) => {
         invocation.suppressRetry = true;
-        invocation.controller.abort('Lucid representative dispatcher stopped.');
+        invocation.controller.abort('Lucid agent dispatcher stopped.');
       });
     }
     await Promise.allSettled([
@@ -362,12 +362,12 @@ export class InProcessRepresentativeTaskDispatcher {
     runRequestGeneration: number | undefined,
   ): void {
     const controller = new AbortController();
-    const invocation: RepresentativeTaskInvocation = {
+    const invocation: AgentTaskInvocation = {
       taskId,
       invocationId: this.options.createInvocationId?.(
         taskId,
         runRequestGeneration,
-      ) ?? `lucid-representative:${randomUUID()}`,
+      ) ?? `lucid-agent:${randomUUID()}`,
       runRequestGeneration,
       signal: controller.signal,
     };
@@ -379,7 +379,7 @@ export class InProcessRepresentativeTaskDispatcher {
     };
     const timeout = setTimeout(() => {
       controller.abort(
-        `Lucid representative invocation exceeded ${this.options.invocationTimeoutMs}ms.`,
+        `Lucid agent invocation exceeded ${this.options.invocationTimeoutMs}ms.`,
       );
     }, this.options.invocationTimeoutMs);
     timeout.unref();
@@ -399,7 +399,7 @@ export class InProcessRepresentativeTaskDispatcher {
   private async invoke(active: ActiveInvocation): Promise<void> {
     try {
       const result = await this.options.target.invoke(active.invocation);
-      const decision = resolveRepresentativeTaskDispatchDecision(
+      const decision = resolveAgentTaskDispatchDecision(
         result.status,
         this.contentionRetryMs,
       );
@@ -538,7 +538,7 @@ export class InProcessRepresentativeTaskDispatcher {
     return taskId.startsWith(this.options.taskIdPrefix);
   }
 
-  private reportOutcome(outcome: RepresentativeTaskDispatchOutcome): void {
+  private reportOutcome(outcome: AgentTaskDispatchOutcome): void {
     try {
       this.options.onOutcome?.(outcome);
     } catch (error) {
@@ -551,7 +551,7 @@ export class InProcessRepresentativeTaskDispatcher {
     }
   }
 
-  private reportError(error: RepresentativeTaskDispatchError): void {
+  private reportError(error: AgentTaskDispatchError): void {
     try {
       this.options.onError?.(error);
     } catch {
@@ -571,10 +571,10 @@ export class InProcessRepresentativeTaskDispatcher {
  * those immediately would bypass durable timing. Only `busy` and `claim-lost`
  * are transient delivery contention and receive a short host retry.
  */
-export function resolveRepresentativeTaskDispatchDecision(
+export function resolveAgentTaskDispatchDecision(
   status: RunHeartbeatTaskResult['status'],
   contentionRetryMs: number,
-): RepresentativeTaskDispatchDecision {
+): AgentTaskDispatchDecision {
   if (status === 'busy' || status === 'claim-lost') {
     return { kind: 'retry-transiently', delayMs: contentionRetryMs };
   }
@@ -620,7 +620,7 @@ function assertPositiveInteger(value: number, name: string): void {
 function requireCancellationReason(reason: string): string {
   const normalized = reason.trim().replace(/\s+/g, ' ');
   if (!normalized) {
-    throw new Error('Representative task cancellation reason cannot be empty.');
+    throw new Error('Agent task cancellation reason cannot be empty.');
   }
   return normalized;
 }

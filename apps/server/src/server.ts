@@ -13,18 +13,18 @@ import {
 import { handleHealthRequest } from './health.js';
 import { DiscoveryWorkspaceService } from './lucid/workspace/service.js';
 import {
-  HeddleRepresentativeAgentRunner,
-} from './lucid/representative/heddle-runner.js';
-import { ParticipantNetworkService } from './lucid/network/service.js';
+  HeddleAgentRunner,
+} from './lucid/agent/heddle-runner.js';
+import { UserNetworkService } from './lucid/network/service.js';
 import {
-  REPRESENTATIVE_AGENT_TASK_ID_PREFIX,
-  RepresentativeAgentHeartbeatService,
-} from './lucid/representative/heartbeat-service.js';
+  AGENT_TASK_ID_PREFIX,
+  AgentHeartbeatService,
+} from './lucid/agent/heartbeat-service.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
 import {
-  createRepresentativeAgentExecutionHost,
-} from './runtime/representative-agent-execution-composition.js';
+  createAgentExecutionHost,
+} from './runtime/agent-execution-composition.js';
 import {
   createStaticSpaRequestHandler,
 } from './web/static-spa-request-handler.js';
@@ -43,19 +43,19 @@ const authenticator = createLucidAuthenticator(
   config.authentication,
   stores.network,
 );
-const agentRunner = new HeddleRepresentativeAgentRunner(
+const agentRunner = new HeddleAgentRunner(
   stores.communication,
   config,
 );
-const executionHost = createRepresentativeAgentExecutionHost({
+const executionHost = createAgentExecutionHost({
   config,
-  store: stores.representative,
+  store: stores.agent,
   taskAuthority,
-  taskIdPrefix: REPRESENTATIVE_AGENT_TASK_ID_PREFIX,
+  taskIdPrefix: AGENT_TASK_ID_PREFIX,
   logger,
 });
-const heartbeats = new RepresentativeAgentHeartbeatService(
-  stores.representative,
+const heartbeats = new AgentHeartbeatService(
+  stores.agent,
   stores.workspace,
   agentRunner,
   config,
@@ -72,7 +72,7 @@ const discoveryWorkspace = new DiscoveryWorkspaceService(
     heddleVersion: heddlePackage.version,
   },
 );
-const participantNetwork = new ParticipantNetworkService(
+const userNetwork = new UserNetworkService(
   stores.network,
   heartbeats,
   {
@@ -95,7 +95,7 @@ heartbeats.start();
 
 const server = createHTTPServer({
   basePath: TRPC_BASE_PATH,
-  router: createAppRouter(discoveryWorkspace, participantNetwork, {
+  router: createAppRouter(discoveryWorkspace, userNetwork, {
     allowSelfEnrollment: config.authentication.mode === 'supabase'
       && config.authentication.allowSelfEnrollment,
   }),

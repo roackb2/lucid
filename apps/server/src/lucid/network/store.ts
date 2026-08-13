@@ -1,70 +1,70 @@
-/** Persistence port for trusted participant-network administration. */
+/** Persistence port for trusted user-network administration. */
 import type {
   Agent,
   AgentView,
   DiscoveryEvent,
   DiscoveryWorkspace,
-  Participant,
-  ParticipantStatus,
-  ParticipantView,
-  RegisterParticipantInput,
+  User,
+  UserStatus,
+  UserView,
+  RegisterUserInput,
 } from '../discovery-types.js';
 
 export type NetworkDiagnosticsStoreSnapshot = {
   workspace: DiscoveryWorkspace;
-  participants: ParticipantView[];
+  users: UserView[];
   agents: AgentView[];
   events: DiscoveryEvent[];
 };
 
-export type ParticipantWithAgent = {
-  participant: Participant;
+export type UserWithAgent = {
+  user: User;
   agent: Agent;
   created?: boolean;
 };
 
 /** Case-sensitive subject identity from a successfully verified provider token. */
-export type AuthenticatedParticipantIdentity = {
+export type AuthenticatedUserIdentity = {
   issuer: string;
   subject: string;
 };
 
 /** First-time product profile attached to an authenticated human principal. */
-export type EnrollAuthenticatedParticipantInput =
-  AuthenticatedParticipantIdentity & {
+export type EnrollAuthenticatedUserInput =
+  AuthenticatedUserIdentity & {
     displayName: string;
     privateContext: string;
     contextApproved: boolean;
   };
 
 /** Product identity resolved without exposing provider claims downstream. */
-export type ResolvedParticipantIdentity = {
-  participantId: string;
-  status: ParticipantStatus;
+export type ResolvedUserIdentity = {
+  userId: string;
+  status: UserStatus;
 };
 
-export interface ParticipantIdentityReader {
-  resolveParticipantIdentity(
-    identity: AuthenticatedParticipantIdentity,
-  ): Promise<ResolvedParticipantIdentity | undefined>;
+export interface UserIdentityReader {
+  resolveUserIdentity(
+    identity: AuthenticatedUserIdentity,
+  ): Promise<ResolvedUserIdentity | undefined>;
 }
 
-export interface ParticipantNetworkStore extends ParticipantIdentityReader {
-  enrollAuthenticatedParticipant(
-    input: EnrollAuthenticatedParticipantInput,
-  ): Promise<ParticipantWithAgent>;
+export interface UserNetworkStore extends UserIdentityReader {
+  enrollAuthenticatedUser(
+    input: EnrollAuthenticatedUserInput,
+  ): Promise<UserWithAgent>;
   readNetworkDiagnostics(): Promise<NetworkDiagnosticsStoreSnapshot>;
-  requireAgentByParticipantId(participantId: string): Promise<Agent>;
-  registerParticipant(
-    input: RegisterParticipantInput,
-  ): Promise<ParticipantWithAgent>;
-  setParticipantStatus(
-    participantId: string,
-    status: Extract<ParticipantStatus, 'active' | 'disabled'>,
-  ): Promise<ParticipantWithAgent>;
-  retireParticipant(participantId: string): Promise<ParticipantWithAgent>;
-  saveParticipantInput(
-    participantId: string,
+  requireAgentByUserId(userId: string): Promise<Agent>;
+  registerUser(
+    input: RegisterUserInput,
+  ): Promise<UserWithAgent>;
+  setUserStatus(
+    userId: string,
+    status: Extract<UserStatus, 'active' | 'disabled'>,
+  ): Promise<UserWithAgent>;
+  retireUser(userId: string): Promise<UserWithAgent>;
+  saveUserInput(
+    userId: string,
     content: string,
     idempotencyKey: string,
   ): Promise<DiscoveryEvent>;

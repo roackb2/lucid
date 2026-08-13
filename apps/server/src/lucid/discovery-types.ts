@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-export const participantKindSchema = z.enum(['human', 'synthetic']);
-export const participantStatusSchema = z.enum([
+export const userKindSchema = z.enum(['human', 'synthetic']);
+export const userStatusSchema = z.enum([
   'active',
   'disabled',
   'retired',
@@ -15,7 +15,7 @@ export const networkMessageRoleSchema = z.enum([
 export const discoveryEventKindSchema = z.enum([
   'workspace_created',
   'interest_saved',
-  'participant_input',
+  'user_input',
   'check_requested',
   'agent_wake_started',
   'shared_message',
@@ -23,18 +23,18 @@ export const discoveryEventKindSchema = z.enum([
   'finding_reported',
   'feedback_saved',
   'guidance_saved',
-  'representative_note_updated',
-  'participant_added',
-  'participant_disabled',
-  'participant_enabled',
-  'participant_retired',
+  'agent_note_updated',
+  'user_added',
+  'user_disabled',
+  'user_enabled',
+  'user_retired',
   'agent_wake_no_action',
   'agent_wake_completed',
   'error',
 ]);
 
-export type ParticipantKind = z.infer<typeof participantKindSchema>;
-export type ParticipantStatus = z.infer<typeof participantStatusSchema>;
+export type UserKind = z.infer<typeof userKindSchema>;
+export type UserStatus = z.infer<typeof userStatusSchema>;
 export type AgentStatus = z.infer<typeof agentStatusSchema>;
 export type NetworkMessageRole = z.infer<typeof networkMessageRoleSchema>;
 export type DiscoveryEventKind = z.infer<typeof discoveryEventKindSchema>;
@@ -45,7 +45,7 @@ export type AppendDiscoveryEventInput = {
   kind: DiscoveryEventKind;
   actorAgentId?: string;
   targetAgentId?: string;
-  targetParticipantId?: string;
+  targetUserId?: string;
   replyToSequence?: number;
   idempotencyKey?: string;
   title: string;
@@ -62,12 +62,12 @@ export type DiscoveryWorkspace = {
   updatedAt: string;
 };
 
-export type Participant = {
+export type User = {
   id: string;
   workspaceId: string;
   registrationKey?: string;
-  kind: ParticipantKind;
-  status: ParticipantStatus;
+  kind: UserKind;
+  status: UserStatus;
   displayName: string;
   privateContext: string;
   contextConsentAt?: string;
@@ -75,14 +75,14 @@ export type Participant = {
   updatedAt: string;
 };
 
-export type ParticipantView = Omit<
-  Participant,
+export type UserView = Omit<
+  User,
   'privateContext' | 'registrationKey'
 >;
 
-export type RegisterParticipantInput = {
+export type RegisterUserInput = {
   registrationKey: string;
-  kind: ParticipantKind;
+  kind: UserKind;
   displayName: string;
   privateContext: string;
   contextApproved?: boolean;
@@ -91,7 +91,7 @@ export type RegisterParticipantInput = {
 export type Agent = {
   id: string;
   workspaceId: string;
-  participantId: string;
+  userId: string;
   sortOrder: number;
   name: string;
   role: string;
@@ -122,9 +122,9 @@ export type AgentView = Omit<
   | 'activeWakeNumber'
   | 'activeWakeHorizon'
 > & {
-  participant: ParticipantView;
+  user: UserView;
   unreadCount: number;
-  isUserAgent: boolean;
+  isCurrentUserAgent: boolean;
 };
 
 export type DiscoveryEvent = {
@@ -135,7 +135,7 @@ export type DiscoveryEvent = {
   kind: DiscoveryEventKind;
   actorAgentId?: string;
   targetAgentId?: string;
-  targetParticipantId?: string;
+  targetUserId?: string;
   /**
    * The event this event answers or continues. Content provenance remains in
    * metadata.sourceEventIds so conversation routing cannot masquerade as an
@@ -151,7 +151,7 @@ export type DiscoveryEvent = {
 
 export type FindingView = {
   finding: DiscoveryEvent;
-  /** Messages the representative cited when it reported the finding. */
+  /** Messages the agent cited when it reported the finding. */
   sources: FindingSourceView[];
   /**
    * Earliest peer-authored messages in the cited provenance graph. Relays are
@@ -170,9 +170,9 @@ export type FindingSourceView = {
   attribution?: {
     agentId: string;
     agentName: string;
-    participantId: string;
-    participantDisplayName: string;
-    participantKind: ParticipantKind;
+    userId: string;
+    userDisplayName: string;
+    userKind: UserKind;
   };
 };
 
@@ -183,27 +183,27 @@ export type NetworkRequestProgressPhase =
   | 'reviewed-without-finding';
 
 /**
- * Participant-scoped result of one disclosed network request. The phase is
- * derived only from delivered messages, the representative's durable mailbox
+ * User-scoped result of one disclosed network request. The phase is
+ * derived only from delivered messages, the agent's durable mailbox
  * cursor, and linked findings; it is not a model-authored status claim.
  */
 export type NetworkRequestProgressView = {
   phase: NetworkRequestProgressPhase;
   /** All delivered first-hop messages answering this request. */
   responseCount: number;
-  /** Delivered replies beyond the representative's durable review cursor. */
+  /** Delivered replies beyond the agent's durable review cursor. */
   pendingReviewCount: number;
   /** Unique peer-authored provenance roots behind the delivered messages. */
   originatingResponseCount: number;
-  /** Unique participants who authored those provenance roots. */
-  originatingParticipantCount: number;
+  /** Unique users who authored those provenance roots. */
+  originatingUserCount: number;
   latestResponseAt?: string;
   /** Completion time of the wake that processed the latest delivered reply. */
   reviewedAt?: string;
 };
 
 /**
- * One prior request cycle for the current participant-owned assignment.
+ * One prior request cycle for the current user-owned assignment.
  * Every field is a persisted event or a transport-derived progress view;
  * scheduled empty wakes and unrelated network activity are excluded.
  */
@@ -216,9 +216,9 @@ export type NetworkRequestHistoryItemView = {
 };
 
 /**
- * Participant-scoped projection of the latest request lifecycle. It exposes
- * what this participant's own representative shared and aggregate reply
- * progress, never the global participant directory or unrelated messages.
+ * User-scoped projection of the latest request lifecycle. It exposes
+ * what this user's own agent shared and aggregate reply
+ * progress, never the global user directory or unrelated messages.
  */
 export type NetworkActivityView = {
   assignment: DiscoveryEvent;
@@ -229,9 +229,9 @@ export type NetworkActivityView = {
 };
 
 /**
- * Participant-scoped trace of what happened after the latest guidance. The
+ * User-scoped trace of what happened after the latest guidance. The
  * guidance may be direct or attached to a finding. Every field is an existing
- * persisted event; the projection does not infer whether the representative
+ * persisted event; the projection does not infer whether the agent
  * understood the guidance correctly.
  */
 export type GuidanceFollowThroughView = {
@@ -245,11 +245,11 @@ export type GuidanceFollowThroughView = {
 };
 
 /**
- * Bounded Lucid-owned history supplied to one representative on every wake.
- * Raw events remain authoritative; the working note is the representative's
- * replaceable interpretation of that history, not verified participant data.
+ * Bounded Lucid-owned history supplied to one agent on every wake.
+ * Raw events remain authoritative; the working note is the agent's
+ * replaceable interpretation of that history, not verified user data.
  */
-export type RepresentativeWorkingContext = {
+export type AgentWorkingContext = {
   principalInputs: DiscoveryEvent[];
   findings: FindingView[];
   workingNote?: DiscoveryEvent;
@@ -257,7 +257,7 @@ export type RepresentativeWorkingContext = {
 
 export type AgentWakeClaim = {
   agent: Agent;
-  participant: Participant;
+  user: User;
   wakeId: string;
   claimToken: string;
   wakeNumber: number;
@@ -266,10 +266,10 @@ export type AgentWakeClaim = {
 };
 
 export type AgentWakeContext = AgentWakeClaim & {
-  workingContext: RepresentativeWorkingContext;
+  workingContext: AgentWorkingContext;
 };
 
-export type RepresentativeAgentTaskStatus =
+export type AgentTaskStatus =
   | 'idle'
   | 'running'
   | 'waiting'
@@ -277,11 +277,11 @@ export type RepresentativeAgentTaskStatus =
   | 'complete'
   | 'failed';
 
-export type RepresentativeAgentTaskView = {
+export type AgentTaskView = {
   taskId: string;
   agentId: string;
   enabled: boolean;
-  status: RepresentativeAgentTaskStatus;
+  status: AgentTaskStatus;
   progress: string;
   intervalMs: number;
   nextRunAt?: string;
@@ -291,7 +291,7 @@ export type RepresentativeAgentTaskView = {
 };
 
 export type BackgroundChecksView = {
-  /** Participant or network task preference, independent of the operator gate. */
+  /** User or network task preference, independent of the operator gate. */
   enabled: boolean;
   /** Durable service-wide admission gate controlled only by an operator. */
   dispatchEnabled: boolean;
@@ -299,13 +299,13 @@ export type BackgroundChecksView = {
   intervalMs: number;
   nextRunAt?: string;
   lastRunAt?: string;
-  tasks: RepresentativeAgentTaskView[];
+  tasks: AgentTaskView[];
 };
 
 export type DiscoveryWorkspaceSnapshot = {
   workspace: DiscoveryWorkspace;
-  user: ParticipantView;
-  representative: AgentView;
+  user: UserView;
+  agent: AgentView;
   interest?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
   networkActivity?: NetworkActivityView;
@@ -320,7 +320,7 @@ export type DiscoveryWorkspaceSnapshot = {
 
 export type NetworkDiagnosticsSnapshot = {
   workspace: DiscoveryWorkspace;
-  participants: ParticipantView[];
+  users: UserView[];
   agents: AgentView[];
   events: DiscoveryEvent[];
   backgroundChecks: BackgroundChecksView;

@@ -119,7 +119,7 @@ test('a longitudinal phase emits only its ordered idempotent inputs', async () =
   assert.equal(second.length, first.length);
 });
 
-test('a longitudinal phase rejects an unknown participant scenario', async () => {
+test('a longitudinal phase rejects an unknown user scenario', async () => {
   const fake = createFakeApi();
   const phase = {
     key: 'invalid',
@@ -140,31 +140,31 @@ test('a longitudinal phase rejects an unknown participant scenario', async () =>
 });
 
 function createFakeApi() {
-  const registrations: Parameters<NetworkSimulatorApi['registerParticipant']>[0][] = [];
-  const inputs: Parameters<NetworkSimulatorApi['submitParticipantInput']>[0][] = [];
-  const participantIdByRegistrationKey = new Map<string, string>();
+  const registrations: Parameters<NetworkSimulatorApi['registerUser']>[0][] = [];
+  const inputs: Parameters<NetworkSimulatorApi['submitUserInput']>[0][] = [];
+  const userIdByRegistrationKey = new Map<string, string>();
   const api: NetworkSimulatorApi = {
-    async registerParticipant(input) {
+    async registerUser(input) {
       registrations.push(input);
-      const participantId = participantIdByRegistrationKey.get(
+      const userId = userIdByRegistrationKey.get(
         input.registrationKey,
-      ) ?? `participant-${participantIdByRegistrationKey.size + 1}`;
-      participantIdByRegistrationKey.set(input.registrationKey, participantId);
+      ) ?? `user-${userIdByRegistrationKey.size + 1}`;
+      userIdByRegistrationKey.set(input.registrationKey, userId);
       return {
         created: registrations.filter(({ registrationKey }) => (
           registrationKey === input.registrationKey
         )).length === 1,
-        participantId,
-        representativeAgentId: `agent-${participantId}`,
+        userId,
+        agentId: `agent-${userId}`,
         displayName: input.displayName,
         kind: 'synthetic',
       };
     },
-    async submitParticipantInput(input) {
+    async submitUserInput(input) {
       inputs.push(input);
       return {
-        participantId: input.participantId,
-        representativeAgentId: `agent-${input.participantId}`,
+        userId: input.userId,
+        agentId: `agent-${input.userId}`,
         eventId: `event-${inputs.length}`,
         sequence: inputs.length,
       };

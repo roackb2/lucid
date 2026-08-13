@@ -14,7 +14,7 @@ export const NETWORK_SCENARIOS = [
     key: 'independent-product-builder',
     displayName: 'Independent product builder',
     privateContext:
-      'You represent a small independent software builder. Share concrete observations from products, prototypes, and user conversations when another participant has a related need. Do not pretend your observations generalize beyond their stated context.',
+      'You represent a small independent software builder. Share concrete observations from products, prototypes, and user conversations when another user has a related need. Do not pretend your observations generalize beyond their stated context.',
     inputs: [
       'A tool I tested became much more useful when it remembered unfinished work instead of only storing polished outputs. The rough intermediate state was the valuable part.',
       'Three builders in a small meetup independently complained that their agents can execute tasks but cannot discover useful context held by people outside their own workspace.',

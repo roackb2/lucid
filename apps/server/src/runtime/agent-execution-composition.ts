@@ -1,26 +1,26 @@
 import type { LucidConfig } from '../config.js';
-import type { RepresentativeWakeStore } from '../lucid/representative/store.js';
+import type { AgentWakeStore } from '../lucid/agent/store.js';
 import type { LucidLogger } from '../logger.js';
 import {
-  LongLivedRepresentativeAgentExecutionHost,
-  TargetedRepresentativeAgentExecutionHost,
-  type RepresentativeAgentExecutionHost,
-  type RepresentativeHeartbeatTaskAuthority,
-} from './representative-agent-execution-host.js';
-import { RepresentativeAgentWorker } from './representative-agent-worker.js';
+  LongLivedAgentExecutionHost,
+  TargetedAgentExecutionHost,
+  type AgentExecutionHost,
+  type AgentHeartbeatTaskAuthority,
+} from './agent-execution-host.js';
+import { AgentWorker } from './agent-worker.js';
 
-export type RepresentativeAgentExecutionCompositionOptions = {
+export type AgentExecutionCompositionOptions = {
   config: LucidConfig;
-  store: RepresentativeWakeStore;
-  taskAuthority: RepresentativeHeartbeatTaskAuthority;
+  store: AgentWakeStore;
+  taskAuthority: AgentHeartbeatTaskAuthority;
   taskIdPrefix: string;
   logger: LucidLogger;
 };
 
 /** Selects and wires the configured execution topology at the process root. */
-export function createRepresentativeAgentExecutionHost(
-  options: RepresentativeAgentExecutionCompositionOptions,
-): RepresentativeAgentExecutionHost {
+export function createAgentExecutionHost(
+  options: AgentExecutionCompositionOptions,
+): AgentExecutionHost {
   const {
     config,
     store,
@@ -29,7 +29,7 @@ export function createRepresentativeAgentExecutionHost(
     logger,
   } = options;
   if (config.heartbeatHost === 'scheduler') {
-    return new LongLivedRepresentativeAgentExecutionHost({
+    return new LongLivedAgentExecutionHost({
       authority: taskAuthority,
       workspaceRoot: config.repoRoot,
       stateRoot: config.heddleStateRoot,
@@ -49,9 +49,9 @@ export function createRepresentativeAgentExecutionHost(
     });
   }
 
-  return new TargetedRepresentativeAgentExecutionHost({
+  return new TargetedAgentExecutionHost({
     authority: taskAuthority,
-    createTarget: (handler) => new RepresentativeAgentWorker({
+    createTarget: (handler) => new AgentWorker({
       store: taskAuthority,
       handler,
       runtime: {

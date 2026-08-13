@@ -1,23 +1,23 @@
 # Lucid architecture
 
 Lucid is one TypeScript application with separate web and server workspaces.
-The server combines participant-facing APIs, domain services, PostgreSQL
-adapters, and a replaceable representative-execution host. PostgreSQL remains
+The server combines user-facing APIs, domain services, PostgreSQL
+adapters, and a replaceable agent-execution host. PostgreSQL remains
 the authority when the API process or execution worker restarts.
 
 ```mermaid
 flowchart LR
-  Browser["Participant web workspace"] --> API["Authenticated tRPC API"]
+  Browser["User web workspace"] --> API["Authenticated tRPC API"]
   Simulator["Loopback development simulator"] --> API
   API --> Workspace["Workspace service"]
-  API --> Network["Participant network service"]
+  API --> Network["User network service"]
   Workspace --> WorkspaceStore["Workspace store port"]
   Network --> NetworkStore["Network store port"]
-  Heartbeat["Representative heartbeat service"] --> WakeStore["Wake store port"]
+  Heartbeat["Agent heartbeat service"] --> WakeStore["Wake store port"]
   Heartbeat --> WorkingContext["Workspace working-context port"]
   Heartbeat --> Tasks["Heddle task authority"]
   Tasks --> Host["Bounded execution host"]
-  Host --> Runner["Heddle representative runner"]
+  Host --> Runner["Heddle agent runner"]
   Runner --> Tools["Lucid communication tools"]
   Tools --> CommunicationStore["Communication store port"]
   WorkspaceStore --> WorkspaceAdapter["Workspace PostgreSQL adapter"]
@@ -34,9 +34,9 @@ flowchart LR
 
 ## Applications and transport
 
-`apps/web` renders one local participant's discovery workspace. It fetches one
-authoritative snapshot and sends participant intent such as saving an interest,
-requesting a check, pausing a representative, submitting feedback, or giving
+`apps/web` renders one local user's discovery workspace. It fetches one
+authoritative snapshot and sends user intent such as saving an interest,
+requesting a check, pausing a agent, submitting feedback, or giving
 direct guidance. React does not decide mailbox visibility, infer whether mail
 is unread, or reconstruct finding causality.
 
@@ -44,12 +44,12 @@ is unread, or reconstruct finding causality.
 surfaces:
 
 - `system.health` reports basic process health without authentication;
-- `discovery` is the participant-scoped product API used by the web app;
+- `discovery` is the user-scoped product API used by the web app;
 - `operator` controls the durable global dispatch gate; and
-- `development` provides loopback-only participant registration, synthetic
+- `development` provides loopback-only user registration, synthetic
   input, diagnostics, lifecycle changes, and reset for simulation.
 
-The other routes derive their role and local participant identity from the
+The other routes derive their role and local user identity from the
 authenticated request rather than accepting identity in ordinary product
 input.
 
@@ -57,42 +57,42 @@ input.
 
 The server is organized around behavior rather than tables:
 
-- the workspace service owns the local participant's interest, manual checks,
-  findings, feedback, guidance, and participant-scoped projection;
-- the participant-network service owns trusted ingress, participant lifecycle,
-  development diagnostics, and coordination with representative tasks;
-- the representative heartbeat service reconciles participants to Heddle
+- the workspace service owns the local user's interest, manual checks,
+  findings, feedback, guidance, and user-scoped projection;
+- the user-network service owns trusted ingress, user lifecycle,
+  development diagnostics, and coordination with agent tasks;
+- the agent heartbeat service reconciles users to Heddle
   tasks, claims fixed mailbox wakes, enforces completion prerequisites, routes
   new messages, and coordinates pause/recovery; and
-- the communication tool service grants one representative a bounded set of
+- the communication tool service grants one agent a bounded set of
   visible reads and validated writes for one wake.
 
 Each service owns a narrow primary store port expressed in domain operations.
 Its PostgreSQL adapter lives in the same behavior slice and implements that
 port with the real Drizzle queries and transactions. A service may also consume
-an explicitly named projection port owned by another slice. Representative wake
+an explicitly named projection port owned by another slice. Agent wake
 orchestration, for example, reads retry-stable working context through the
-workspace-owned `RepresentativeWorkingContextReader`; it does not import the
+workspace-owned `AgentWorkingContextReader`; it does not import the
 workspace adapter.
 
 Shared persistence code owns only the schema, policy-free record codecs, and
 the disposable test fixture. Neutral PostgreSQL infrastructure owns pool and
-migration mechanics. Mailbox visibility, participant projection, workspace
+migration mechanics. Mailbox visibility, user projection, workspace
 identity, initialization, and read-model policy remain in their owning slices.
 Neither shared location becomes a second domain layer.
 
 This is deliberately not repository-per-table CRUD. Operations such as
-participant registration or wake claiming span several records and must remain
+user registration or wake claiming span several records and must remain
 one domain transaction.
 
 ### Code map
 
 | Path | Responsibility |
 | --- | --- |
-| `apps/server/src/lucid/workspace/` | Participant workspace service, primary store port, secondary working-context port, PostgreSQL adapter, and workspace policy |
-| `apps/server/src/lucid/network/` | Participant ingress/lifecycle service, store port, PostgreSQL adapter, and participant-visibility policy |
-| `apps/server/src/lucid/representative/` | Representative wake/task coordination, store port, PostgreSQL adapter, runner, and mailbox policy |
-| `apps/server/src/lucid/representative/communication/` | Bounded communication tools, store port, and PostgreSQL adapter |
+| `apps/server/src/lucid/workspace/` | User workspace service, primary store port, secondary working-context port, PostgreSQL adapter, and workspace policy |
+| `apps/server/src/lucid/network/` | User ingress/lifecycle service, store port, PostgreSQL adapter, and user-visibility policy |
+| `apps/server/src/lucid/agent/` | Agent wake/task coordination, store port, PostgreSQL adapter, runner, and mailbox policy |
+| `apps/server/src/lucid/agent/communication/` | Bounded communication tools, store port, and PostgreSQL adapter |
 | `apps/server/src/lucid/persistence/postgres/` | Shared Lucid schema, policy-free record codecs, and disposable PostgreSQL test fixture only |
 | `apps/server/src/infrastructure/postgres/` | Neutral PostgreSQL pool and migration mechanics without Lucid product policy |
 | `apps/server/src/runtime/heartbeat/postgres/` | PostgreSQL adapter for Heddle's public task-authority contracts |
@@ -116,8 +116,8 @@ One PostgreSQL database contains two separately owned schemas:
 ```text
 lucid
 ├── discovery_workspaces
-├── participants
-├── representative_agents
+├── users
+├── agents
 └── discovery_events
 
 heddle
@@ -127,8 +127,8 @@ heddle
 └── immutable run history
 ```
 
-Lucid is event-centered but not purely event-sourced. Participant and
-representative rows hold lifecycle and cursor state, while append-only
+Lucid is event-centered but not purely event-sourced. User and
+agent rows hold lifecycle and cursor state, while append-only
 `discovery_events` preserve interests, inputs, messages, findings, feedback,
 guidance, working-note revisions, and wake outcomes. Read models such as
 network progress and guidance follow-through are derived from these durable
@@ -139,9 +139,9 @@ but their ownership remains separate. Migrations are checked in and applied by
 an explicit command before startup. `LUCID_STATE_ROOT` contains local Heddle
 execution artifacts only.
 
-## Representative execution
+## Agent execution
 
-Every non-retired participant has a derived Heddle heartbeat task. Participant
+Every non-retired user has a derived Heddle heartbeat task. User
 registration reconciles that task; persisting new mailbox input creates a
 durable Heddle run request. The default targeted host then:
 
@@ -174,54 +174,54 @@ and MCP authority, independently verifies the MCP bearer, and supplies the
 strict HTTP/SSE `ExecutionHost` port. Lucid contributes one read-only workspace
 projection through its product MCP service. The optional hosted profile now
 composes these pieces into ordinary server startup, but it does not move
-representative heartbeats out of process.
+agent heartbeats out of process.
 
 ## Agent boundary
 
-The representative runs through Heddle with default tools and plan tools
+The agent runs through Heddle with default tools and plan tools
 disabled. Lucid supplies only its domain tools:
 
 - read visible messages through the wake's fixed horizon;
-- update the representative's private working note;
+- update the agent's private working note;
 - post a shared message;
 - message an encountered active peer directly;
-- report a sourced finding privately to the represented participant; or
+- report a sourced finding privately to the represented user; or
 - finish without action.
 
 Deterministic code validates visibility, reply routing, source references,
 peer eligibility, action budgets, and retry identities. The model decides what
 the text means and whether it appears relevant. Tool execution is serialized
-within a wake; independent representatives may run concurrently.
+within a wake; independent agents may run concurrently.
 
 ## Authentication and trust boundaries
 
 Three request authenticators exist:
 
 - `development` accepts only a loopback-bound server and maps the local socket
-  to the seeded participant with participant and operator roles;
-- `static-token` accepts distinct high-entropy participant and operator bearer
+  to the seeded user with user and operator roles;
+- `static-token` accepts distinct high-entropy user and operator bearer
   tokens and is limited to a private single-user pilot over TLS; and
 - `supabase` verifies a Google-backed Supabase access token through the
   project's JWKS, then resolves the exact `(issuer, subject)` to a durable
-  Lucid participant. Email and provider profile claims are never product
+  Lucid user. Email and provider profile claims are never product
   authorization.
 
 The browser uses development mode without a credential on loopback, or sends
 its short-lived Supabase session in hosted mode. An authenticated but unbound
-subject can access only the identity/onboarding surface; participant routes and
+subject can access only the identity/onboarding surface; user routes and
 hosted execution require a durable binding. Authorization headers, tokens,
-model credentials, database URLs, and private participant context must not be
+model credentials, database URLs, and private user context must not be
 logged.
 
 ## Deployment and process lifecycle
 
 Startup validates configuration, opens PostgreSQL, initializes missing Lucid
 defaults without stealing live claims, recovers eligible expired Heddle work,
-reconciles representative tasks, starts the selected execution host, and then
+reconciles agent tasks, starts the selected execution host, and then
 accepts HTTP traffic.
 
 Shutdown stops new HTTP work and execution admission, aborts and awaits locally
-owned representative work, then closes PostgreSQL last. A process must never
+owned agent work, then closes PostgreSQL last. A process must never
 close persistence while an owned wake can still settle.
 
 The current targeted dispatcher is an in-process delivery mechanism over a

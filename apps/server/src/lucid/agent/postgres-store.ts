@@ -1,5 +1,5 @@
 /**
- * PostgreSQL adapter for representative scheduling and wake ownership.
+ * PostgreSQL adapter for agent scheduling and wake ownership.
  *
  * Wake selection, claim fencing, cursor settlement, recovery, and global
  * dispatch state remain in this adapter because their invariants depend on
@@ -20,43 +20,43 @@ import {
 } from 'drizzle-orm';
 import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
 import {
-  LOCAL_PARTICIPANT,
-  LOCAL_REPRESENTATIVE,
-} from '../local-participant.js';
+  LOCAL_USER,
+  LOCAL_AGENT,
+} from '../local-user.js';
 import type {
   Agent,
   AgentWakeClaim,
   AppendDiscoveryEventInput,
   DiscoveryEvent,
   DiscoveryWorkspace,
-  Participant,
+  User,
 } from '../discovery-types.js';
 import {
   readMetadataSequence,
   toAgent,
   toDiscoveryEvent,
   toDiscoveryWorkspace,
-  toParticipant,
+  toUser,
 } from '../persistence/postgres/records.js';
 import {
   postgresDiscoveryEvents as discoveryEvents,
   postgresDiscoveryWorkspaces as discoveryWorkspaces,
-  postgresParticipants as participants,
-  postgresRepresentativeAgents as representativeAgents,
+  postgresUsers as users,
+  postgresAgents as agents,
 } from '../persistence/postgres/schema.js';
 import { LUCID_WORKSPACE_ID } from '../workspace/workspace-identity.js';
 import { AGENT_PRINCIPAL_EVENT_KINDS } from './mailbox-policy.js';
 import type {
   RecordWakeCompletionInput,
-  RepresentativeWakeStore,
+  AgentWakeStore,
 } from './store.js';
 
 type LucidPostgresTransaction = Parameters<
   Parameters<PostgresDatabase['orm']['transaction']>[0]
 >[0];
 
-export class PostgresRepresentativeWakeStore
-implements RepresentativeWakeStore {
+export class PostgresAgentWakeStore
+implements AgentWakeStore {
   constructor(private readonly database: PostgresDatabase) {}
 
   async initialize(): Promise<void> {
@@ -107,36 +107,36 @@ implements RepresentativeWakeStore {
     return await this.requireWorkspace();
   }
 
-  async listParticipants(): Promise<Participant[]> {
+  async listUsers(): Promise<User[]> {
     return (await this.database.orm
       .select()
-      .from(participants)
-      .where(eq(participants.workspaceId, LUCID_WORKSPACE_ID))
-      .orderBy(asc(participants.createdAt)))
-      .map(toParticipant);
+      .from(users)
+      .where(eq(users.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(asc(users.createdAt)))
+      .map(toUser);
   }
 
   async listAgents(): Promise<Agent[]> {
     return (await this.database.orm
       .select()
-      .from(representativeAgents)
-      .where(eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID))
-      .orderBy(asc(representativeAgents.sortOrder)))
+      .from(agents)
+      .where(eq(agents.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(asc(agents.sortOrder)))
       .map(toAgent);
   }
 
   async listActiveAgents(): Promise<Agent[]> {
-    const [participantList, agentList] = await Promise.all([
-      this.listParticipants(),
+    const [userList, agentList] = await Promise.all([
+      this.listUsers(),
       this.listAgents(),
     ]);
-    const activeParticipantIds = new Set(
-      participantList
-        .filter((participant) => participant.status === 'active')
-        .map((participant) => participant.id),
+    const activeUserIds = new Set(
+      userList
+        .filter((user) => user.status === 'active')
+        .map((user) => user.id),
     );
     return agentList.filter(
-      (agent) => activeParticipantIds.has(agent.participantId),
+      (agent) => activeUserIds.has(agent.userId),
     );
   }
 
@@ -184,33 +184,33 @@ implements RepresentativeWakeStore {
 
       const [agentRow] = await transaction
         .select()
-        .from(representativeAgents)
+        .from(agents)
         .where(and(
-          eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-          eq(representativeAgents.id, agentId),
+          eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+          eq(agents.id, agentId),
         ))
         .for('update')
         .limit(1);
       if (!agentRow) {
-        throw new Error(`Representative agent not found: ${agentId}`);
+        throw new Error(`Agent not found: ${agentId}`);
       }
       const selectedAgent = toAgent(agentRow);
       if (selectedAgent.status === 'running') {
-        throw new Error(`Representative agent is already running: ${agentId}`);
+        throw new Error(`Agent is already running: ${agentId}`);
       }
 
-      const [participantRow] = await transaction
+      const [userRow] = await transaction
         .select()
-        .from(participants)
+        .from(users)
         .where(and(
-          eq(participants.workspaceId, LUCID_WORKSPACE_ID),
-          eq(participants.id, selectedAgent.participantId),
+          eq(users.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.id, selectedAgent.userId),
         ))
         .limit(1);
-      if (!participantRow) {
-        throw new Error(`Participant not found: ${selectedAgent.participantId}`);
+      if (!userRow) {
+        throw new Error(`User not found: ${selectedAgent.userId}`);
       }
-      if (toParticipant(participantRow).status !== 'active') {
+      if (toUser(userRow).status !== 'active') {
         return undefined;
       }
 
@@ -260,7 +260,7 @@ implements RepresentativeWakeStore {
       if (!visibleEvents.length) {
         if (selectedAgent.activeWakeId) {
           await transaction
-            .update(representativeAgents)
+            .update(agents)
             .set({
               activeWakeId: null,
               activeWakeClaimToken: null,
@@ -268,7 +268,7 @@ implements RepresentativeWakeStore {
               activeWakeHorizon: null,
               updatedAt: now,
             })
-            .where(eq(representativeAgents.id, selectedAgent.id));
+            .where(eq(agents.id, selectedAgent.id));
         }
         return undefined;
       }
@@ -291,7 +291,7 @@ implements RepresentativeWakeStore {
           .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID));
       }
       await transaction
-        .update(representativeAgents)
+        .update(agents)
         .set({
           status: 'running',
           runCount: selectedAgent.runCount + 1,
@@ -302,7 +302,7 @@ implements RepresentativeWakeStore {
           lastRunAt: now,
           updatedAt: now,
         })
-        .where(eq(representativeAgents.id, selectedAgent.id));
+        .where(eq(agents.id, selectedAgent.id));
       if (!resumingWake) {
         await transaction.insert(discoveryEvents).values({
           id: `event_${randomUUID()}`,
@@ -338,7 +338,7 @@ implements RepresentativeWakeStore {
           lastRunAt: now,
           updatedAt: now,
         },
-        participant: toParticipant(participantRow),
+        user: toUser(userRow),
         wakeId: activeWakeId,
         claimToken,
         wakeNumber,
@@ -355,7 +355,7 @@ implements RepresentativeWakeStore {
   ): Promise<void> {
     const agent = await this.requireAgent(agentId);
     const updated = await this.database.orm
-      .update(representativeAgents)
+      .update(agents)
       .set({
         status: 'idle',
         lastSeenSequence: Math.max(agent.lastSeenSequence, horizonSequence),
@@ -366,15 +366,15 @@ implements RepresentativeWakeStore {
         updatedAt: dayjs().toISOString(),
       })
       .where(and(
-        eq(representativeAgents.id, agentId),
-        eq(representativeAgents.status, 'running'),
-        eq(representativeAgents.activeWakeClaimToken, claimToken),
-        eq(representativeAgents.activeWakeHorizon, horizonSequence),
+        eq(agents.id, agentId),
+        eq(agents.status, 'running'),
+        eq(agents.activeWakeClaimToken, claimToken),
+        eq(agents.activeWakeHorizon, horizonSequence),
       ))
-      .returning({ id: representativeAgents.id });
+      .returning({ id: agents.id });
     if (!updated.length) {
       throw new Error(
-        `Wake claim is no longer owned by representative agent: ${agentId}`,
+        `Wake claim is no longer owned by agent: ${agentId}`,
       );
     }
   }
@@ -398,10 +398,10 @@ implements RepresentativeWakeStore {
     return await this.database.orm.transaction(async (transaction) => {
       const [agentRow] = await transaction
         .select()
-        .from(representativeAgents)
+        .from(agents)
         .where(and(
-          eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-          eq(representativeAgents.id, agentId),
+          eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+          eq(agents.id, agentId),
         ))
         .for('update')
         .limit(1);
@@ -414,9 +414,9 @@ implements RepresentativeWakeStore {
       }
 
       await transaction
-        .update(representativeAgents)
+        .update(agents)
         .set({ status: 'idle', updatedAt: now })
-        .where(eq(representativeAgents.id, agentId));
+        .where(eq(agents.id, agentId));
       await transaction.insert(discoveryEvents).values({
         id: `event_${randomUUID()}`,
         workspaceId: LUCID_WORKSPACE_ID,
@@ -425,7 +425,7 @@ implements RepresentativeWakeStore {
         actorAgentId: agentId,
         idempotencyKey:
           `${agentRow.activeWakeId ?? agentId}:recovered:${interruptedExecutionId}`,
-        title: 'Interrupted representative wake recovered',
+        title: 'Interrupted agent wake recovered',
         content:
           'The prior execution lease expired. Its unread mailbox horizon remains available for a fenced retry.',
         metadata: {
@@ -466,7 +466,7 @@ implements RepresentativeWakeStore {
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(discoveryEvents.kind, 'representative_note_updated'),
+        eq(discoveryEvents.kind, 'agent_note_updated'),
         eq(discoveryEvents.actorAgentId, agentId),
         eq(discoveryEvents.targetAgentId, agentId),
         gt(discoveryEvents.sequence, sourceSequence),
@@ -508,7 +508,7 @@ implements RepresentativeWakeStore {
           kind: input.kind,
           actorAgentId: input.actorAgentId,
           targetAgentId: input.targetAgentId,
-          targetParticipantId: input.targetParticipantId,
+          targetUserId: input.targetUserId,
           replyToSequence: input.replyToSequence,
           idempotencyKey: input.idempotencyKey,
           title: input.title,
@@ -544,17 +544,17 @@ implements RepresentativeWakeStore {
     status: 'idle' | 'error',
   ): Promise<void> {
     const updated = await this.database.orm
-      .update(representativeAgents)
+      .update(agents)
       .set({ status, updatedAt: dayjs().toISOString() })
       .where(and(
-        eq(representativeAgents.id, agentId),
-        eq(representativeAgents.status, 'running'),
-        eq(representativeAgents.activeWakeClaimToken, claimToken),
+        eq(agents.id, agentId),
+        eq(agents.status, 'running'),
+        eq(agents.activeWakeClaimToken, claimToken),
       ))
-      .returning({ id: representativeAgents.id });
+      .returning({ id: agents.id });
     if (!updated.length) {
       throw new Error(
-        `Wake claim is no longer owned by representative agent: ${agentId}`,
+        `Wake claim is no longer owned by agent: ${agentId}`,
       );
     }
   }
@@ -579,14 +579,14 @@ implements RepresentativeWakeStore {
   private async requireAgent(id: string): Promise<Agent> {
     const [row] = await this.database.orm
       .select()
-      .from(representativeAgents)
+      .from(agents)
       .where(and(
-        eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(representativeAgents.id, id),
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.id, id),
       ))
       .limit(1);
     if (!row) {
-      throw new Error(`Representative agent not found: ${id}`);
+      throw new Error(`Agent not found: ${id}`);
     }
     return toAgent(row);
   }
@@ -614,8 +614,8 @@ implements RepresentativeWakeStore {
       backgroundChecksEnabled,
     });
     await transaction.insert(discoveryWorkspaces).values(rows.workspace);
-    await transaction.insert(participants).values(rows.participant);
-    await transaction.insert(representativeAgents).values(rows.representative);
+    await transaction.insert(users).values(rows.user);
+    await transaction.insert(agents).values(rows.agent);
     await transaction.insert(discoveryEvents).values(rows.event);
   }
 }
@@ -634,15 +634,15 @@ function createInitialWorkspaceRows(input: {
       createdAt: input.now,
       updatedAt: input.now,
     },
-    participant: {
-      ...LOCAL_PARTICIPANT,
+    user: {
+      ...LOCAL_USER,
       workspaceId: LUCID_WORKSPACE_ID,
       contextConsentAt: input.now,
       createdAt: input.now,
       updatedAt: input.now,
     },
-    representative: {
-      ...LOCAL_REPRESENTATIVE,
+    agent: {
+      ...LOCAL_AGENT,
       workspaceId: LUCID_WORKSPACE_ID,
       status: 'idle' as const,
       runCount: 0,
@@ -658,7 +658,7 @@ function createInitialWorkspaceRows(input: {
       kind: 'workspace_created' as const,
       title: 'Discovery workspace created',
       content:
-        'The local participant is represented by Lucid. Other participants enter through the network ingress rather than product defaults.',
+        'The local user is represented by Lucid. Other users enter through the network ingress rather than product defaults.',
       metadata: {
         versionId,
         visibility: 'shared' as const,

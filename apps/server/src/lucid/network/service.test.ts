@@ -1,25 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
-  RepresentativeAgentHeartbeatService,
-} from '../representative/heartbeat-service.js';
-import { ParticipantNetworkService } from './service.js';
+  AgentHeartbeatService,
+} from '../agent/heartbeat-service.js';
+import { UserNetworkService } from './service.js';
 import type {
-  ParticipantNetworkStore,
-  ParticipantWithAgent,
+  UserNetworkStore,
+  UserWithAgent,
 } from './store.js';
 
-describe('participant network identity enrollment', () => {
-  it('reconciles the new representative and returns product identifiers', async () => {
-    const enrolled = participantWithAgent();
-    const enrollAuthenticatedParticipant = vi.fn(async () => enrolled);
+describe('user network identity enrollment', () => {
+  it('reconciles the new agent and returns product identifiers', async () => {
+    const enrolled = userWithAgent();
+    const enrollAuthenticatedUser = vi.fn(async () => enrolled);
     const reconcileAgentTasks = vi.fn(async () => undefined);
-    const service = new ParticipantNetworkService(
-      { enrollAuthenticatedParticipant } as unknown as ParticipantNetworkStore,
-      { reconcileAgentTasks } as unknown as RepresentativeAgentHeartbeatService,
+    const service = new UserNetworkService(
+      { enrollAuthenticatedUser } as unknown as UserNetworkStore,
+      { reconcileAgentTasks } as unknown as AgentHeartbeatService,
       { model: 'test-model', heddleVersion: 'test-version' },
     );
 
-    await expect(service.enrollAuthenticatedParticipant({
+    await expect(service.enrollAuthenticatedUser({
       issuer: 'https://identity.example.test',
       subject: 'verified-subject',
       displayName: 'Avery',
@@ -27,22 +27,22 @@ describe('participant network identity enrollment', () => {
       contextApproved: true,
     })).resolves.toEqual({
       created: true,
-      participantId: enrolled.participant.id,
-      representativeAgentId: enrolled.agent.id,
+      userId: enrolled.user.id,
+      agentId: enrolled.agent.id,
       displayName: 'Avery',
       kind: 'human',
     });
-    expect(enrollAuthenticatedParticipant).toHaveBeenCalledOnce();
+    expect(enrollAuthenticatedUser).toHaveBeenCalledOnce();
     expect(reconcileAgentTasks).toHaveBeenCalledOnce();
   });
 });
 
-function participantWithAgent(): ParticipantWithAgent {
+function userWithAgent(): UserWithAgent {
   const now = '2026-08-13T00:00:00.000Z';
   return {
     created: true,
-    participant: {
-      id: 'participant_avery',
+    user: {
+      id: 'user_avery',
       workspaceId: 'lucid-workspace',
       kind: 'human',
       status: 'active',
@@ -55,10 +55,10 @@ function participantWithAgent(): ParticipantWithAgent {
     agent: {
       id: 'agent_avery',
       workspaceId: 'lucid-workspace',
-      participantId: 'participant_avery',
+      userId: 'user_avery',
       sortOrder: 2,
-      name: 'Avery representative',
-      role: 'Personal representative',
+      name: 'Avery agent',
+      role: 'Personal agent',
       color: '#ffffff',
       purpose: 'Represent Avery in the network.',
       instructions: 'Act for Avery.',

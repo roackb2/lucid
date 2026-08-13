@@ -2,7 +2,7 @@
 
 This boundary implements Heddle's public `HeartbeatTargetedTaskStore` for
 request-routed hosted workers. It persists framework-owned task state in the
-PostgreSQL `heddle` schema while Lucid's participants, mailbox, findings, and
+PostgreSQL `heddle` schema while Lucid's users, mailbox, findings, and
 other product state remain in the separate `lucid` schema.
 
 ## Owns
@@ -24,7 +24,7 @@ or operator update.
 
 ## Does not own
 
-- participant identity, authorization, mailbox semantics, or agent findings;
+- user identity, authorization, mailbox semantics, or agent findings;
 - queue delivery, worker retries, visibility timeouts, or dispatch policy;
 - authorization decisions, tenant quotas, or global Lucid pause policy;
 - model execution or Heddle runtime state outside the task-store contract;

@@ -1,11 +1,11 @@
 # Static SPA request handler
 
-This request handler exposes the pre-built Lucid participant SPA from the same
+This request handler exposes the pre-built Lucid user SPA from the same
 origin as the server. `sirv` owns static file delivery, including content types,
 ETags, ranges, and streaming. This boundary owns only SPA navigation fallback,
 cache and security headers, and a fail-fast startup check for `index.html`.
 
-It does not own participant authentication, tRPC procedures, hosted execution,
+It does not own user authentication, tRPC procedures, hosted execution,
 TLS, or product projections. The server composition root routes `/healthz`,
 hosted-execution endpoints, and `/api/trpc/` before delegating remaining GET and
 HEAD requests here.

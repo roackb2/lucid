@@ -1,4 +1,4 @@
-/** Persistence port exposed to one representative's communication tools. */
+/** Persistence port exposed to one agent's communication tools. */
 import type {
   Agent,
   AppendDiscoveryEventInput,
@@ -6,7 +6,7 @@ import type {
 } from '../../discovery-types.js';
 
 export type CommunicationEventKind =
-  | 'representative_note_updated'
+  | 'agent_note_updated'
   | 'shared_message'
   | 'direct_message'
   | 'finding_reported'
@@ -44,8 +44,8 @@ export interface AgentCommunicationStore {
     agentId: string,
     sourceSequence: number,
   ): Promise<boolean>;
-  hasParticipantFindingUsingAnyOrigin(
-    participantId: string,
+  hasUserFindingUsingAnyOrigin(
+    userId: string,
     sourceEventIds: number[],
   ): Promise<boolean>;
   hasAgentContributedToRequestThread(

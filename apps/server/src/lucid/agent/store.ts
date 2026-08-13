@@ -1,11 +1,11 @@
-/** Persistence port for representative wake orchestration. */
+/** Persistence port for agent wake orchestration. */
 import type {
   Agent,
   AgentWakeClaim,
   AppendDiscoveryEventInput,
   DiscoveryEvent,
   DiscoveryWorkspace,
-  Participant,
+  User,
 } from '../discovery-types.js';
 
 export type RecordWakeCompletionInput = Omit<
@@ -13,11 +13,11 @@ export type RecordWakeCompletionInput = Omit<
   'kind'
 >;
 
-export interface RepresentativeWakeStore {
+export interface AgentWakeStore {
   reset(options: { backgroundChecksEnabled: boolean }): Promise<void>;
   readWorkspace(): Promise<DiscoveryWorkspace>;
   setBackgroundChecksEnabled(enabled: boolean): Promise<DiscoveryWorkspace>;
-  listParticipants(): Promise<Participant[]>;
+  listUsers(): Promise<User[]>;
   listAgents(): Promise<Agent[]>;
   listActiveAgents(): Promise<Agent[]>;
   readEvent(sequence: number): Promise<DiscoveryEvent | undefined>;

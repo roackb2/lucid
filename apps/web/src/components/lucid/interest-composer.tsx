@@ -180,7 +180,7 @@ export function InterestComposer({
                 request thread.
               </p>
               <small>
-                {failedTask.error ?? 'The representative wake failed.'}
+                {failedTask.error ?? 'The agent wake failed.'}
                 {failedTask.nextRunAt
                   ? ` Next automatic retry ${dayjs(failedTask.nextRunAt).format('MMM D, HH:mm')}.`
                   : ''}
@@ -213,7 +213,7 @@ export function InterestComposer({
             <div>
               <strong>Preparing a privacy-minimized network request</strong>
               <p>
-                Your representative has the assignment. It is not considered
+                Your agent has the assignment. It is not considered
                 delivered until you can see what was shared here.
               </p>
             </div>

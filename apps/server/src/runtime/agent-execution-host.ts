@@ -13,18 +13,18 @@ import {
   type StopHeartbeatSchedulerOptions,
 } from '@roackb2/heddle/advanced';
 import {
-  InProcessRepresentativeTaskDispatcher,
-  type InProcessRepresentativeTaskDispatcherOptions,
-} from './in-process-representative-task-dispatcher.js';
+  InProcessAgentTaskDispatcher,
+  type InProcessAgentTaskDispatcherOptions,
+} from './in-process-agent-task-dispatcher.js';
 import type {
-  RepresentativeTaskInvocationTarget,
-} from './representative-task-invocation.js';
+  AgentTaskInvocationTarget,
+} from './agent-task-invocation.js';
 
-export type RepresentativeHeartbeatTaskAuthority =
+export type AgentHeartbeatTaskAuthority =
   HeartbeatTargetedTaskStore
   & HeartbeatTaskAdministrationService;
 
-export type StartRepresentativeAgentExecutionHostInput = {
+export type StartAgentExecutionHostInput = {
   handler: HeartbeatTaskHandler;
   globallyEnabled: boolean;
 };
@@ -35,8 +35,8 @@ export type StartRepresentativeAgentExecutionHostInput = {
  * Implementations may use one long-lived scheduler or route one bounded task
  * invocation at a time. Neither form may reimplement Heddle task policy.
  */
-export interface RepresentativeAgentExecutionHost {
-  start(input: StartRepresentativeAgentExecutionHostInput): void;
+export interface AgentExecutionHost {
+  start(input: StartAgentExecutionHostInput): void;
   notify(request: HeartbeatTaskRunRequestSignal): void;
   cancelTask(
     taskId: string,
@@ -47,16 +47,16 @@ export interface RepresentativeAgentExecutionHost {
   stop(options?: StopHeartbeatSchedulerOptions): Promise<void>;
 }
 
-export type LongLivedRepresentativeAgentExecutionHostOptions = Omit<
+export type LongLivedAgentExecutionHostOptions = Omit<
   StartHeartbeatSchedulerOptions,
   'handler' | 'runner' | 'store'
 > & {
-  authority: RepresentativeHeartbeatTaskAuthority;
+  authority: AgentHeartbeatTaskAuthority;
 };
 
 /** Zero-setup local host backed by Heddle's supported scheduler loop. */
-export class LongLivedRepresentativeAgentExecutionHost
-implements RepresentativeAgentExecutionHost {
+export class LongLivedAgentExecutionHost
+implements AgentExecutionHost {
   private handler?: HeartbeatTaskHandler;
   private scheduler?: HeartbeatSchedulerHandle;
   private started = false;
@@ -64,12 +64,12 @@ implements RepresentativeAgentExecutionHost {
   private stopped = false;
 
   constructor(
-    private readonly options: LongLivedRepresentativeAgentExecutionHostOptions,
+    private readonly options: LongLivedAgentExecutionHostOptions,
   ) {}
 
-  start(input: StartRepresentativeAgentExecutionHostInput): void {
+  start(input: StartAgentExecutionHostInput): void {
     if (this.stopped) {
-      throw new Error('A stopped representative execution host cannot restart.');
+      throw new Error('A stopped agent execution host cannot restart.');
     }
     if (this.started) {
       return;
@@ -170,16 +170,16 @@ implements RepresentativeAgentExecutionHost {
 }
 
 type TargetedDispatcherOptions = Omit<
-  InProcessRepresentativeTaskDispatcherOptions,
+  InProcessAgentTaskDispatcherOptions,
   'store' | 'target'
 >;
 
-export type TargetedRepresentativeAgentExecutionHostOptions =
+export type TargetedAgentExecutionHostOptions =
   TargetedDispatcherOptions & {
-    authority: RepresentativeHeartbeatTaskAuthority;
+    authority: AgentHeartbeatTaskAuthority;
     createTarget: (
       handler: HeartbeatTaskHandler,
-    ) => RepresentativeTaskInvocationTarget;
+    ) => AgentTaskInvocationTarget;
     /** Must be shorter than the store lease so expired ownership is revisited. */
     recoveryIntervalMs: number;
     recoveryOwnerId?: string;
@@ -192,9 +192,9 @@ export type TargetedRepresentativeAgentExecutionHostOptions =
  * The local dispatcher remains responsible for bounded delivery only. Heddle
  * performs direct lookup, due claiming, fencing, execution, and settlement.
  */
-export class TargetedRepresentativeAgentExecutionHost
-implements RepresentativeAgentExecutionHost {
-  private dispatcher?: InProcessRepresentativeTaskDispatcher;
+export class TargetedAgentExecutionHost
+implements AgentExecutionHost {
+  private dispatcher?: InProcessAgentTaskDispatcher;
   private unsubscribe?: () => void;
   private recoveryTimer?: NodeJS.Timeout;
   private recoveryPromise?: Promise<void>;
@@ -204,16 +204,16 @@ implements RepresentativeAgentExecutionHost {
   private readonly recoveryOwnerId: string;
 
   constructor(
-    private readonly options: TargetedRepresentativeAgentExecutionHostOptions,
+    private readonly options: TargetedAgentExecutionHostOptions,
   ) {
     assertPositiveInteger(options.recoveryIntervalMs, 'recoveryIntervalMs');
     this.recoveryOwnerId = options.recoveryOwnerId
       ?? `lucid-targeted-recovery:${randomUUID()}`;
   }
 
-  start(input: StartRepresentativeAgentExecutionHostInput): void {
+  start(input: StartAgentExecutionHostInput): void {
     if (this.stopped) {
-      throw new Error('A stopped representative execution host cannot restart.');
+      throw new Error('A stopped agent execution host cannot restart.');
     }
     if (this.started) {
       return;
@@ -229,7 +229,7 @@ implements RepresentativeAgentExecutionHost {
     } = this.options;
     this.started = true;
     this.paused = !input.globallyEnabled;
-    this.dispatcher = new InProcessRepresentativeTaskDispatcher({
+    this.dispatcher = new InProcessAgentTaskDispatcher({
       ...dispatcherOptions,
       store: authority,
       target: createTarget(input.handler),
@@ -387,7 +387,7 @@ function inactiveCancellationDisposition(
 function normalizeCancellationReason(reason: string): string {
   const normalized = reason.trim().replace(/\s+/g, ' ');
   if (!normalized) {
-    throw new Error('Representative task cancellation reason cannot be empty.');
+    throw new Error('Agent task cancellation reason cannot be empty.');
   }
   return normalized;
 }

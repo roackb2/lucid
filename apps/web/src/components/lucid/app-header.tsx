@@ -10,9 +10,9 @@ export function AppHeader({ snapshot, onSignOut }: AppHeaderProps) {
   const isRunning = snapshot.backgroundChecks.running;
   const isEnabled = snapshot.backgroundChecks.enabled;
   const dispatchEnabled = snapshot.backgroundChecks.dispatchEnabled;
-  const hasFailedWake = snapshot.representative.status === 'error'
+  const hasFailedWake = snapshot.agent.status === 'error'
     || snapshot.backgroundChecks.tasks.some(({ agentId, status }) => (
-      agentId === snapshot.representative.id && status === 'failed'
+      agentId === snapshot.agent.id && status === 'failed'
     ));
 
   return (

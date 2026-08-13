@@ -1,5 +1,5 @@
 /**
- * CLI entrypoint for generating independent participant input outside Lucid's
+ * CLI entrypoint for generating independent user input outside Lucid's
  * product runtime. Run once from cron or continuously during local exploration.
  */
 import { randomUUID } from 'node:crypto';
@@ -40,11 +40,11 @@ const client = createTRPCClient<AppRouter>({
   ],
 });
 const api: NetworkSimulatorApi = {
-  registerParticipant: (input) => (
-    client.development.registerParticipant.mutate(input)
+  registerUser: (input) => (
+    client.development.registerUser.mutate(input)
   ),
-  submitParticipantInput: (input) => (
-    client.development.submitParticipantInput.mutate(input)
+  submitUserInput: (input) => (
+    client.development.submitUserInput.mutate(input)
   ),
 };
 

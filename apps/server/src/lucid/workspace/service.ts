@@ -1,30 +1,30 @@
 /**
- * Application boundary for one authenticated participant's discovery workspace.
+ * Application boundary for one authenticated user's discovery workspace.
  *
- * This service deliberately returns a participant-scoped product projection.
- * Network registration, world diagnostics, and participant administration live
- * in ParticipantNetworkService and never leak into the main user snapshot.
+ * This service deliberately returns a user-scoped product projection.
+ * Network registration, world diagnostics, and user administration live
+ * in UserNetworkService and never leak into the main user snapshot.
  */
 import type { DiscoveryWorkspaceSnapshot } from '../discovery-types.js';
 import type {
-  RepresentativeAgentHeartbeatService,
-} from '../representative/heartbeat-service.js';
+  AgentHeartbeatService,
+} from '../agent/heartbeat-service.js';
 import type { DiscoveryWorkspaceStore } from './store.js';
 
 export class DiscoveryInputError extends Error {}
 
-/** Coordinates participant commands with durable mailbox execution. */
+/** Coordinates user commands with durable mailbox execution. */
 export class DiscoveryWorkspaceService {
   constructor(
     private readonly store: DiscoveryWorkspaceStore,
-    private readonly heartbeats: RepresentativeAgentHeartbeatService,
+    private readonly heartbeats: AgentHeartbeatService,
     private readonly runtime: { model: string; heddleVersion: string },
   ) {}
 
-  async snapshot(participantId: string): Promise<DiscoveryWorkspaceSnapshot> {
-    const workspace = await this.store.readSnapshot(participantId);
+  async snapshot(userId: string): Promise<DiscoveryWorkspaceSnapshot> {
+    const workspace = await this.store.readSnapshot(userId);
     const backgroundChecks = await this.heartbeats.snapshotForAgent(
-      workspace.representative.id,
+      workspace.agent.id,
     );
     return {
       ...workspace,
@@ -34,18 +34,18 @@ export class DiscoveryWorkspaceService {
   }
 
   async saveInterest(
-    participantId: string,
+    userId: string,
     content: string,
   ): Promise<DiscoveryWorkspaceSnapshot> {
-    await this.store.saveInterest(participantId, content);
-    const userAgent = await this.store.requireParticipantAgent(participantId);
-    await this.heartbeats.triggerAgent(userAgent.id);
-    return await this.snapshot(participantId);
+    await this.store.saveInterest(userId, content);
+    const agent = await this.store.requireAgentForUser(userId);
+    await this.heartbeats.triggerAgent(agent.id);
+    return await this.snapshot(userId);
   }
 
-  async runNow(participantId: string): Promise<DiscoveryWorkspaceSnapshot> {
-    const userAgent = await this.store.requireParticipantAgent(participantId);
-    const heartbeat = await this.heartbeats.snapshotForAgent(userAgent.id);
+  async runNow(userId: string): Promise<DiscoveryWorkspaceSnapshot> {
+    const agent = await this.store.requireAgentForUser(userId);
+    const heartbeat = await this.heartbeats.snapshotForAgent(agent.id);
     if (!heartbeat.dispatchEnabled) {
       throw new DiscoveryInputError(
         'The hosted demo is paused by an operator. Try again after dispatch resumes.',
@@ -57,22 +57,22 @@ export class DiscoveryWorkspaceService {
       );
     }
     if (
-      userAgent.status === 'error'
+      agent.status === 'error'
       || heartbeat.tasks.some(({ status }) => status === 'failed')
     ) {
       throw new DiscoveryInputError(
         'The current assignment needs to be retried before starting another check.',
       );
     }
-    const interest = await this.store.findSavedInterest(participantId);
+    const interest = await this.store.findSavedInterest(userId);
     if (!interest) {
       throw new DiscoveryInputError(
         'Save what Lucid should look for before running a check.',
       );
     }
     const workingContext = await this.store
-      .readRepresentativeWorkingContext(
-        userAgent.id,
+      .readAgentWorkingContext(
+        agent.id,
         Number.MAX_SAFE_INTEGER,
       );
     const latestFindingFeedback = workingContext.findings
@@ -90,22 +90,22 @@ export class DiscoveryWorkspaceService {
     const workingDirection = workingContext.workingNote?.content
       ?? 'No refined working direction has been saved yet.';
     const guidanceDirection = latestGuidance?.content
-      ?? 'No participant guidance has been received yet.';
+      ?? 'No user guidance has been received yet.';
     // A manual check is mailbox input, not a second execution path. Persist it
     // before triggering Heddle so a crash cannot lose the user's request. The
-    // request carries the representative's current learning so the next
+    // request carries the agent's current learning so the next
     // network outreach does not simply repeat the original broad assignment.
     await this.store.recordCheckRequest({
-      targetAgentId: userAgent.id,
-      targetParticipantId: userAgent.participantId,
+      targetAgentId: agent.id,
+      targetUserId: agent.userId,
       title: 'You ask Lucid to check now',
       content: `Required change to the next network request:
-Ask using the current working direction and latest participant guidance below. Preserve the concrete constraints that distinguish a useful next result; do not send only another paraphrase of the original broad assignment.
+Ask using the current working direction and latest user guidance below. Preserve the concrete constraints that distinguish a useful next result; do not send only another paraphrase of the original broad assignment.
 
 Current working direction:
 ${workingDirection}
 
-Latest participant guidance:
+Latest user guidance:
 ${guidanceDirection}
 
 Original saved assignment (background context only):
@@ -119,7 +119,7 @@ ${interest.content}`,
       },
     });
     try {
-      await this.heartbeats.triggerAgent(userAgent.id);
+      await this.heartbeats.triggerAgent(agent.id);
     } catch (error) {
       throw new DiscoveryInputError(
         error instanceof Error
@@ -127,14 +127,14 @@ ${interest.content}`,
           : 'Lucid could not queue a background check.',
       );
     }
-    return await this.snapshot(participantId);
+    return await this.snapshot(userId);
   }
 
   async retryCurrentWake(
-    participantId: string,
+    userId: string,
   ): Promise<DiscoveryWorkspaceSnapshot> {
-    const userAgent = await this.store.requireParticipantAgent(participantId);
-    const heartbeat = await this.heartbeats.snapshotForAgent(userAgent.id);
+    const agent = await this.store.requireAgentForUser(userId);
+    const heartbeat = await this.heartbeats.snapshotForAgent(agent.id);
     if (!heartbeat.dispatchEnabled) {
       throw new DiscoveryInputError(
         'The hosted demo is paused by an operator. Try again after dispatch resumes.',
@@ -146,77 +146,77 @@ ${interest.content}`,
       );
     }
     if (
-      userAgent.status !== 'error'
+      agent.status !== 'error'
       && heartbeat.tasks.every(({ status }) => status !== 'failed')
     ) {
       throw new DiscoveryInputError(
-        'There is no failed representative wake to retry.',
+        'There is no failed agent wake to retry.',
       );
     }
 
     // Retry the fixed Heddle checkpoint directly. Appending a check_requested
     // event here would create a second request thread and hide the original
     // failure instead of repairing it.
-    await this.heartbeats.triggerAgent(userAgent.id);
-    return await this.snapshot(participantId);
+    await this.heartbeats.triggerAgent(agent.id);
+    return await this.snapshot(userId);
   }
 
   async setBackgroundChecksEnabled(
-    participantId: string,
+    userId: string,
     enabled: boolean,
   ): Promise<DiscoveryWorkspaceSnapshot> {
-    const userAgent = await this.store.requireParticipantAgent(participantId);
+    const agent = await this.store.requireAgentForUser(userId);
     try {
       if (!enabled) {
-        // The durable Heddle task owns this participant's listening preference.
-        // Keep the participant active so mail accumulates for a later resume.
-        await this.heartbeats.disableAgentTasks([userAgent.id]);
+        // The durable Heddle task owns this user's listening preference.
+        // Keep the user active so mail accumulates for a later resume.
+        await this.heartbeats.disableAgentTasks([agent.id]);
       } else {
-        await this.heartbeats.enableAgentTask(userAgent.id);
-        await this.heartbeats.triggerAgent(userAgent.id);
+        await this.heartbeats.enableAgentTask(agent.id);
+        await this.heartbeats.triggerAgent(agent.id);
       }
-      return await this.snapshot(participantId);
+      return await this.snapshot(userId);
     } catch (error) {
       await this.heartbeats.reconcileAgentTasks();
       throw new DiscoveryInputError(
         error instanceof Error
           ? error.message
-          : 'Lucid could not change your representative status.',
+          : 'Lucid could not change your agent status.',
       );
     }
   }
 
   async submitFeedback(
-    participantId: string,
+    userId: string,
     findingSequence: number,
     content: string,
   ): Promise<DiscoveryWorkspaceSnapshot> {
     await this.store.saveFeedback(
-      participantId,
+      userId,
       findingSequence,
       content,
     );
-    const userAgent = await this.store.requireParticipantAgent(participantId);
-    await this.heartbeats.triggerAgent(userAgent.id);
-    return await this.snapshot(participantId);
+    const agent = await this.store.requireAgentForUser(userId);
+    await this.heartbeats.triggerAgent(agent.id);
+    return await this.snapshot(userId);
   }
 
   async submitGuidance(
-    participantId: string,
+    userId: string,
     content: string,
   ): Promise<DiscoveryWorkspaceSnapshot> {
-    if (!(await this.store.findSavedInterest(participantId))) {
+    if (!(await this.store.findSavedInterest(userId))) {
       throw new DiscoveryInputError(
         'Save what Lucid should look for before refining its direction.',
       );
     }
-    // Preserve the participant's words as raw private input. The heartbeat is
+    // Preserve the user's words as raw private input. The heartbeat is
     // responsible for producing a separate agent-authored working-note
     // revision, and cannot consume this mailbox event until that revision is
     // durably recorded.
-    await this.store.saveGuidance(participantId, content);
-    const userAgent = await this.store.requireParticipantAgent(participantId);
-    await this.heartbeats.triggerAgent(userAgent.id);
-    return await this.snapshot(participantId);
+    await this.store.saveGuidance(userId, content);
+    const agent = await this.store.requireAgentForUser(userId);
+    await this.heartbeats.triggerAgent(agent.id);
+    return await this.snapshot(userId);
   }
 }

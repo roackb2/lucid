@@ -1,5 +1,5 @@
 /**
- * Client synchronization boundary for the participant-scoped workspace.
+ * Client synchronization boundary for the user-scoped workspace.
  * Mutations install the server's authoritative projection; this hook owns
  * polling and notifications, not optimistic domain state or network admin.
  */
@@ -18,7 +18,7 @@ export function useDiscoveryWorkspace() {
   const snapshot = useQuery({
     queryKey: SNAPSHOT_KEY,
     queryFn: () => lucidClient.discovery.snapshot.query(),
-    // Poll quickly only while this participant's representative is running.
+    // Poll quickly only while this user's agent is running.
     refetchInterval: (query) => (
       query.state.data?.backgroundChecks.running ? 700 : 4_000
     ),
@@ -38,7 +38,7 @@ export function useDiscoveryWorkspace() {
     onSuccess: (nextSnapshot) => {
       installSnapshot(nextSnapshot);
       toast.success(
-        'Interest saved. Your representative is preparing a network request.',
+        'Interest saved. Your agent is preparing a network request.',
       );
     },
     onError: notifyError,
@@ -57,7 +57,7 @@ export function useDiscoveryWorkspace() {
     mutationFn: () => lucidClient.discovery.retryCurrentWake.mutate(),
     onSuccess: (nextSnapshot) => {
       installSnapshot(nextSnapshot);
-      toast.message('Your representative is retrying the current work.');
+      toast.message('Your agent is retrying the current work.');
     },
     onError: notifyError,
   });
@@ -70,8 +70,8 @@ export function useDiscoveryWorkspace() {
       installSnapshot(nextSnapshot);
       toast.message(
         nextSnapshot.backgroundChecks.enabled
-          ? 'Your representative resumed listening.'
-          : 'Your representative paused.',
+          ? 'Your agent resumed listening.'
+          : 'Your agent paused.',
       );
     },
     onError: notifyError,
@@ -83,7 +83,7 @@ export function useDiscoveryWorkspace() {
     ),
     onSuccess: (nextSnapshot) => {
       installSnapshot(nextSnapshot);
-      toast.success('Feedback saved for your representative’s next wake.');
+      toast.success('Feedback saved for your agent’s next wake.');
     },
     onError: notifyError,
   });
@@ -95,7 +95,7 @@ export function useDiscoveryWorkspace() {
     onSuccess: (nextSnapshot) => {
       installSnapshot(nextSnapshot);
       toast.success(
-        'Guidance saved. Your representative is revising its working direction.',
+        'Guidance saved. Your agent is revising its working direction.',
       );
     },
     onError: notifyError,

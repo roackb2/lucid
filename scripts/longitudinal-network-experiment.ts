@@ -1,6 +1,6 @@
 /**
  * CLI for advancing one deterministic, multi-phase Lucid learning experiment.
- * The operator remains the participant: this script supplies network events
+ * The operator remains the user: this script supplies network events
  * but never saves interest, submits feedback, or judges a finding.
  */
 import { parseArgs } from 'node:util';
@@ -53,11 +53,11 @@ if (values.list) {
       ],
     });
     const api: NetworkSimulatorApi = {
-      registerParticipant: (input) => (
-        client.development.registerParticipant.mutate(input)
+      registerUser: (input) => (
+        client.development.registerUser.mutate(input)
       ),
-      submitParticipantInput: (input) => (
-        client.development.submitParticipantInput.mutate(input)
+      submitUserInput: (input) => (
+        client.development.submitUserInput.mutate(input)
       ),
     };
 
@@ -79,7 +79,7 @@ if (values.list) {
     console.log(phase.operatorInstruction);
     console.log(next
       ? `Next phase: yarn simulate:learning --experiment-id ${values['experiment-id']} --phase ${next.key}`
-      : 'All scripted phases are complete. Continue using Run now only if you want to observe later silence or add free-form participant input.');
+      : 'All scripted phases are complete. Continue using Run now only if you want to observe later silence or add free-form user input.');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Lucid longitudinal experiment failed: ${message}`);

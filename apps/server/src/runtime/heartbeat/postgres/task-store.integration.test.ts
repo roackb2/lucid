@@ -163,8 +163,8 @@ describe('PostgreSQL heartbeat persistence', () => {
 
     it('serializes conflicting task creation across API processes', async () => {
       const input = {
-        id: 'representative:conflict',
-        task: 'Run exactly one representative-agent cycle.',
+        id: 'agent:conflict',
+        task: 'Run exactly one agent cycle.',
         intervalMs: 60_000,
         defer: false,
       };
@@ -179,7 +179,7 @@ describe('PostgreSQL heartbeat persistence', () => {
     });
 
     it('applies update, enablement, trigger, and resume policy to the latest row', async () => {
-      const taskId = 'representative:controlled';
+      const taskId = 'agent:controlled';
       await first.createTask({
         id: taskId,
         task: 'Inspect the latest mailbox.',
@@ -188,11 +188,11 @@ describe('PostgreSQL heartbeat persistence', () => {
       });
 
       const updated = await second.updateTask(taskId, {
-        name: 'Controlled representative',
+        name: 'Controlled agent',
         intervalMs: 120_000,
       });
       expect(updated).toMatchObject({
-        name: 'Controlled representative',
+        name: 'Controlled agent',
         schedule: { intervalMs: 120_000 },
       });
       expect(await first.setTaskEnabled(taskId, false)).toMatchObject({
@@ -233,7 +233,7 @@ describe('PostgreSQL heartbeat persistence', () => {
     });
 
     it('rejects deletion while claimed and removes task history after settlement', async () => {
-      const taskId = 'representative:deletion';
+      const taskId = 'agent:deletion';
       await first.createTask({
         id: taskId,
         task: 'Create one inspectable history entry.',
@@ -270,9 +270,9 @@ describe('PostgreSQL heartbeat persistence', () => {
     });
 
     it('reconciles one task-id namespace while preserving a running obsolete task', async () => {
-      const keepId = 'representative:keep';
-      const idleId = 'representative:obsolete-idle';
-      const runningId = 'representative:obsolete-running';
+      const keepId = 'agent:keep';
+      const idleId = 'agent:obsolete-idle';
+      const runningId = 'agent:obsolete-running';
       const unrelatedId = 'maintenance:unrelated';
       await Promise.all([
         first.createTask({ id: keepId, name: 'Stored name', task: 'Keep.', defer: false }),
@@ -288,9 +288,9 @@ describe('PostgreSQL heartbeat persistence', () => {
         claimedAt: new Date(execution.claimedAt),
         claimMode: 'due',
       });
-      const newTask = createDesiredTask('representative:new');
+      const newTask = createDesiredTask('agent:new');
       const reconciliation = await first.reconcileTasks({
-        namespace: 'representative:',
+        namespace: 'agent:',
         desired: [
           { ...createDesiredTask(keepId), name: 'Desired name must not overwrite' },
           newTask,
@@ -315,7 +315,7 @@ describe('PostgreSQL heartbeat persistence', () => {
         finishedAt: dayjs().toDate(),
       });
       const afterSettlement = await first.reconcileTasks({
-        namespace: 'representative:',
+        namespace: 'agent:',
         desired: [createDesiredTask(keepId), newTask],
       });
       expect(afterSettlement.deleted.map(({ id }) => id)).toEqual([runningId]);
@@ -323,7 +323,7 @@ describe('PostgreSQL heartbeat persistence', () => {
     });
 
     it('preserves both an operator update and a concurrent execution claim', async () => {
-      const taskId = 'representative:update-claim-race';
+      const taskId = 'agent:update-claim-race';
       await first.createTask({
         id: taskId,
         task: 'Race one claim with one operator update.',

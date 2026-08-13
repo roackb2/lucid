@@ -13,11 +13,11 @@ import { HostedAccess } from '@/components/lucid/hosted-access';
 import { HostedConversation } from '@/components/lucid/hosted-conversation';
 import { InterestComposer } from '@/components/lucid/interest-composer';
 import {
-  ParticipantOnboarding,
-  type ParticipantOnboardingInput,
-} from '@/components/lucid/participant-onboarding';
+  UserOnboarding,
+  type UserOnboardingInput,
+} from '@/components/lucid/user-onboarding';
 import { RecentNetworkRequests } from '@/components/lucid/recent-network-requests';
-import { RepresentativeProgress } from '@/components/lucid/representative-progress';
+import { AgentProgress } from '@/components/lucid/agent-progress';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
 import { useLucidAuth } from '@/auth/supabase-auth';
@@ -57,7 +57,7 @@ function AuthenticatedSupabaseApp({
     retry: false,
   });
   const enroll = useMutation({
-    mutationFn: (input: ParticipantOnboardingInput) => (
+    mutationFn: (input: UserOnboardingInput) => (
       lucidClient.identity.enroll.mutate(input)
     ),
     onSuccess: async () => {
@@ -73,7 +73,7 @@ function AuthenticatedSupabaseApp({
   }
   if (identity.data.status === 'onboarding-required') {
     return (
-      <ParticipantOnboarding
+      <UserOnboarding
         enrollmentAllowed={identity.data.enrollmentAllowed}
         onEnroll={async (input) => {
           await enroll.mutateAsync(input);
@@ -116,12 +116,12 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
   }
 
   const backgroundChecks = snapshot.backgroundChecks;
-  const representativeTask = backgroundChecks.tasks.find(
-    ({ agentId }) => agentId === snapshot.representative.id,
+  const agentTask = backgroundChecks.tasks.find(
+    ({ agentId }) => agentId === snapshot.agent.id,
   );
   const hasFailedWake = Boolean(
-    snapshot.representative.status === 'error'
-    || representativeTask?.status === 'failed',
+    snapshot.agent.status === 'error'
+    || agentTask?.status === 'failed',
   );
   const currentAssignmentSequence = snapshot.interest?.sequence;
   const currentFindings = currentAssignmentSequence
@@ -143,7 +143,7 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
         <section className="workspace-intro">
           <div>
             <p className="section-label">Your discovery workspace</p>
-            <h1>Give your representative an ongoing assignment.</h1>
+            <h1>Give your agent an ongoing assignment.</h1>
             <p>
               It keeps your interest, earlier findings, and guidance in view
               while listening for something genuinely new from the network.
@@ -186,7 +186,7 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
               isRunningNow={discovery.runNow.isPending}
               isRetrying={discovery.retryCurrentWake.isPending}
               lastCheckedAt={backgroundChecks.lastRunAt}
-              failedTask={hasFailedWake ? representativeTask : undefined}
+              failedTask={hasFailedWake ? agentTask : undefined}
               onSaveInterest={(content) => (
                 discovery.saveInterest.mutateAsync(content)
               )}
@@ -200,7 +200,7 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
               requests={snapshot.networkActivity?.previousRequests ?? []}
             />
 
-            <RepresentativeProgress
+            <AgentProgress
               isSubmittingGuidance={discovery.submitGuidance.isPending}
               onGuidance={async (content) => {
                 await discovery.submitGuidance.mutateAsync(content);
@@ -241,7 +241,7 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
 
           <aside className="workspace-sidebar">
             <HowChecksWork />
-            <ParticipantPerspective />
+            <UserPerspective />
           </aside>
         </div>
       </main>
@@ -282,7 +282,7 @@ function HowChecksWork() {
       <ol className="how-it-works">
         <li>
           <span>1</span>
-          <p><strong>You save an interest.</strong> The full text stays private to your representative.</p>
+          <p><strong>You save an interest.</strong> The full text stays private to your agent.</p>
         </li>
         <li>
           <span>2</span>
@@ -298,22 +298,22 @@ function HowChecksWork() {
         </li>
       </ol>
       <p className="prototype-note">
-        Empty wakes do not call the model. Your representative acts only when
-        it has unread input or another participant’s message.
+        Empty wakes do not call the model. Your agent acts only when
+        it has unread input or another user’s message.
       </p>
     </section>
   );
 }
 
-function ParticipantPerspective() {
+function UserPerspective() {
   return (
     <section className="sidebar-card">
       <header>
         <Network size={17} />
-        <h2>A participant’s view</h2>
+        <h2>A user’s view</h2>
       </header>
       <p className="prototype-note">
-        There is no global participant directory here. Other representatives
+        There is no global user directory here. Other agents
         become visible only when their messages contribute to one of your
         findings.
       </p>

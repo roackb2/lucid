@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { McpInvocationScope } from '@roackb2/heddle-adopter/mcp';
 import {
-  ParticipantWorkspaceProjectionReader,
+  UserWorkspaceProjectionReader,
   WorkspaceProjectionScopeError,
 } from './workspace-projection-reader.js';
 import { workspaceSnapshot } from './test-support.js';
@@ -16,11 +16,11 @@ const SCOPE: McpInvocationScope = {
   workflow: 'conversation-turn',
 };
 
-describe('participant workspace MCP projection reader', () => {
-  it('reads the verified participant when deployment scope matches', async () => {
+describe('user workspace MCP projection reader', () => {
+  it('reads the verified user when deployment scope matches', async () => {
     const snapshot = workspaceSnapshot();
     const source = { snapshot: vi.fn(async () => snapshot) };
-    const reader = new ParticipantWorkspaceProjectionReader({
+    const reader = new UserWorkspaceProjectionReader({
       tenantId: SCOPE.tenantId,
       productSessionId: SCOPE.productSessionId,
     }, source);
@@ -37,7 +37,7 @@ describe('participant workspace MCP projection reader', () => {
     ['productSessionId', 'product-session-b'],
   ] as const)('denies a mismatched %s before reading product data', async (field, value) => {
     const source = { snapshot: vi.fn(async () => workspaceSnapshot()) };
-    const reader = new ParticipantWorkspaceProjectionReader({
+    const reader = new UserWorkspaceProjectionReader({
       tenantId: SCOPE.tenantId,
       productSessionId: SCOPE.productSessionId,
     }, source);
@@ -52,12 +52,12 @@ describe('participant workspace MCP projection reader', () => {
   it('checks cancellation before and after the underlying projection read', async () => {
     const controller = new AbortController();
     const source = {
-      snapshot: vi.fn(async (_participantId: string) => {
+      snapshot: vi.fn(async (_userId: string) => {
         controller.abort(new Error('cancelled during read'));
         return workspaceSnapshot();
       }),
     };
-    const reader = new ParticipantWorkspaceProjectionReader({
+    const reader = new UserWorkspaceProjectionReader({
       tenantId: SCOPE.tenantId,
       productSessionId: SCOPE.productSessionId,
     }, source);

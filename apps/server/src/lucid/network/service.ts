@@ -1,133 +1,133 @@
 /**
- * Trusted ingress and operator boundary for the local participant network.
+ * Trusted ingress and operator boundary for the local user network.
  *
  * External development tools use this service through the loopback-only tRPC
- * router. It persists participant identity or private principal input before
+ * router. It persists user identity or private principal input before
  * reconciling/requesting Heddle execution. The user-facing workspace never
  * receives this service's world-wide diagnostics projection.
  */
-import { LOCAL_USER_ID } from '../local-participant.js';
+import { LOCAL_USER_ID } from '../local-user.js';
 import type {
   BackgroundChecksView,
   NetworkDiagnosticsSnapshot,
-  RegisterParticipantInput,
+  RegisterUserInput,
 } from '../discovery-types.js';
 import type {
-  RepresentativeAgentHeartbeatService,
-} from '../representative/heartbeat-service.js';
+  AgentHeartbeatService,
+} from '../agent/heartbeat-service.js';
 import type {
-  EnrollAuthenticatedParticipantInput,
-  ParticipantNetworkStore,
-  ParticipantWithAgent,
+  EnrollAuthenticatedUserInput,
+  UserNetworkStore,
+  UserWithAgent,
 } from './store.js';
 
-export class ParticipantNetworkInputError extends Error {}
+export class UserNetworkInputError extends Error {}
 
-export type ParticipantEnrollmentReceipt = {
+export type UserEnrollmentReceipt = {
   created: boolean;
-  participantId: string;
-  representativeAgentId: string;
+  userId: string;
+  agentId: string;
   displayName: string;
-  kind: RegisterParticipantInput['kind'];
+  kind: RegisterUserInput['kind'];
 };
 
-/** Coordinates network ingress with derived representative heartbeat tasks. */
-export class ParticipantNetworkService {
+/** Coordinates network ingress with derived agent heartbeat tasks. */
+export class UserNetworkService {
   constructor(
-    private readonly store: ParticipantNetworkStore,
-    private readonly heartbeats: RepresentativeAgentHeartbeatService,
+    private readonly store: UserNetworkStore,
+    private readonly heartbeats: AgentHeartbeatService,
     private readonly runtime: { model: string; heddleVersion: string },
   ) {}
 
-  async registerParticipant(
-    input: RegisterParticipantInput,
-  ): Promise<ParticipantEnrollmentReceipt> {
+  async registerUser(
+    input: RegisterUserInput,
+  ): Promise<UserEnrollmentReceipt> {
     try {
-      const registered = await this.store.registerParticipant(input);
-      return await this.completeParticipantSetup(registered);
+      const registered = await this.store.registerUser(input);
+      return await this.completeUserSetup(registered);
     } catch (error) {
-      throw new ParticipantNetworkInputError(
-        inputErrorMessage(error, 'Lucid could not register this participant.'),
+      throw new UserNetworkInputError(
+        inputErrorMessage(error, 'Lucid could not register this user.'),
       );
     }
   }
 
-  /** Atomically enrolls one verified provider subject as a human participant. */
-  async enrollAuthenticatedParticipant(
-    input: EnrollAuthenticatedParticipantInput,
-  ): Promise<ParticipantEnrollmentReceipt> {
+  /** Atomically enrolls one verified provider subject as a human user. */
+  async enrollAuthenticatedUser(
+    input: EnrollAuthenticatedUserInput,
+  ): Promise<UserEnrollmentReceipt> {
     try {
-      return await this.completeParticipantSetup(
-        await this.store.enrollAuthenticatedParticipant(input),
+      return await this.completeUserSetup(
+        await this.store.enrollAuthenticatedUser(input),
       );
     } catch (error) {
-      throw new ParticipantNetworkInputError(
-        inputErrorMessage(error, 'Lucid could not enroll this participant.'),
+      throw new UserNetworkInputError(
+        inputErrorMessage(error, 'Lucid could not enroll this user.'),
       );
     }
   }
 
-  async submitParticipantInput(input: {
-    participantId: string;
+  async submitUserInput(input: {
+    userId: string;
     content: string;
     idempotencyKey: string;
   }): Promise<{
-    participantId: string;
-    representativeAgentId: string;
+    userId: string;
+    agentId: string;
     eventId: string;
     sequence: number;
   }> {
     try {
-      const agent = await this.store.requireAgentByParticipantId(
-        input.participantId,
+      const agent = await this.store.requireAgentByUserId(
+        input.userId,
       );
       // Durable input is committed before Heddle is notified. A failed wake
       // request leaves unread mail that startup or a later trigger can recover.
-      const event = await this.store.saveParticipantInput(
-        input.participantId,
+      const event = await this.store.saveUserInput(
+        input.userId,
         input.content,
         input.idempotencyKey,
       );
       await this.heartbeats.triggerAgent(agent.id);
       return {
-        participantId: input.participantId,
-        representativeAgentId: agent.id,
+        userId: input.userId,
+        agentId: agent.id,
         eventId: event.id,
         sequence: event.sequence,
       };
     } catch (error) {
-      throw new ParticipantNetworkInputError(
-        inputErrorMessage(error, 'Lucid could not accept participant input.'),
+      throw new UserNetworkInputError(
+        inputErrorMessage(error, 'Lucid could not accept user input.'),
       );
     }
   }
 
-  async setParticipantEnabled(
-    participantId: string,
+  async setUserEnabled(
+    userId: string,
     enabled: boolean,
   ): Promise<NetworkDiagnosticsSnapshot> {
-    if (participantId === LOCAL_USER_ID) {
-      throw new ParticipantNetworkInputError(
-        'The local participant manages listening from the product workspace.',
+    if (userId === LOCAL_USER_ID) {
+      throw new UserNetworkInputError(
+        'The local user manages listening from the product workspace.',
       );
     }
     try {
-      const agent = await this.store.requireAgentByParticipantId(
-        participantId,
+      const agent = await this.store.requireAgentByUserId(
+        userId,
       );
       if (!enabled) {
         await this.heartbeats.disableAgentTasks([agent.id]);
       }
-      await this.store.setParticipantStatus(
-        participantId,
+      await this.store.setUserStatus(
+        userId,
         enabled ? 'active' : 'disabled',
       );
       if (enabled) {
         try {
           await this.heartbeats.enableAgentTask(agent.id);
         } catch (error) {
-          await this.store.setParticipantStatus(
-            participantId,
+          await this.store.setUserStatus(
+            userId,
             'disabled',
           );
           await this.heartbeats.reconcileAgentTasks();
@@ -139,32 +139,32 @@ export class ParticipantNetworkService {
       return await this.diagnostics();
     } catch (error) {
       await this.heartbeats.reconcileAgentTasks();
-      throw new ParticipantNetworkInputError(
-        inputErrorMessage(error, 'Lucid could not change participant status.'),
+      throw new UserNetworkInputError(
+        inputErrorMessage(error, 'Lucid could not change user status.'),
       );
     }
   }
 
-  async retireParticipant(
-    participantId: string,
+  async retireUser(
+    userId: string,
   ): Promise<NetworkDiagnosticsSnapshot> {
-    if (participantId === LOCAL_USER_ID) {
-      throw new ParticipantNetworkInputError(
-        'The local participant cannot be retired.',
+    if (userId === LOCAL_USER_ID) {
+      throw new UserNetworkInputError(
+        'The local user cannot be retired.',
       );
     }
     try {
-      const agent = await this.store.requireAgentByParticipantId(
-        participantId,
+      const agent = await this.store.requireAgentByUserId(
+        userId,
       );
       await this.heartbeats.disableAgentTasks([agent.id]);
-      await this.store.retireParticipant(participantId);
+      await this.store.retireUser(userId);
       await this.heartbeats.reconcileAgentTasks();
       return await this.diagnostics();
     } catch (error) {
       await this.heartbeats.reconcileAgentTasks();
-      throw new ParticipantNetworkInputError(
-        inputErrorMessage(error, 'Lucid could not retire this participant.'),
+      throw new UserNetworkInputError(
+        inputErrorMessage(error, 'Lucid could not retire this user.'),
       );
     }
   }
@@ -179,7 +179,7 @@ export class ParticipantNetworkService {
     return await this.heartbeats.snapshot();
   }
 
-  /** Changes the durable service-wide dispatch gate, not participant preferences. */
+  /** Changes the durable service-wide dispatch gate, not user preferences. */
   async setGlobalBackgroundChecksEnabled(
     enabled: boolean,
   ): Promise<BackgroundChecksView> {
@@ -199,9 +199,9 @@ export class ParticipantNetworkService {
     };
   }
 
-  private async completeParticipantSetup(
-    registered: ParticipantWithAgent,
-  ): Promise<ParticipantEnrollmentReceipt> {
+  private async completeUserSetup(
+    registered: UserWithAgent,
+  ): Promise<UserEnrollmentReceipt> {
     try {
       await this.heartbeats.reconcileAgentTasks();
     } catch (error) {
@@ -211,28 +211,28 @@ export class ParticipantNetworkService {
       // Never leave a newly visible principal routable without an execution
       // task. If compensation also fails, report both failures explicitly.
       try {
-        await this.store.setParticipantStatus(
-          registered.participant.id,
+        await this.store.setUserStatus(
+          registered.user.id,
           'disabled',
         );
         await this.heartbeats.reconcileAgentTasks();
       } catch (compensationError) {
         throw new AggregateError(
           [error, compensationError],
-          'Representative setup failed and Lucid could not disable the participant safely.',
+          'Agent setup failed and Lucid could not disable the user safely.',
         );
       }
       throw new Error(
-        'The participant was saved disabled because representative setup failed.',
+        'The user was saved disabled because agent setup failed.',
         { cause: error },
       );
     }
     return {
       created: registered.created === true,
-      participantId: registered.participant.id,
-      representativeAgentId: registered.agent.id,
-      displayName: registered.participant.displayName,
-      kind: registered.participant.kind,
+      userId: registered.user.id,
+      agentId: registered.agent.id,
+      displayName: registered.user.displayName,
+      kind: registered.user.kind,
     };
   }
 }

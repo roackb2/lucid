@@ -12,9 +12,9 @@ import {
   it,
   vi,
 } from 'vitest';
-import { RepresentativeAgentWorker } from './representative-agent-worker.js';
+import { AgentWorker } from './agent-worker.js';
 
-describe('representative agent worker', () => {
+describe('agent worker', () => {
   const stateRoots: string[] = [];
 
   afterEach(() => {
@@ -27,8 +27,8 @@ describe('representative agent worker', () => {
   it('executes only the routed task without scanning or recovering owners', async () => {
     const now = new Date('2026-08-08T08:00:00.000Z');
     const store = createStore();
-    const tasks = [createTask('representative-a'), createTask('representative-b')];
-    await store.reconcileTasks({ namespace: 'representative-', desired: tasks });
+    const tasks = [createTask('agent-a'), createTask('agent-b')];
+    await store.reconcileTasks({ namespace: 'agent-', desired: tasks });
     await Promise.all(tasks.map((task) => store.requestTaskRun(task.id, {
       requestedAt: now,
       reason: 'test-work-arrived',
@@ -37,7 +37,7 @@ describe('representative agent worker', () => {
     const listTasks = vi.spyOn(store, 'listTasks');
     const recoverInterruptedTasks = vi.spyOn(store, 'recoverInterruptedTasks');
     const handledTaskIds: string[] = [];
-    const worker = new RepresentativeAgentWorker({
+    const worker = new AgentWorker({
       store,
       now: () => now,
       handler: async (execution) => {
@@ -47,18 +47,18 @@ describe('representative agent worker', () => {
     });
 
     const result = await worker.invoke({
-      taskId: 'representative-a',
+      taskId: 'agent-a',
       invocationId: 'invocation-a',
       runRequestGeneration: 1,
       signal: new AbortController().signal,
     });
 
     expect(result.status).toBe('settled');
-    expect(handledTaskIds).toEqual(['representative-a']);
+    expect(handledTaskIds).toEqual(['agent-a']);
     expect(listTasks).not.toHaveBeenCalled();
     expect(recoverInterruptedTasks).not.toHaveBeenCalled();
-    await expect(store.loadTask('representative-b')).resolves.toMatchObject({
-      id: 'representative-b',
+    await expect(store.loadTask('agent-b')).resolves.toMatchObject({
+      id: 'agent-b',
       state: {
         runRequest: {
           generation: 1,
@@ -74,16 +74,16 @@ describe('representative agent worker', () => {
     const handler = vi.fn();
     const controller = new AbortController();
     controller.abort('test cancellation');
-    const worker = new RepresentativeAgentWorker({ store, handler });
+    const worker = new AgentWorker({ store, handler });
 
     const result = await worker.invoke({
-      taskId: 'representative-cancelled',
+      taskId: 'agent-cancelled',
       invocationId: 'invocation-cancelled',
       signal: controller.signal,
     });
 
     expect(result).toMatchObject({
-      taskId: 'representative-cancelled',
+      taskId: 'agent-cancelled',
       status: 'cancelled',
       failed: false,
     });
@@ -101,7 +101,7 @@ describe('representative agent worker', () => {
 function createTask(id: string): HeartbeatTask {
   return {
     id,
-    task: `Process representative work for ${id}.`,
+    task: `Process agent work for ${id}.`,
     enabled: true,
     schedule: {
       intervalMs: 60_000,

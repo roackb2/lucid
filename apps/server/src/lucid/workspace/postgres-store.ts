@@ -1,4 +1,4 @@
-/** PostgreSQL adapter for participant-facing workspace commands and views. */
+/** PostgreSQL adapter for user-facing workspace commands and views. */
 import { randomUUID } from 'node:crypto';
 import dayjs from 'dayjs';
 import {
@@ -25,27 +25,27 @@ import {
   type NetworkRequestHistoryItemView,
   type NetworkRequestProgressPhase,
   type NetworkRequestProgressView,
-  type Participant,
-  type RepresentativeWorkingContext,
+  type User,
+  type AgentWorkingContext,
 } from '../discovery-types.js';
 import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
-import { toParticipantView } from '../network/participant-visibility.js';
+import { toUserView } from '../network/user-visibility.js';
 import {
   readMetadataSequence,
   readSequenceIds,
   toAgent,
   toDiscoveryEvent,
   toDiscoveryWorkspace,
-  toParticipant,
+  toUser,
   uniqueEvents,
 } from '../persistence/postgres/records.js';
 import {
   postgresDiscoveryEvents as discoveryEvents,
   postgresDiscoveryWorkspaces as discoveryWorkspaces,
-  postgresParticipants as participants,
-  postgresRepresentativeAgents as representativeAgents,
+  postgresUsers as users,
+  postgresAgents as agents,
 } from '../persistence/postgres/schema.js';
-import { AGENT_PRINCIPAL_EVENT_KINDS } from '../representative/mailbox-policy.js';
+import { AGENT_PRINCIPAL_EVENT_KINDS } from '../agent/mailbox-policy.js';
 import type {
   DiscoveryWorkspaceStore,
   DiscoveryWorkspaceStoreSnapshot,
@@ -83,97 +83,97 @@ implements DiscoveryWorkspaceStore {
   constructor(private readonly database: PostgresDatabase) {}
 
   async readSnapshot(
-    participantId: string,
+    userId: string,
   ): Promise<DiscoveryWorkspaceStoreSnapshot> {
     const workspace = await this.requireWorkspace();
-    const [user, representative] = await Promise.all([
-      this.requireParticipant(participantId),
-      this.requireParticipantAgent(participantId),
+    const [user, agent] = await Promise.all([
+      this.requireUser(userId),
+      this.requireAgentForUser(userId),
     ]);
-    const workingContext = await this.readRepresentativeWorkingContext(
-      representative.id,
+    const workingContext = await this.readAgentWorkingContext(
+      agent.id,
       Number.MAX_SAFE_INTEGER,
     );
     return {
       workspace,
-      user: toParticipantView(user),
-      representative: await this.toAgentView(representative, user),
-      interest: await this.findSavedInterest(participantId),
+      user: toUserView(user),
+      agent: await this.toAgentView(agent, user),
+      interest: await this.findSavedInterest(userId),
       workingNote: workingContext.workingNote,
-      networkActivity: await this.readNetworkActivity(representative),
+      networkActivity: await this.readNetworkActivity(agent),
       guidanceFollowThrough: await this.readGuidanceFollowThrough(
-        representative,
+        agent,
         workingContext.findings,
       ),
       findings: workingContext.findings,
     };
   }
 
-  private async requireParticipant(id: string): Promise<Participant> {
+  private async requireUser(id: string): Promise<User> {
     const [row] = await this.database.orm
       .select()
-      .from(participants)
+      .from(users)
       .where(and(
-        eq(participants.workspaceId, LUCID_WORKSPACE_ID),
-        eq(participants.id, id),
+        eq(users.workspaceId, LUCID_WORKSPACE_ID),
+        eq(users.id, id),
       ))
       .limit(1);
     if (!row) {
-      throw new Error(`Participant not found: ${id}`);
+      throw new Error(`User not found: ${id}`);
     }
-    return toParticipant(row);
+    return toUser(row);
   }
 
   private async requireAgent(id: string): Promise<Agent> {
     const [row] = await this.database.orm
       .select()
-      .from(representativeAgents)
+      .from(agents)
       .where(and(
-        eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(representativeAgents.id, id),
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.id, id),
       ))
       .limit(1);
     if (!row) {
-      throw new Error(`Representative agent not found: ${id}`);
+      throw new Error(`Agent not found: ${id}`);
     }
     return toAgent(row);
   }
 
-  private async requireAgentByParticipantId(
-    participantId: string,
+  private async requireAgentByUserId(
+    userId: string,
   ): Promise<Agent> {
     const [row] = await this.database.orm
       .select()
-      .from(representativeAgents)
+      .from(agents)
       .where(and(
-        eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(representativeAgents.participantId, participantId),
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.userId, userId),
       ))
       .limit(1);
     if (!row) {
       throw new Error(
-        `Representative agent not found for participant: ${participantId}`,
+        `Agent not found for user: ${userId}`,
       );
     }
     return toAgent(row);
   }
 
-  async requireParticipantAgent(participantId: string): Promise<Agent> {
-    return await this.requireAgentByParticipantId(participantId);
+  async requireAgentForUser(userId: string): Promise<Agent> {
+    return await this.requireAgentByUserId(userId);
   }
 
   async findSavedInterest(
-    participantId: string,
+    userId: string,
   ): Promise<DiscoveryEvent | undefined> {
-    const representative = await this.requireParticipantAgent(participantId);
+    const agent = await this.requireAgentForUser(userId);
     const [row] = await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'interest_saved'),
-        eq(discoveryEvents.targetAgentId, representative.id),
-        eq(discoveryEvents.targetParticipantId, participantId),
+        eq(discoveryEvents.targetAgentId, agent.id),
+        eq(discoveryEvents.targetUserId, userId),
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .limit(1);
@@ -181,14 +181,14 @@ implements DiscoveryWorkspaceStore {
   }
 
   async saveInterest(
-    participantId: string,
+    userId: string,
     content: string,
   ): Promise<DiscoveryEvent> {
-    const representative = await this.requireParticipantAgent(participantId);
+    const agent = await this.requireAgentForUser(userId);
     return await this.appendEvent({
       kind: 'interest_saved',
-      targetAgentId: representative.id,
-      targetParticipantId: participantId,
+      targetAgentId: agent.id,
+      targetUserId: userId,
       title: 'You update what Lucid should look for',
       content,
       metadata: {
@@ -199,12 +199,12 @@ implements DiscoveryWorkspaceStore {
   }
 
   async saveFeedback(
-    participantId: string,
+    userId: string,
     findingSequence: number,
     content: string,
   ): Promise<DiscoveryEvent> {
-    const finding = await this.requireParticipantFinding(
-      participantId,
+    const finding = await this.requireUserFinding(
+      userId,
       findingSequence,
     );
     const [existing] = await this.database.orm
@@ -222,8 +222,8 @@ implements DiscoveryWorkspaceStore {
 
     return await this.appendEvent({
       kind: 'feedback_saved',
-      targetAgentId: (await this.requireAgentByParticipantId(participantId)).id,
-      targetParticipantId: participantId,
+      targetAgentId: (await this.requireAgentByUserId(userId)).id,
+      targetUserId: userId,
       replyToSequence: finding.sequence,
       title: 'You explain how this finding should affect future checks',
       content,
@@ -235,31 +235,31 @@ implements DiscoveryWorkspaceStore {
   }
 
   async saveGuidance(
-    participantId: string,
+    userId: string,
     content: string,
   ): Promise<DiscoveryEvent> {
     const normalizedContent = content.trim();
     if (!normalizedContent || normalizedContent.length > 1_600) {
       throw new Error('Guidance must contain 1 to 1,600 characters.');
     }
-    const [interest, representative] = await Promise.all([
-      this.findSavedInterest(participantId),
-      this.requireParticipantAgent(participantId),
+    const [interest, agent] = await Promise.all([
+      this.findSavedInterest(userId),
+      this.requireAgentForUser(userId),
     ]);
     if (!interest) {
-      throw new Error('Save an interest before refining the representative.');
+      throw new Error('Save an interest before refining the agent.');
     }
     const workingNote = await this.findWorkingNote(
-      representative,
+      agent,
       Number.MAX_SAFE_INTEGER,
     );
 
     return await this.appendEvent({
       kind: 'guidance_saved',
-      targetAgentId: representative.id,
-      targetParticipantId: representative.participantId,
+      targetAgentId: agent.id,
+      targetUserId: agent.userId,
       replyToSequence: workingNote?.sequence,
-      title: 'You correct or refine your representative’s direction',
+      title: 'You correct or refine your agent’s direction',
       content: normalizedContent,
       metadata: {
         visibility: 'user-and-agent',
@@ -281,7 +281,7 @@ implements DiscoveryWorkspaceStore {
       return [];
     }
     // The caller may request older history, but it can never bypass the join or
-    // resume floor established for this participant.
+    // resume floor established for this user.
     const visibleAfterSequence = Math.max(
       afterSequence,
       agent.mailboxFloorSequence,
@@ -317,10 +317,10 @@ implements DiscoveryWorkspaceStore {
       .map(toDiscoveryEvent);
   }
 
-  async readRepresentativeWorkingContext(
+  async readAgentWorkingContext(
     agentId: string,
     throughSequence: number,
-  ): Promise<RepresentativeWorkingContext> {
+  ): Promise<AgentWorkingContext> {
     const agent = await this.requireAgent(agentId);
     const boundedSequence = Math.max(0, throughSequence);
 
@@ -333,7 +333,7 @@ implements DiscoveryWorkspaceStore {
         boundedSequence,
       ),
       this.listFindings(
-        agent.participantId,
+        agent.userId,
         boundedSequence,
       ),
       this.findWorkingNote(
@@ -383,7 +383,7 @@ implements DiscoveryWorkspaceStore {
           kind: input.kind,
           actorAgentId: input.actorAgentId,
           targetAgentId: input.targetAgentId,
-          targetParticipantId: input.targetParticipantId,
+          targetUserId: input.targetUserId,
           replyToSequence: input.replyToSequence,
           idempotencyKey: input.idempotencyKey,
           title: input.title,
@@ -417,7 +417,7 @@ implements DiscoveryWorkspaceStore {
     agent: Agent,
     throughSequence: number,
   ): Promise<DiscoveryEvent[]> {
-    const [latestInterestRows, recentParticipantInputRows] = await Promise.all([
+    const [latestInterestRows, recentUserInputRows] = await Promise.all([
       this.database.orm
         .select()
         .from(discoveryEvents)
@@ -425,7 +425,7 @@ implements DiscoveryWorkspaceStore {
           eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
           eq(discoveryEvents.kind, 'interest_saved'),
           eq(discoveryEvents.targetAgentId, agent.id),
-          eq(discoveryEvents.targetParticipantId, agent.participantId),
+          eq(discoveryEvents.targetUserId, agent.userId),
           lte(discoveryEvents.sequence, throughSequence),
         ))
         .orderBy(desc(discoveryEvents.sequence))
@@ -436,22 +436,22 @@ implements DiscoveryWorkspaceStore {
         .where(and(
           eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
           inArray(discoveryEvents.kind, [
-            'participant_input',
+            'user_input',
             'guidance_saved',
           ]),
           eq(discoveryEvents.targetAgentId, agent.id),
-          eq(discoveryEvents.targetParticipantId, agent.participantId),
+          eq(discoveryEvents.targetUserId, agent.userId),
           lte(discoveryEvents.sequence, throughSequence),
         ))
         .orderBy(desc(discoveryEvents.sequence))
         .limit(PRINCIPAL_INPUT_LIMIT),
     ]);
     const latestInterest = latestInterestRows[0];
-    const recentParticipantInputs = recentParticipantInputRows.reverse();
+    const recentUserInputs = recentUserInputRows.reverse();
 
     return [
       ...(latestInterest ? [toDiscoveryEvent(latestInterest)] : []),
-      ...recentParticipantInputs.map(toDiscoveryEvent),
+      ...recentUserInputs.map(toDiscoveryEvent),
     ].sort((left, right) => left.sequence - right.sequence);
   }
 
@@ -464,10 +464,10 @@ implements DiscoveryWorkspaceStore {
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(discoveryEvents.kind, 'representative_note_updated'),
+        eq(discoveryEvents.kind, 'agent_note_updated'),
         eq(discoveryEvents.actorAgentId, agent.id),
         eq(discoveryEvents.targetAgentId, agent.id),
-        eq(discoveryEvents.targetParticipantId, agent.participantId),
+        eq(discoveryEvents.targetUserId, agent.userId),
         lte(discoveryEvents.sequence, throughSequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
@@ -476,7 +476,7 @@ implements DiscoveryWorkspaceStore {
   }
 
   private async listFindings(
-    participantId: string,
+    userId: string,
     throughSequence = Number.MAX_SAFE_INTEGER,
   ): Promise<FindingView[]> {
     const findings = (await this.database.orm
@@ -485,7 +485,7 @@ implements DiscoveryWorkspaceStore {
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'finding_reported'),
-        eq(discoveryEvents.targetParticipantId, participantId),
+        eq(discoveryEvents.targetUserId, userId),
         lte(discoveryEvents.sequence, throughSequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
@@ -515,7 +515,7 @@ implements DiscoveryWorkspaceStore {
           .where(and(
             eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
             eq(discoveryEvents.kind, 'interest_saved'),
-            eq(discoveryEvents.targetParticipantId, participantId),
+            eq(discoveryEvents.targetUserId, userId),
             lte(discoveryEvents.sequence, finding.sequence),
           ))
           .orderBy(desc(discoveryEvents.sequence))
@@ -559,14 +559,14 @@ implements DiscoveryWorkspaceStore {
   }
 
   private async readNetworkActivity(
-    representative: Agent,
+    agent: Agent,
   ): Promise<NetworkActivityView | undefined> {
     const [assignmentRow] = await this.database.orm
       .select()
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(discoveryEvents.targetAgentId, representative.id),
+        eq(discoveryEvents.targetAgentId, agent.id),
         eq(discoveryEvents.kind, 'interest_saved'),
       ))
       .orderBy(desc(discoveryEvents.sequence))
@@ -585,7 +585,7 @@ implements DiscoveryWorkspaceStore {
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'check_requested'),
-        eq(discoveryEvents.targetAgentId, representative.id),
+        eq(discoveryEvents.targetAgentId, agent.id),
         gt(discoveryEvents.sequence, assignment.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence)))
@@ -600,7 +600,7 @@ implements DiscoveryWorkspaceStore {
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'shared_message'),
-        eq(discoveryEvents.actorAgentId, representative.id),
+        eq(discoveryEvents.actorAgentId, agent.id),
         gt(discoveryEvents.sequence, assignment.sequence),
       ))
       .orderBy(asc(discoveryEvents.sequence)))
@@ -618,8 +618,8 @@ implements DiscoveryWorkspaceStore {
         return byTrigger;
       }, new Map<number, DiscoveryEvent>());
     const findingEvents = await this.listFindingEvents(
-      representative.participantId,
-      representative.id,
+      agent.userId,
+      agent.id,
       assignment.sequence,
     );
     const currentTrigger = requestTriggers[0]!;
@@ -630,7 +630,7 @@ implements DiscoveryWorkspaceStore {
         const previousRequest = requestByTriggerSequence.get(trigger.sequence);
         return previousRequest
           ? await this.toNetworkRequestHistoryItem(
-              representative,
+              agent,
               trigger,
               previousRequest,
               findingEvents,
@@ -645,7 +645,7 @@ implements DiscoveryWorkspaceStore {
     }
 
     const requestOutcome = await this.readNetworkRequestOutcome(
-      representative,
+      agent,
       request,
       findingEvents,
     );
@@ -658,18 +658,18 @@ implements DiscoveryWorkspaceStore {
   }
 
   /**
-   * Builds one bounded participant history item without exposing the global
+   * Builds one bounded user history item without exposing the global
    * event ledger. Guidance is included only when the check explicitly carried
-   * that participant-authored event into its request.
+   * that user-authored event into its request.
    */
   private async toNetworkRequestHistoryItem(
-    representative: Agent,
+    agent: Agent,
     trigger: DiscoveryEvent,
     request: DiscoveryEvent,
     findingEvents: DiscoveryEvent[],
   ): Promise<NetworkRequestHistoryItemView> {
     const outcome = await this.readNetworkRequestOutcome(
-      representative,
+      agent,
       request,
       findingEvents,
     );
@@ -691,11 +691,11 @@ implements DiscoveryWorkspaceStore {
 
   /**
    * Projects one request outcome from transport and mailbox facts. A reply is
-   * pending review until the representative's successful cursor passes it;
+   * pending review until the agent's successful cursor passes it;
    * only then may absence of a linked finding become deliberate silence.
    */
   private async readNetworkRequestOutcome(
-    representative: Agent,
+    agent: Agent,
     request: DiscoveryEvent,
     findingEvents: DiscoveryEvent[],
   ): Promise<{
@@ -704,7 +704,7 @@ implements DiscoveryWorkspaceStore {
   }> {
     // One assignment/check defines one semantic request. Include any retry-era
     // duplicate writes in the same lifecycle so their delivered replies and
-    // linked findings cannot produce contradictory participant-facing states.
+    // linked findings cannot produce contradictory user-facing states.
     const requestSequences = request.replyToSequence
       ? (await this.database.orm
           .select({ sequence: discoveryEvents.sequence })
@@ -712,7 +712,7 @@ implements DiscoveryWorkspaceStore {
           .where(and(
             eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
             eq(discoveryEvents.kind, 'shared_message'),
-            eq(discoveryEvents.actorAgentId, representative.id),
+            eq(discoveryEvents.actorAgentId, agent.id),
             eq(discoveryEvents.replyToSequence, request.replyToSequence),
           ))
           .orderBy(asc(discoveryEvents.sequence)))
@@ -725,7 +725,7 @@ implements DiscoveryWorkspaceStore {
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         inArray(discoveryEvents.kind, ['shared_message', 'direct_message']),
-        ne(discoveryEvents.actorAgentId, representative.id),
+        ne(discoveryEvents.actorAgentId, agent.id),
         gt(discoveryEvents.sequence, request.sequence),
         inArray(discoveryEvents.replyToSequence, requestSequences),
       ))
@@ -735,28 +735,28 @@ implements DiscoveryWorkspaceStore {
       responses.map(async (response) => (
         await this.findOriginatingPeerMessages(
           [response.sequence],
-          representative.id,
+          agent.id,
         )
       )),
     )).flat());
     const sourceViews = await Promise.all(originatingResponses.map(
       async (response) => await this.toFindingSourceView(response),
     ));
-    const originatingParticipantIds = new Set(sourceViews.flatMap(
+    const originatingUserIds = new Set(sourceViews.flatMap(
       ({ attribution }) => {
-        return attribution ? [attribution.participantId] : [];
+        return attribution ? [attribution.userId] : [];
       },
     ));
 
     const pendingReviewCount = responses.filter(
-      ({ sequence }) => sequence > representative.lastSeenSequence,
+      ({ sequence }) => sequence > agent.lastSeenSequence,
     ).length;
     const linkedFindingFlags = await Promise.all(findingEvents.map(
       async (finding) => (
         finding.sequence > request.sequence
         && (await this.listRequestThreadOutboundMessages(
           readSequenceIds(finding.metadata.sourceEventIds),
-          representative.id,
+          agent.id,
         )).some(({ sequence }) => requestSequenceSet.has(sequence))
       ),
     ));
@@ -772,7 +772,7 @@ implements DiscoveryWorkspaceStore {
     const reviewedAt = phase === 'finding-reported'
       || phase === 'reviewed-without-finding'
       ? await this.findResponseReviewCompletionAt(
-          representative.id,
+          agent.id,
           responses.at(-1)?.sequence,
         )
       : undefined;
@@ -782,7 +782,7 @@ implements DiscoveryWorkspaceStore {
         responseCount: responses.length,
         pendingReviewCount,
         originatingResponseCount: originatingResponses.length,
-        originatingParticipantCount: originatingParticipantIds.size,
+        originatingUserCount: originatingUserIds.size,
         latestResponseAt: responses.at(-1)?.createdAt,
         reviewedAt,
       },
@@ -791,7 +791,7 @@ implements DiscoveryWorkspaceStore {
   }
 
   private async listFindingEvents(
-    participantId: string,
+    userId: string,
     agentId: string,
     afterSequence: number,
   ): Promise<DiscoveryEvent[]> {
@@ -801,7 +801,7 @@ implements DiscoveryWorkspaceStore {
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'finding_reported'),
-        eq(discoveryEvents.targetParticipantId, participantId),
+        eq(discoveryEvents.targetUserId, userId),
         eq(discoveryEvents.actorAgentId, agentId),
         gt(discoveryEvents.sequence, afterSequence),
       ))
@@ -846,7 +846,7 @@ implements DiscoveryWorkspaceStore {
   }
 
   private async readGuidanceFollowThrough(
-    representative: Agent,
+    agent: Agent,
     findings: FindingView[],
   ): Promise<GuidanceFollowThroughView | undefined> {
     const [currentAssignment] = await this.database.orm
@@ -855,7 +855,7 @@ implements DiscoveryWorkspaceStore {
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'interest_saved'),
-        eq(discoveryEvents.targetAgentId, representative.id),
+        eq(discoveryEvents.targetAgentId, agent.id),
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .limit(1);
@@ -877,7 +877,7 @@ implements DiscoveryWorkspaceStore {
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'guidance_saved'),
-        eq(discoveryEvents.targetAgentId, representative.id),
+        eq(discoveryEvents.targetAgentId, agent.id),
         gt(discoveryEvents.sequence, currentAssignment.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence))
@@ -898,9 +898,9 @@ implements DiscoveryWorkspaceStore {
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(discoveryEvents.kind, 'representative_note_updated'),
-        eq(discoveryEvents.actorAgentId, representative.id),
-        eq(discoveryEvents.targetParticipantId, representative.participantId),
+        eq(discoveryEvents.kind, 'agent_note_updated'),
+        eq(discoveryEvents.actorAgentId, agent.id),
+        eq(discoveryEvents.targetUserId, agent.userId),
         gt(discoveryEvents.sequence, guidance.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence)))
@@ -915,7 +915,7 @@ implements DiscoveryWorkspaceStore {
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'check_requested'),
-        eq(discoveryEvents.targetAgentId, representative.id),
+        eq(discoveryEvents.targetAgentId, agent.id),
         gt(discoveryEvents.sequence, guidance.sequence),
       ))
       .orderBy(desc(discoveryEvents.sequence)))
@@ -931,7 +931,7 @@ implements DiscoveryWorkspaceStore {
           .where(and(
             eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
             eq(discoveryEvents.kind, 'shared_message'),
-            eq(discoveryEvents.actorAgentId, representative.id),
+            eq(discoveryEvents.actorAgentId, agent.id),
             eq(discoveryEvents.replyToSequence, check.sequence),
           ))
           .orderBy(asc(discoveryEvents.sequence))
@@ -940,14 +940,14 @@ implements DiscoveryWorkspaceStore {
     const requestEvent = request ? toDiscoveryEvent(request) : undefined;
     const findingEvents = requestEvent
       ? await this.listFindingEvents(
-          representative.participantId,
-          representative.id,
+          agent.userId,
+          agent.id,
           currentAssignment.sequence,
         )
       : [];
     const requestOutcome = requestEvent
       ? await this.readNetworkRequestOutcome(
-          representative,
+          agent,
           requestEvent,
           findingEvents,
         )
@@ -985,29 +985,29 @@ implements DiscoveryWorkspaceStore {
     }
     const [agentRow] = await this.database.orm
       .select()
-      .from(representativeAgents)
-      .where(eq(representativeAgents.id, message.actorAgentId))
+      .from(agents)
+      .where(eq(agents.id, message.actorAgentId))
       .limit(1);
     if (!agentRow) {
       return { message };
     }
-    const [participantRow] = await this.database.orm
+    const [userRow] = await this.database.orm
       .select()
-      .from(participants)
-      .where(eq(participants.id, agentRow.participantId))
+      .from(users)
+      .where(eq(users.id, agentRow.userId))
       .limit(1);
-    if (!participantRow) {
+    if (!userRow) {
       return { message };
     }
-    const participant = toParticipant(participantRow);
+    const user = toUser(userRow);
     return {
       message,
       attribution: {
         agentId: agentRow.id,
         agentName: agentRow.name,
-        participantId: participant.id,
-        participantDisplayName: participant.displayName,
-        participantKind: participant.kind,
+        userId: user.id,
+        userDisplayName: user.displayName,
+        userKind: user.kind,
       },
     };
   }
@@ -1017,7 +1017,7 @@ implements DiscoveryWorkspaceStore {
     reporterAgentId?: string,
   ): Promise<DiscoveryEvent[]> {
     // Walk the reply thread backward from a finding source to reveal what its
-    // representative disclosed. Content provenance is intentionally separate.
+    // agent disclosed. Content provenance is intentionally separate.
     const visited = new Set(sourceEventIds);
     const queue = await this.readEventsBySequence(sourceEventIds);
     const outboundMessages: DiscoveryEvent[] = [];
@@ -1083,18 +1083,18 @@ implements DiscoveryWorkspaceStore {
         && event.actorAgentId !== reporterAgentId
         && ['shared_message', 'direct_message'].includes(event.kind),
       );
-      const hasParticipantOwnedSource = sourceEvents.some((source) => (
+      const hasUserOwnedSource = sourceEvents.some((source) => (
         source.targetAgentId === event.actorAgentId
         && [
           'interest_saved',
-          'participant_input',
+          'user_input',
           'check_requested',
           'feedback_saved',
-          'representative_note_updated',
+          'agent_note_updated',
         ].includes(source.kind)
       ));
       const originatesContent = isPeerMessage
-        && (!upstream.length || hasParticipantOwnedSource);
+        && (!upstream.length || hasUserOwnedSource);
       const origins = uniqueEvents([
         ...upstream,
         ...(originatesContent ? [event] : []),
@@ -1125,8 +1125,8 @@ implements DiscoveryWorkspaceStore {
       .map(toDiscoveryEvent);
   }
 
-  private async requireParticipantFinding(
-    participantId: string,
+  private async requireUserFinding(
+    userId: string,
     sequence: number,
   ): Promise<DiscoveryEvent> {
     const [row] = await this.database.orm
@@ -1136,12 +1136,12 @@ implements DiscoveryWorkspaceStore {
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.sequence, sequence),
         eq(discoveryEvents.kind, 'finding_reported'),
-        eq(discoveryEvents.targetParticipantId, participantId),
+        eq(discoveryEvents.targetUserId, userId),
       ))
       .limit(1);
     if (!row) {
       throw new Error(
-        `Finding not found for participant ${participantId}: ${sequence}`,
+        `Finding not found for user ${userId}: ${sequence}`,
       );
     }
     return toDiscoveryEvent(row);
@@ -1169,27 +1169,27 @@ implements DiscoveryWorkspaceStore {
   private async findActiveAgent(agentId: string): Promise<Agent | undefined> {
     const [row] = await this.database.orm
       .select({
-        participantStatus: participants.status,
-        agent: representativeAgents,
+        userStatus: users.status,
+        agent: agents,
       })
-      .from(representativeAgents)
+      .from(agents)
       .innerJoin(
-        participants,
-        eq(participants.id, representativeAgents.participantId),
+        users,
+        eq(users.id, agents.userId),
       )
       .where(and(
-        eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(representativeAgents.id, agentId),
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.id, agentId),
       ))
       .limit(1);
-    return row?.participantStatus === 'active'
+    return row?.userStatus === 'active'
       ? toAgent(row.agent)
       : undefined;
   }
 
   private async toAgentView(
     agent: Agent,
-    participant: Participant,
+    user: User,
   ): Promise<AgentView> {
     const {
       instructions: _instructions,
@@ -1203,13 +1203,13 @@ implements DiscoveryWorkspaceStore {
     } = agent;
     return {
       ...view,
-      participant: toParticipantView(participant),
+      user: toUserView(user),
       unreadCount: (await this.listEventsVisibleToAgent(
         agent.id,
         agent.lastSeenSequence,
         10_000,
       )).length,
-      isUserAgent: agent.participantId === participant.id,
+      isCurrentUserAgent: agent.userId === user.id,
     };
   }
 }

@@ -1,4 +1,4 @@
-/** PostgreSQL adapter for one representative's communication tools. */
+/** PostgreSQL adapter for one agent's communication tools. */
 import { randomUUID } from 'node:crypto';
 import dayjs from 'dayjs';
 import {
@@ -16,21 +16,21 @@ import type {
   Agent,
   AppendDiscoveryEventInput,
   DiscoveryEvent,
-  Participant,
+  User,
 } from '../../discovery-types.js';
 import {
   readMetadataSequence,
   readSequenceIds,
   toAgent,
   toDiscoveryEvent,
-  toParticipant,
+  toUser,
   uniqueEvents,
 } from '../../persistence/postgres/records.js';
 import {
   postgresDiscoveryEvents as discoveryEvents,
   postgresDiscoveryWorkspaces as discoveryWorkspaces,
-  postgresParticipants as participants,
-  postgresRepresentativeAgents as representativeAgents,
+  postgresUsers as users,
+  postgresAgents as agents,
 } from '../../persistence/postgres/schema.js';
 import { LUCID_WORKSPACE_ID } from '../../workspace/workspace-identity.js';
 import { AGENT_PRINCIPAL_EVENT_KINDS } from '../mailbox-policy.js';
@@ -43,51 +43,51 @@ export class PostgresAgentCommunicationStore
 implements AgentCommunicationStore {
   constructor(private readonly database: PostgresDatabase) {}
 
-  private async listParticipants(): Promise<Participant[]> {
+  private async listUsers(): Promise<User[]> {
     return (await this.database.orm
       .select()
-      .from(participants)
-      .where(eq(participants.workspaceId, LUCID_WORKSPACE_ID))
-      .orderBy(asc(participants.createdAt)))
-      .map(toParticipant);
+      .from(users)
+      .where(eq(users.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(asc(users.createdAt)))
+      .map(toUser);
   }
 
   async listAgents(): Promise<Agent[]> {
     return (await this.database.orm
       .select()
-      .from(representativeAgents)
-      .where(eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID))
-      .orderBy(asc(representativeAgents.sortOrder)))
+      .from(agents)
+      .where(eq(agents.workspaceId, LUCID_WORKSPACE_ID))
+      .orderBy(asc(agents.sortOrder)))
       .map(toAgent);
   }
 
   async listActiveAgents(): Promise<Agent[]> {
-    const [participantList, agentList] = await Promise.all([
-      this.listParticipants(),
+    const [userList, agentList] = await Promise.all([
+      this.listUsers(),
       this.listAgents(),
     ]);
-    const activeParticipantIds = new Set(
-      participantList
-        .filter((participant) => participant.status === 'active')
-        .map((participant) => participant.id),
+    const activeUserIds = new Set(
+      userList
+        .filter((user) => user.status === 'active')
+        .map((user) => user.id),
     );
     return agentList.filter(
-      (agent) => activeParticipantIds.has(agent.participantId),
+      (agent) => activeUserIds.has(agent.userId),
     );
   }
 
-  private async requireAgentByParticipantId(participantId: string): Promise<Agent> {
+  private async requireAgentByUserId(userId: string): Promise<Agent> {
     const [row] = await this.database.orm
       .select()
-      .from(representativeAgents)
+      .from(agents)
       .where(and(
-        eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(representativeAgents.participantId, participantId),
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.userId, userId),
       ))
       .limit(1);
     if (!row) {
       throw new Error(
-        `Representative agent not found for participant: ${participantId}`,
+        `Agent not found for user: ${userId}`,
       );
     }
     return toAgent(row);
@@ -104,7 +104,7 @@ implements AgentCommunicationStore {
       return [];
     }
     // The caller may request older history, but it can never bypass the join or
-    // resume floor established for this participant.
+    // resume floor established for this user.
     const visibleAfterSequence = Math.max(
       afterSequence,
       agent.mailboxFloorSequence,
@@ -175,14 +175,14 @@ implements AgentCommunicationStore {
       .map(toDiscoveryEvent);
   }
 
-  async hasParticipantFindingUsingAnyOrigin(
-    participantId: string,
+  async hasUserFindingUsingAnyOrigin(
+    userId: string,
     sourceEventIds: number[],
   ): Promise<boolean> {
     if (!sourceEventIds.length) {
       return false;
     }
-    const reporter = await this.requireAgentByParticipantId(participantId);
+    const reporter = await this.requireAgentByUserId(userId);
     const requested = new Set(
       (await this.findOriginatingPeerMessages(sourceEventIds, reporter.id))
         .map(({ sequence }) => sequence),
@@ -196,7 +196,7 @@ implements AgentCommunicationStore {
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'finding_reported'),
-        eq(discoveryEvents.targetParticipantId, participantId),
+        eq(discoveryEvents.targetUserId, userId),
       )))
       .map(toDiscoveryEvent);
     return (await Promise.all(findings.map(async (finding) => (
@@ -236,7 +236,7 @@ implements AgentCommunicationStore {
       .from(discoveryEvents)
       .where(and(
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(discoveryEvents.kind, 'representative_note_updated'),
+        eq(discoveryEvents.kind, 'agent_note_updated'),
         eq(discoveryEvents.actorAgentId, agentId),
         eq(discoveryEvents.targetAgentId, agentId),
         gt(discoveryEvents.sequence, sourceSequence),
@@ -327,7 +327,7 @@ implements AgentCommunicationStore {
           kind: input.kind,
           actorAgentId: input.actorAgentId,
           targetAgentId: input.targetAgentId,
-          targetParticipantId: input.targetParticipantId,
+          targetUserId: input.targetUserId,
           replyToSequence: input.replyToSequence,
           idempotencyKey: input.idempotencyKey,
           title: input.title,
@@ -413,18 +413,18 @@ implements AgentCommunicationStore {
         && event.actorAgentId !== reporterAgentId
         && ['shared_message', 'direct_message'].includes(event.kind),
       );
-      const hasParticipantOwnedSource = sourceEvents.some((source) => (
+      const hasUserOwnedSource = sourceEvents.some((source) => (
         source.targetAgentId === event.actorAgentId
         && [
           'interest_saved',
-          'participant_input',
+          'user_input',
           'check_requested',
           'feedback_saved',
-          'representative_note_updated',
+          'agent_note_updated',
         ].includes(source.kind)
       ));
       const originatesContent = isPeerMessage
-        && (!upstream.length || hasParticipantOwnedSource);
+        && (!upstream.length || hasUserOwnedSource);
       const origins = uniqueEvents([
         ...upstream,
         ...(originatesContent ? [event] : []),
@@ -458,20 +458,20 @@ implements AgentCommunicationStore {
   private async findActiveAgent(agentId: string): Promise<Agent | undefined> {
     const [row] = await this.database.orm
       .select({
-        participantStatus: participants.status,
-        agent: representativeAgents,
+        userStatus: users.status,
+        agent: agents,
       })
-      .from(representativeAgents)
+      .from(agents)
       .innerJoin(
-        participants,
-        eq(participants.id, representativeAgents.participantId),
+        users,
+        eq(users.id, agents.userId),
       )
       .where(and(
-        eq(representativeAgents.workspaceId, LUCID_WORKSPACE_ID),
-        eq(representativeAgents.id, agentId),
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.id, agentId),
       ))
       .limit(1);
-    return row?.participantStatus === 'active'
+    return row?.userStatus === 'active'
       ? toAgent(row.agent)
       : undefined;
   }

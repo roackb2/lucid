@@ -6,9 +6,9 @@ import {
   type FetchImplementation,
 } from 'jose';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { LOCAL_USER_ID } from '../lucid/local-participant.js';
+import { LOCAL_USER_ID } from '../lucid/local-user.js';
 import type {
-  ParticipantIdentityReader,
+  UserIdentityReader,
 } from '../lucid/network/store.js';
 import type {
   LucidAuthenticationInput,
@@ -30,13 +30,13 @@ export type SupabaseAuthenticationConfig = {
 };
 
 /**
- * Verifies a Supabase session and resolves it to Lucid's durable participant.
+ * Verifies a Supabase session and resolves it to Lucid's durable user.
  * Provider profile claims stop at this boundary; authorization comes from the
  * product-owned identity binding, never email or Google metadata.
  */
 export function createSupabaseAuthenticator(
   config: SupabaseAuthenticationConfig,
-  identities: ParticipantIdentityReader,
+  identities: UserIdentityReader,
   options: { fetch?: FetchImplementation } = {},
 ): LucidAuthenticator {
   const projectUrl = parseProjectUrl(config.projectUrl);
@@ -55,8 +55,8 @@ export function createSupabaseAuthenticator(
       if (tokensEqual(token, config.operatorToken)) {
         return {
           subject: 'static-token:operator',
-          participantId: LOCAL_USER_ID,
-          roles: ['participant', 'operator'],
+          userId: LOCAL_USER_ID,
+          roles: ['user', 'operator'],
         };
       }
       if (token.length > MAX_ACCESS_TOKEN_CHARACTERS) {
@@ -70,15 +70,15 @@ export function createSupabaseAuthenticator(
       if (!identity) {
         return undefined;
       }
-      const binding = await identities.resolveParticipantIdentity(identity);
-      const activeParticipantId = binding?.status === 'active'
-        ? binding.participantId
+      const binding = await identities.resolveUserIdentity(identity);
+      const activeUserId = binding?.status === 'active'
+        ? binding.userId
         : undefined;
       return {
         subject: `${identity.issuer}:${identity.subject}`,
         externalIdentity: identity,
-        participantId: activeParticipantId,
-        roles: activeParticipantId ? ['participant'] : [],
+        userId: activeUserId,
+        roles: activeUserId ? ['user'] : [],
       } satisfies LucidRequestPrincipal;
     },
   };

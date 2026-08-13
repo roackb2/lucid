@@ -18,7 +18,7 @@ const environmentSchema = z.object({
   LUCID_WEB_ROOT: z.string().trim().min(1).optional(),
   LUCID_AUTH_MODE: z.enum(['development', 'static-token', 'supabase'])
     .default('development'),
-  LUCID_PARTICIPANT_TOKEN: z.string().trim().min(32).optional(),
+  LUCID_USER_TOKEN: z.string().trim().min(32).optional(),
   LUCID_OPERATOR_TOKEN: z.string().trim().min(32).optional(),
   LUCID_SUPABASE_PROJECT_URL: z.url().optional(),
   LUCID_ALLOW_SELF_ENROLLMENT: z.enum(['true', 'false']).default('false'),
@@ -44,6 +44,7 @@ const environmentSchema = z.object({
     .default(3),
   LUCID_HEARTBEAT_HOST: z.enum(['scheduler', 'targeted']).optional(),
   LUCID_HEARTBEAT_NAMESPACE: z.string().trim().min(1).max(200)
+    // Stable database namespace; changing it would create a second task catalog.
     .default('lucid:representatives'),
   LUCID_HEARTBEAT_EXECUTION_LEASE_MS: z.coerce
     .number()
@@ -76,11 +77,11 @@ const environmentSchema = z.object({
     });
   }
   if (environment.LUCID_AUTH_MODE === 'static-token') {
-    if (!environment.LUCID_PARTICIPANT_TOKEN) {
+    if (!environment.LUCID_USER_TOKEN) {
       context.addIssue({
         code: 'custom',
-        path: ['LUCID_PARTICIPANT_TOKEN'],
-        message: 'LUCID_PARTICIPANT_TOKEN is required in static-token mode.',
+        path: ['LUCID_USER_TOKEN'],
+        message: 'LUCID_USER_TOKEN is required in static-token mode.',
       });
     }
     if (!environment.LUCID_OPERATOR_TOKEN) {
@@ -91,14 +92,14 @@ const environmentSchema = z.object({
       });
     }
     if (
-      environment.LUCID_PARTICIPANT_TOKEN
+      environment.LUCID_USER_TOKEN
       && environment.LUCID_OPERATOR_TOKEN
-      && environment.LUCID_PARTICIPANT_TOKEN === environment.LUCID_OPERATOR_TOKEN
+      && environment.LUCID_USER_TOKEN === environment.LUCID_OPERATOR_TOKEN
     ) {
       context.addIssue({
         code: 'custom',
         path: ['LUCID_OPERATOR_TOKEN'],
-        message: 'Participant and operator tokens must be distinct.',
+        message: 'User and operator tokens must be distinct.',
       });
     }
   }
@@ -208,7 +209,7 @@ function resolveAuthenticationConfig(
   if (input.LUCID_AUTH_MODE === 'static-token') {
     return {
       mode: 'static-token',
-      participantToken: input.LUCID_PARTICIPANT_TOKEN!,
+      userToken: input.LUCID_USER_TOKEN!,
       operatorToken: input.LUCID_OPERATOR_TOKEN!,
     };
   }

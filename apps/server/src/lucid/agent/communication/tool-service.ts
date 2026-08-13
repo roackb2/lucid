@@ -1,5 +1,5 @@
 /**
- * Host-enforced communication boundary for one representative-agent wake.
+ * Host-enforced communication boundary for one agent wake.
  *
  * The model receives ordinary-language tools, while this module enforces the
  * facts prompts cannot guarantee: mailbox visibility, the claimed event
@@ -18,7 +18,7 @@ import type {
   Agent,
   DiscoveryEvent,
   NetworkMessageRole,
-  Participant,
+  User,
 } from '../../discovery-types.js';
 import type { AgentCommunicationStore } from './store.js';
 
@@ -71,7 +71,7 @@ const WRITE_DISCOVERY_STATE_POLICY = {
 } satisfies ToolPolicyHostContext;
 
 /**
- * Grants one representative agent a bounded set of communication operations
+ * Grants one agent a bounded set of communication operations
  * for one wake. It validates visibility, reply targets, and declared content
  * sources before writing events, but never scores message truth or usefulness.
  */
@@ -85,7 +85,7 @@ export class AgentCommunicationToolService {
   constructor(
     private readonly store: AgentCommunicationStore,
     private readonly agent: Agent,
-    private readonly participant: Participant,
+    private readonly user: User,
     private readonly wakeId: string,
     private readonly wakeNumber: number,
     private readonly horizonSequence: number,
@@ -94,7 +94,7 @@ export class AgentCommunicationToolService {
   ) {}
 
   async definitions(): Promise<ToolDefinition[]> {
-    // A representative discovers peers from delivered messages, never from a
+    // A agent discovers peers from delivered messages, never from a
     // global directory. Shared messages provide the initial introduction.
     const [
       activeAgents,
@@ -190,7 +190,7 @@ export class AgentCommunicationToolService {
       {
         name: 'update_working_note',
         description:
-          'Replace this representative’s private working note when new participant input, feedback, or a concrete finding changes the ongoing assignment. Preserve what matters, what to avoid, and what to try next in ordinary language. The note is an interpretation, not verified fact.',
+          'Replace this agent’s private working note when new user input, feedback, or a concrete finding changes the ongoing assignment. Preserve what matters, what to avoid, and what to try next in ordinary language. The note is an interpretation, not verified fact.',
         capabilities: ['lucid.discovery.write'],
         hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
         parameters: {
@@ -206,7 +206,7 @@ export class AgentCommunicationToolService {
       {
         name: 'post_shared_message',
         description:
-          'Publish a concise network request, substantive response, or contribution. reply_to_event_id identifies the request or principal event this message continues. source_event_ids identify the information used in the content. A request representing check_requested must carry its current working constraints instead of only repeating the original interest. When answering a peer request, contribute this participant’s own context instead of relaying another representative’s answer. Never post merely to say that no match or example is available.',
+          'Publish a concise network request, substantive response, or contribution. reply_to_event_id identifies the request or principal event this message continues. source_event_ids identify the information used in the content. A request representing check_requested must carry its current working constraints instead of only repeating the original interest. When answering a peer request, contribute this user’s own context instead of relaying another agent’s answer. Never post merely to say that no match or example is available.',
         capabilities: ['lucid.discovery.write'],
         hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
         parameters: {
@@ -225,7 +225,7 @@ export class AgentCommunicationToolService {
               maxItems: 8,
               items: { type: 'integer', minimum: 1 },
               description:
-                'Visible events whose information is used in the message. Include every peer message being repeated or summarized. Use an empty array when the contribution comes only from this participant’s supplied private context. These references establish provenance, not the reply thread.',
+                'Visible events whose information is used in the message. Include every peer message being repeated or summarized. Use an empty array when the contribution comes only from this user’s supplied private context. These references establish provenance, not the reply thread.',
             },
           },
           required: ['reply_to_event_id', 'content', 'source_event_ids'],
@@ -236,7 +236,7 @@ export class AgentCommunicationToolService {
       ...(addressableAgents.length ? [{
         name: 'send_direct_message',
         description:
-          'Send one private reply to an encountered representative when this participant’s context provides a specific answer or follow-up.',
+          'Send one private reply to an encountered agent when this user’s context provides a specific answer or follow-up.',
         capabilities: ['lucid.discovery.write'],
         hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
         parameters: {
@@ -258,7 +258,7 @@ export class AgentCommunicationToolService {
               maxItems: 8,
               items: { type: 'integer', minimum: 1 },
               description:
-                'Visible events whose information is used in the response. Use an empty array when the response comes only from this participant’s supplied private context.',
+                'Visible events whose information is used in the response. Use an empty array when the response comes only from this user’s supplied private context.',
             },
           },
           required: [
@@ -296,7 +296,7 @@ export class AgentCommunicationToolService {
     return {
       name: 'report_finding',
       description:
-        'Deliver one specific peer-sourced connection privately to this agent’s own participant. This does not reply to the source agent. State what the source contributed and why it may relate, without declaring it useful, validated, or a successful match. Sources prove delivery, not truth.',
+        'Deliver one specific peer-sourced connection privately to this agent’s own user. This does not reply to the source agent. State what the source contributed and why it may relate, without declaring it useful, validated, or a successful match. Sources prove delivery, not truth.',
       capabilities: ['lucid.discovery.write'],
       hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
       parameters: {
@@ -363,15 +363,15 @@ export class AgentCommunicationToolService {
     // later readers distinguish the derived note from raw source events.
     const event = await this.store.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
-      kind: 'representative_note_updated',
+      kind: 'agent_note_updated',
       actorAgentId: this.agent.id,
       targetAgentId: this.agent.id,
-      targetParticipantId: this.participant.id,
+      targetUserId: this.user.id,
       idempotencyKey: `${this.wakeId}:working-note`,
       title: `${this.agent.name} updates its private working note`,
       content: parsed.data.content,
       metadata: {
-        visibility: 'participant-and-agent',
+        visibility: 'user-and-agent',
         wakeId: this.wakeId,
         throughSequence: this.horizonSequence,
         derived: true,
@@ -513,7 +513,7 @@ export class AgentCommunicationToolService {
       return {
         ok: false,
         error:
-          'A direct message must reply to a visible message authored by its target representative.',
+          'A direct message must reply to a visible message authored by its target agent.',
       };
     }
     const referenceFailure = this.validateTextEventReferences(
@@ -597,8 +597,8 @@ export class AgentCommunicationToolService {
           'A finding must cite at least one visible shared or direct message from another agent.',
       };
     }
-    if (await this.store.hasParticipantFindingUsingAnyOrigin(
-      this.participant.id,
+    if (await this.store.hasUserFindingUsingAnyOrigin(
+      this.user.id,
       sourceEventIds,
     )) {
       return {
@@ -615,9 +615,9 @@ export class AgentCommunicationToolService {
       wakeNumber: this.wakeNumber,
       kind: 'finding_reported',
       actorAgentId: this.agent.id,
-      targetParticipantId: this.participant.id,
+      targetUserId: this.user.id,
       idempotencyKey: this.actionIdempotencyKey(actionIndex),
-      title: `New finding for ${this.participant.displayName}`,
+      title: `New finding for ${this.user.displayName}`,
       content: parsed.data.content,
       metadata: {
         visibility: 'user',
@@ -735,7 +735,7 @@ export class AgentCommunicationToolService {
     return {
       ok: false,
       error:
-        `First use update_working_note to incorporate the participant guidance at ${sourceReferences}. Replace incompatible older assumptions instead of appending contradictory rules. Other actions remain unavailable until the revised note is recorded.`,
+        `First use update_working_note to incorporate the user guidance at ${sourceReferences}. Replace incompatible older assumptions instead of appending contradictory rules. Other actions remain unavailable until the revised note is recorded.`,
     };
   }
 
@@ -854,7 +854,7 @@ export class AgentCommunicationToolService {
       ? {
           ok: false,
           error:
-            'This representative already communicated in the same request thread. Finish without action unless a new user request starts a new thread.',
+            'This agent already communicated in the same request thread. Finish without action unless a new user request starts a new thread.',
         }
       : undefined;
   }

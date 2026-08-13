@@ -7,7 +7,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import superjson from 'superjson';
 import type { AppRouter } from '@lucid/server/router';
 
-const ACCESS_TOKEN_KEY = 'lucid.participant-access-token';
+const ACCESS_TOKEN_KEY = 'lucid.user-access-token';
 const apiUrl = import.meta.env.VITE_LUCID_API_URL ?? '/api/trpc';
 let activeAccessToken: string | undefined;
 let sessionAccessToken: string | undefined;
@@ -39,7 +39,7 @@ export function hasHostedAccessToken(): boolean {
   return Boolean(readHostedAccessToken());
 }
 
-/** Returns the same tab-scoped participant credential used by tRPC. */
+/** Returns the same tab-scoped user credential used by tRPC. */
 export function getHostedAccessToken(): string | undefined {
   return readHostedAccessToken();
 }

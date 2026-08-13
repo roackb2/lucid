@@ -24,7 +24,7 @@ export function BackgroundChecks({
   isUpdating,
   onSetEnabled,
 }: BackgroundChecksProps) {
-  const representativeTask = checks.tasks.find(({ status: taskStatus }) => (
+  const agentTask = checks.tasks.find(({ status: taskStatus }) => (
     taskStatus === 'failed'
   )) ?? checks.tasks[0];
   const globallyPaused = !checks.dispatchEnabled;
@@ -65,13 +65,13 @@ export function BackgroundChecks({
         </div>
         <p>
           {hasFailedWake
-            ? representativeTask?.error
-              ?? 'The last representative wake did not complete.'
+            ? agentTask?.error
+              ?? 'The last agent wake did not complete.'
             : globallyPaused
-            ? `New messages and run intent stay saved. Only an operator can resume dispatch; your representative preference remains ${checks.enabled ? 'enabled' : 'paused'}.`
+            ? `New messages and run intent stay saved. Only an operator can resume dispatch; your agent preference remains ${checks.enabled ? 'enabled' : 'paused'}.`
             : checks.enabled
-            ? `Your representative wakes every ${formatInterval(checks.intervalMs)}. New mailbox messages can wake it sooner.`
-            : 'Your interest and findings stay saved. Resume when you want your representative to process new messages.'}
+            ? `Your agent wakes every ${formatInterval(checks.intervalMs)}. New mailbox messages can wake it sooner.`
+            : 'Your interest and findings stay saved. Resume when you want your agent to process new messages.'}
         </p>
       </div>
       <dl className="background-checks__timing">

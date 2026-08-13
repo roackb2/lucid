@@ -1,5 +1,5 @@
 /**
- * Adapts Lucid's participant and mailbox lifecycle to Heddle heartbeat tasks.
+ * Adapts Lucid's user and mailbox lifecycle to Heddle heartbeat tasks.
  *
  * The store remains authoritative for who may run and which events a wake
  * may consume. Heddle owns durable scheduling, credentials, cancellation,
@@ -18,53 +18,57 @@ import {
 import type { LucidConfig } from '../../config.js';
 import type { LucidLogger } from '../../logger.js';
 import type {
-  RepresentativeAgentExecutionHost,
-  RepresentativeHeartbeatTaskAuthority,
-} from '../../runtime/representative-agent-execution-host.js';
+  AgentExecutionHost,
+  AgentHeartbeatTaskAuthority,
+} from '../../runtime/agent-execution-host.js';
 import {
   networkMessageRoleSchema,
   type AgentWakeClaim,
   type AgentWakeContext,
   type BackgroundChecksView,
-  type RepresentativeAgentTaskView,
+  type AgentTaskView,
 } from '../discovery-types.js';
 import type {
-  RepresentativeAgentHeartbeatRunner,
+  AgentHeartbeatRunner,
 } from './heddle-runner.js';
 import type {
-  RepresentativeWakeStore,
+  AgentWakeStore,
 } from './store.js';
 import type {
-  RepresentativeWorkingContextReader,
+  AgentWorkingContextReader,
 } from '../workspace/store.js';
 
-export const REPRESENTATIVE_AGENT_TASK_ID_PREFIX = 'lucid-representative-';
+/**
+ * Stable persisted Heddle task key. The value predates the user/agent vocabulary
+ * and must not change without migrating task and run-record identities.
+ */
+export const AGENT_TASK_ID_PREFIX = 'lucid-representative-';
 const UNSAFE_CANCELLATION_DISPOSITIONS = new Set<
   HeartbeatTaskCancellationDisposition
 >(['not-owned', 'not-found']);
 
 /**
- * Hosts Lucid's representative agents as durable Heddle heartbeat tasks.
+ * Hosts Lucid's agents as durable Heddle heartbeat tasks.
  *
  * Heddle owns task timing, checkpoints, run records, scheduler selection, and
  * provider execution. This service maps tasks to Lucid agents, claims mailbox
  * work, settles durable cursors, and accelerates only the recipients implied
  * by newly emitted request and response messages.
  */
-export class RepresentativeAgentHeartbeatService {
+export class AgentHeartbeatService {
   private acceptingRuns = true;
   private globallyEnabled = true;
   private hostStarted = false;
   private readonly taskMutationMutex = new Mutex();
 
   constructor(
-    private readonly store: RepresentativeWakeStore,
-    private readonly workingContext: RepresentativeWorkingContextReader,
-    private readonly runner: RepresentativeAgentHeartbeatRunner,
+    private readonly store: AgentWakeStore,
+    private readonly workingContext: AgentWorkingContextReader,
+    private readonly runner: AgentHeartbeatRunner,
     private readonly config: LucidConfig,
     private readonly logger: LucidLogger,
-    private readonly tasks: RepresentativeHeartbeatTaskAuthority,
-    private readonly executionHost: RepresentativeAgentExecutionHost,
+    private readonly tasks: AgentHeartbeatTaskAuthority,
+    private readonly executionHost: AgentExecutionHost,
   ) {}
 
   async initialize(): Promise<void> {
@@ -90,22 +94,22 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   async snapshot(): Promise<BackgroundChecksView> {
-    const [workspace, participants, agents, taskViews] = await Promise.all([
+    const [workspace, users, agents, taskViews] = await Promise.all([
       this.store.readWorkspace(),
-      this.store.listParticipants(),
+      this.store.listUsers(),
       this.store.listAgents(),
       this.tasks.listTaskViews(),
     ]);
-    const participantById = new Map(
-      participants.map((participant) => [participant.id, participant]),
+    const userById = new Map(
+      users.map((user) => [user.id, user]),
     );
     const visibleAgents = agents.filter(
-      (agent) => participantById.get(agent.participantId)?.status !== 'retired',
+      (agent) => userById.get(agent.userId)?.status !== 'retired',
     );
     const activeAgentIds = new Set(
       visibleAgents
         .filter((agent) => (
-          participantById.get(agent.participantId)?.status === 'active'
+          userById.get(agent.userId)?.status === 'active'
         ))
         .map((agent) => agent.id),
     );
@@ -114,7 +118,7 @@ export class RepresentativeAgentHeartbeatService {
     );
     const tasks = visibleAgents.flatMap((agent) => {
       const task = taskById.get(taskIdForAgent(agent.id));
-      return task ? [toRepresentativeAgentTaskView(agent.id, task)] : [];
+      return task ? [toAgentTaskView(agent.id, task)] : [];
     });
     const activeTasks = tasks.filter((task) => activeAgentIds.has(task.agentId));
     const enabledTasks = activeTasks.filter((task) => task.enabled);
@@ -132,7 +136,7 @@ export class RepresentativeAgentHeartbeatService {
     };
   }
 
-  /** Returns only one participant representative's execution projection. */
+  /** Returns the execution projection for one user's agent. */
   async snapshotForAgent(agentId: string): Promise<BackgroundChecksView> {
     const network = await this.snapshot();
     const tasks = network.tasks.filter((task) => task.agentId === agentId);
@@ -170,7 +174,7 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   /**
-   * Changes the durable operator gate without rewriting participant task
+   * Changes the durable operator gate without rewriting user task
    * preferences. Pausing settles only work owned by this execution host.
    */
   async setGlobalBackgroundChecksEnabled(enabled: boolean): Promise<void> {
@@ -248,7 +252,7 @@ export class RepresentativeAgentHeartbeatService {
       }
 
       // Resolve every target before changing anything. A missing derived task
-      // is an invariant failure, not permission to mutate participant state.
+      // is an invariant failure, not permission to mutate user state.
       const tasks = await Promise.all(uniqueAgentIds.map((agentId) => (
         this.requireManagedTask(agentId)
       )));
@@ -263,7 +267,7 @@ export class RepresentativeAgentHeartbeatService {
       // matching local invocation is explicitly `not-owned` and fails closed.
       const results = await Promise.all(tasksRequiringSettlement.map((task) => (
         this.executionHost.cancelTask(task.id, {
-          reason: 'Lucid participant lifecycle change',
+          reason: 'Lucid user lifecycle change',
         })
       )));
       const unsafeResult = results.find(({ disposition }) => (
@@ -275,7 +279,7 @@ export class RepresentativeAgentHeartbeatService {
         );
       }
 
-      // Disable only after every target can no longer retain old participant
+      // Disable only after every target can no longer retain old user
       // context or cross the boundary being changed by the caller.
       await Promise.all(tasksRequiringSettlement
         .filter((task) => task.enabled)
@@ -284,24 +288,24 @@ export class RepresentativeAgentHeartbeatService {
   }
 
   private async ensureAgentTasks(): Promise<void> {
-    // Domain participant state owns network availability. For active
-    // participants, the existing Heddle task retains its durable personal
+    // Domain user state owns network availability. For active
+    // users, the existing Heddle task retains its durable personal
     // listening preference across host restarts and unrelated reconciliation.
-    const [workspace, participants, agents, existingTasks] = await Promise.all([
+    const [workspace, users, agents, existingTasks] = await Promise.all([
       this.store.readWorkspace(),
-      this.store.listParticipants(),
+      this.store.listUsers(),
       this.store.listAgents(),
       this.listManagedTasks(),
     ]);
-    const participantById = new Map(
-      participants.map((participant) => [participant.id, participant]),
+    const userById = new Map(
+      users.map((user) => [user.id, user]),
     );
     const managedAgents = agents.filter(
-      (agent) => participantById.get(agent.participantId)?.status !== 'retired',
+      (agent) => userById.get(agent.userId)?.status !== 'retired',
     );
     const agentIds = new Set(managedAgents.map((agent) => agent.id));
 
-    // Execution hosts settle their own work before reset or participant
+    // Execution hosts settle their own work before reset or user
     // mutations. Heddle still rejects deletion of non-owned running tasks.
     for (const task of existingTasks) {
       const agentId = agentIdFromTask(task.id);
@@ -318,13 +322,13 @@ export class RepresentativeAgentHeartbeatService {
       (await this.listManagedTasks()).map((task) => [task.id, task]),
     );
     for (const agent of managedAgents) {
-      const participant = participantById.get(agent.participantId);
-      if (!participant) {
-        throw new Error(`Participant not found for agent: ${agent.id}`);
+      const user = userById.get(agent.userId);
+      if (!user) {
+        throw new Error(`User not found for agent: ${agent.id}`);
       }
       const taskId = taskIdForAgent(agent.id);
       const existing = currentTasks.get(taskId);
-      const desiredEnabled = participant.status === 'active'
+      const desiredEnabled = user.status === 'active'
         && (existing?.enabled ?? true);
       if (!existing) {
         await this.tasks.createTask({
@@ -406,7 +410,7 @@ export class RepresentativeAgentHeartbeatService {
       const wake: AgentWakeContext = {
         ...claim,
         workingContext:
-          await this.workingContext.readRepresentativeWorkingContext(
+          await this.workingContext.readAgentWorkingContext(
             agentId,
             claim.horizonSequence,
           ),
@@ -461,12 +465,12 @@ export class RepresentativeAgentHeartbeatService {
         ))).every(Boolean)
       ) {
         // Saving an assignment cannot be acknowledged as complete until the
-        // representative actually publishes a privacy-minimized request. A
+        // agent actually publishes a privacy-minimized request. A
         // failed wake retains its fixed horizon and retry-stable action slots.
         await this.store.failAgentWake(agentId, wake.claimToken);
         claimedWake = undefined;
         throw new Error(
-          'The representative finished without sharing the required network request.',
+          'The agent finished without sharing the required network request.',
         );
       }
 
@@ -482,13 +486,13 @@ export class RepresentativeAgentHeartbeatService {
           ),
         ))).every(Boolean)
       ) {
-        // Direct participant guidance changes the representative's durable
+        // Direct user guidance changes the agent's durable
         // interpretation. A model summary alone cannot acknowledge it: the
         // revised note must exist before the mailbox cursor advances.
         await this.store.failAgentWake(agentId, wake.claimToken);
         claimedWake = undefined;
         throw new Error(
-          'The representative finished without revising its working note for the latest guidance.',
+          'The agent finished without revising its working note for the latest guidance.',
         );
       }
 
@@ -500,7 +504,7 @@ export class RepresentativeAgentHeartbeatService {
         idempotencyKey: `${wake.wakeId}:completed`,
         title: `${wake.agent.name} completes a background check`,
         content:
-          'The representative finished processing its claimed mailbox messages.',
+          'The agent finished processing its claimed mailbox messages.',
         metadata: {
           visibility: 'operator',
           wakeId: wake.wakeId,
@@ -602,7 +606,7 @@ export class RepresentativeAgentHeartbeatService {
 
   private async listManagedTasks(): Promise<HeartbeatTask[]> {
     return (await this.tasks.listTasks()).filter(
-      (task) => task.id.startsWith(REPRESENTATIVE_AGENT_TASK_ID_PREFIX),
+      (task) => task.id.startsWith(AGENT_TASK_ID_PREFIX),
     );
   }
 
@@ -641,12 +645,12 @@ export class RepresentativeAgentHeartbeatService {
 }
 
 function taskIdForAgent(agentId: string): string {
-  return `${REPRESENTATIVE_AGENT_TASK_ID_PREFIX}${agentId}`;
+  return `${AGENT_TASK_ID_PREFIX}${agentId}`;
 }
 
 function agentIdFromTask(taskId: string): string | undefined {
-  return taskId.startsWith(REPRESENTATIVE_AGENT_TASK_ID_PREFIX)
-    ? taskId.slice(REPRESENTATIVE_AGENT_TASK_ID_PREFIX.length)
+  return taskId.startsWith(AGENT_TASK_ID_PREFIX)
+    ? taskId.slice(AGENT_TASK_ID_PREFIX.length)
     : undefined;
 }
 
@@ -660,10 +664,10 @@ function taskRequiresReplacement(
     || task.runtime?.stateDir !== config.heddleStateRoot;
 }
 
-function toRepresentativeAgentTaskView(
+function toAgentTaskView(
   agentId: string,
   task: HeartbeatTaskView,
-): RepresentativeAgentTaskView {
+): AgentTaskView {
   return {
     taskId: task.taskId,
     agentId,

@@ -1,7 +1,7 @@
 /**
- * Flexible development ingress for one independently described participant.
+ * Flexible development ingress for one independently described user.
  * This is intentionally outside product code: it lets developers play a real
- * or synthetic participant without adding a built-in Lucid character.
+ * or synthetic user without adding a built-in Lucid character.
  */
 import { randomUUID } from 'node:crypto';
 import { parseArgs } from 'node:util';
@@ -11,7 +11,7 @@ import type { AppRouter } from '../apps/server/src/router.js';
 
 await main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`Lucid participant input failed: ${message}`);
+  console.error(`Lucid user input failed: ${message}`);
   process.exitCode = 1;
 });
 
@@ -42,10 +42,10 @@ async function main(): Promise<void> {
     '--private-context',
   );
   const input = requireText(values.input, '--input');
-  const kind = parseParticipantKind(values.kind);
+  const kind = parseUserKind(values.kind);
   if (kind === 'human' && !values['context-approved']) {
     throw new Error(
-      'Human participant context requires the explicit --context-approved flag.',
+      'Human user context requires the explicit --context-approved flag.',
     );
   }
 
@@ -54,7 +54,7 @@ async function main(): Promise<void> {
       httpBatchLink({ transformer: superjson, url: values.url }),
     ],
   });
-  const participant = await client.development.registerParticipant.mutate(
+  const user = await client.development.registerUser.mutate(
     kind === 'human'
       ? {
           registrationKey,
@@ -65,14 +65,14 @@ async function main(): Promise<void> {
         }
       : { registrationKey, kind, displayName, privateContext },
   );
-  const receipt = await client.development.submitParticipantInput.mutate({
-    participantId: participant.participantId,
+  const receipt = await client.development.submitUserInput.mutate({
+    userId: user.userId,
     content: input,
     idempotencyKey: values['input-key']
-      ?? `lucid-participant-input:${registrationKey}:${randomUUID()}`,
+      ?? `lucid-user-input:${registrationKey}:${randomUUID()}`,
   });
   console.log(
-    `${participant.displayName} (${participant.participantId}) submitted event #${receipt.sequence}.`,
+    `${user.displayName} (${user.userId}) submitted event #${receipt.sequence}.`,
   );
 }
 
@@ -87,7 +87,7 @@ function requireText(
   return normalized;
 }
 
-function parseParticipantKind(value: string): 'human' | 'synthetic' {
+function parseUserKind(value: string): 'human' | 'synthetic' {
   if (value === 'human' || value === 'synthetic') {
     return value;
   }

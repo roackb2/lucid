@@ -13,10 +13,10 @@ export function GoogleSignIn({ onSignIn }: { onSignIn: () => Promise<void> }) {
           <LogIn size={20} />
         </span>
         <p className="section-label">Private preview</p>
-        <h1 id="google-sign-in-heading">Meet your Lucid representative.</h1>
+        <h1 id="google-sign-in-heading">Meet your Lucid agent.</h1>
         <p>
           Sign in with an invited Google account. Lucid gives each person a
-          durable participant identity and a representative in the shared agent
+          durable user identity and a agent in the shared agent
           network.
         </p>
         <Button

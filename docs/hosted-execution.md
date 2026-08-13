@@ -2,7 +2,7 @@
 
 Lucid keeps hosted agent execution replaceable, but it does not embed or import
 the private Heddle execution-host service. The current Lucid server executes
-representative heartbeats in process. This document records the boundary that
+agent heartbeats in process. This document records the boundary that
 must be preserved before moving the model and tool loop into an isolated
 runtime such as Amazon Bedrock AgentCore Runtime.
 
@@ -20,12 +20,12 @@ adopter machinery:
 
 Lucid keeps only its domain boundary: an authenticated Streamable HTTP MCP
 service exposing `read_workspace_snapshot` and binding the verified execution
-subject to that participant's product projection.
+subject to that user's product projection.
 
 The public package owns generic JWT/JWKS and ordered SSE conformance. When the
 complete hosted profile is explicitly enabled, Lucid startup now loads an
 owner-readable ES256 key, publishes public JWKS, mounts its product MCP edge,
-and exposes an authenticated participant conversation endpoint. It calls the
+and exposes an authenticated user conversation endpoint. It calls the
 configured host through either the strict direct HTTP/SSE adapter or the
 AgentCore AWS SDK adapter without importing private host code or sending a
 database credential.
@@ -41,7 +41,7 @@ evidence boundaries.
 The optional startup-composition test separately crosses the package-owned
 Node HTTP/JWKS/SSE and Streamable HTTP MCP services, Lucid product
 admission, the direct host wire, a fake host, official-SDK MCP discovery/call,
-and the participant-scoped workspace projection. It proves that the complete
+and the user-scoped workspace projection. It proves that the complete
 profile is wired while Lucid owns only route mounting and product policy.
 Lucid also has a provider-specific AgentCore `ExecutionHost` adapter that
 signs the same portable request and consumes the same strict stream through
@@ -50,8 +50,8 @@ session-isolation smoke have completed. These prove the research direction,
 not production security or compliance. Conversation replay and product history
 are also not durable yet.
 
-Lucid's representative workflow is also not connected to the external host. A
-representative wake still requires:
+Lucid's agent workflow is also not connected to the external host. A
+agent wake still requires:
 
 - a PostgreSQL-backed Heddle task claim, checkpoint, and fenced settlement;
 - a Lucid wake claim and fixed mailbox horizon;
@@ -59,14 +59,14 @@ representative wake still requires:
   policy; and
 - durable Lucid completion or failure settlement.
 
-The conversation port must not be relabeled as representative execution.
+The conversation port must not be relabeled as agent execution.
 Moving heartbeats requires a supported autonomous-task workflow and the same
 durable claim and settlement semantics.
 
 ## Why the current invocation target is local
 
-`RepresentativeTaskInvocationTarget` is an internal delivery seam between the
-bounded dispatcher and `RepresentativeAgentWorker`. Its input contains an
+`AgentTaskInvocationTarget` is an internal delivery seam between the
+bounded dispatcher and `AgentWorker`. Its input contains an
 `AbortSignal`, its result is Heddle's targeted-task result, and its worker needs
 both the PostgreSQL task store and the in-process heartbeat handler. It is not a
 serializable wire contract.
@@ -80,7 +80,7 @@ stay in Lucid even when the model loop eventually runs elsewhere.
 
 ```mermaid
 flowchart LR
-  Client["Participant client"] --> Backend["Lucid backend and control plane"]
+  Client["User client"] --> Backend["Lucid backend and control plane"]
   Backend --> Database[("PostgreSQL")]
   Backend --> Runtime["External Heddle execution host"]
   Runtime --> MCP["Tenant-scoped Lucid MCP"]
@@ -116,14 +116,14 @@ public `ExecutionHost` port without exposing host internals.
 
 ## Next integration sequence
 
-1. Complete Google-backed participant enrollment and verify one signed-in
+1. Complete Google-backed user enrollment and verify one signed-in
    browser through Lucid, the managed Execution Host, and its scoped MCP tool.
-2. Sharpen the participant-facing social-product experience before adding
+2. Sharpen the user-facing social-product experience before adding
    deeper infrastructure or compliance work.
 3. Add durable invocation/replay only when conversation history becomes a
    supported product requirement.
 4. Add an `autonomous-task` contract before replacing Lucid's in-process
-   representative runner. Preserve PostgreSQL task/wake authority and expose
+   agent runner. Preserve PostgreSQL task/wake authority and expose
    stateful communication tools only with durable invocation-scoped policy.
 
 ## Security invariants

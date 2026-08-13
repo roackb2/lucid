@@ -7,21 +7,21 @@ import {
 } from 'vitest';
 import {
   LOCAL_USER_ID,
-  USER_AGENT_ID,
-} from '../lucid/local-participant.js';
-import type { ParticipantNetworkStore } from '../lucid/network/store.js';
+  LOCAL_AGENT_ID,
+} from '../lucid/local-user.js';
+import type { UserNetworkStore } from '../lucid/network/store.js';
 import type {
   AgentCommunicationStore,
-} from '../lucid/representative/communication/store.js';
+} from '../lucid/agent/communication/store.js';
 import type {
-  RepresentativeWakeStore,
-} from '../lucid/representative/store.js';
+  AgentWakeStore,
+} from '../lucid/agent/store.js';
 import type { DiscoveryWorkspaceStore } from '../lucid/workspace/store.js';
 
 export type LucidStoreSet = {
   workspace: DiscoveryWorkspaceStore;
-  network: ParticipantNetworkStore;
-  representative: RepresentativeWakeStore;
+  network: UserNetworkStore;
+  agent: AgentWakeStore;
   communication: AgentCommunicationStore;
 };
 
@@ -55,7 +55,7 @@ export const defineLucidStoreContract = (
     close = undefined;
   });
 
-  it('starts with only the local participant and returns a scoped product view', async () => {
+  it('starts with only the local user and returns a scoped product view', async () => {
     const product = await stores.workspace.readSnapshot(LOCAL_USER_ID);
     const diagnostics = await stores.network.readNetworkDiagnostics();
 
@@ -65,19 +65,19 @@ export const defineLucidStoreContract = (
       kind: 'human',
       displayName: 'You',
     });
-    expect(product.representative).toMatchObject({
-      id: USER_AGENT_ID,
-      participant: { id: LOCAL_USER_ID },
+    expect(product.agent).toMatchObject({
+      id: LOCAL_AGENT_ID,
+      user: { id: LOCAL_USER_ID },
     });
-    expect(diagnostics.participants.map(({ id }) => id)).toEqual([
+    expect(diagnostics.users.map(({ id }) => id)).toEqual([
       LOCAL_USER_ID,
     ]);
-    expect(diagnostics.agents.map(({ id }) => id)).toEqual([USER_AGENT_ID]);
+    expect(diagnostics.agents.map(({ id }) => id)).toEqual([LOCAL_AGENT_ID]);
     expect(JSON.stringify(product)).not.toContain('privateContext');
     expect(JSON.stringify(product)).not.toContain('registrationKey');
   });
 
-  it('registers independent participants idempotently without exposing private context', async () => {
+  it('registers independent users idempotently without exposing private context', async () => {
     const input = {
       registrationKey: 'sim:test:builder',
       kind: 'synthetic' as const,
@@ -85,30 +85,30 @@ export const defineLucidStoreContract = (
       privateContext: 'Private observations from small product experiments.',
     };
 
-    const first = await stores.network.registerParticipant(input);
-    const second = await stores.network.registerParticipant(input);
+    const first = await stores.network.registerUser(input);
+    const second = await stores.network.registerUser(input);
     const diagnostics = await stores.network.readNetworkDiagnostics();
 
     expect(first.created).toBe(true);
     expect(second).toMatchObject({
       created: false,
-      participant: { id: first.participant.id },
+      user: { id: first.user.id },
       agent: { id: first.agent.id },
     });
-    expect(diagnostics.participants).toHaveLength(2);
+    expect(diagnostics.users).toHaveLength(2);
     expect(diagnostics.agents).toHaveLength(2);
     expect(JSON.stringify(diagnostics)).not.toContain(input.privateContext);
-    await expect(stores.network.registerParticipant({
+    await expect(stores.network.registerUser({
       ...input,
       privateContext: 'A conflicting identity payload.',
-    })).rejects.toThrow('already belongs to a different participant profile');
+    })).rejects.toThrow('already belongs to a different user profile');
   });
 
-  it('delivers each participant input only to its own representative', async () => {
+  it('delivers each user input only to its own agent', async () => {
     const source = await registerSynthetic(stores, 'source');
-    const event = await stores.network.saveParticipantInput(
-      source.participant.id,
-      'One new observation arrived from this participant.',
+    const event = await stores.network.saveUserInput(
+      source.user.id,
+      'One new observation arrived from this user.',
       'sim-input:source:1',
     );
 
@@ -117,25 +117,25 @@ export const defineLucidStoreContract = (
         .map(({ sequence }) => sequence),
     ).toContain(event.sequence);
     expect(
-      (await stores.communication.listEventsVisibleToAgent(USER_AGENT_ID, 0))
+      (await stores.communication.listEventsVisibleToAgent(LOCAL_AGENT_ID, 0))
         .map(({ sequence }) => sequence),
     ).not.toContain(event.sequence);
-    expect(await stores.network.saveParticipantInput(
-      source.participant.id,
+    expect(await stores.network.saveUserInput(
+      source.user.id,
       'A retry must return the original event.',
       'sim-input:source:1',
     )).toEqual(event);
   });
 
-  it('enforces consent and mailbox floors across a human participant lifecycle', async () => {
+  it('enforces consent and mailbox floors across a human user lifecycle', async () => {
     const historicalMessage = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
-      title: 'Message from before the participant joined',
-      content: 'A new participant must not inherit this old message.',
+      actorAgentId: LOCAL_AGENT_ID,
+      title: 'Message from before the user joined',
+      content: 'A new user must not inherit this old message.',
     });
     const privateContext = 'I approved one specific personal observation.';
-    const created = await stores.network.registerParticipant({
+    const created = await stores.network.registerUser({
       registrationKey: 'human:test:avery',
       kind: 'human',
       displayName: 'Avery',
@@ -143,7 +143,7 @@ export const defineLucidStoreContract = (
       contextApproved: true,
     });
 
-    expect(created.participant.contextConsentAt).toEqual(expect.any(String));
+    expect(created.user.contextConsentAt).toEqual(expect.any(String));
     expect(await stores.communication.listEventsVisibleToAgent(created.agent.id, 0))
       .not.toContainEqual(expect.objectContaining({
         sequence: historicalMessage.sequence,
@@ -151,21 +151,21 @@ export const defineLucidStoreContract = (
     expect(JSON.stringify(await stores.network.readNetworkDiagnostics()))
       .not.toContain(privateContext);
 
-    await stores.network.setParticipantStatus(created.participant.id, 'disabled');
+    await stores.network.setUserStatus(created.user.id, 'disabled');
     const pausedMessage = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       title: 'Message sent while paused',
       content: 'This message must not be replayed after resume.',
     });
-    await stores.network.setParticipantStatus(created.participant.id, 'active');
+    await stores.network.setUserStatus(created.user.id, 'active');
     expect(await stores.communication.readVisibleEventsBySequence(
       created.agent.id,
       [pausedMessage.sequence],
     )).toEqual([]);
 
-    const retired = await stores.network.retireParticipant(created.participant.id);
-    expect(retired.participant).toMatchObject({
+    const retired = await stores.network.retireUser(created.user.id);
+    expect(retired.user).toMatchObject({
       status: 'retired',
       privateContext: '',
     });
@@ -178,15 +178,15 @@ export const defineLucidStoreContract = (
     const sourceMessage = await stores.communication.appendCommunicationEvent({
       kind: 'direct_message',
       actorAgentId: source.agent.id,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Specific response',
-      content: 'A participant supplied one relevant observation.',
+      content: 'A user supplied one relevant observation.',
     });
     await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'New finding for You',
       content: 'The observation may connect to the saved interest.',
       metadata: { sourceEventIds: [sourceMessage.sequence] },
@@ -199,9 +199,9 @@ export const defineLucidStoreContract = (
         message: expect.objectContaining({ sequence: sourceMessage.sequence }),
         attribution: expect.objectContaining({
           agentId: source.agent.id,
-          participantId: source.participant.id,
-          participantDisplayName: source.participant.displayName,
-          participantKind: 'synthetic',
+          userId: source.user.id,
+          userDisplayName: source.user.displayName,
+          userKind: 'synthetic',
         }),
       })],
     });
@@ -210,11 +210,11 @@ export const defineLucidStoreContract = (
     expect(snapshot).not.toHaveProperty('events');
   });
 
-  it('projects the latest participant-owned network request lifecycle', async () => {
+  it('projects the latest user-owned network request lifecycle', async () => {
     const source = await registerSynthetic(stores, 'request-source');
     const interest = await stores.workspace.saveInterest(
       LOCAL_USER_ID,
-      'Find a concrete example of long-running representative memory.',
+      'Find a concrete example of long-running agent memory.',
     );
 
     expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toEqual({
@@ -224,14 +224,14 @@ export const defineLucidStoreContract = (
 
     const request = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: interest.sequence,
-      title: 'Your representative asks the network',
+      title: 'Your agent asks the network',
       content: 'Who has observed a concrete long-running memory failure?',
       metadata: { sourceEventIds: [interest.sequence] },
     });
     expect(await stores.communication.findAgentPublishedRequestForTrigger(
-      USER_AGENT_ID,
+      LOCAL_AGENT_ID,
       interest.sequence,
     )).toMatchObject({ sequence: request.sequence });
     expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).networkActivity).toMatchObject({
@@ -247,9 +247,9 @@ export const defineLucidStoreContract = (
     const response = await stores.communication.appendCommunicationEvent({
       kind: 'direct_message',
       actorAgentId: source.agent.id,
-      targetAgentId: USER_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
       replyToSequence: request.sequence,
-      title: 'A participant replies',
+      title: 'A user replies',
       content: 'One operator lost rejection rules after a process restart.',
       metadata: { sourceEventIds: [request.sequence] },
     });
@@ -260,25 +260,25 @@ export const defineLucidStoreContract = (
         responseCount: 1,
         pendingReviewCount: 1,
         originatingResponseCount: 1,
-        originatingParticipantCount: 1,
+        originatingUserCount: 1,
         latestResponseAt: response.createdAt,
       },
     });
 
-    const responseWake = await stores.representative.beginAgentWake(
-      USER_AGENT_ID,
+    const responseWake = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
       'wake_review_response',
     );
     expect(responseWake).toBeDefined();
-    const reviewCompletion = await stores.representative.recordWakeCompletion({
+    const reviewCompletion = await stores.agent.recordWakeCompletion({
       wakeNumber: responseWake!.wakeNumber,
-      actorAgentId: USER_AGENT_ID,
-      title: 'The representative completes response review',
+      actorAgentId: LOCAL_AGENT_ID,
+      title: 'The agent completes response review',
       content: 'The delivered response was processed.',
       metadata: { wakeId: responseWake!.wakeId },
     });
-    await stores.representative.completeAgentWake(
-      USER_AGENT_ID,
+    await stores.agent.completeAgentWake(
+      LOCAL_AGENT_ID,
       responseWake!.claimToken,
       responseWake!.horizonSequence,
     );
@@ -294,8 +294,8 @@ export const defineLucidStoreContract = (
 
     await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'A response to the current assignment',
       content: 'A peer described a specific long-running memory failure.',
       metadata: { sourceEventIds: [response.sequence] },
@@ -307,7 +307,7 @@ export const defineLucidStoreContract = (
         responseCount: 1,
         pendingReviewCount: 0,
         originatingResponseCount: 1,
-        originatingParticipantCount: 1,
+        originatingUserCount: 1,
         latestResponseAt: response.createdAt,
       },
     });
@@ -320,8 +320,8 @@ export const defineLucidStoreContract = (
     });
 
     const check = await stores.workspace.recordCheckRequest({
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Check the current assignment again',
       content: interest.content,
     });
@@ -340,9 +340,9 @@ export const defineLucidStoreContract = (
 
     const refreshedRequest = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: check.sequence,
-      title: 'Your representative checks the network again',
+      title: 'Your agent checks the network again',
       content: 'Who has a newer concrete example?',
       metadata: { sourceEventIds: [check.sequence] },
     });
@@ -365,14 +365,14 @@ export const defineLucidStoreContract = (
     const source = await registerSynthetic(stores, 'request-history');
     const interest = await stores.workspace.saveInterest(
       LOCAL_USER_ID,
-      'Find durable examples of participant-controlled representative work.',
+      'Find durable examples of user-controlled agent work.',
     );
     const firstRequest = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: interest.sequence,
       title: 'The first request',
-      content: 'Who has a participant-controlled representative example?',
+      content: 'Who has a user-controlled agent example?',
       metadata: { sourceEventIds: [interest.sequence] },
     });
     await stores.communication.appendCommunicationEvent({
@@ -383,51 +383,51 @@ export const defineLucidStoreContract = (
       content: 'One synthetic scenario resembles that idea.',
       metadata: { sourceEventIds: [] },
     });
-    const responseWake = await stores.representative.beginAgentWake(
-      USER_AGENT_ID,
+    const responseWake = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
       'wake_history_silence',
     );
-    await stores.representative.recordWakeCompletion({
+    await stores.agent.recordWakeCompletion({
       wakeNumber: responseWake!.wakeNumber,
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       title: 'Review finishes without a finding',
       content: 'The response did not satisfy the assignment.',
       metadata: { wakeId: responseWake!.wakeId },
     });
-    await stores.representative.completeAgentWake(
-      USER_AGENT_ID,
+    await stores.agent.completeAgentWake(
+      LOCAL_AGENT_ID,
       responseWake!.claimToken,
       responseWake!.horizonSequence,
     );
 
     const guidance = await stores.workspace.saveGuidance(
       LOCAL_USER_ID,
-      'Only keep independently named examples with a participant-visible result.',
+      'Only keep independently named examples with a user-visible result.',
     );
     const guidedCheck = await stores.workspace.recordCheckRequest({
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Apply the newer guidance',
-      content: 'Look again using the participant correction.',
+      content: 'Look again using the user correction.',
       metadata: { latestGuidanceSequence: guidance.sequence },
     });
     const guidedRequest = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: guidedCheck.sequence,
       title: 'A guidance-shaped request',
       content: 'Who has an independently named example with a visible result?',
       metadata: { sourceEventIds: [guidedCheck.sequence] },
     });
     const latestCheck = await stores.workspace.recordCheckRequest({
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Start one newer check',
       content: 'Look for a newer increment.',
     });
     const latestRequest = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: latestCheck.sequence,
       title: 'The current request',
       content: 'Who has a newer concrete increment?',
@@ -468,7 +468,7 @@ export const defineLucidStoreContract = (
     );
     const requests = [await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: interest.sequence,
       title: 'Initial request',
       content: 'Start the bounded history.',
@@ -477,14 +477,14 @@ export const defineLucidStoreContract = (
 
     for (let index = 1; index <= 6; index += 1) {
       const check = await stores.workspace.recordCheckRequest({
-        targetAgentId: USER_AGENT_ID,
-        targetParticipantId: LOCAL_USER_ID,
+        targetAgentId: LOCAL_AGENT_ID,
+        targetUserId: LOCAL_USER_ID,
         title: `Check ${index}`,
         content: `Look for increment ${index}.`,
       });
       requests.push(await stores.communication.appendCommunicationEvent({
         kind: 'shared_message',
-        actorAgentId: USER_AGENT_ID,
+        actorAgentId: LOCAL_AGENT_ID,
         replyToSequence: check.sequence,
         title: `Request ${index}`,
         content: `Who has increment ${index}?`,
@@ -506,7 +506,7 @@ export const defineLucidStoreContract = (
     );
     const request = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: interest.sequence,
       title: 'The canonical request',
       content: 'Who has one concrete example?',
@@ -514,7 +514,7 @@ export const defineLucidStoreContract = (
     });
     const duplicateRequest = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: interest.sequence,
       title: 'A retry artifact',
       content: 'A retry regenerated the same semantic request.',
@@ -536,28 +536,28 @@ export const defineLucidStoreContract = (
       content: 'A progress view separates unread delivery from reviewed silence.',
       metadata: { sourceEventIds: [] },
     });
-    const responseWake = await stores.representative.beginAgentWake(
-      USER_AGENT_ID,
+    const responseWake = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
       'wake_duplicate_request_review',
     );
     await stores.communication.appendCommunicationEvent({
       wakeNumber: responseWake!.wakeNumber,
       kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'A linked finding',
       content: 'A durable mailbox makes completed silence legible.',
       metadata: { sourceEventIds: [canonicalResponse.sequence] },
     });
-    await stores.representative.recordWakeCompletion({
+    await stores.agent.recordWakeCompletion({
       wakeNumber: responseWake!.wakeNumber,
-      actorAgentId: USER_AGENT_ID,
-      title: 'The representative completes review',
+      actorAgentId: LOCAL_AGENT_ID,
+      title: 'The agent completes review',
       content: 'Every delivered response was reviewed.',
       metadata: { wakeId: responseWake!.wakeId },
     });
-    await stores.representative.completeAgentWake(
-      USER_AGENT_ID,
+    await stores.agent.completeAgentWake(
+      LOCAL_AGENT_ID,
       responseWake!.claimToken,
       responseWake!.horizonSequence,
     );
@@ -572,7 +572,7 @@ export const defineLucidStoreContract = (
     });
   });
 
-  it('collapses relays into their originating participant contribution', async () => {
+  it('collapses relays into their originating user contribution', async () => {
     const origin = await registerSynthetic(stores, 'origin');
     const relay = await registerSynthetic(stores, 'relay');
     const interest = await stores.workspace.saveInterest(
@@ -581,17 +581,17 @@ export const defineLucidStoreContract = (
     );
     const request = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: interest.sequence,
-      title: 'Your representative asks the network',
+      title: 'Your agent asks the network',
       content: 'Who has a concrete long-running operator workflow?',
       metadata: {
         messageRole: 'request',
         sourceEventIds: [interest.sequence],
       },
     });
-    const originInput = await stores.network.saveParticipantInput(
-      origin.participant.id,
+    const originInput = await stores.network.saveUserInput(
+      origin.user.id,
       'A support operator keeps unresolved cases across daily agent wakes.',
       'test:origin:workflow',
     );
@@ -599,7 +599,7 @@ export const defineLucidStoreContract = (
       kind: 'shared_message',
       actorAgentId: origin.agent.id,
       replyToSequence: request.sequence,
-      title: 'An originating participant responds',
+      title: 'An originating user responds',
       content: originInput.content,
       metadata: {
         messageRole: 'response',
@@ -610,7 +610,7 @@ export const defineLucidStoreContract = (
       kind: 'shared_message',
       actorAgentId: relay.agent.id,
       replyToSequence: request.sequence,
-      title: 'Another representative relays the response',
+      title: 'Another agent relays the response',
       content: `From #${originResponse.sequence}: ${originResponse.content}`,
       metadata: {
         messageRole: 'response',
@@ -619,8 +619,8 @@ export const defineLucidStoreContract = (
     });
     await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'A response to the current assignment',
       content: 'A support workflow may be relevant.',
       metadata: {
@@ -633,7 +633,7 @@ export const defineLucidStoreContract = (
       requestProgress: {
         responseCount: 2,
         originatingResponseCount: 1,
-        originatingParticipantCount: 1,
+        originatingUserCount: 1,
       },
     });
     expect(snapshot.findings[0]).toMatchObject({
@@ -648,27 +648,27 @@ export const defineLucidStoreContract = (
       originatingSources: [expect.objectContaining({
         message: expect.objectContaining({ sequence: originResponse.sequence }),
         attribution: expect.objectContaining({
-          participantId: origin.participant.id,
+          userId: origin.user.id,
         }),
       })],
     });
-    expect(await stores.communication.hasParticipantFindingUsingAnyOrigin(
+    expect(await stores.communication.hasUserFindingUsingAnyOrigin(
       LOCAL_USER_ID,
       [relayedResponse.sequence],
     )).toBe(true);
   });
 
-  it('projects participant-scoped working history at a retry-stable event horizon', async () => {
+  it('projects user-scoped working history at a retry-stable event horizon', async () => {
     const source = await registerSynthetic(stores, 'memory-source');
     const interest = await stores.workspace.saveInterest(
       LOCAL_USER_ID,
       'Find products that preserve useful unfinished work.',
     );
     const firstNote = await stores.communication.appendCommunicationEvent({
-      kind: 'representative_note_updated',
-      actorAgentId: USER_AGENT_ID,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      kind: 'agent_note_updated',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Lucid updates its private working note',
       content: 'Look for concrete examples involving unfinished work.',
       metadata: { throughSequence: interest.sequence, derived: true },
@@ -676,14 +676,14 @@ export const defineLucidStoreContract = (
     const sourceMessage = await stores.communication.appendCommunicationEvent({
       kind: 'direct_message',
       actorAgentId: source.agent.id,
-      targetAgentId: USER_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
       title: 'A concrete network observation',
       content: 'A prototype retained abandoned drafts for later comparison.',
     });
     const finding = await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'New finding for You',
       content: 'Abandoned drafts may be useful comparison material.',
       metadata: { sourceEventIds: [sourceMessage.sequence] },
@@ -694,17 +694,17 @@ export const defineLucidStoreContract = (
       'Useful only when the example names a real workflow.',
     );
     const revisedNote = await stores.communication.appendCommunicationEvent({
-      kind: 'representative_note_updated',
-      actorAgentId: USER_AGENT_ID,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      kind: 'agent_note_updated',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Lucid updates its private working note',
       content: 'Require a named workflow before reporting similar examples.',
       metadata: { throughSequence: feedback.sequence, derived: true },
     });
 
-    const beforeRevision = await stores.workspace.readRepresentativeWorkingContext(
-      USER_AGENT_ID,
+    const beforeRevision = await stores.workspace.readAgentWorkingContext(
+      LOCAL_AGENT_ID,
       feedback.sequence,
     );
     expect(beforeRevision).toMatchObject({
@@ -716,8 +716,8 @@ export const defineLucidStoreContract = (
       })],
     });
 
-    const afterRevision = await stores.workspace.readRepresentativeWorkingContext(
-      USER_AGENT_ID,
+    const afterRevision = await stores.workspace.readAgentWorkingContext(
+      LOCAL_AGENT_ID,
       revisedNote.sequence,
     );
     expect(afterRevision.workingNote).toMatchObject({
@@ -727,7 +727,7 @@ export const defineLucidStoreContract = (
     expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).workingNote).toEqual(
       revisedNote,
     );
-    expect(await stores.workspace.readRepresentativeWorkingContext(
+    expect(await stores.workspace.readAgentWorkingContext(
       source.agent.id,
       revisedNote.sequence,
     )).toMatchObject({
@@ -737,17 +737,17 @@ export const defineLucidStoreContract = (
     });
   });
 
-  it('keeps direct guidance private and traces the representative revision', async () => {
+  it('keeps direct guidance private and traces the agent revision', async () => {
     const peer = await registerSynthetic(stores, 'guidance-peer');
     const interest = await stores.workspace.saveInterest(
       LOCAL_USER_ID,
       'Find early signals about durable personal agents.',
     );
     const priorNote = await stores.communication.appendCommunicationEvent({
-      kind: 'representative_note_updated',
-      actorAgentId: USER_AGENT_ID,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      kind: 'agent_note_updated',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Lucid updates its private working note',
       content: 'Require an exact production mechanism before reporting.',
       metadata: { throughSequence: interest.sequence, derived: true },
@@ -758,7 +758,7 @@ export const defineLucidStoreContract = (
     );
 
     expect(await stores.communication.listEventsVisibleToAgent(
-      USER_AGENT_ID,
+      LOCAL_AGENT_ID,
       interest.sequence,
     )).toContainEqual(expect.objectContaining({
       sequence: guidance.sequence,
@@ -770,8 +770,8 @@ export const defineLucidStoreContract = (
     )).not.toContainEqual(expect.objectContaining({
       sequence: guidance.sequence,
     }));
-    expect((await stores.workspace.readRepresentativeWorkingContext(
-      USER_AGENT_ID,
+    expect((await stores.workspace.readAgentWorkingContext(
+      LOCAL_AGENT_ID,
       guidance.sequence,
     )).principalInputs).toContainEqual(expect.objectContaining({
       sequence: guidance.sequence,
@@ -784,15 +784,15 @@ export const defineLucidStoreContract = (
         workingNote: undefined,
       });
     expect(await stores.communication.hasAgentUpdatedWorkingNoteThrough(
-      USER_AGENT_ID,
+      LOCAL_AGENT_ID,
       guidance.sequence,
     )).toBe(false);
 
     const revisedNote = await stores.communication.appendCommunicationEvent({
-      kind: 'representative_note_updated',
-      actorAgentId: USER_AGENT_ID,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      kind: 'agent_note_updated',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Lucid updates its private working note',
       content:
         'Accept weak signals when they are clearly labeled; an exact production mechanism is no longer required.',
@@ -800,7 +800,7 @@ export const defineLucidStoreContract = (
     });
 
     expect(await stores.communication.hasAgentUpdatedWorkingNoteThrough(
-      USER_AGENT_ID,
+      LOCAL_AGENT_ID,
       guidance.sequence,
     )).toBe(true);
     expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).guidanceFollowThrough)
@@ -823,14 +823,14 @@ export const defineLucidStoreContract = (
     const firstMessage = await stores.communication.appendCommunicationEvent({
       kind: 'direct_message',
       actorAgentId: source.agent.id,
-      targetAgentId: USER_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
       title: 'An initial network lead',
       content: 'A builder changed onboarding after one outside conversation.',
     });
     const firstFinding = await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'An initial finding',
       content: 'An outside conversation may have changed onboarding.',
       metadata: { sourceEventIds: [firstMessage.sequence] },
@@ -848,31 +848,31 @@ export const defineLucidStoreContract = (
       });
 
     const note = await stores.communication.appendCommunicationEvent({
-      kind: 'representative_note_updated',
-      actorAgentId: USER_AGENT_ID,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      kind: 'agent_note_updated',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'Lucid updates its private working note',
       content: 'Require a before-and-after decision and named mechanism.',
       metadata: { throughSequence: feedback.sequence, derived: true },
     });
     const check = await stores.workspace.recordCheckRequest({
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'You ask Lucid to check now',
-      content: 'Continue with the participant feedback.',
+      content: 'Continue with the user feedback.',
       metadata: { latestGuidanceSequence: feedback.sequence },
     });
     const request = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: check.sequence,
-      title: 'Your representative asks a narrower question',
+      title: 'Your agent asks a narrower question',
       content: 'Who has a before-and-after decision and named mechanism?',
       metadata: { sourceEventIds: [check.sequence], messageRole: 'request' },
     });
-    const sourceInput = await stores.network.saveParticipantInput(
-      source.participant.id,
+    const sourceInput = await stores.network.saveUserInput(
+      source.user.id,
       'A team replaced persona setup with one active problem after support interviews exposed the missing handoff.',
       'test:follow-through:result',
     );
@@ -880,7 +880,7 @@ export const defineLucidStoreContract = (
       kind: 'shared_message',
       actorAgentId: source.agent.id,
       replyToSequence: request.sequence,
-      title: 'A participant answers the narrower request',
+      title: 'A user answers the narrower request',
       content: sourceInput.content,
       metadata: {
         sourceEventIds: [sourceInput.sequence],
@@ -889,8 +889,8 @@ export const defineLucidStoreContract = (
     });
     const resultingFinding = await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'A later finding',
       content: 'The onboarding decision now includes a concrete mechanism.',
       metadata: { sourceEventIds: [response.sequence] },
@@ -911,17 +911,17 @@ export const defineLucidStoreContract = (
       });
 
     const laterCheck = await stores.workspace.recordCheckRequest({
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'You ask Lucid to check again',
       content: 'Apply the same feedback to a more precise request.',
       metadata: { latestGuidanceSequence: feedback.sequence },
     });
     const laterRequest = await stores.communication.appendCommunicationEvent({
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       replyToSequence: laterCheck.sequence,
-      title: 'Your representative asks a more precise question',
+      title: 'Your agent asks a more precise question',
       content: 'Which product decision changed, and by what mechanism?',
       metadata: {
         sourceEventIds: [laterCheck.sequence],
@@ -932,16 +932,16 @@ export const defineLucidStoreContract = (
       kind: 'shared_message',
       actorAgentId: source.agent.id,
       replyToSequence: laterRequest.sequence,
-      title: 'A participant answers the more precise request',
-      content: 'A participant inbox replaced a global task dashboard.',
+      title: 'A user answers the more precise request',
+      content: 'A user inbox replaced a global task dashboard.',
       metadata: { sourceEventIds: [], messageRole: 'response' },
     });
     const laterFinding = await stores.communication.appendCommunicationEvent({
       kind: 'finding_reported',
-      actorAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       title: 'A more precise later finding',
-      content: 'The global dashboard became a participant inbox.',
+      content: 'The global dashboard became a user inbox.',
       metadata: { sourceEventIds: [laterResponse.sequence] },
     });
 
@@ -963,10 +963,10 @@ export const defineLucidStoreContract = (
   it('reuses a failed wake horizon and idempotency slots on retry', async () => {
     await stores.workspace.saveInterest(
       LOCAL_USER_ID,
-      'Find one specific participant match.',
+      'Find one specific user match.',
     );
-    const firstWake = await stores.representative.beginAgentWake(
-      USER_AGENT_ID,
+    const firstWake = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
       'wake_first',
     );
     expect(firstWake).toBeDefined();
@@ -974,29 +974,29 @@ export const defineLucidStoreContract = (
     const firstEvent = await stores.communication.appendCommunicationEvent({
       wakeNumber: firstWake!.wakeNumber,
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       idempotencyKey: `${firstWake!.wakeId}:action:1`,
       title: 'Original action',
       content: 'This is the first durable side effect.',
     });
     const firstNote = await stores.communication.appendCommunicationEvent({
       wakeNumber: firstWake!.wakeNumber,
-      kind: 'representative_note_updated',
-      actorAgentId: USER_AGENT_ID,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      kind: 'agent_note_updated',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       idempotencyKey: `${firstWake!.wakeId}:working-note`,
       title: 'Original working note',
       content: 'This note was written by the first attempt.',
       metadata: { throughSequence: firstWake!.horizonSequence },
     });
-    await stores.representative.failAgentWake(
-      USER_AGENT_ID,
+    await stores.agent.failAgentWake(
+      LOCAL_AGENT_ID,
       firstWake!.claimToken,
     );
 
-    const retriedWake = await stores.representative.beginAgentWake(
-      USER_AGENT_ID,
+    const retriedWake = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
       'wake_replacement',
     );
     expect(retriedWake).toMatchObject({
@@ -1004,24 +1004,24 @@ export const defineLucidStoreContract = (
       wakeNumber: firstWake!.wakeNumber,
       horizonSequence: firstWake!.horizonSequence,
     });
-    expect(await stores.workspace.readRepresentativeWorkingContext(
-      USER_AGENT_ID,
+    expect(await stores.workspace.readAgentWorkingContext(
+      LOCAL_AGENT_ID,
       retriedWake!.horizonSequence,
     )).toMatchObject({ workingNote: undefined });
     expect(await stores.communication.appendCommunicationEvent({
       wakeNumber: retriedWake!.wakeNumber,
       kind: 'shared_message',
-      actorAgentId: USER_AGENT_ID,
+      actorAgentId: LOCAL_AGENT_ID,
       idempotencyKey: `${retriedWake!.wakeId}:action:1`,
       title: 'Replacement action',
       content: 'This must not create a second side effect.',
     })).toEqual(firstEvent);
     expect(await stores.communication.appendCommunicationEvent({
       wakeNumber: retriedWake!.wakeNumber,
-      kind: 'representative_note_updated',
-      actorAgentId: USER_AGENT_ID,
-      targetAgentId: USER_AGENT_ID,
-      targetParticipantId: LOCAL_USER_ID,
+      kind: 'agent_note_updated',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
       idempotencyKey: `${retriedWake!.wakeId}:working-note`,
       title: 'Replacement working note',
       content: 'This retry must return the first note.',
@@ -1036,31 +1036,31 @@ export const defineLucidStoreContract = (
       LOCAL_USER_ID,
       'Keep this input unread until the wake succeeds.',
     );
-    const claimed = await stores.representative.beginAgentWake(
-      USER_AGENT_ID,
+    const claimed = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
       'execution_before_restart',
     );
     expect(claimed?.visibleEvents.map(({ sequence }) => sequence))
       .toContain(interest.sequence);
 
-    expect(await stores.representative.recoverInterruptedAgentWake(
-      USER_AGENT_ID,
+    expect(await stores.agent.recoverInterruptedAgentWake(
+      LOCAL_AGENT_ID,
       'different_execution',
     )).toBe(false);
-    expect((await stores.workspace.requireParticipantAgent(
+    expect((await stores.workspace.requireAgentForUser(
       LOCAL_USER_ID,
     )).status).toBe('running');
-    expect(await stores.representative.recoverInterruptedAgentWake(
-      USER_AGENT_ID,
+    expect(await stores.agent.recoverInterruptedAgentWake(
+      LOCAL_AGENT_ID,
       claimed!.claimToken,
     )).toBe(true);
-    expect(await stores.representative.recoverInterruptedAgentWake(
-      USER_AGENT_ID,
+    expect(await stores.agent.recoverInterruptedAgentWake(
+      LOCAL_AGENT_ID,
       claimed!.claimToken,
     )).toBe(false);
 
-    const resumed = await stores.representative.beginAgentWake(
-      USER_AGENT_ID,
+    const resumed = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
       'execution_after_restart',
     );
     expect(resumed).toMatchObject({
@@ -1073,7 +1073,7 @@ export const defineLucidStoreContract = (
     expect((await stores.network.readNetworkDiagnostics()).events).toContainEqual(
       expect.objectContaining({
         kind: 'error',
-        title: 'Interrupted representative wake recovered',
+        title: 'Interrupted agent wake recovered',
       }),
     );
   });
@@ -1083,7 +1083,7 @@ async function registerSynthetic(
   stores: LucidStoreSet,
   key: string,
 ) {
-  return await stores.network.registerParticipant({
+  return await stores.network.registerUser({
     registrationKey: `sim:test:${key}`,
     kind: 'synthetic',
     displayName: `Synthetic ${key}`,

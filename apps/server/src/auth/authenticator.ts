@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { LOCAL_USER_ID } from '../lucid/local-participant.js';
+import { LOCAL_USER_ID } from '../lucid/local-user.js';
 import type {
-  ParticipantIdentityReader,
+  UserIdentityReader,
 } from '../lucid/network/store.js';
 import type { LucidRequestPrincipal } from './request-principal.js';
 import {
@@ -24,7 +24,7 @@ export type LucidAuthenticationConfig =
   | { mode: 'development' }
   | {
       mode: 'static-token';
-      participantToken: string;
+      userToken: string;
       operatorToken: string;
     }
   | SupabaseAuthenticationConfig;
@@ -37,7 +37,7 @@ export type LucidAuthenticationConfig =
  */
 export function createLucidAuthenticator(
   config: LucidAuthenticationConfig,
-  identities?: ParticipantIdentityReader,
+  identities?: UserIdentityReader,
 ): LucidAuthenticator {
   if (config.mode === 'development') {
     return {
@@ -45,8 +45,8 @@ export function createLucidAuthenticator(
         isLoopbackAddress(remoteAddress)
           ? {
               subject: 'development:local-user',
-              participantId: LOCAL_USER_ID,
-              roles: ['participant', 'operator'],
+              userId: LOCAL_USER_ID,
+              roles: ['user', 'operator'],
             }
           : undefined
       ),
@@ -69,15 +69,15 @@ export function createLucidAuthenticator(
       if (tokensEqual(token, config.operatorToken)) {
         return {
           subject: 'static-token:operator',
-          participantId: LOCAL_USER_ID,
-          roles: ['participant', 'operator'],
+          userId: LOCAL_USER_ID,
+          roles: ['user', 'operator'],
         };
       }
-      if (tokensEqual(token, config.participantToken)) {
+      if (tokensEqual(token, config.userToken)) {
         return {
-          subject: 'static-token:participant',
-          participantId: LOCAL_USER_ID,
-          roles: ['participant'],
+          subject: 'static-token:user',
+          userId: LOCAL_USER_ID,
+          roles: ['user'],
         };
       }
       return undefined;

@@ -1,5 +1,5 @@
 /**
- * Persistence port for the participant-facing discovery workspace.
+ * Persistence port for the user-facing discovery workspace.
  *
  * The service depends on product transactions and projections, never on
  * PostgreSQL tables, query builders, or the wider operator/runtime surface.
@@ -13,14 +13,14 @@ import type {
   GuidanceFollowThroughView,
   FindingView,
   NetworkActivityView,
-  ParticipantView,
-  RepresentativeWorkingContext,
+  UserView,
+  AgentWorkingContext,
 } from '../discovery-types.js';
 
 export type DiscoveryWorkspaceStoreSnapshot = {
   workspace: DiscoveryWorkspace;
-  user: ParticipantView;
-  representative: AgentView;
+  user: UserView;
+  agent: AgentView;
   interest?: DiscoveryEvent;
   workingNote?: DiscoveryEvent;
   networkActivity?: NetworkActivityView;
@@ -33,25 +33,25 @@ export type RecordCheckRequestInput = Omit<
   'kind'
 >;
 
-/** Secondary projection port consumed by representative wake orchestration. */
-export interface RepresentativeWorkingContextReader {
-  readRepresentativeWorkingContext(
+/** Secondary projection port consumed by agent wake orchestration. */
+export interface AgentWorkingContextReader {
+  readAgentWorkingContext(
     agentId: string,
     throughSequence: number,
-  ): Promise<RepresentativeWorkingContext>;
+  ): Promise<AgentWorkingContext>;
 }
 
 export interface DiscoveryWorkspaceStore
-extends RepresentativeWorkingContextReader {
-  readSnapshot(participantId: string): Promise<DiscoveryWorkspaceStoreSnapshot>;
-  requireParticipantAgent(participantId: string): Promise<Agent>;
-  findSavedInterest(participantId: string): Promise<DiscoveryEvent | undefined>;
-  saveInterest(participantId: string, content: string): Promise<DiscoveryEvent>;
+extends AgentWorkingContextReader {
+  readSnapshot(userId: string): Promise<DiscoveryWorkspaceStoreSnapshot>;
+  requireAgentForUser(userId: string): Promise<Agent>;
+  findSavedInterest(userId: string): Promise<DiscoveryEvent | undefined>;
+  saveInterest(userId: string, content: string): Promise<DiscoveryEvent>;
   saveFeedback(
-    participantId: string,
+    userId: string,
     findingSequence: number,
     content: string,
   ): Promise<DiscoveryEvent>;
-  saveGuidance(participantId: string, content: string): Promise<DiscoveryEvent>;
+  saveGuidance(userId: string, content: string): Promise<DiscoveryEvent>;
   recordCheckRequest(input: RecordCheckRequestInput): Promise<DiscoveryEvent>;
 }

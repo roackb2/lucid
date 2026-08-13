@@ -13,15 +13,15 @@ import {
   vi,
 } from 'vitest';
 import {
-  TargetedRepresentativeAgentExecutionHost,
-} from './representative-agent-execution-host.js';
+  TargetedAgentExecutionHost,
+} from './agent-execution-host.js';
 import type {
-  RepresentativeTaskInvocation,
-} from './representative-task-invocation.js';
+  AgentTaskInvocation,
+} from './agent-task-invocation.js';
 
-describe('targeted representative execution host', () => {
+describe('targeted agent execution host', () => {
   const roots: string[] = [];
-  const hosts: TargetedRepresentativeAgentExecutionHost[] = [];
+  const hosts: TargetedAgentExecutionHost[] = [];
 
   afterEach(async () => {
     await Promise.all(hosts.map((host) => (
@@ -38,8 +38,8 @@ describe('targeted representative execution host', () => {
     roots.push(root);
     const authority = new FileHeartbeatTaskService({ stateRoot: root });
     await authority.createTask({
-      id: 'lucid-representative-local',
-      task: 'Run one local representative.',
+      id: 'lucid-agent-local',
+      task: 'Run one local agent.',
       intervalMs: 60_000,
       defer: true,
     });
@@ -48,8 +48,8 @@ describe('targeted representative execution host', () => {
       'recoverInterruptedTasks',
     );
 
-    const invocations: RepresentativeTaskInvocation[] = [];
-    const host = new TargetedRepresentativeAgentExecutionHost({
+    const invocations: AgentTaskInvocation[] = [];
+    const host = new TargetedAgentExecutionHost({
       authority,
       createTarget: () => ({
         invoke: vi.fn(async (invocation) => {
@@ -62,7 +62,7 @@ describe('targeted representative execution host', () => {
           };
         }),
       }),
-      taskIdPrefix: 'lucid-representative-',
+      taskIdPrefix: 'lucid-agent-',
       pollIntervalMs: 60_000,
       maxConcurrentInvocations: 1,
       invocationTimeoutMs: 60_000,
@@ -78,16 +78,16 @@ describe('targeted representative execution host', () => {
     await recoverInterruptedTasks.mock.results[0]?.value;
 
     const request = await authority.requestTaskRun(
-      'lucid-representative-local',
+      'lucid-agent-local',
       { reason: 'test-notification' },
     );
     host.notify(request);
     await vi.waitFor(() => expect(invocations).toHaveLength(1));
 
-    await expect(host.cancelTask('lucid-representative-local', {
-      reason: 'Participant paused.',
+    await expect(host.cancelTask('lucid-agent-local', {
+      reason: 'User paused.',
     })).resolves.toMatchObject({
-      taskId: 'lucid-representative-local',
+      taskId: 'lucid-agent-local',
       disposition: 'cancelled',
       executionId: invocations[0]?.invocationId,
     });
@@ -95,7 +95,7 @@ describe('targeted representative execution host', () => {
 
     await authority.saveTask(remoteRunningTask());
     await expect(host.cancelTask('remote-running', {
-      reason: 'Participant paused.',
+      reason: 'User paused.',
     })).resolves.toMatchObject({
       taskId: 'remote-running',
       disposition: 'not-owned',

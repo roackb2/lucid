@@ -1,4 +1,4 @@
-export type LucidRequestRole = 'participant' | 'operator';
+export type LucidRequestRole = 'user' | 'operator';
 
 /** Verified upstream subject used only to resolve a durable Lucid identity. */
 export type LucidExternalIdentity = {
@@ -10,7 +10,7 @@ export type LucidExternalIdentity = {
 export type LucidRequestPrincipal = {
   subject: string;
   externalIdentity?: LucidExternalIdentity;
-  participantId?: string;
+  userId?: string;
   roles: readonly LucidRequestRole[];
 };
 

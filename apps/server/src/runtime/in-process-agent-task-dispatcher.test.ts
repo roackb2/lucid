@@ -11,16 +11,16 @@ import {
   vi,
 } from 'vitest';
 import {
-  InProcessRepresentativeTaskDispatcher,
-  resolveRepresentativeTaskDispatchDecision,
-} from './in-process-representative-task-dispatcher.js';
+  InProcessAgentTaskDispatcher,
+  resolveAgentTaskDispatchDecision,
+} from './in-process-agent-task-dispatcher.js';
 import type {
-  RepresentativeTaskInvocation,
-  RepresentativeTaskInvocationTarget,
-} from './representative-task-invocation.js';
+  AgentTaskInvocation,
+  AgentTaskInvocationTarget,
+} from './agent-task-invocation.js';
 
-describe('in-process representative task dispatcher', () => {
-  const dispatchers: InProcessRepresentativeTaskDispatcher[] = [];
+describe('in-process agent task dispatcher', () => {
+  const dispatchers: InProcessAgentTaskDispatcher[] = [];
 
   afterEach(async () => {
     await Promise.all(dispatchers.map((dispatcher) => dispatcher.stop()));
@@ -30,8 +30,8 @@ describe('in-process representative task dispatcher', () => {
 
   it('uses notification generations for a fast path without concurrent duplicate work', async () => {
     const firstRun = deferred<void>();
-    const invocations: RepresentativeTaskInvocation[] = [];
-    const target: RepresentativeTaskInvocationTarget = {
+    const invocations: AgentTaskInvocation[] = [];
+    const target: AgentTaskInvocationTarget = {
       invoke: vi.fn(async (invocation) => {
         invocations.push(invocation);
         if (invocations.length === 1) {
@@ -43,12 +43,12 @@ describe('in-process representative task dispatcher', () => {
     const dispatcher = createDispatcher({ target });
     dispatcher.start();
 
-    expect(dispatcher.notify(runRequest('lucid-representative-a', 1)).status)
+    expect(dispatcher.notify(runRequest('lucid-agent-a', 1)).status)
       .toBe('queued');
     await vi.waitFor(() => expect(invocations).toHaveLength(1));
-    expect(dispatcher.notify(runRequest('lucid-representative-a', 1)).status)
+    expect(dispatcher.notify(runRequest('lucid-agent-a', 1)).status)
       .toBe('coalesced');
-    expect(dispatcher.notify(runRequest('lucid-representative-a', 2)).status)
+    expect(dispatcher.notify(runRequest('lucid-agent-a', 2)).status)
       .toBe('queued');
     expect(invocations).toHaveLength(1);
 
@@ -61,11 +61,11 @@ describe('in-process representative task dispatcher', () => {
   it('uses the durable global gate and polling as the correctness fallback', async () => {
     let globallyEnabled = false;
     let globalGateReads = 0;
-    const task = createDueTask('lucid-representative-polled');
+    const task = createDueTask('lucid-agent-polled');
     const store = {
       listTasks: vi.fn(async () => [task]),
     };
-    const target: RepresentativeTaskInvocationTarget = {
+    const target: AgentTaskInvocationTarget = {
       invoke: vi.fn(async ({ taskId }) => {
         task.enabled = false;
         return noWork(taskId);
@@ -97,7 +97,7 @@ describe('in-process representative task dispatcher', () => {
     const releases = new Map<string, Deferred<void>>();
     let activeCount = 0;
     let maximumActiveCount = 0;
-    const target: RepresentativeTaskInvocationTarget = {
+    const target: AgentTaskInvocationTarget = {
       invoke: vi.fn(async ({ taskId }) => {
         activeCount += 1;
         maximumActiveCount = Math.max(maximumActiveCount, activeCount);
@@ -114,12 +114,12 @@ describe('in-process representative task dispatcher', () => {
     });
     dispatcher.start();
     ['a', 'b', 'c'].forEach((suffix) => {
-      dispatcher.notify(runRequest(`lucid-representative-${suffix}`, 1));
+      dispatcher.notify(runRequest(`lucid-agent-${suffix}`, 1));
     });
 
     await vi.waitFor(() => expect(target.invoke).toHaveBeenCalledTimes(2));
     expect(maximumActiveCount).toBe(2);
-    releases.get('lucid-representative-a')?.resolve();
+    releases.get('lucid-agent-a')?.resolve();
     await vi.waitFor(() => expect(target.invoke).toHaveBeenCalledTimes(3));
     expect(maximumActiveCount).toBe(2);
     releases.forEach((release) => release.resolve());
@@ -128,7 +128,7 @@ describe('in-process representative task dispatcher', () => {
   it('retries ownership contention but respects Heddle durable schedules', async () => {
     const outcomes: RunHeartbeatTaskResult['status'][] = [];
     let attempts = 0;
-    const target: RepresentativeTaskInvocationTarget = {
+    const target: AgentTaskInvocationTarget = {
       invoke: vi.fn(async ({ taskId }) => {
         attempts += 1;
         return attempts === 1
@@ -142,15 +142,15 @@ describe('in-process representative task dispatcher', () => {
       onOutcome: ({ result }) => outcomes.push(result.status),
     });
     dispatcher.start();
-    dispatcher.notify(runRequest('lucid-representative-contention', 1));
+    dispatcher.notify(runRequest('lucid-agent-contention', 1));
 
     await vi.waitFor(() => expect(target.invoke).toHaveBeenCalledTimes(2));
     expect(outcomes).toEqual(['busy', 'not-found']);
-    expect(resolveRepresentativeTaskDispatchDecision('busy', 25)).toEqual({
+    expect(resolveAgentTaskDispatchDecision('busy', 25)).toEqual({
       kind: 'retry-transiently',
       delayMs: 25,
     });
-    expect(resolveRepresentativeTaskDispatchDecision('claim-lost', 25)).toEqual({
+    expect(resolveAgentTaskDispatchDecision('claim-lost', 25)).toEqual({
       kind: 'retry-transiently',
       delayMs: 25,
     });
@@ -160,20 +160,20 @@ describe('in-process representative task dispatcher', () => {
       'not-due',
       'cancelled',
     ] as const) {
-      expect(resolveRepresentativeTaskDispatchDecision(status, 25)).toEqual({
+      expect(resolveAgentTaskDispatchDecision(status, 25)).toEqual({
         kind: 'wait-for-durable-schedule',
       });
     }
     for (const status of ['settled', 'not-found', 'disabled'] as const) {
-      expect(resolveRepresentativeTaskDispatchDecision(status, 25)).toEqual({
+      expect(resolveAgentTaskDispatchDecision(status, 25)).toEqual({
         kind: 'complete-delivery',
       });
     }
   });
 
   it('aborts and awaits task cancellation and graceful shutdown', async () => {
-    const invocations = new Map<string, RepresentativeTaskInvocation>();
-    const target: RepresentativeTaskInvocationTarget = {
+    const invocations = new Map<string, AgentTaskInvocation>();
+    const target: AgentTaskInvocationTarget = {
       invoke: vi.fn(async (invocation) => {
         invocations.set(invocation.taskId, invocation);
         await aborted(invocation.signal);
@@ -189,34 +189,34 @@ describe('in-process representative task dispatcher', () => {
       maxConcurrentInvocations: 2,
     });
     dispatcher.start();
-    dispatcher.notify(runRequest('lucid-representative-cancel', 1));
+    dispatcher.notify(runRequest('lucid-agent-cancel', 1));
     await vi.waitFor(() => expect(invocations.size).toBe(1));
 
     const cancellation = await dispatcher.cancelTask(
-      'lucid-representative-cancel',
-      'Participant paused.',
+      'lucid-agent-cancel',
+      'User paused.',
     );
     expect(cancellation).toMatchObject({
-      taskId: 'lucid-representative-cancel',
+      taskId: 'lucid-agent-cancel',
       disposition: 'cancelled',
     });
-    expect(invocations.get('lucid-representative-cancel')?.signal.aborted)
+    expect(invocations.get('lucid-agent-cancel')?.signal.aborted)
       .toBe(true);
 
-    dispatcher.notify(runRequest('lucid-representative-stop-a', 1));
-    dispatcher.notify(runRequest('lucid-representative-stop-b', 1));
+    dispatcher.notify(runRequest('lucid-agent-stop-a', 1));
+    dispatcher.notify(runRequest('lucid-agent-stop-b', 1));
     await vi.waitFor(() => expect(invocations.size).toBe(3));
     await dispatcher.stop();
-    expect(invocations.get('lucid-representative-stop-a')?.signal.aborted)
+    expect(invocations.get('lucid-agent-stop-a')?.signal.aborted)
       .toBe(true);
-    expect(invocations.get('lucid-representative-stop-b')?.signal.aborted)
+    expect(invocations.get('lucid-agent-stop-b')?.signal.aborted)
       .toBe(true);
-    expect(dispatcher.notify(runRequest('lucid-representative-late', 1)).status)
+    expect(dispatcher.notify(runRequest('lucid-agent-late', 1)).status)
       .toBe('not-running');
   });
 
   it('retains notifications while paused and admits them after resume', async () => {
-    const target: RepresentativeTaskInvocationTarget = {
+    const target: AgentTaskInvocationTarget = {
       invoke: vi.fn(async ({ taskId }) => noWork(taskId)),
     };
     const dispatcher = createDispatcher({ target });
@@ -224,7 +224,7 @@ describe('in-process representative task dispatcher', () => {
     await dispatcher.pause('Operator paused global dispatch.');
 
     expect(dispatcher.notify(
-      runRequest('lucid-representative-paused', 1),
+      runRequest('lucid-agent-paused', 1),
     ).status).toBe('queued');
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(target.invoke).not.toHaveBeenCalled();
@@ -234,7 +234,7 @@ describe('in-process representative task dispatcher', () => {
   });
 
   it('cancels an invocation that exceeds its configured wall-clock bound', async () => {
-    const target: RepresentativeTaskInvocationTarget = {
+    const target: AgentTaskInvocationTarget = {
       invoke: vi.fn(async (invocation) => {
         await aborted(invocation.signal);
         return {
@@ -249,7 +249,7 @@ describe('in-process representative task dispatcher', () => {
       invocationTimeoutMs: 10,
     });
     dispatcher.start();
-    dispatcher.notify(runRequest('lucid-representative-timeout', 1));
+    dispatcher.notify(runRequest('lucid-agent-timeout', 1));
 
     await vi.waitFor(() => expect(target.invoke).toHaveBeenCalledOnce());
     await vi.waitFor(() => {
@@ -261,13 +261,13 @@ describe('in-process representative task dispatcher', () => {
 
   function createDispatcher(
     overrides: Partial<
-      ConstructorParameters<typeof InProcessRepresentativeTaskDispatcher>[0]
+      ConstructorParameters<typeof InProcessAgentTaskDispatcher>[0]
     > = {},
-  ): InProcessRepresentativeTaskDispatcher {
-    const dispatcher = new InProcessRepresentativeTaskDispatcher({
+  ): InProcessAgentTaskDispatcher {
+    const dispatcher = new InProcessAgentTaskDispatcher({
       store: { listTasks: async () => [] },
       target: { invoke: async ({ taskId }) => noWork(taskId) },
-      taskIdPrefix: 'lucid-representative-',
+      taskIdPrefix: 'lucid-agent-',
       pollIntervalMs: 1_000,
       maxConcurrentInvocations: 1,
       invocationTimeoutMs: 60_000,
@@ -296,7 +296,7 @@ function runRequest(
 function createDueTask(id: string): HeartbeatTask {
   return {
     id,
-    task: `Process representative work for ${id}.`,
+    task: `Process agent work for ${id}.`,
     enabled: true,
     schedule: {
       intervalMs: 60_000,

@@ -3,19 +3,19 @@ import {
   createPostgresTestDatabase,
 } from '../../../infrastructure/postgres/test-database.js';
 import type { PostgresDatabase } from '../../../infrastructure/postgres/database.js';
-import { PostgresParticipantNetworkStore } from '../../network/postgres-store.js';
+import { PostgresUserNetworkStore } from '../../network/postgres-store.js';
 import {
   PostgresAgentCommunicationStore,
-} from '../../representative/communication/postgres-store.js';
-import { PostgresRepresentativeWakeStore } from '../../representative/postgres-store.js';
+} from '../../agent/communication/postgres-store.js';
+import { PostgresAgentWakeStore } from '../../agent/postgres-store.js';
 import { PostgresDiscoveryWorkspaceStore } from '../../workspace/postgres-store.js';
 
 export type PostgresTestStores = {
   database: PostgresDatabase;
   stores: {
     workspace: PostgresDiscoveryWorkspaceStore;
-    network: PostgresParticipantNetworkStore;
-    representative: PostgresRepresentativeWakeStore;
+    network: PostgresUserNetworkStore;
+    agent: PostgresAgentWakeStore;
     communication: PostgresAgentCommunicationStore;
   };
 };
@@ -35,15 +35,15 @@ export async function createPostgresTestStores(options: {
   });
   try {
     const workspace = new PostgresDiscoveryWorkspaceStore(database);
-    const representative = new PostgresRepresentativeWakeStore(database);
-    await representative.initialize();
+    const agent = new PostgresAgentWakeStore(database);
+    await agent.initialize();
     if (options.reset ?? true) {
-      await representative.reset({ backgroundChecksEnabled: true });
+      await agent.reset({ backgroundChecksEnabled: true });
     }
     const stores = {
       workspace,
-      network: new PostgresParticipantNetworkStore(database),
-      representative,
+      network: new PostgresUserNetworkStore(database),
+      agent,
       communication: new PostgresAgentCommunicationStore(database),
     };
     return {

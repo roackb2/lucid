@@ -8,27 +8,27 @@ describe('Lucid request authentication', () => {
     await expect(authenticator.authenticate({
       remoteAddress: '127.0.0.1',
     })).resolves.toMatchObject({
-      participantId: 'local-user',
-      roles: ['participant', 'operator'],
+      userId: 'local-user',
+      roles: ['user', 'operator'],
     });
     await expect(authenticator.authenticate({
       remoteAddress: '203.0.113.10',
     })).resolves.toBeUndefined();
   });
 
-  it('derives participant and operator roles from distinct bearer tokens', async () => {
+  it('derives user and operator roles from distinct bearer tokens', async () => {
     const authenticator = createLucidAuthenticator({
       mode: 'static-token',
-      participantToken: 'participant-token-with-at-least-32-characters',
+      userToken: 'user-token-with-at-least-32-characters',
       operatorToken: 'operator-token-with-at-least-32-characters-long',
     });
 
     await expect(authenticator.authenticate({
-      authorization: 'Bearer participant-token-with-at-least-32-characters',
-    })).resolves.toMatchObject({ roles: ['participant'] });
+      authorization: 'Bearer user-token-with-at-least-32-characters',
+    })).resolves.toMatchObject({ roles: ['user'] });
     await expect(authenticator.authenticate({
       authorization: 'Bearer operator-token-with-at-least-32-characters-long',
-    })).resolves.toMatchObject({ roles: ['participant', 'operator'] });
+    })).resolves.toMatchObject({ roles: ['user', 'operator'] });
     await expect(authenticator.authenticate({
       authorization: 'Bearer invalid',
     })).resolves.toBeUndefined();
@@ -37,12 +37,12 @@ describe('Lucid request authentication', () => {
   it('rejects malformed authorization schemes', async () => {
     const authenticator = createLucidAuthenticator({
       mode: 'static-token',
-      participantToken: 'participant-token-with-at-least-32-characters',
+      userToken: 'user-token-with-at-least-32-characters',
       operatorToken: 'operator-token-with-at-least-32-characters-long',
     });
 
     await expect(authenticator.authenticate({
-      authorization: 'Basic participant-token-with-at-least-32-characters',
+      authorization: 'Basic user-token-with-at-least-32-characters',
     })).resolves.toBeUndefined();
   });
 });

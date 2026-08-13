@@ -1,17 +1,17 @@
 /**
- * Development-only episodes for testing whether one Lucid representative can
- * refine an ongoing assignment across real participant feedback. The phases
+ * Development-only episodes for testing whether one Lucid agent can
+ * refine an ongoing assignment across real user feedback. The phases
  * describe exogenous events; they never prescribe what the product agent must
- * conclude or whether the participant should value a finding.
+ * conclude or whether the user should value a finding.
  */
 import type { LongitudinalNetworkPhase } from './network-simulator-core.js';
 
 export const LONGITUDINAL_NETWORK_PHASES = [
   {
     key: 'setup',
-    title: 'Prepare the participant network',
+    title: 'Prepare the user network',
     purpose:
-      'Register stable synthetic participants before the local representative publishes its first request. No participant input is submitted.',
+      'Register stable synthetic users before the local agent publishes its first request. No user input is submitted.',
     operatorInstruction:
       'Open Lucid and save the ongoing interest. Wait until its first network request is visible, then advance to baseline.',
     inputs: [],
@@ -20,7 +20,7 @@ export const LONGITUDINAL_NETWORK_PHASES = [
     key: 'baseline',
     title: 'Initial outside-context leads',
     purpose:
-      'Give the representative two plausible starting leads before the participant explains what is actually useful.',
+      'Give the agent two plausible starting leads before the user explains what is actually useful.',
     operatorInstruction:
       'Inspect any finding and leave your own feedback before advancing to refinement.',
     inputs: [
@@ -40,14 +40,14 @@ export const LONGITUDINAL_NETWORK_PHASES = [
     key: 'refinement',
     title: 'One concrete increment and one repetition',
     purpose:
-      'Test whether the representative follows the participant correction, selects the concrete increment, and ignores a restatement.',
+      'Test whether the agent follows the user correction, selects the concrete increment, and ignores a restatement.',
     operatorInstruction:
       'Run a check now so the revised direction reaches the network, inspect any new finding, and leave feedback before advancing to revision.',
     inputs: [
       {
         scenarioKey: 'systems-engineer',
         content:
-          'An agent-runtime prototype first exposed a global task dashboard. After an operator explained that they only needed to know what their own representative retained, requested, and returned, the product changed to a participant-scoped inbox. The concrete mechanism was replacing task status rows with the saved assignment, disclosed request, sourced finding, and private feedback loop.',
+          'An agent-runtime prototype first exposed a global task dashboard. After an operator explained that they only needed to know what their own agent retained, requested, and returned, the product changed to a user-scoped inbox. The concrete mechanism was replacing task status rows with the saved assignment, disclosed request, sourced finding, and private feedback loop.',
       },
       {
         scenarioKey: 'community-organizer',
@@ -60,7 +60,7 @@ export const LONGITUDINAL_NETWORK_PHASES = [
     key: 'revision',
     title: 'A correction plus unrelated noise',
     purpose:
-      'Test whether the representative can report a material revision to an earlier lead while staying quiet about unrelated novelty.',
+      'Test whether the agent can report a material revision to an earlier lead while staying quiet about unrelated novelty.',
     operatorInstruction:
       'Run a check now, inspect whether the correction is reported without the unrelated technique, and leave any final feedback.',
     inputs: [

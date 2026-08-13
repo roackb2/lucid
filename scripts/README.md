@@ -1,4 +1,4 @@
-# Local participant-network simulator
+# Local user-network simulator
 
 This directory is development tooling, not Lucid product code.
 
@@ -14,19 +14,19 @@ loopback-only `development` tRPC router. It must not import or write through:
 - product initialization defaults.
 
 That boundary ensures a future webhook, import, second client, or real
-participant can replace the simulator without changing Lucid's network model.
+user can replace the simulator without changing Lucid's network model.
 
 ## Files
 
 | File | Responsibility |
 | --- | --- |
-| `network-scenarios.ts` | Replaceable development-only participants and observations |
+| `network-scenarios.ts` | Replaceable development-only users and observations |
 | `network-simulator-core.ts` | Idempotent registration and seeded input orchestration against an abstract API |
 | `network-simulator.ts` | CLI parsing, tRPC adapter, continuous timing, and operator output |
 | `network-simulator-core.test.ts` | Determinism, registration reuse, and input-idempotency coverage |
 | `longitudinal-network-scenarios.ts` | Ordered development-only events for a multi-feedback-cycle product experiment |
-| `longitudinal-network-experiment.ts` | Phase CLI that advances external inputs without impersonating the local participant |
-| `participant-input.ts` | Free-form real or synthetic participant registration and input |
+| `longitudinal-network-experiment.ts` | Phase CLI that advances external inputs without impersonating the local user |
+| `user-input.ts` | Free-form real or synthetic user registration and input |
 | `generate-hosted-execution-key.ts` | Create one ignored, owner-readable ES256 key for the optional local Execution Host authority |
 
 ## Hosted execution signing key
@@ -63,20 +63,20 @@ Options:
 
 - `--url`: tRPC endpoint, default
   `http://127.0.0.1:8081/api/trpc`;
-- `--seed`: stable participant namespace and random-selection seed;
+- `--seed`: stable user namespace and random-selection seed;
 - `--run-id`: stable idempotency namespace for an exactly repeatable run;
 - `--mode`: `once` or `continuous`;
 - `--interval-ms`: continuous interval, minimum 1000 ms.
 
-A repeated seed reuses participants. A repeated seed plus run ID and tick
+A repeated seed reuses users. A repeated seed plus run ID and tick
 reuses the original input event. Omitting the run ID generates a fresh one so
 separate cron invocations can add new observations.
 
-For a participant that is not one of the fixed scenarios, submit ordinary
+For a user that is not one of the fixed scenarios, submit ordinary
 language directly:
 
 ```bash
-yarn participant:submit \
+yarn user:submit \
   --registration-key dogfood:operator \
   --display-name "Background-agent operator" \
   --private-context "I have operated long-lived local agents." \
@@ -85,7 +85,7 @@ yarn participant:submit \
 
 Use `--kind human --context-approved` only when that person explicitly approved
 the supplied private context. Reuse the registration key to keep the same
-participant identity; add `--input-key` when a caller needs retry idempotency.
+user identity; add `--input-key` when a caller needs retry idempotency.
 
 ## Longitudinal learning experiment
 
@@ -105,14 +105,14 @@ yarn simulate:learning \
   --phase setup
 ```
 
-The setup phase registers participants without giving them input. Save the
+The setup phase registers users without giving them input. Save the
 local interest after setup, wait for its request, then advance through
 `baseline`, `refinement`, and `revision`. Return to the Lucid UI between phases,
 submit your own ordinary-text feedback, and use **Run now** when the phase
-instruction asks the representative to share its revised direction. The script
-never saves the local interest, sends participant feedback, invokes **Run
+instruction asks the agent to share its revised direction. The script
+never saves the local interest, sends user feedback, invokes **Run
 now**, or decides whether a finding is useful. Repeating the same experiment ID
 and unchanged phase input is idempotent; editing an input creates a new content
 version. Choose a new experiment ID for an independent world. Omitting
-`--phase` safely defaults to `setup` so participants join before the first
+`--phase` safely defaults to `setup` so users join before the first
 request.

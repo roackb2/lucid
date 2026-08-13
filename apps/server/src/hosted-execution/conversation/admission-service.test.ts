@@ -1,6 +1,6 @@
 import type { ExecutionHostStreamEvent } from '@roackb2/heddle-adopter/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { LOCAL_USER_ID } from '../../lucid/local-participant.js';
+import { LOCAL_USER_ID } from '../../lucid/local-user.js';
 import {
   HostedConversationAdmissionService,
   HostedConversationAuthorizationError,
@@ -13,15 +13,15 @@ import type {
 const NOW = new Date('2026-08-10T12:00:00.000Z');
 
 describe('HostedConversationAdmissionService', () => {
-  it('derives immutable turn authority from the admitted Lucid participant', async () => {
+  it('derives immutable turn authority from the admitted Lucid user', async () => {
     const observed: HostedConversationTurnInput[] = [];
     const service = createService(observed);
 
     const events = await collect(service.streamTurn({
       principal: {
         subject: 'replaceable-auth-provider-label',
-        participantId: LOCAL_USER_ID,
-        roles: ['participant'],
+        userId: LOCAL_USER_ID,
+        roles: ['user'],
       },
       prompt: 'Summarize my workspace.',
       signal: new AbortController().signal,
@@ -44,14 +44,14 @@ describe('HostedConversationAdmissionService', () => {
     );
   });
 
-  it('rejects a principal outside the local participant boundary', async () => {
+  it('rejects a principal outside the local user boundary', async () => {
     const observed: HostedConversationTurnInput[] = [];
     const service = createService(observed);
 
     await expect(collect(service.streamTurn({
       principal: {
         subject: 'operator-only',
-        participantId: LOCAL_USER_ID,
+        userId: LOCAL_USER_ID,
         roles: ['operator'],
       },
       prompt: 'Do not run.',
@@ -69,9 +69,9 @@ describe('HostedConversationAdmissionService', () => {
 
     await expect(collect(service.streamTurn({
       principal: {
-        subject: 'participant',
-        participantId: LOCAL_USER_ID,
-        roles: ['participant'],
+        subject: 'user',
+        userId: LOCAL_USER_ID,
+        roles: ['user'],
       },
       prompt: 'Do not run.',
       signal: abortController.signal,
