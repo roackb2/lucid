@@ -1,0 +1,47 @@
+name: Promote merged Lucid release
+
+on:
+  pull_request_target:
+    branches: [dev]
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DEPLOYMENT_REPOSITORY: ${{ vars.LUCID_DEPLOYMENT_REPOSITORY }}
+      DEPLOYMENT_TOKEN: ${{ secrets.LUCID_DEPLOYMENT_DISPATCH_TOKEN }}
+      LUCID_REF: ${{ github.event.pull_request.merge_commit_sha }}
+    steps:
+      # pull_request_target deliberately runs the trusted workflow from the
+      # base branch. Never check out or execute pull-request code in this job.
+      - name: Dispatch immutable merge commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$DEPLOYMENT_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo '::error::LUCID_DEPLOYMENT_REPOSITORY must name the private deployment repository.'
+            exit 1
+          fi
+          if [[ ! "$LUCID_REF" =~ ^[a-f0-9]{40}$ ]]; then
+            echo '::error::The merged pull request did not provide an immutable commit SHA.'
+            exit 1
+          fi
+          if [[ -z "$DEPLOYMENT_TOKEN" ]]; then
+            echo '::error::LUCID_DEPLOYMENT_DISPATCH_TOKEN is not configured.'
+            exit 1
+          fi
+
+          payload="$(jq -cn --arg ref "$LUCID_REF" '{ref: "main", inputs: {lucid_ref: $ref}}')"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${DEPLOYMENT_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${DEPLOYMENT_REPOSITORY}/actions/workflows/deploy-lucid.yml/dispatches" \
+            --data "$payload"
