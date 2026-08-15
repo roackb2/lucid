@@ -8,14 +8,10 @@ const TURN: HostedConversationTurn = {
   invocationId: 'invocation-001',
   prompt: 'Summarize my workspace.',
   status: 'completed',
-  runId: 'run-001',
-  answerMarkdown: '## Durable answer',
-  errorCode: null,
-  deadlineAt: '2026-08-13T12:01:00.000Z',
-  createdAt: '2026-08-13T12:00:00.000Z',
-  acceptedAt: '2026-08-13T12:00:01.000Z',
+  summary: '## Durable answer',
+  failureCode: null,
+  requestedAt: '2026-08-13T12:00:00.000Z',
   settledAt: '2026-08-13T12:00:02.000Z',
-  updatedAt: '2026-08-13T12:00:02.000Z',
 };
 
 describe('hosted conversation durable rendering', () => {

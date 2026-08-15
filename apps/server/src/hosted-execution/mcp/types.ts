@@ -1,4 +1,4 @@
-import type { McpInvocationScope } from '@roackb2/heddle-adopter/mcp';
+import type { McpInvocationScope } from '@heddleagent/execution-host-client/mcp';
 import type { DiscoveryWorkspaceSnapshot } from '../../lucid/discovery-types.js';
 
 /** The first product capability is deliberately small and read-only. */

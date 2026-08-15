@@ -47,11 +47,11 @@ one origin.
 Hosted questions use same-origin
 `/hosted-execution/conversation-turns` with the same tab-scoped user
 credential. The browser validates the canonical
-`@roackb2/heddle-adopter` event schema and ordering, renders only safe progress
+`@heddleagent/execution-host-client` event schema and ordering, renders only safe progress
 labels, and releases the terminal answer only after clean stream completion.
-Live progress remains ephemeral. The server-owned conversation projection is
-queried separately through authenticated tRPC after settlement and survives a
-page refresh or process restart.
+Live progress remains ephemeral. Lucid queries the public, durably settled
+Heddle lifecycle records through authenticated tRPC; that bounded product view
+survives a page refresh or process restart.
 It never receives execution authority, model credentials, MCP capabilities,
 or database credentials.
 

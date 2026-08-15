@@ -66,8 +66,8 @@ export function HostedConversationHistory({
                     {describeHostedConversationStatus(turn.status)}
                   </span>
                   <strong>{turn.prompt}</strong>
-                  <time dateTime={turn.createdAt}>
-                    {dayjs(turn.createdAt).format('MMM D, HH:mm')}
+                  <time dateTime={turn.requestedAt}>
+                    {dayjs(turn.requestedAt).format('MMM D, HH:mm')}
                   </time>
                   <ChevronDown
                     aria-hidden="true"
@@ -76,9 +76,9 @@ export function HostedConversationHistory({
                   />
                 </summary>
                 <div className="hosted-conversation-history__content">
-                  {turn.answerMarkdown ? (
+                  {turn.summary ? (
                     <HostedConversationAnswer
-                      markdown={turn.answerMarkdown}
+                      markdown={turn.summary}
                       status={turn.status}
                     />
                   ) : (

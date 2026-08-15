@@ -1,16 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { ExecutionHostStreamEvent } from '@roackb2/heddle-adopter/contracts';
-import type { HostedConversationTurnRunner } from '@roackb2/heddle-adopter/conversation';
+import type { HostedConversationTurnRunner } from '@heddleagent/execution-host-client/conversation';
 import dayjs from 'dayjs';
 import { principalHasRole } from '../../auth/request-principal.js';
 import type {
   HostedConversationRequest,
   HostedConversationRequestService,
 } from './types.js';
-import {
-  HostedConversationHistoryService,
-  isHostedConversationTerminalEvent,
-} from './history-service.js';
 
 export class HostedConversationAuthorizationError extends Error {
   readonly name = 'HostedConversationAuthorizationError';
@@ -37,7 +32,6 @@ implements HostedConversationRequestService {
 
   constructor(
     private readonly turns: HostedConversationTurnRunner,
-    private readonly history: HostedConversationHistoryService,
     policy: HostedConversationAdmissionPolicy,
     options: {
       now?: () => Date;
@@ -63,76 +57,14 @@ implements HostedConversationRequestService {
       subjectId,
       productSessionId: this.#policy.productSessionId,
     };
-    await this.history.createTurn({
+    yield* this.turns.streamTurn({
+      scope,
+      runtimeSessionId: createRuntimeSessionId(scope),
       invocationId,
-      userId: subjectId,
       prompt: input.prompt,
       deadlineAt,
+      signal: input.signal,
     });
-
-    let settled = false;
-    try {
-      input.signal.throwIfAborted();
-      for await (const event of this.turns.streamTurn({
-        scope,
-        runtimeSessionId: createRuntimeSessionId(scope),
-        invocationId,
-        prompt: input.prompt,
-        deadlineAt,
-        signal: input.signal,
-      })) {
-        let publicEvent: ExecutionHostStreamEvent = event;
-        if (event.kind === 'accepted') {
-          await this.history.recordAccepted({
-            invocationId,
-            userId: subjectId,
-            runId: event.runId,
-            acceptedAt: event.timestamp,
-          });
-        } else if (isHostedConversationTerminalEvent(event)) {
-          const durableTurn = await this.history.recordTerminal(subjectId, event);
-          if (event.kind === 'result') {
-            publicEvent = {
-              ...event,
-              result: {
-                ...event.result,
-                summary: durableTurn.answerMarkdown ?? undefined,
-              },
-            };
-          }
-          settled = true;
-        }
-        yield publicEvent;
-      }
-      if (!settled) {
-        settled = true;
-        await this.history.recordAbandoned({
-          invocationId,
-          userId: subjectId,
-        });
-      }
-    } catch (error) {
-      if (!settled) {
-        settled = true;
-        await this.history.recordThrownFailure({
-          invocationId,
-          userId: subjectId,
-          error,
-          signal: input.signal,
-        });
-      }
-      throw error;
-    } finally {
-      // A downstream disconnect closes the async iterator without throwing
-      // through the loop. Settle before releasing the managed stream.
-      if (!settled) {
-        settled = true;
-        await this.history.recordAbandoned({
-          invocationId,
-          userId: subjectId,
-        });
-      }
-    }
   }
 }
 

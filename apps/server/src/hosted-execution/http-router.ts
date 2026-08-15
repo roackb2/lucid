@@ -1,12 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   NodeStreamableHttpMcpService,
-} from '@roackb2/heddle-adopter/mcp/node';
+} from '@heddleagent/execution-host-client/mcp/node';
 import {
   DEFAULT_ADOPTER_CONVERSATION_TURNS_PATH,
   DEFAULT_ADOPTER_JWKS_PATH,
   type NodeExecutionAdopterHttpHandler,
-} from '@roackb2/heddle-adopter/node';
+} from '@heddleagent/execution-host-client/node';
 import type { LucidLogger } from '../logger.js';
 import type { LucidProductMcpToolName } from './mcp/types.js';
 

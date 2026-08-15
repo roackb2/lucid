@@ -97,7 +97,7 @@ one domain transaction.
 | `apps/server/src/infrastructure/postgres/` | Neutral PostgreSQL pool and migration mechanics without Lucid product policy |
 | `apps/server/src/runtime/heartbeat/postgres/` | PostgreSQL adapter for Heddle's public task-authority contracts |
 | `apps/server/src/composition/postgres-persistence.ts` | Constructs the adapters over one pool and owns their shared shutdown boundary |
-| `apps/server/src/hosted-execution/` | Lucid-owned product MCP tools and scope-to-projection binding; generic authority, verification, and host clients come from `@roackb2/heddle-adopter` |
+| `apps/server/src/hosted-execution/` | Lucid-owned product MCP tools and scope-to-projection binding; generic authority, verification, and host clients come from `@heddleagent/execution-host-client` |
 
 Transactions follow use-case ownership rather than table ownership. A
 service-local adapter may atomically query or update several product tables,

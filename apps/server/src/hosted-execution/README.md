@@ -8,13 +8,17 @@ still runs in process and retains its PostgreSQL task and wake authorities.
 ## Services
 
 Lucid imports the generic adopter machinery from the released
-`@roackb2/heddle-adopter` package:
+`@heddleagent/execution-host-client` package:
 
 - `authority` mints short-lived execution assertions and optional MCP
   capabilities and projects public JWKS keys;
 - `mcp` independently verifies capabilities at the product edge; and
 - `http-sse` defines the provider-neutral `ExecutionHost` port and strict
-  direct-development client.
+  direct-development client; and
+- `conversation` owns the durable hosted-turn lifecycle over an injected store.
+
+`@heddleagent/postgres/execution-host/conversations` supplies that store over
+Lucid's owned Drizzle handle.
 
 This directory contains only Lucid-owned behavior:
 
@@ -22,14 +26,14 @@ This directory contains only Lucid-owned behavior:
 | --- | --- |
 | `config.ts` | Validate Lucid's all-or-nothing hosted profile and select product identity, URLs, audiences, and limits |
 | `agentcore/` | Invoke one configured AgentCore Runtime through the official AWS SDK while preserving the public request/SSE contract |
-| `conversation/` | Admit an authenticated Lucid user and derive product-owned scope, invocation identity, Runtime session, and deadline |
+| `conversation/` | Admit an authenticated Lucid user, derive product-owned scope/identity/deadline, and query the newest 20 scoped lifecycle records |
 | `http-router.ts` | Mount the package-owned HTTP and MCP services beside Lucid's tRPC routes |
 | `mcp/product-tools.ts` | Declare the exact Lucid tool names, schemas, descriptions, and product operations |
 | `mcp/workspace-projection-reader.ts` | Bind verified capability scope to Lucid's current workspace projection |
 
-`@roackb2/heddle-adopter` owns the ES256 key loader, non-enumerable direct
-credentials, authority and capability verification, hosted-turn
-orchestration, bounded Node HTTP/JWKS/SSE service, declarative JSON-tool
+`@heddleagent/execution-host-client` owns the ES256 key loader, non-enumerable direct
+credentials, authority and capability verification, hosted-turn orchestration,
+durable lifecycle transitions, bounded Node HTTP/JWKS/SSE service, declarative JSON-tool
 registry, and stateless Streamable HTTP MCP lifecycle. Those implementations
 must not be copied back into Lucid.
 
@@ -78,7 +82,8 @@ PostgreSQL URL.
 ## Dependency rules
 
 - Lucid owns product authentication, authorization, identity mapping,
-  capability minting, canonical data, and result projection.
+  capability minting, canonical data, migration execution, and the bounded
+  user history query. Heddle owns generic lifecycle projection and writes.
 - The external host owns the Heddle loop, isolated workspace/processes, and
   strict event stream. It receives only short-lived authority and model access.
 - MCP exposes domain capabilities rather than database CRUD. It re-verifies

@@ -1,4 +1,4 @@
-import type { ExecutionHostStreamEvent } from '@roackb2/heddle-adopter/contracts';
+import type { ExecutionHostStreamEvent } from '@heddleagent/execution-host-client/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   HostedConversationClientError,

@@ -24,7 +24,7 @@ import {
   getHostedAccessToken,
   type HostedConversationTurn,
 } from '@/lib/trpc';
-import type { ExecutionHostStreamEvent } from '@roackb2/heddle-adopter/contracts';
+import type { ExecutionHostStreamEvent } from '@heddleagent/execution-host-client/contracts';
 import {
   useHostedConversationHistory,
 } from '@/hooks/use-hosted-conversation-history';

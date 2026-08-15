@@ -1,7 +1,7 @@
 import {
   ExecutionHostStreamEventSchema,
   type ExecutionHostStreamEvent,
-} from '@roackb2/heddle-adopter/contracts';
+} from '@heddleagent/execution-host-client/contracts';
 import {
   createParser,
   type EventSourceMessage,
@@ -27,7 +27,7 @@ export type HostedConversationRequest = {
 /**
  * Consumes Lucid's adopter-side endpoint through the canonical Heddle stream
  * contract. Product authentication stays in Lucid; stream shape and ordering
- * come from `@roackb2/heddle-adopter`.
+ * come from `@heddleagent/execution-host-client`.
  */
 export async function* streamHostedConversation(
   input: HostedConversationRequest,

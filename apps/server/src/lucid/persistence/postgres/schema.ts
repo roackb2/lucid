@@ -2,9 +2,8 @@
  * PostgreSQL persistence model for Lucid's shared hosted workspace.
  *
  * The `lucid` schema contains product-owned user, agent, and
- * immutable event state. The runtime heartbeat adapter owns the separate
- * `heddle` schema through Heddle's released remote-store contracts; this
- * module deliberately declares no Heddle internals.
+ * immutable event state. Released Heddle adapters own their separate `heddle`
+ * schema and bundled migrations; this module does not redeclare those tables.
  */
 import { sql } from 'drizzle-orm';
 import {
@@ -21,10 +20,6 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import type { DiscoveryEventMetadata } from '../../discovery-types.js';
-import type {
-  HostedConversationErrorCode,
-  HostedConversationTurnStatus,
-} from '../../../hosted-execution/conversation/store.js';
 
 export const lucidPostgresSchema = pgSchema('lucid');
 
@@ -244,87 +239,10 @@ export const postgresDiscoveryEvents = lucidPostgresSchema.table(
   ],
 );
 
-/** Bounded user-visible projection of managed hosted conversation turns. */
-export const postgresHostedConversationTurns = lucidPostgresSchema.table(
-  'hosted_conversation_turns',
-  {
-    invocationId: text('invocation_id').primaryKey(),
-    workspaceId: text('workspace_id')
-      .notNull()
-      .references(() => postgresDiscoveryWorkspaces.id, {
-        onDelete: 'cascade',
-      }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => postgresUsers.id, { onDelete: 'cascade' }),
-    prompt: text('prompt').notNull(),
-    status: text('status')
-      .$type<HostedConversationTurnStatus>()
-      .notNull(),
-    runId: text('run_id'),
-    answerMarkdown: text('answer_markdown'),
-    errorCode: text('error_code').$type<HostedConversationErrorCode>(),
-    deadlineAt: timestampColumn('deadline_at').notNull(),
-    createdAt: timestampColumn('created_at').notNull(),
-    acceptedAt: timestampColumn('accepted_at'),
-    settledAt: timestampColumn('settled_at'),
-    updatedAt: timestampColumn('updated_at').notNull(),
-  },
-  (table) => [
-    index('hosted_conversation_turns_user_recent_idx').on(
-      table.workspaceId,
-      table.userId,
-      table.createdAt,
-    ),
-    check(
-      'hosted_conversation_turns_invocation_id_valid',
-      sql`char_length(${table.invocationId}) between 1 and 256`,
-    ),
-    check(
-      'hosted_conversation_turns_prompt_valid',
-      sql`char_length(${table.prompt}) between 1 and 20000 and ${table.prompt} = btrim(${table.prompt})`,
-    ),
-    check(
-      'hosted_conversation_turns_status_valid',
-      sql`${table.status} in ('requested', 'running', 'completed', 'max_steps', 'failed', 'cancelled', 'interrupted')`,
-    ),
-    check(
-      'hosted_conversation_turns_run_id_valid',
-      sql`${table.runId} is null or char_length(${table.runId}) between 1 and 256`,
-    ),
-    check(
-      'hosted_conversation_turns_answer_bounded',
-      sql`${table.answerMarkdown} is null or char_length(${table.answerMarkdown}) <= 100000`,
-    ),
-    check(
-      'hosted_conversation_turns_error_code_valid',
-      sql`${table.errorCode} is null or ${table.errorCode} ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'`,
-    ),
-    check(
-      'hosted_conversation_turns_lifecycle_valid',
-      sql`(
-        ${table.status} = 'requested'
-        and ${table.runId} is null
-        and ${table.acceptedAt} is null
-        and ${table.settledAt} is null
-      ) or (
-        ${table.status} = 'running'
-        and ${table.runId} is not null
-        and ${table.acceptedAt} is not null
-        and ${table.settledAt} is null
-      ) or (
-        ${table.status} in ('completed', 'max_steps', 'failed', 'cancelled', 'interrupted')
-        and ${table.settledAt} is not null
-      )`,
-    ),
-  ],
-);
-
 export const lucidPostgresTables = {
   discoveryWorkspaces: postgresDiscoveryWorkspaces,
   users: postgresUsers,
   userIdentityBindings: postgresUserIdentityBindings,
   agents: postgresAgents,
   discoveryEvents: postgresDiscoveryEvents,
-  hostedConversationTurns: postgresHostedConversationTurns,
 };

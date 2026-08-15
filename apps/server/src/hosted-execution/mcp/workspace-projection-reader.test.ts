@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { McpInvocationScope } from '@roackb2/heddle-adopter/mcp';
+import type { McpInvocationScope } from '@heddleagent/execution-host-client/mcp';
 import {
   UserWorkspaceProjectionReader,
   WorkspaceProjectionScopeError,

@@ -85,8 +85,13 @@ const userNetwork = new UserNetworkService(
   },
 );
 const conversationHistory = new HostedConversationHistoryService(
-  stores.conversation,
-  LUCID_WORKSPACE_ID,
+  stores.conversationHistory,
+  stores.conversationLifecycle,
+  {
+    tenantId: hostedExecutionConfig?.tenantId ?? 'lucid-local',
+    productSessionId:
+      hostedExecutionConfig?.productSessionId ?? LUCID_WORKSPACE_ID,
+  },
 );
 const hostedExecution = hostedExecutionConfig
   ? await createHostedExecutionComposition({
@@ -94,7 +99,7 @@ const hostedExecution = hostedExecutionConfig
       authenticator,
       discoveryWorkspace,
       logger,
-      conversationHistory,
+      conversationLifecycle: stores.conversationLifecycle,
     })
   : undefined;
 const staticSpaRequestHandler = config.webRoot

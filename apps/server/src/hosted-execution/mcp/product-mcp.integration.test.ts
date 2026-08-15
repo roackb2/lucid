@@ -8,10 +8,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { McpCapabilityVerifier } from '@roackb2/heddle-adopter/mcp';
+import type { McpCapabilityVerifier } from '@heddleagent/execution-host-client/mcp';
 import {
   NodeStreamableHttpMcpService,
-} from '@roackb2/heddle-adopter/mcp/node';
+} from '@heddleagent/execution-host-client/mcp/node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLucidProductToolset } from './product-tools.js';
 import {

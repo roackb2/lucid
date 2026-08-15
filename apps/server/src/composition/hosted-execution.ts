@@ -1,12 +1,16 @@
-import { JoseExecutionAuthority } from '@roackb2/heddle-adopter/authority';
-import { HostedConversationTurnService } from '@roackb2/heddle-adopter/conversation';
-import { DirectHttpExecutionHost, type ExecutionHost } from '@roackb2/heddle-adopter/http-sse';
-import { JwtMcpCapabilityVerifier } from '@roackb2/heddle-adopter/mcp';
-import { NodeStreamableHttpMcpService } from '@roackb2/heddle-adopter/mcp/node';
+import { JoseExecutionAuthority } from '@heddleagent/execution-host-client/authority';
+import {
+  DurableHostedConversationTurnService,
+  HostedConversationTurnService,
+  type HostedConversationTurnLifecycleStore,
+} from '@heddleagent/execution-host-client/conversation';
+import { DirectHttpExecutionHost, type ExecutionHost } from '@heddleagent/execution-host-client/http-sse';
+import { JwtMcpCapabilityVerifier } from '@heddleagent/execution-host-client/mcp';
+import { NodeStreamableHttpMcpService } from '@heddleagent/execution-host-client/mcp/node';
 import {
   loadExecutionAuthorityKeyPairFromFile,
   NodeExecutionAdopterHttpService,
-} from '@roackb2/heddle-adopter/node';
+} from '@heddleagent/execution-host-client/node';
 import type { LucidAuthenticator } from '../auth/authenticator.js';
 import type { HostedExecutionConfig } from '../hosted-execution/config.js';
 import { AgentCoreExecutionHost } from '../hosted-execution/agentcore/execution-host.js';
@@ -14,9 +18,6 @@ import {
   HostedConversationAuthorizationError,
   HostedConversationAdmissionService,
 } from '../hosted-execution/conversation/admission-service.js';
-import type {
-  HostedConversationHistoryService,
-} from '../hosted-execution/conversation/history-service.js';
 import {
   HOSTED_EXECUTION_JWKS_PATH,
   HOSTED_CONVERSATION_TURNS_PATH,
@@ -44,7 +45,7 @@ export async function createHostedExecutionComposition(input: {
     snapshot(userId: string): Promise<DiscoveryWorkspaceSnapshot>;
   };
   logger: LucidLogger;
-  conversationHistory: HostedConversationHistoryService;
+  conversationLifecycle: HostedConversationTurnLifecycleStore;
   executionHost?: ExecutionHost;
 }): Promise<HostedExecutionComposition> {
   const maxTurnSeconds = Math.ceil(input.config.maxTurnMs / 1_000);
@@ -105,15 +106,18 @@ export async function createHostedExecutionComposition(input: {
   if (!executionHost) {
     throw new Error('Hosted execution transport could not be composed.');
   }
-  const turns = new HostedConversationTurnService({
+  const baseTurns = new HostedConversationTurnService({
     authority,
     executionHost,
     modelCredentials: input.config.modelCredentials,
     mcp: { allowedTools: LUCID_PRODUCT_MCP_TOOLS },
   });
+  const turns = new DurableHostedConversationTurnService({
+    turns: baseTurns,
+    store: input.conversationLifecycle,
+  });
   const conversations = new HostedConversationAdmissionService(
     turns,
-    input.conversationHistory,
     {
       tenantId: input.config.tenantId,
       productSessionId: input.config.productSessionId,

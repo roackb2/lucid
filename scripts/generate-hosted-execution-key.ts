@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
   generateExecutionAuthorityKeyFile,
-} from '@roackb2/heddle-adopter/node';
+} from '@heddleagent/execution-host-client/node';
 
 await main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);

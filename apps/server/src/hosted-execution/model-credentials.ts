@@ -1,7 +1,7 @@
 import type {
   HostedConversationCredentialContext,
   HostedConversationModelCredentialProvider,
-} from '@roackb2/heddle-adopter/conversation';
+} from '@heddleagent/execution-host-client/conversation';
 import { z } from 'zod';
 
 const ModelApiKeySchema = z.string().trim().min(8).max(4_096);
