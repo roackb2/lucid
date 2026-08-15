@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { HostedConversationTurnRunner } from '@roackb2/heddle-adopter/conversation';
+import type { HostedConversationTurnRunner } from '@heddleagent/execution-host-client/conversation';
 import dayjs from 'dayjs';
 import { principalHasRole } from '../../auth/request-principal.js';
 import type {
@@ -48,20 +48,21 @@ implements HostedConversationRequestService {
   ): ReturnType<HostedConversationRequestService['streamTurn']> {
     const subjectId = requireUserSubject(input);
     input.signal.throwIfAborted();
+    const invocationId = this.#createInvocationId();
+    const deadlineAt = dayjs(this.#now())
+      .add(this.#policy.maxTurnMs, 'millisecond')
+      .toISOString();
     const scope = {
       tenantId: this.#policy.tenantId,
       subjectId,
       productSessionId: this.#policy.productSessionId,
     };
-
     yield* this.turns.streamTurn({
       scope,
       runtimeSessionId: createRuntimeSessionId(scope),
-      invocationId: this.#createInvocationId(),
+      invocationId,
       prompt: input.prompt,
-      deadlineAt: dayjs(this.#now())
-        .add(this.#policy.maxTurnMs, 'millisecond')
-        .toISOString(),
+      deadlineAt,
       signal: input.signal,
     });
   }

@@ -14,11 +14,14 @@ import {
   MCP_CAPABILITY_HEADER,
   MODEL_API_KEY_HEADER,
   type ExecutionHostStreamEvent,
-} from '@roackb2/heddle-adopter/contracts';
+} from '@heddleagent/execution-host-client/contracts';
 import {
   DirectExecutionHostCredentials,
   generateExecutionAuthorityKeyFile,
-} from '@roackb2/heddle-adopter/node';
+} from '@heddleagent/execution-host-client/node';
+import type {
+  HostedConversationTurnLifecycleStore,
+} from '@heddleagent/execution-host-client/conversation';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLucidAuthenticator } from '../auth/authenticator.js';
 import {
@@ -101,6 +104,7 @@ describe('hosted execution composition', () => {
       discoveryWorkspace: {
         snapshot: async () => workspaceSnapshot(),
       },
+      conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
     handleLucidRequest = (request, response) => {
@@ -197,6 +201,7 @@ describe('hosted execution composition', () => {
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
+      conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
     handleLucidRequest = (request, response) => {
@@ -224,6 +229,15 @@ describe('hosted execution composition', () => {
     await composition.close();
   });
 });
+
+function memoryConversationLifecycle(): HostedConversationTurnLifecycleStore {
+  return {
+    createTurn: async () => undefined,
+    recordAccepted: async () => undefined,
+    settleTurn: async () => undefined,
+    interruptExpiredTurns: async () => undefined,
+  };
+}
 
 async function handleFakeExecutionHost(
   request: IncomingMessage,

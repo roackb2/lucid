@@ -29,6 +29,8 @@ type RouterOutputs = inferRouterOutputs<AppRouter>;
 
 export type DiscoverySnapshot = RouterOutputs['discovery']['snapshot'];
 export type FindingView = DiscoverySnapshot['findings'][number];
+export type HostedConversationTurn =
+  RouterOutputs['hostedConversation']['recent'][number];
 
 export function isAuthenticationRequired(error: unknown): boolean {
   return isTRPCClientError<AppRouter>(error)

@@ -9,13 +9,13 @@ import {
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
   HostedConversationTurnService,
-} from '@roackb2/heddle-adopter/conversation';
+} from '@heddleagent/execution-host-client/conversation';
 import {
   NodeStreamableHttpMcpService,
-} from '@roackb2/heddle-adopter/mcp/node';
+} from '@heddleagent/execution-host-client/mcp/node';
 import {
   LocalExecutionHostContractFixture,
-} from '@roackb2/heddle-adopter/testing';
+} from '@heddleagent/execution-host-client/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { createLucidProductToolset } from '../mcp/product-tools.js';
 import {

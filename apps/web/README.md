@@ -29,7 +29,9 @@ The primary path is:
     and
 11. ask one authenticated, cancellable hosted-agent question whose execution
     runs in AgentCore and whose only initial product capability is the
-    user-scoped workspace snapshot.
+    user-scoped workspace snapshot; and
+12. reload or return later and inspect the newest 20 user-scoped prompts,
+    truthful terminal states, and public Markdown answers.
 
 The app intentionally does not render a global user directory, event
 log, task list, reset control, or user administration. Those are
@@ -45,8 +47,11 @@ one origin.
 Hosted questions use same-origin
 `/hosted-execution/conversation-turns` with the same tab-scoped user
 credential. The browser validates the canonical
-`@roackb2/heddle-adopter` event schema and ordering, renders only safe progress
+`@heddleagent/execution-host-client` event schema and ordering, renders only safe progress
 labels, and releases the terminal answer only after clean stream completion.
+Live progress remains ephemeral. Lucid queries the public, durably settled
+Heddle lifecycle records through authenticated tRPC; that bounded product view
+survives a page refresh or process restart.
 It never receives execution authority, model credentials, MCP capabilities,
 or database credentials.
 
@@ -71,7 +76,10 @@ browser security controls.
 | `app-header.tsx` | Navigate the user workspace and summarize local agent status |
 | `hosted-access.tsx` | Collect the private-pilot user token without embedding it in the public build |
 | `hosted-conversation.tsx` | Submit and cancel one user-scoped hosted turn and present safe progress plus the terminal answer |
+| `hosted-conversation-history.tsx` | Present the bounded durable turn projection without treating failure, cancellation, or interruption as success |
+| `hosted-conversation-answer.tsx` | Render live and durable public summaries through one safe Markdown policy |
 | `hosted-conversation-client.ts` | Authenticate the same-origin request and validate the ordered Heddle adopter SSE contract |
+| `use-hosted-conversation-history.ts` | Synchronize the authenticated user's durable turn projection and isolated retry state |
 | `use-discovery-workspace.ts` | Own the scoped tRPC query, mutations, cache, polling, and notifications |
 | `network-request-progress.ts` | Give every user-facing surface consistent language for the server-derived request phase |
 
@@ -97,6 +105,9 @@ browser security controls.
   React does not reconstruct causality from display text.
 - Components must not infer unread delivery, fabricate no-match results,
   schedule work locally, or assign truth/value scores.
+- Hosted history never reconstructs or stores live activity, tool payloads,
+  hidden reasoning, or credentials. HTML and images remain disabled in stored
+  Markdown and external links open with `noopener` protection.
 
 Run `yarn workspace @lucid/web typecheck` and
 `yarn workspace @lucid/web build` after UI changes.

@@ -1,7 +1,7 @@
 import {
   defineNodeMcpJsonTool,
   NodeMcpJsonToolset,
-} from '@roackb2/heddle-adopter/mcp/node';
+} from '@heddleagent/execution-host-client/mcp/node';
 import { z } from 'zod';
 import {
   READ_WORKSPACE_SNAPSHOT_TOOL,
@@ -13,7 +13,8 @@ import {
 /**
  * Builds the exact model-visible Lucid capabilities exposed to the Execution
  * Host. Generic capability checks, cancellation, safe failures, JSON result
- * projection, HTTP, and MCP resource lifecycle stay in heddle-adopter.
+ * projection, HTTP, and MCP resource lifecycle stay in the Heddle integration
+ * package.
  */
 export function createLucidProductToolset(
   workspaceReader: ScopedWorkspaceProjectionReader,

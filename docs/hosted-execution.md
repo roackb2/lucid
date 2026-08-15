@@ -9,7 +9,7 @@ runtime such as Amazon Bedrock AgentCore Runtime.
 ## Current status
 
 The external execution host supports one versioned `conversation-turn`
-workflow. The released `@roackb2/heddle-adopter` package supplies the generic
+workflow. The released `@heddleagent/execution-host-client` package supplies the generic
 adopter machinery:
 
 - an ES256 authority service that issues separately typed execution and MCP
@@ -22,7 +22,10 @@ Lucid keeps only its domain boundary: an authenticated Streamable HTTP MCP
 service exposing `read_workspace_snapshot` and binding the verified execution
 subject to that user's product projection.
 
-The public package owns generic JWT/JWKS and ordered SSE conformance. When the
+The public package owns generic JWT/JWKS, ordered SSE conformance, and the
+durable requested/accepted/terminal lifecycle. Its official PostgreSQL adapter
+implements the atomic lifecycle port over Lucid's supplied database handle.
+When the
 complete hosted profile is explicitly enabled, Lucid startup now loads an
 owner-readable ES256 key, publishes public JWKS, mounts its product MCP edge,
 and exposes an authenticated user conversation endpoint. It calls the
@@ -47,8 +50,11 @@ Lucid also has a provider-specific AgentCore `ExecutionHost` adapter that
 signs the same portable request and consumes the same strict stream through
 the official AWS SDK. A real managed Heddle turn and one bounded high-level
 session-isolation smoke have completed. These prove the research direction,
-not production security or compliance. Conversation replay and product history
-are also not durable yet.
+not production security or compliance. Lucid now exposes the authenticated
+user's newest 20 direct prompts and truthful durable terminal records. Lucid
+owns the authenticated bounded query, while Heddle owns lifecycle writes. It
+does not persist activity, tool payloads, credentials, traces, or hidden
+reasoning, and it does not yet provide replay or continuation.
 
 Lucid's agent workflow is also not connected to the external host. A
 agent wake still requires:
@@ -92,7 +98,8 @@ The Lucid backend owns:
 - end-user authentication and product authorization;
 - adopter, tenant, subject, product-session, and invocation identity;
 - Heddle task and Lucid wake lifecycle;
-- PostgreSQL access and durable product settlement;
+- PostgreSQL access, migration execution, and authenticated history queries;
+- selection of the Heddle lifecycle store implementation;
 - execution-assertion issuance and replay policy; and
 - the curated MCP capabilities exposed to one wake.
 
@@ -111,7 +118,7 @@ agent, or wake identity from model-controlled arguments.
 
 Lucid must not depend on the private host as a source package. It consumes the
 versioned public contract and reference implementation from
-`@roackb2/heddle-adopter`; provider-specific transports can implement the same
+`@heddleagent/execution-host-client`; provider-specific transports can implement the same
 public `ExecutionHost` port without exposing host internals.
 
 ## Next integration sequence
@@ -120,8 +127,8 @@ public `ExecutionHost` port without exposing host internals.
    browser through Lucid, the managed Execution Host, and its scoped MCP tool.
 2. Sharpen the user-facing social-product experience before adding
    deeper infrastructure or compliance work.
-3. Add durable invocation/replay only when conversation history becomes a
-   supported product requirement.
+3. Treat the bounded durable terminal history as the product authority; add
+   replay or continuation only for a separately selected user question.
 4. Add an `autonomous-task` contract before replacing Lucid's in-process
    agent runner. Preserve PostgreSQL task/wake authority and expose
    stateful communication tools only with durable invocation-scoped policy.

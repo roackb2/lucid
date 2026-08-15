@@ -26,8 +26,20 @@ import type {
   AgentHeartbeatTaskAuthority,
 } from '../runtime/agent-execution-host.js';
 import {
+  createPostgresHostedConversationTurnLifecycleStore,
+} from '@heddleagent/postgres/execution-host/conversations';
+import type {
+  HostedConversationTurnLifecycleStore,
+} from '@heddleagent/execution-host-client/conversation';
+import {
   PostgresHeartbeatTaskStore,
 } from '../runtime/heartbeat/postgres/task-store.js';
+import {
+  PostgresHostedConversationHistoryStore,
+} from '../hosted-execution/conversation/postgres-history-store.js';
+import type {
+  HostedConversationHistoryStore,
+} from '../hosted-execution/conversation/store.js';
 
 export type PostgresPersistence = {
   stores: {
@@ -35,6 +47,8 @@ export type PostgresPersistence = {
     network: UserNetworkStore;
     agent: AgentWakeStore;
     communication: AgentCommunicationStore;
+    conversationHistory: HostedConversationHistoryStore;
+    conversationLifecycle: HostedConversationTurnLifecycleStore;
   };
   taskAuthority: AgentHeartbeatTaskAuthority;
   close: () => Promise<void>;
@@ -57,6 +71,13 @@ export async function createPostgresPersistence(
         network: new PostgresUserNetworkStore(database),
         agent,
         communication: new PostgresAgentCommunicationStore(database),
+        conversationHistory: new PostgresHostedConversationHistoryStore(
+          database,
+        ),
+        conversationLifecycle:
+          createPostgresHostedConversationTurnLifecycleStore({
+            database: database.orm,
+          }),
       },
       taskAuthority: new PostgresHeartbeatTaskStore({
         database,

@@ -1,49 +1,53 @@
-# Hosted conversation application service
+# Hosted conversation application boundary
 
-This boundary supplies Lucid's product admission for one `conversation-turn`
-against a separately deployed Heddle Execution Host. Generic authority and
-host invocation live in `@roackb2/heddle-adopter/conversation`; this folder is
-product application code, not another agent loop or transport adapter.
+This folder contains Lucid's product admission and recent-history query for one
+hosted conversation. It does not implement the generic hosted-turn lifecycle.
 
 ## Ownership
 
 `HostedConversationAdmissionService` owns:
 
-- requiring the authenticated local user role and product identity;
-- deriving the fixed Lucid tenant, subject, and product-session scope;
-- assigning a unique invocation ID and stable Runtime session ID; and
-- bounding the turn with the configured deadline.
+- requiring an authenticated Lucid user;
+- selecting Lucid's tenant, subject, and product-session scope;
+- assigning the invocation ID and stable Runtime session ID; and
+- applying Lucid's configured turn deadline.
 
-The package-owned `HostedConversationTurnService` owns:
+The composed `DurableHostedConversationTurnService` from
+`@heddleagent/execution-host-client/conversation` owns requested, accepted,
+terminal, cancellation, interruption, expiry, safe failure projection, and
+persistence-before-event ordering. Its injected implementation comes from
+`@heddleagent/postgres/execution-host/conversations`; Lucid does not repeat
+those transitions or SQL fences.
 
-- fixing the Lucid product MCP allowlist for the turn;
-- asking the public adopter authority to mint execution and MCP credentials;
-- resolving the model credential through a narrow secret-provider port; and
-- forwarding the provider-neutral ordered event stream to its caller.
+`HostedConversationHistoryService` owns only the product read policy:
 
-It does not own:
+- derive the subject from the authenticated server principal;
+- reconcile expired open records through the public Heddle lifecycle API; and
+- return the newest 20 records in that exact tenant/subject/session scope.
 
-- browser authentication, tenant lookup, or authorization;
-- HTTP routes, JWKS or MCP route registration, or AWS SigV4;
-- durable invocation uniqueness, replay, retry, or result projection;
-- the Heddle loop, isolated workspace, or process lifecycle; or
-- agent heartbeat task/wake claims and settlement.
+`PostgresHostedConversationHistoryStore` implements that bounded query over
+the exported Heddle table. It does not mutate lifecycle state. The browser
+receives prompt, status, public summary, safe failure code, and public
+timestamps only; activity, tool payloads, assertions, credentials, traces,
+reasoning, and raw errors remain excluded.
 
-The HTTP router authenticates and parses requests, then delegates product
-admission instead of deriving authority itself. Model-controlled input never
-chooses scope, Runtime session ID, invocation ID, deadline, or MCP tools.
-Composition deliberately fixes `LUCID_PRODUCT_MCP_TOOLS` when constructing the
-package service. No route or model-controlled request can select a tool.
+## Composition and migration
 
-`hosted-conversation.integration.test.ts` runs the package service through the
-public `@roackb2/heddle-adopter/testing` HTTP/SSE fixture and Lucid's real local
-MCP edge. That test proves the adopter control-plane round trip without a
-model, Docker, AWS, or the private Execution Host. Real-host and
-managed-runtime tests remain separate evidence boundaries.
+`composition/postgres-persistence.ts` creates the official Heddle lifecycle
+store over Lucid's owned Drizzle handle. `composition/hosted-execution.ts`
+wraps the package's base turn runner with that lifecycle before product
+admission. Both use the same authorized scope.
 
-`types.ts` contains only Lucid's request-service port; generic turn and model
-credential types come directly from the public package.
+Lucid still owns when migrations run. Migration `0005` installs the SQL shipped
+by `@heddleagent/postgres@6.0.0` as a custom Drizzle migration because Drizzle
+Kit's schema loader cannot consume the package's ESM-only subpath. Runtime code
+uses the public package export directly; the table is not redeclared here.
 
-`admission-service.test.ts` independently fixes the user, session, ID,
-deadline, and cancellation behavior so composition tests do not become the
-only description of Lucid's admission policy.
+## Verification boundary
+
+- `admission-service.test.ts` covers Lucid authentication and derived scope.
+- `history-service.test.ts` covers the fixed user scope and 20-row policy.
+- `postgres-history-store.integration.test.ts` covers real PostgreSQL history,
+  reconnect durability, deterministic bounding, and user isolation.
+- Heddle's own package suite covers generic lifecycle transitions and fencing;
+  those cases should not be duplicated in Lucid.

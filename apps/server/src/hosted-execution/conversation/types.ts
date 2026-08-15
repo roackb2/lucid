@@ -1,6 +1,6 @@
 import type {
   ExecutionHostStreamEvent,
-} from '@roackb2/heddle-adopter/contracts';
+} from '@heddleagent/execution-host-client/contracts';
 import type { LucidRequestPrincipal } from '../../auth/request-principal.js';
 
 export type HostedConversationRequest = {

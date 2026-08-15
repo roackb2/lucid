@@ -28,6 +28,10 @@ import {
 import {
   createStaticSpaRequestHandler,
 } from './web/static-spa-request-handler.js';
+import {
+  HostedConversationHistoryService,
+} from './hosted-execution/conversation/history-service.js';
+import { LUCID_WORKSPACE_ID } from './lucid/workspace/workspace-identity.js';
 
 const TRPC_BASE_PATH = '/api/trpc/';
 
@@ -80,12 +84,22 @@ const userNetwork = new UserNetworkService(
     heddleVersion: heddlePackage.version,
   },
 );
+const conversationHistory = new HostedConversationHistoryService(
+  stores.conversationHistory,
+  stores.conversationLifecycle,
+  {
+    tenantId: hostedExecutionConfig?.tenantId ?? 'lucid-local',
+    productSessionId:
+      hostedExecutionConfig?.productSessionId ?? LUCID_WORKSPACE_ID,
+  },
+);
 const hostedExecution = hostedExecutionConfig
   ? await createHostedExecutionComposition({
       config: hostedExecutionConfig,
       authenticator,
       discoveryWorkspace,
       logger,
+      conversationLifecycle: stores.conversationLifecycle,
     })
   : undefined;
 const staticSpaRequestHandler = config.webRoot
@@ -95,10 +109,15 @@ heartbeats.start();
 
 const server = createHTTPServer({
   basePath: TRPC_BASE_PATH,
-  router: createAppRouter(discoveryWorkspace, userNetwork, {
-    allowSelfEnrollment: config.authentication.mode === 'supabase'
-      && config.authentication.allowSelfEnrollment,
-  }),
+  router: createAppRouter(
+    discoveryWorkspace,
+    userNetwork,
+    conversationHistory,
+    {
+      allowSelfEnrollment: config.authentication.mode === 'supabase'
+        && config.authentication.allowSelfEnrollment,
+    },
+  ),
   createContext: async ({ req }) => {
     const remoteAddress = req.socket.remoteAddress;
     return {

@@ -3,7 +3,7 @@
 This adapter is Lucid's provider-specific implementation of the public
 `ExecutionHost` port. It sends the language-neutral invocation contract through
 AWS `InvokeAgentRuntime` and delegates strict request/SSE validation to
-`@roackb2/heddle-adopter`.
+`@heddleagent/execution-host-client`.
 
 It owns:
 

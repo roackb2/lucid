@@ -9,9 +9,9 @@ import {
   Send,
   Square,
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
+import { HostedConversationAnswer } from './hosted-conversation-answer';
+import { HostedConversationHistory } from './hosted-conversation-history';
 import {
   mergeHostedConversationProgress,
   presentHostedConversationActivity,
@@ -20,7 +20,14 @@ import {
 import {
   streamHostedConversation,
 } from '@/lib/hosted-conversation-client';
-import { getHostedAccessToken } from '@/lib/trpc';
+import {
+  getHostedAccessToken,
+  type HostedConversationTurn,
+} from '@/lib/trpc';
+import type { ExecutionHostStreamEvent } from '@heddleagent/execution-host-client/contracts';
+import {
+  useHostedConversationHistory,
+} from '@/hooks/use-hosted-conversation-history';
 
 const MAX_PROMPT_CHARACTERS = 20_000;
 
@@ -28,11 +35,16 @@ export function HostedConversation() {
   const [prompt, setPrompt] = useState('');
   const [submittedPrompt, setSubmittedPrompt] = useState('');
   const [answer, setAnswer] = useState('');
+  const [answerStatus, setAnswerStatus] = useState<
+    HostedConversationTurn['status']
+  >('completed');
   const [status, setStatus] = useState('Ready');
   const [progress, setProgress] = useState<HostedConversationProgressItem[]>([]);
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
+  const [activeInvocationId, setActiveInvocationId] = useState<string>();
   const active = useRef<AbortController | undefined>(undefined);
+  const history = useHostedConversationHistory();
 
   useEffect(() => () => active.current?.abort(), []);
 
@@ -51,8 +63,10 @@ export function HostedConversation() {
 
     const controller = new AbortController();
     active.current = controller;
+    setActiveInvocationId(undefined);
     setSubmittedPrompt(candidate);
     setAnswer('');
+    setAnswerStatus('completed');
     setProgress([]);
     setError('');
     setRunning(true);
@@ -64,6 +78,7 @@ export function HostedConversation() {
         signal: controller.signal,
       })) {
         if (item.kind === 'accepted') {
+          setActiveInvocationId(item.invocationId);
           setStatus('Agent workspace ready');
         } else if (item.kind === 'activity') {
           const presentation = presentHostedConversationActivity(item.activity);
@@ -76,10 +91,9 @@ export function HostedConversation() {
             ));
           }
         } else if (item.kind === 'result') {
-          setAnswer(
-            item.result.summary
-              ?? 'The agent completed without a written summary.',
-          );
+          const presentation = presentHostedConversationResult(item.result);
+          setAnswer(presentation.answerMarkdown);
+          setAnswerStatus(presentation.status);
           setStatus(describeOutcome(item.result.outcome));
         } else if (item.kind === 'cancelled') {
           setStatus('Cancelled');
@@ -104,6 +118,7 @@ export function HostedConversation() {
         active.current = undefined;
       }
       setRunning(false);
+      void history.refetch();
     }
   };
 
@@ -195,27 +210,10 @@ export function HostedConversation() {
             </section>
           ) : null}
           {answer ? (
-            <div className="hosted-conversation-answer">
-              <span>Agent</span>
-              <ReactMarkdown
-                components={{
-                  a: ({ children, ...properties }) => (
-                    <a
-                      {...properties}
-                      rel="noreferrer noopener"
-                      target="_blank"
-                    >
-                      {children}
-                    </a>
-                  ),
-                }}
-                disallowedElements={['img']}
-                remarkPlugins={[remarkGfm]}
-                skipHtml
-              >
-                {answer}
-              </ReactMarkdown>
-            </div>
+            <HostedConversationAnswer
+              markdown={answer}
+              status={answerStatus}
+            />
           ) : null}
         </section>
       ) : (
@@ -224,6 +222,14 @@ export function HostedConversation() {
           lets the agent inspect your user-scoped workspace snapshot.
         </p>
       )}
+
+      <HostedConversationHistory
+        activeInvocationId={activeInvocationId}
+        error={history.error}
+        isPending={history.isPending}
+        onRetry={() => history.refetch()}
+        turns={history.data ?? []}
+      />
     </section>
   );
 }
@@ -237,4 +243,33 @@ function describeOutcome(
     error: 'Could not complete',
     interrupted: 'Interrupted',
   }[outcome];
+}
+
+type HostedConversationResult = Extract<
+  ExecutionHostStreamEvent,
+  { kind: 'result' }
+>['result'];
+
+export function presentHostedConversationResult(
+  result: HostedConversationResult,
+): {
+  answerMarkdown: string;
+  status: HostedConversationTurn['status'];
+} {
+  const status = {
+    done: 'completed',
+    max_steps: 'max_steps',
+    error: 'failed',
+    interrupted: 'interrupted',
+  } as const;
+  const emptyAnswer = {
+    done: 'The agent completed without a written summary.',
+    max_steps: 'The agent stopped at the step limit without a written summary.',
+    error: 'The agent could not complete this question.',
+    interrupted: 'This conversation ended before Lucid received a terminal answer.',
+  } as const;
+  return {
+    answerMarkdown: result.summary ?? emptyAnswer[result.outcome],
+    status: status[result.outcome],
+  };
 }

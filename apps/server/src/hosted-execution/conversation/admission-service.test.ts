@@ -1,23 +1,21 @@
-import type { ExecutionHostStreamEvent } from '@roackb2/heddle-adopter/contracts';
+import type { ExecutionHostStreamEvent } from '@heddleagent/execution-host-client/contracts';
+import type {
+  HostedConversationTurnInput,
+  HostedConversationTurnRunner,
+} from '@heddleagent/execution-host-client/conversation';
 import { describe, expect, it, vi } from 'vitest';
 import { LOCAL_USER_ID } from '../../lucid/local-user.js';
 import {
   HostedConversationAdmissionService,
   HostedConversationAuthorizationError,
 } from './admission-service.js';
-import type {
-  HostedConversationTurnInput,
-  HostedConversationTurnRunner,
-} from './types.js';
 
 const NOW = new Date('2026-08-10T12:00:00.000Z');
 
 describe('HostedConversationAdmissionService', () => {
   it('derives immutable turn authority from the admitted Lucid user', async () => {
     const observed: HostedConversationTurnInput[] = [];
-    const service = createService(observed);
-
-    const events = await collect(service.streamTurn({
+    const events = await collect(createService(observed).streamTurn({
       principal: {
         subject: 'replaceable-auth-provider-label',
         userId: LOCAL_USER_ID,
@@ -46,9 +44,8 @@ describe('HostedConversationAdmissionService', () => {
 
   it('rejects a principal outside the local user boundary', async () => {
     const observed: HostedConversationTurnInput[] = [];
-    const service = createService(observed);
 
-    await expect(collect(service.streamTurn({
+    await expect(collect(createService(observed).streamTurn({
       principal: {
         subject: 'operator-only',
         userId: LOCAL_USER_ID,
@@ -63,11 +60,13 @@ describe('HostedConversationAdmissionService', () => {
   it('fails before allocating an invocation after caller cancellation', async () => {
     const observed: HostedConversationTurnInput[] = [];
     const createInvocationId = vi.fn(() => 'invocation-001');
-    const service = createService(observed, createInvocationId);
     const abortController = new AbortController();
     abortController.abort(new Error('request closed'));
 
-    await expect(collect(service.streamTurn({
+    await expect(collect(createService(
+      observed,
+      createInvocationId,
+    ).streamTurn({
       principal: {
         subject: 'user',
         userId: LOCAL_USER_ID,
@@ -98,14 +97,18 @@ function createService(
       };
     },
   };
-  return new HostedConversationAdmissionService(turns, {
-    tenantId: 'tenant-a',
-    productSessionId: 'workspace-a',
-    maxTurnMs: 60_000,
-  }, {
-    now: () => NOW,
-    createInvocationId,
-  });
+  return new HostedConversationAdmissionService(
+    turns,
+    {
+      tenantId: 'tenant-a',
+      productSessionId: 'workspace-a',
+      maxTurnMs: 60_000,
+    },
+    {
+      now: () => NOW,
+      createInvocationId,
+    },
+  );
 }
 
 async function collect(

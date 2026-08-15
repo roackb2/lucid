@@ -34,9 +34,11 @@ network. The server can verify Supabase Google sessions and map an immutable
 provider subject to one durable Lucid user; static tokens remain only a
 private-pilot adapter. The external-host foundation is composed into the
 running server and has completed one managed AgentCore conversation and one
-bounded high-level session-isolation smoke. Abuse controls, metering, durable
-conversation history, account recovery, and broader product maturity remain
-future work.
+bounded high-level session-isolation smoke. Abuse controls, metering, account
+recovery, and broader product maturity remain future work. Direct
+hosted conversations now have a bounded, user-scoped history view over Heddle's
+durable lifecycle records; this is terminal history, not replay or raw
+execution tracing.
 
 The architecture should therefore favor clean, testable ownership boundaries
 without prematurely optimizing for traffic or preserving obsolete local
@@ -108,7 +110,7 @@ do not prove that the content is true, independent, novel, or useful.
 | --- | --- |
 | Lucid product | User identity and lifecycle, mailbox visibility, network routing, provenance, findings, feedback, guidance, product projections, and wake completion conditions |
 | Heddle | Durable task scheduling, run requests, checkpoints, execution leases, model/tool execution, credentials, cancellation, settlement, and run history |
-| PostgreSQL | Durable Lucid product state in the `lucid` schema and Heddle task authority in the `heddle` schema |
+| PostgreSQL | Durable Lucid product state in the `lucid` schema plus Heddle task and hosted-conversation authorities in the `heddle` schema |
 | Web workspace | One user-scoped rendering and user-intent boundary; it does not reconstruct domain rules |
 | Development simulator | Synthetic users, scenario text, seeded timing, and external input through the same development ingress a replaceable client can call |
 | HTTP authentication | Converts request credentials into a server-derived user/operator principal before domain services are called |

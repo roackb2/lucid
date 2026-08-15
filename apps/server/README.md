@@ -31,12 +31,15 @@ bounded execution, and recovery predictable.
 - `src/infrastructure/postgres/database.ts` owns the shared PostgreSQL pool and
   migration mechanism without importing product schemas.
 - `src/lucid/{workspace,network,agent}/postgres-store.ts` and
-  `src/lucid/agent/communication/postgres-store.ts` implement four
-  service-owned store ports with their use-case transactions.
+  `src/lucid/agent/communication/postgres-store.ts` implement Lucid-owned
+  product stores. `src/hosted-execution/conversation/postgres-history-store.ts`
+  owns only the bounded product history query.
+- `@heddleagent/postgres/execution-host/conversations` implements hosted-turn
+  lifecycle writes over the same Lucid-owned pool.
 - `src/runtime/heartbeat/postgres/task-store.ts` implements Heddle's public
   task authority contracts over the same owned pool.
-- `src/composition/postgres-persistence.ts` composes the four product stores
-  and Heddle task adapter, then owns their shared pool shutdown.
+- `src/composition/postgres-persistence.ts` composes the product stores and
+  selected Heddle adapters, then owns their shared pool shutdown.
 - `src/hosted-execution/` owns the adopter-side authority, MCP, and external
   conversation host ports without importing private host code. Its
   `agentcore/` adapter is the only provider-specific AWS SDK boundary.
@@ -54,6 +57,7 @@ bounded execution, and recovery predictable.
   - `discovery.setBackgroundChecksEnabled`
   - `discovery.submitFeedback`
   - `discovery.resetWorkspace`
+  - `hostedConversation.recent`
 - `src/config.ts` validates environment variables and resolves state paths.
 
 The tRPC transport is mounted at `/api/trpc/`. The production image builds and
@@ -97,14 +101,14 @@ image, run `node apps/server/dist/migrate.js` as a separate release step. See
 [`../../docs/deploying.md`](../../docs/deploying.md) for the generic
 configuration and deployment sequence.
 
-The server requires `@roackb2/heddle` 5.13 because the merged
-PostgreSQL heartbeat adapter consumes the released public task administration,
-control-policy, and state-projector APIs. Downgrading to 5.9 makes the existing
-server source fail typechecking even though the hosted-execution boundary does
-not import Heddle directly. The external conversation foundation separately
-uses `@roackb2/heddle-adopter` 5.13 for signing-key and credential handling,
-signed authority, Node HTTP/JWKS/SSE, product-edge MCP, conversation
-orchestration, and the versioned `ExecutionHost` client contract.
+The server still requires `@roackb2/heddle` 5.13 for the existing in-process
+agent runner and released heartbeat task APIs. The external conversation
+boundary uses `@heddleagent/execution-host-client@6.0.0` for signing-key and
+credential handling, signed authority, Node HTTP/JWKS/SSE, product-edge MCP,
+generic durable conversation lifecycle, and the versioned `ExecutionHost`
+contract. Its lifecycle store is supplied by
+`@heddleagent/postgres@6.0.0`; Lucid retains authenticated scope selection,
+migration execution, and its history query.
 
 `src/lucid` owns users, mailbox events, findings, feedback, wake claims,
 and the service-owned store ports. Heddle owns provider

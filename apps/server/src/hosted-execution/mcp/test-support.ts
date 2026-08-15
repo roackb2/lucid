@@ -2,10 +2,10 @@ import { webcrypto } from 'node:crypto';
 import {
   JoseExecutionAuthority,
   type ExecutionAuthority,
-} from '@roackb2/heddle-adopter/authority';
+} from '@heddleagent/execution-host-client/authority';
 import {
   JwtMcpCapabilityVerifier,
-} from '@roackb2/heddle-adopter/mcp';
+} from '@heddleagent/execution-host-client/mcp';
 import type {
   DiscoveryWorkspaceSnapshot,
 } from '../../lucid/discovery-types.js';

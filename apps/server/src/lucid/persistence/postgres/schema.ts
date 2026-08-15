@@ -2,9 +2,8 @@
  * PostgreSQL persistence model for Lucid's shared hosted workspace.
  *
  * The `lucid` schema contains product-owned user, agent, and
- * immutable event state. The runtime heartbeat adapter owns the separate
- * `heddle` schema through Heddle's released remote-store contracts; this
- * module deliberately declares no Heddle internals.
+ * immutable event state. Released Heddle adapters own their separate `heddle`
+ * schema and bundled migrations; this module does not redeclare those tables.
  */
 import { sql } from 'drizzle-orm';
 import {

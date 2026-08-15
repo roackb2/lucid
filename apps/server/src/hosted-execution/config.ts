@@ -3,11 +3,11 @@ import {
   McpServerIdSchema,
   OpaqueIdSchema,
   isSafeWebUrl,
-} from '@roackb2/heddle-adopter/contracts';
+} from '@heddleagent/execution-host-client/contracts';
 import type {
   HostedConversationModelCredentialProvider,
-} from '@roackb2/heddle-adopter/conversation';
-import { DirectExecutionHostCredentials } from '@roackb2/heddle-adopter/node';
+} from '@heddleagent/execution-host-client/conversation';
+import { DirectExecutionHostCredentials } from '@heddleagent/execution-host-client/node';
 import { z } from 'zod';
 import { EnvironmentHostedModelCredentials } from './model-credentials.js';
 

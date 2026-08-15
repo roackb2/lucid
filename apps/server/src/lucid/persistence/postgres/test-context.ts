@@ -9,6 +9,16 @@ import {
 } from '../../agent/communication/postgres-store.js';
 import { PostgresAgentWakeStore } from '../../agent/postgres-store.js';
 import { PostgresDiscoveryWorkspaceStore } from '../../workspace/postgres-store.js';
+import {
+  PostgresHostedConversationHistoryStore,
+} from '../../../hosted-execution/conversation/postgres-history-store.js';
+import {
+  createPostgresHostedConversationTurnLifecycleStore,
+  postgresExecutionHostConversationTurns,
+} from '@heddleagent/postgres/execution-host/conversations';
+import type {
+  HostedConversationTurnLifecycleStore,
+} from '@heddleagent/execution-host-client/conversation';
 
 export type PostgresTestStores = {
   database: PostgresDatabase;
@@ -17,6 +27,8 @@ export type PostgresTestStores = {
     network: PostgresUserNetworkStore;
     agent: PostgresAgentWakeStore;
     communication: PostgresAgentCommunicationStore;
+    conversationHistory: PostgresHostedConversationHistoryStore;
+    conversationLifecycle: HostedConversationTurnLifecycleStore;
   };
 };
 
@@ -38,6 +50,7 @@ export async function createPostgresTestStores(options: {
     const agent = new PostgresAgentWakeStore(database);
     await agent.initialize();
     if (options.reset ?? true) {
+      await database.orm.delete(postgresExecutionHostConversationTurns);
       await agent.reset({ backgroundChecksEnabled: true });
     }
     const stores = {
@@ -45,6 +58,13 @@ export async function createPostgresTestStores(options: {
       network: new PostgresUserNetworkStore(database),
       agent,
       communication: new PostgresAgentCommunicationStore(database),
+      conversationHistory: new PostgresHostedConversationHistoryStore(
+        database,
+      ),
+      conversationLifecycle:
+        createPostgresHostedConversationTurnLifecycleStore({
+          database: database.orm,
+        }),
     };
     return {
       database,

@@ -30,8 +30,8 @@ are endpoint internals, not agent tools.
 
 | Layer | Owner | Responsibility | Visible to the model |
 | --- | --- | --- | --- |
-| Generic MCP edge | `@roackb2/heddle-adopter/mcp/node` | Bearer extraction and redaction, capability verification, bounded JSON parsing, Streamable HTTP transport lifecycle, cancellation, safe protocol errors, and shutdown cleanup | No |
-| Generic JSON tool registry | `@roackb2/heddle-adopter/mcp/node` | Capability admission, per-call lifetime checks, cancellation composition, safe failures, and JSON result projection | No |
+| Generic MCP edge | `@heddleagent/execution-host-client/mcp/node` | Bearer extraction and redaction, capability verification, bounded JSON parsing, Streamable HTTP transport lifecycle, cancellation, safe protocol errors, and shutdown cleanup | No |
+| Generic JSON tool registry | `@heddleagent/execution-host-client/mcp/node` | Capability admission, per-call lifetime checks, cancellation composition, safe failures, and JSON result projection | No |
 | Lucid tool definitions | `product-tools.ts` | Exact tool names, descriptions, schemas, annotations, failure messages, and product operations | Yes |
 | Lucid tool contract | `types.ts` | Fixed supported-tool union and product-owned projection ports | Only the registered tool schema |
 | Lucid projection adapter | `workspace-projection-reader.ts` | Bind verified capability scope to that user's projection in the shared network | No |
@@ -43,7 +43,7 @@ available to the Execution Host. Currently that is only
 `read_workspace_snapshot`. Helper methods inside the package service are MCP
 server internals and are never model-visible tools.
 
-`@roackb2/heddle-adopter/mcp` supplies the generic verifier for the dedicated
+`@heddleagent/execution-host-client/mcp` supplies the generic verifier for the dedicated
 `heddle-mcp-capability+jwt` signature, issuer, audience, age, deployment
 binding, and Lucid's fixed supported-tool set using JWKS.
 

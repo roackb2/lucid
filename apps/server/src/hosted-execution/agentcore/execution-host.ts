@@ -9,12 +9,12 @@ import {
   MCP_CAPABILITY_HEADER,
   MODEL_API_KEY_HEADER,
   type ExecutionHostStreamEvent,
-} from '@roackb2/heddle-adopter/contracts';
+} from '@heddleagent/execution-host-client/contracts';
 import {
   DirectHttpExecutionHost,
   type ExecutionHost,
   type ExecutionHostConversationTurn,
-} from '@roackb2/heddle-adopter/http-sse';
+} from '@heddleagent/execution-host-client/http-sse';
 import { HttpRequest } from '@smithy/protocol-http';
 import type {
   AgentCoreExecutionHostConfig,

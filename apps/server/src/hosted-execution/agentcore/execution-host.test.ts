@@ -6,12 +6,12 @@ import {
   MCP_CAPABILITY_HEADER,
   MODEL_API_KEY_HEADER,
   type ExecutionHostStreamEvent,
-} from '@roackb2/heddle-adopter/contracts';
+} from '@heddleagent/execution-host-client/contracts';
 import {
   ExecutionHostInvocationCancelledError,
   ExecutionHostStreamInterruptedError,
   type ExecutionHostConversationTurn,
-} from '@roackb2/heddle-adopter/http-sse';
+} from '@heddleagent/execution-host-client/http-sse';
 import { createServer, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';

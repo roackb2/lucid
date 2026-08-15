@@ -3,7 +3,9 @@
 This directory owns only the product schema, policy-free record codecs, and the
 disposable real-PostgreSQL fixture shared by adapter tests. Concrete stores and
 their Drizzle queries live beside the workspace, user-network,
-agent-wake, and agent-communication services that own those use cases.
+agent-wake, agent-communication, and hosted-conversation services that own
+those use cases. Hosted conversation lifecycle writes use Heddle's official
+adapter; Lucid keeps only its bounded product history query.
 This directory must never grow back into a central product repository.
 
 ## Responsibilities
@@ -12,7 +14,7 @@ This directory must never grow back into a central product repository.
 | --- | --- |
 | `schema.ts` | Declares product tables and constraints in the `lucid` schema |
 | `records.ts` | Decodes and normalizes PostgreSQL records without owning queries or domain policy |
-| `test-context.ts` | Constructs the four named stores over the disposable PostgreSQL fixture |
+| `test-context.ts` | Constructs the named Lucid stores plus the official Heddle conversation lifecycle store over the disposable PostgreSQL fixture |
 
 The services receive narrow store ports through
 `composition/postgres-persistence.ts`. PostgreSQL driver, query-builder, and
@@ -41,10 +43,11 @@ it can release only the matching product wake claim.
 ## PostgreSQL operational boundary
 
 PostgreSQL uses the standard `lucid` schema for product state. Heddle task,
-run-request, checkpoint, lease, and run-history state uses the separate
-`heddle` schema through Heddle's released targeted-store contract and public
-state/control projectors. Lucid does not copy Heddle's private file-store model
-or use a filtered local store as a distributed lock.
+run-request, checkpoint, lease, run-history, and hosted-conversation lifecycle
+state uses the separate `heddle` schema through released Heddle adapters.
+Lucid supplies the shared Drizzle handle and explicitly applies checked-in
+migrations; it does not copy Heddle transition logic or use a filtered local
+store as a distributed lock.
 
 The schema-neutral `PostgresDatabase` in
 `../../../infrastructure/postgres/database.ts` defaults to `prepare: false`,
@@ -81,8 +84,9 @@ The full cross-store contract requires a disposable real PostgreSQL database:
 LUCID_POSTGRES_TEST_URL='postgresql:///lucid_test' yarn test
 ```
 
-The product suite resets only the `lucid` product tables inside that database;
-the heartbeat suite deletes only its opaque test namespaces. Together they
+The product fixture resets the `lucid` product tables and the selected Heddle
+conversation table inside that disposable database; the heartbeat suite
+deletes only its opaque test namespaces. Together they
 validate shared store behavior, two-pool wake and task contention,
 cross-process idempotency, lease recovery and fencing, non-stealing
 initialization, and persistence after every client connection closes. The URL
@@ -103,6 +107,11 @@ files run serially because they share fixed schema names.
   nullable unique idempotency key for retry-safe agent side effects and a
   nullable `reply_to_sequence` for conversation routing. Content provenance is
   recorded separately in `metadata.sourceEventIds`.
+- `heddle.execution_host_conversation_turns` is Heddle's lifecycle authority
+  for direct hosted questions. Lucid's product query exposes the newest 20 in
+  one authenticated tenant/user/session scope. It stores public terminal
+  Markdown and safe lifecycle status, not execution activity, credentials,
+  traces, hidden reasoning, or tool data.
 
 The agent working note is also stored as an immutable discovery
 event (`agent_note_updated`) rather than a mutable profile column.
@@ -171,13 +180,15 @@ discovery_workspaces 1 ── * users
 users         1 ── 1 agents
 discovery_workspaces 1 ── * agents
 discovery_workspaces 1 ── * discovery_events
-
 agents.id   ──> logical Heddle task ID
+authenticated user ID ──> Heddle conversation subject scope
 discovery_events actor/target/reply ──> delivery and conversation references
 discovery_events metadata source IDs  ──> content provenance references
 ```
 
-Workspace and user ownership use foreign keys. Event actor, recipient,
+Workspace and user ownership within the `lucid` schema use foreign keys.
+The separately owned Heddle lifecycle table is fenced by the full validated
+tenant/subject/product-session scope rather than Lucid foreign keys. Event actor, recipient,
 reply, and provenance identifiers remain append-only logical references
 validated by the owning store adapter. A reply determines which request should
 receive a response; a source determines which earlier content was repeated or
