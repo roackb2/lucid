@@ -1,4 +1,5 @@
 import { JoseExecutionAuthority } from '@heddleagent/execution-host-client/authority';
+import { AgentCoreExecutionHost } from '@heddleagent/execution-host-client/agentcore';
 import {
   DurableHostedConversationTurnService,
   HostedConversationTurnService,
@@ -13,7 +14,6 @@ import {
 } from '@heddleagent/execution-host-client/node';
 import type { LucidAuthenticator } from '../auth/authenticator.js';
 import type { HostedExecutionConfig } from '../hosted-execution/config.js';
-import { AgentCoreExecutionHost } from '../hosted-execution/agentcore/execution-host.js';
 import {
   HostedConversationAuthorizationError,
   HostedConversationAdmissionService,

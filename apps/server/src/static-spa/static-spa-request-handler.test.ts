@@ -65,17 +65,17 @@ describe('static SPA request handler', () => {
   });
 
   it('fails startup when the configured build is incomplete', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'lucid-static-web-empty-'));
+    const root = await mkdtemp(join(tmpdir(), 'lucid-static-spa-empty-'));
     roots.add(root);
 
     await expect(createStaticSpaRequestHandler(root)).rejects.toThrow(
-      'Lucid web root is missing index.html',
+      'Lucid SPA root is missing index.html',
     );
   });
 });
 
 async function createFixture(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'lucid-static-web-'));
+  const root = await mkdtemp(join(tmpdir(), 'lucid-static-spa-'));
   roots.add(root);
   await mkdir(join(root, 'assets'));
   await writeFile(

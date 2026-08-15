@@ -27,7 +27,7 @@ import {
 } from './runtime/agent-execution-composition.js';
 import {
   createStaticSpaRequestHandler,
-} from './web/static-spa-request-handler.js';
+} from './static-spa/static-spa-request-handler.js';
 import {
   HostedConversationHistoryService,
 } from './hosted-execution/conversation/history-service.js';

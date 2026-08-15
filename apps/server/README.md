@@ -41,12 +41,12 @@ bounded execution, and recovery predictable.
 - `src/composition/postgres-persistence.ts` composes the product stores and
   selected Heddle adapters, then owns their shared pool shutdown.
 - `src/hosted-execution/` owns the adopter-side authority, MCP, and external
-  conversation host ports without importing private host code. Its
-  `agentcore/` adapter is the only provider-specific AWS SDK boundary.
+  conversation host ports without importing private host code. The released
+  Execution Host client owns both direct and AgentCore transport mechanics.
 - `src/health.ts` exposes process liveness at `GET /healthz`; it does not imply
   database or external-provider readiness.
-- `src/web/` serves the configured production SPA with navigation fallback and
-  separate HTML/immutable-asset cache policy. It is disabled when
+- `src/static-spa/` serves the configured production SPA with navigation
+  fallback and separate HTML/immutable-asset cache policy. It is disabled when
   `LUCID_WEB_ROOT` is unset for split-process local development.
 - `src/router.ts` exposes:
   - `identity.session`
@@ -103,10 +103,10 @@ configuration and deployment sequence.
 
 The server still requires `@roackb2/heddle` 5.13 for the existing in-process
 agent runner and released heartbeat task APIs. The external conversation
-boundary uses `@heddleagent/execution-host-client@6.0.0` for signing-key and
+boundary uses `@heddleagent/execution-host-client@6.1.0` for signing-key and
 credential handling, signed authority, Node HTTP/JWKS/SSE, product-edge MCP,
-generic durable conversation lifecycle, and the versioned `ExecutionHost`
-contract. Its lifecycle store is supplied by
+generic durable conversation lifecycle, the versioned `ExecutionHost`
+contract, and its AgentCore transport. Its lifecycle store is supplied by
 `@heddleagent/postgres@6.0.0`; Lucid retains authenticated scope selection,
 migration execution, and its history query.
 

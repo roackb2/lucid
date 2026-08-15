@@ -23,7 +23,7 @@ export async function createStaticSpaRequestHandler(
   const indexStats = await stat(indexPath).catch(() => undefined);
 
   if (!indexStats?.isFile()) {
-    throw new Error(`Lucid web root is missing index.html: ${root}`);
+    throw new Error(`Lucid SPA root is missing index.html: ${root}`);
   }
 
   const options = {
