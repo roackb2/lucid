@@ -46,7 +46,7 @@ Node HTTP/JWKS/SSE and Streamable HTTP MCP services, Lucid product
 admission, the direct host wire, a fake host, official-SDK MCP discovery/call,
 and the user-scoped workspace projection. It proves that the complete
 profile is wired while Lucid owns only route mounting and product policy.
-Lucid also has a provider-specific AgentCore `ExecutionHost` adapter that
+The released package also supplies an AgentCore `ExecutionHost` adapter that
 signs the same portable request and consumes the same strict stream through
 the official AWS SDK. A real managed Heddle turn and one bounded high-level
 session-isolation smoke have completed. These prove the research direction,
