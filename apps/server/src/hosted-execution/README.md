@@ -70,6 +70,21 @@ local coordinator vertical testable without turning the coordinator into a
 foreground proxy. The existing Lucid heartbeat service still owns current
 product trigger and status flows during this bounded transition.
 
+Lucid also owns the product grounding supplied with each desired heartbeat
+task. Reconciliation carries the selected agent instructions plus an explicit
+requirement to inspect the read-only workspace snapshot before deciding whether
+anything is worth reporting. The coordinator and Runtime execute that context;
+they do not invent Lucid product policy or silently convert an ungrounded model
+turn into a useful finding.
+
+The real local vertical passed on 2026-08-23. One authenticated conversation
+turn and one coordinator-claimed heartbeat both used the direct HTTP Runtime,
+called `product__read_workspace_snapshot` through Lucid's scoped MCP endpoint,
+and reached truthful terminal states. The heartbeat additionally persisted its
+run record and loaded checkpoint through the official PostgreSQL authority.
+This proves the local product boundary, not managed AgentCore deployment or
+coordinator restart recovery.
+
 Two deterministic integration boundaries remain deliberately distinct. The
 public adopter fixture proves the package turn service and Lucid MCP contract
 without private host code. The startup-composition test crosses both real HTTP

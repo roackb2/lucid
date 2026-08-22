@@ -19,6 +19,7 @@ export type HostedHeartbeatCoordinatorTaskInput = {
   defer?: boolean;
   model?: string;
   maxSteps?: number;
+  systemContext?: string;
 };
 
 type Fetch = typeof globalThis.fetch;

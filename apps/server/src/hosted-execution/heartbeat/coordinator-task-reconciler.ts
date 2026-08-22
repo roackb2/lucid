@@ -56,6 +56,10 @@ export class HostedHeartbeatTaskReconciler {
               defer: true,
               model: this.policy.model,
               maxSteps: this.policy.maxSteps,
+              systemContext: [
+                agent.instructions,
+                'Before deciding whether anything is worth reporting, call the available read-only Lucid workspace snapshot tool and ground the decision in its result.',
+              ].filter(Boolean).join('\n\n'),
             } satisfies HostedHeartbeatCoordinatorTaskInput,
           }];
     });

@@ -60,6 +60,8 @@ describe('HostedHeartbeatTaskReconciler', () => {
         intervalMs: 60_000,
         model: 'test-model',
         maxSteps: 4,
+        systemContext:
+          'Before deciding whether anything is worth reporting, call the available read-only Lucid workspace snapshot tool and ground the decision in its result.',
       }),
       undefined,
     );
