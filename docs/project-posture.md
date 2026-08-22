@@ -38,7 +38,10 @@ bounded high-level session-isolation smoke. Abuse controls, metering, account
 recovery, and broader product maturity remain future work. Direct
 hosted conversations now have a bounded, user-scoped history view over Heddle's
 durable lifecycle records; this is terminal history, not replay or raw
-execution tracing.
+execution tracing. A separate coordinator can now receive Lucid's desired
+heartbeat task catalog and obtain one-run authority, but the complete local
+Runtime/MCP/heartbeat vertical remains the active evidence gate and product
+heartbeat controls have not yet migrated.
 
 The architecture should therefore favor clean, testable ownership boundaries
 without prematurely optimizing for traffic or preserving obsolete local

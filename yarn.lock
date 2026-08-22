@@ -698,10 +698,23 @@
     jose "^6.2.8"
     zod "^4.3.6"
 
-"@heddleagent/postgres@6.0.0":
-  version "6.0.0"
-  resolved "https://registry.npmjs.org/@heddleagent/postgres/-/postgres-6.0.0.tgz#ff99357e5efc564fbe2895c3a40cc96637b9e284"
-  integrity sha512-Jo/b01znRr2U/yqdldx49gKlMygWazEeidJYQ3uAb7lnnNjf0xHTp28A7MWPiV3om69/IPQRRpzexDkOXqTaiQ==
+"@heddleagent/execution-host-client@6.2.0":
+  version "6.2.0"
+  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-6.2.0.tgz#4296231cf39e760999206da2b0b6f7deb1583445"
+  integrity sha512-HXnQWsJ4W/1tgr+cbEZKJNjmTwBpQq8VRYD1ZTGmdOv4blv87M/WSbMyKW8CQG8OS4C97s3KiHmJxUux/OReaw==
+  dependencies:
+    "@aws-sdk/client-bedrock-agentcore" "^3.1107.0"
+    "@modelcontextprotocol/sdk" "^1.29.0"
+    "@smithy/protocol-http" "^5.5.16"
+    dayjs "^1.11.20"
+    eventsource-parser "^3.1.0"
+    jose "^6.2.8"
+    zod "^4.3.6"
+
+"@heddleagent/postgres@6.1.0":
+  version "6.1.0"
+  resolved "https://registry.npmjs.org/@heddleagent/postgres/-/postgres-6.1.0.tgz#8a85cbef60de1dad8336ab8c9c8d0c598c997cfd"
+  integrity sha512-330bRmTRnAz02gLdrOVlM6ekSGdX140AMPLO6/lZW/Y+gG8giuHW1boBJAS0Z33bnsOB36sNo/Zqtxx0FJQJDw==
   dependencies:
     dayjs "^1.11.20"
 

@@ -8,6 +8,9 @@ import {
   type NodeExecutionAdopterHttpHandler,
 } from '@heddleagent/execution-host-client/node';
 import type { LucidLogger } from '../logger.js';
+import type {
+  HostedHeartbeatDelegationHttpHandler,
+} from './heartbeat/delegation-http-handler.js';
 import type { LucidProductMcpToolName } from './mcp/types.js';
 
 export const HOSTED_EXECUTION_JWKS_PATH = DEFAULT_ADOPTER_JWKS_PATH;
@@ -26,10 +29,14 @@ export class HostedExecutionHttpRouter {
     private readonly adopterHttp: NodeExecutionAdopterHttpHandler,
     private readonly mcp: NodeStreamableHttpMcpService<LucidProductMcpToolName>,
     private readonly logger: LucidLogger,
+    private readonly heartbeatDelegations?: HostedHeartbeatDelegationHttpHandler,
   ) {}
 
   /** Handles a hosted-execution route or returns false for the tRPC adapter. */
   handle(request: IncomingMessage, response: ServerResponse): boolean {
+    if (this.heartbeatDelegations?.handle(request, response)) {
+      return true;
+    }
     if (readPathname(request.url) === HOSTED_EXECUTION_MCP_PATH) {
       void this.mcp.handle(request, response).catch((error) => {
         this.logger.error({

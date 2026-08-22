@@ -1,15 +1,17 @@
 # External Heddle execution host
 
 Lucid keeps hosted agent execution replaceable, but it does not embed or import
-the private Heddle execution-host service. The current Lucid server executes
-agent heartbeats in process. This document records the boundary that
-must be preserved before moving the model and tool loop into an isolated
-runtime such as Amazon Bedrock AgentCore Runtime.
+the private Heddle execution-host or coordinator services. Foreground hosted
+conversations call the Runtime directly. The current product heartbeat UI
+still uses the embedded service, while an optional coordinator integration now
+publishes desired tasks and issues one-run authority for the local autonomous
+execution proof.
 
 ## Current status
 
-The external execution host supports one versioned `conversation-turn`
-workflow. The released `@heddleagent/execution-host-client` package supplies the generic
+The external execution host supports versioned `conversation-turn` and
+`heartbeat-task` workflows. The released
+`@heddleagent/execution-host-client` package supplies the generic
 adopter machinery:
 
 - an ES256 authority service that issues separately typed execution and MCP
@@ -56,18 +58,23 @@ owns the authenticated bounded query, while Heddle owns lifecycle writes. It
 does not persist activity, tool payloads, credentials, traces, or hidden
 reasoning, and it does not yet provide replay or continuation.
 
-Lucid's agent workflow is also not connected to the external host. A
+The separate coordinator now owns PostgreSQL-backed Heddle task claims,
+checkpoints, recovery, and fenced settlement. Lucid supplies only current
+desired task state and a just-in-time execution/MCP delegation. An external
 agent wake still requires:
 
-- a PostgreSQL-backed Heddle task claim, checkpoint, and fenced settlement;
 - a Lucid wake claim and fixed mailbox horizon;
 - stateful communication tools with visibility, provenance, and action-budget
   policy; and
 - durable Lucid completion or failure settlement.
 
-The conversation port must not be relabeled as agent execution.
-Moving heartbeats requires a supported autonomous-task workflow and the same
-durable claim and settlement semantics.
+The conversation port must not be relabeled as agent execution. The remaining
+local gate is to run Lucid, the direct HTTP Runtime, and the coordinator
+together and observe one real MCP-backed heartbeat terminal. The existing
+product trigger/status paths are intentionally not migrated in this
+architecture-proof slice. Coordinator mode therefore leaves those product
+projections available but does not start the embedded heartbeat worker; the
+bounded proof triggers through the coordinator API and cannot execute twice.
 
 ## Why the current invocation target is local
 
@@ -89,6 +96,9 @@ flowchart LR
   Client["User client"] --> Backend["Lucid backend and control plane"]
   Backend --> Database[("PostgreSQL")]
   Backend --> Runtime["External Heddle execution host"]
+  Backend --> Coordinator["Heddle heartbeat coordinator"]
+  Coordinator --> HeddleDb[("Heddle PostgreSQL schema")]
+  Coordinator --> Runtime
   Runtime --> MCP["Tenant-scoped Lucid MCP"]
   MCP --> Backend
 ```
@@ -97,7 +107,7 @@ The Lucid backend owns:
 
 - end-user authentication and product authorization;
 - adopter, tenant, subject, product-session, and invocation identity;
-- Heddle task and Lucid wake lifecycle;
+- desired heartbeat tasks, Lucid wake lifecycle, and one-run delegation;
 - PostgreSQL access, migration execution, and authenticated history queries;
 - selection of the Heddle lifecycle store implementation;
 - execution-assertion issuance and replay policy; and
@@ -123,15 +133,12 @@ public `ExecutionHost` port without exposing host internals.
 
 ## Next integration sequence
 
-1. Complete Google-backed user enrollment and verify one signed-in
-   browser through Lucid, the managed Execution Host, and its scoped MCP tool.
-2. Sharpen the user-facing social-product experience before adding
-   deeper infrastructure or compliance work.
-3. Treat the bounded durable terminal history as the product authority; add
-   replay or continuation only for a separately selected user question.
-4. Add an `autonomous-task` contract before replacing Lucid's in-process
-   agent runner. Preserve PostgreSQL task/wake authority and expose
-   stateful communication tools only with durable invocation-scoped policy.
+1. Prove the complete local direct path: Lucid -> Runtime -> scoped Lucid MCP.
+2. Prove one coordinator-owned heartbeat through that same Runtime and MCP,
+   including PostgreSQL task settlement and process restart recovery.
+3. Migrate Lucid's product trigger/status controls only after the local
+   architecture proof, without creating a second task authority.
+4. Defer AgentCore deployment until the same semantics are truthful locally.
 
 ## Security invariants
 
@@ -143,6 +150,8 @@ public `ExecutionHost` port without exposing host internals.
   arguments.
 - The runtime receives no PostgreSQL URL, Lucid database credential, signing
   key, or broad AWS role.
+- The coordinator receives neither Lucid's database credential nor signing key;
+  it receives a short-lived execution bundle only after claiming one task.
 - Secrets do not enter prompts, filesystem snapshots, child-process
   environments, traces, logs, or streamed activity.
 - An accepted stream that ends without a terminal event is interrupted or

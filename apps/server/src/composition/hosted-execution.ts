@@ -18,6 +18,10 @@ import {
   HostedConversationAuthorizationError,
   HostedConversationAdmissionService,
 } from '../hosted-execution/conversation/admission-service.js';
+import { HostedHeartbeatDelegationHttpHandler } from '../hosted-execution/heartbeat/delegation-http-handler.js';
+import { HostedHeartbeatDelegationService } from '../hosted-execution/heartbeat/delegation-service.js';
+import { HostedHeartbeatCoordinatorClient } from '../hosted-execution/heartbeat/coordinator-client.js';
+import { HostedHeartbeatTaskReconciler } from '../hosted-execution/heartbeat/coordinator-task-reconciler.js';
 import {
   HOSTED_EXECUTION_JWKS_PATH,
   HOSTED_CONVERSATION_TURNS_PATH,
@@ -30,10 +34,12 @@ import {
 } from '../hosted-execution/mcp/types.js';
 import { UserWorkspaceProjectionReader } from '../hosted-execution/mcp/workspace-projection-reader.js';
 import type { DiscoveryWorkspaceSnapshot } from '../lucid/discovery-types.js';
+import type { AgentWakeStore } from '../lucid/agent/store.js';
 import type { LucidLogger } from '../logger.js';
 
 export type HostedExecutionComposition = {
   http: HostedExecutionHttpRouter;
+  start(): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -46,6 +52,15 @@ export async function createHostedExecutionComposition(input: {
   };
   logger: LucidLogger;
   conversationLifecycle: HostedConversationTurnLifecycleStore;
+  heartbeatStore: Pick<
+    AgentWakeStore,
+    'readWorkspace' | 'listAgents' | 'listUsers'
+  >;
+  heartbeatTaskPolicy: {
+    intervalMs: number;
+    model: string;
+    maxSteps: number;
+  };
   executionHost?: ExecutionHost;
 }): Promise<HostedExecutionComposition> {
   const maxTurnSeconds = Math.ceil(input.config.maxTurnMs / 1_000);
@@ -141,10 +156,44 @@ export async function createHostedExecutionComposition(input: {
       input.logger.warn(failure, 'lucid.hosted_execution.request_failed');
     },
   });
-  const http = new HostedExecutionHttpRouter(adopterHttp, mcp, input.logger);
+  const heartbeatDelegations = input.config.heartbeatDelegationCredentials
+    ? new HostedHeartbeatDelegationHttpHandler(
+        new HostedHeartbeatDelegationService(authority, input.heartbeatStore, {
+          tenantId: input.config.tenantId,
+          productSessionId: input.config.productSessionId,
+          maxTurnMs: input.config.maxTurnMs,
+          allowedTools: LUCID_PRODUCT_MCP_TOOLS,
+        }),
+        input.config.heartbeatDelegationCredentials,
+        input.logger,
+      )
+    : undefined;
+  const heartbeatTaskReconciler = input.config.heartbeatCoordinator
+    ? new HostedHeartbeatTaskReconciler(
+        input.heartbeatStore,
+        new HostedHeartbeatCoordinatorClient(
+          input.config.heartbeatCoordinator.baseUrl,
+          input.config.heartbeatCoordinator.credentials,
+        ),
+        input.heartbeatTaskPolicy,
+      )
+    : undefined;
+  const http = new HostedExecutionHttpRouter(
+    adopterHttp,
+    mcp,
+    input.logger,
+    heartbeatDelegations,
+  );
 
   return {
     http,
+    start: async () => {
+      if (!heartbeatTaskReconciler) {
+        return;
+      }
+      const result = await heartbeatTaskReconciler.reconcile();
+      input.logger.info(result, 'lucid.hosted_heartbeat.tasks_reconciled');
+    },
     close: async () => {
       try {
         await http.close();

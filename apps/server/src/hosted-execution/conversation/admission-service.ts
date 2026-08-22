@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { HostedConversationTurnRunner } from '@heddleagent/execution-host-client/conversation';
 import dayjs from 'dayjs';
 import { principalHasRole } from '../../auth/request-principal.js';
@@ -6,6 +6,7 @@ import type {
   HostedConversationRequest,
   HostedConversationRequestService,
 } from './types.js';
+import { createHostedRuntimeSessionId } from '../runtime-session-id.js';
 
 export class HostedConversationAuthorizationError extends Error {
   readonly name = 'HostedConversationAuthorizationError';
@@ -59,7 +60,7 @@ implements HostedConversationRequestService {
     };
     yield* this.turns.streamTurn({
       scope,
-      runtimeSessionId: createRuntimeSessionId(scope),
+      runtimeSessionId: createHostedRuntimeSessionId(scope),
       invocationId,
       prompt: input.prompt,
       deadlineAt,
@@ -82,22 +83,4 @@ function requireUserSubject(
   // The user ID is Lucid's stable product subject. Authentication
   // adapter labels may change without changing hosted conversation ownership.
   return input.principal.userId;
-}
-
-function createRuntimeSessionId(scope: {
-  tenantId: string;
-  subjectId: string;
-  productSessionId: string;
-}): string {
-  const digest = createHash('sha256')
-    .update(JSON.stringify([
-      scope.tenantId,
-      scope.subjectId,
-      scope.productSessionId,
-    ]))
-    .digest('hex');
-  // AgentCore request session IDs allow only alphanumerics and hyphens. Keep
-  // the stable product-derived digest while encoding it for that provider
-  // boundary rather than leaking a Lucid delimiter into the AWS request.
-  return `lucid-runtime-session-${digest}`;
 }

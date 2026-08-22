@@ -104,6 +104,12 @@ describe('hosted execution composition', () => {
       discoveryWorkspace: {
         snapshot: async () => workspaceSnapshot(),
       },
+      heartbeatStore: unusedHeartbeatStore(),
+      heartbeatTaskPolicy: {
+        intervalMs: 60_000,
+        model: 'test-model',
+        maxSteps: 3,
+      },
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
@@ -201,6 +207,12 @@ describe('hosted execution composition', () => {
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
+      heartbeatStore: unusedHeartbeatStore(),
+      heartbeatTaskPolicy: {
+        intervalMs: 60_000,
+        model: 'test-model',
+        maxSteps: 3,
+      },
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
@@ -236,6 +248,16 @@ function memoryConversationLifecycle(): HostedConversationTurnLifecycleStore {
     recordAccepted: async () => undefined,
     settleTurn: async () => undefined,
     interruptExpiredTurns: async () => undefined,
+  };
+}
+
+function unusedHeartbeatStore() {
+  return {
+    readWorkspace: async () => {
+      throw new Error('Heartbeat delegation is disabled in this fixture.');
+    },
+    listAgents: async () => [],
+    listUsers: async () => [],
   };
 }
 

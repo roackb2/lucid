@@ -1,11 +1,11 @@
 # Lucid server
 
 The server is the composition root for Lucid's PostgreSQL-backed
-delegated-discovery runtime. Both current agent execution-host
-selections run inside this process and use the same product and Heddle task
-authority. The optional `src/hosted-execution/` boundary composes execution
-assertion issuance, a scoped product MCP service, and an outbound conversation
-host port only when its complete profile is explicitly enabled.
+delegated-discovery runtime. The existing product heartbeat host remains in
+process during the coordinator architecture proof. The optional
+`src/hosted-execution/` boundary composes execution authority, scoped product
+MCP, direct foreground turns, and narrow coordinator task/delegation edges
+only when its complete profile is explicitly enabled.
 
 It owns:
 
@@ -72,10 +72,9 @@ Startup order is:
 1. validate the PostgreSQL and authentication configuration;
 2. initialize product defaults without stealing live claims;
 3. recover expired Heddle executions through its lease- and claim-fenced API;
-4. reconcile heartbeat tasks with the current workspace generation;
-5. start either the targeted bounded-worker host or the optional long-lived
-   scheduler;
-6. accept HTTP requests.
+4. open HTTP so JWKS, MCP, and delegation routes are reachable;
+5. if configured, pause and reconcile the external coordinator task catalog;
+6. start the existing product heartbeat host.
 
 Shutdown first stops new HTTP work, then aborts and settles heartbeat
 execution, and closes PostgreSQL last. Persistence code must remain available
@@ -87,11 +86,10 @@ authority for recovery. The optional scheduler host is useful for a
 single-process demo but does not change persistence or create a second task
 authority.
 
-Neither current agent host is a remote transport. See
+The current product heartbeat host is not a remote transport. See
 [`src/hosted-execution/README.md`](src/hosted-execution/README.md) and
 [`../../docs/hosted-execution.md`](../../docs/hosted-execution.md) before
-composing the external conversation boundary or extending it to autonomous
-agent work.
+composing the external execution boundary or changing autonomous work.
 
 Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
@@ -103,11 +101,11 @@ configuration and deployment sequence.
 
 The server still requires `@roackb2/heddle` 5.13 for the existing in-process
 agent runner and released heartbeat task APIs. The external conversation
-boundary uses `@heddleagent/execution-host-client@6.1.0` for signing-key and
+boundary uses `@heddleagent/execution-host-client@6.3.0` for signing-key and
 credential handling, signed authority, Node HTTP/JWKS/SSE, product-edge MCP,
 generic durable conversation lifecycle, the versioned `ExecutionHost`
 contract, and its AgentCore transport. Its lifecycle store is supplied by
-`@heddleagent/postgres@6.0.0`; Lucid retains authenticated scope selection,
+`@heddleagent/postgres@6.1.0`; Lucid retains authenticated scope selection,
 migration execution, and its history query.
 
 `src/lucid` owns users, mailbox events, findings, feedback, wake claims,

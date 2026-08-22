@@ -9,17 +9,25 @@ import type {
 } from '@heddleagent/execution-host-client/conversation';
 import { DirectExecutionHostCredentials } from '@heddleagent/execution-host-client/node';
 import { z } from 'zod';
+import {
+  HostedHeartbeatCoordinatorApiCredentials,
+  HostedHeartbeatDelegationCredentials,
+} from './heartbeat/coordinator-credentials.js';
 import { EnvironmentHostedModelCredentials } from './model-credentials.js';
 
 const ENABLED_ENV = 'LUCID_HOSTED_EXECUTION_ENABLED';
 const SECRET_ENV_NAMES = [
   'LUCID_HOSTED_EXECUTION_LOCAL_TOKEN',
   'LUCID_HOSTED_EXECUTION_MODEL_API_KEY',
+  'LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN',
+  'LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN',
 ] as const;
-const CREDENTIAL_ENV_NAMES = Object.freeze({
+const DIRECT_CREDENTIAL_ENV_NAMES = Object.freeze({
   localToken: SECRET_ENV_NAMES[0],
   modelApiKey: SECRET_ENV_NAMES[1],
 });
+const HEARTBEAT_COORDINATOR_TOKEN_ENV = SECRET_ENV_NAMES[2];
+const HEARTBEAT_COORDINATOR_API_TOKEN_ENV = SECRET_ENV_NAMES[3];
 const AgentCoreRegionSchema = z.string().trim().min(1).max(64).regex(
   /^[a-z]{2}(?:-[a-z0-9]+)+-\d+$/,
   'must be an AWS region identifier',
@@ -42,6 +50,13 @@ const HostedExecutionEnvironmentSchema = z.object({
   LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: z.string().trim().min(32).max(4_096)
     .optional(),
   LUCID_HOSTED_EXECUTION_MODEL_API_KEY: z.string().trim().min(8).max(4_096),
+  LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN: z.string().trim().min(32)
+    .max(4_096)
+    .optional(),
+  LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: z.url().optional(),
+  LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: z.string().trim().min(32)
+    .max(4_096)
+    .optional(),
   LUCID_HOSTED_EXECUTION_AGENTCORE_REGION: AgentCoreRegionSchema.optional(),
   LUCID_HOSTED_EXECUTION_AGENTCORE_RUNTIME_ARN:
     AgentCoreRuntimeArnSchema.optional(),
@@ -81,6 +96,52 @@ const HostedExecutionEnvironmentSchema = z.object({
       code: 'custom',
       path: ['LUCID_HOSTED_EXECUTION_HOST_URL'],
       message: 'must use HTTPS or loopback HTTP without credentials, query, or fragment',
+    });
+  }
+
+  const coordinatorUrl = environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL
+    ? new URL(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL)
+    : undefined;
+  if (
+    coordinatorUrl
+    && (!isSafeWebUrl(coordinatorUrl) || !isOriginUrl(coordinatorUrl))
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL'],
+      message: 'must be an HTTPS or loopback HTTP origin without credentials, query, or fragment',
+    });
+  }
+  if (
+    Boolean(coordinatorUrl)
+    !== Boolean(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL'],
+      message: 'and its API token must be configured together',
+    });
+  }
+  if (
+    coordinatorUrl
+    && !environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN'],
+      message: 'is required when Lucid publishes tasks to a coordinator',
+    });
+  }
+  if (
+    environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN
+    && environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN
+    && environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN
+      === environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN'],
+      message: 'must differ from the heartbeat delegation token',
     });
   }
 
@@ -170,6 +231,11 @@ export type HostedExecutionConfig = {
   maxTurnMs: number;
   transport: HostedExecutionTransportConfig;
   modelCredentials: HostedConversationModelCredentialProvider;
+  heartbeatDelegationCredentials?: HostedHeartbeatDelegationCredentials;
+  heartbeatCoordinator?: {
+    baseUrl: URL;
+    credentials: HostedHeartbeatCoordinatorApiCredentials;
+  };
 };
 
 /** Resolves one optional hosted profile and removes credentials from env. */
@@ -190,13 +256,23 @@ export function resolveHostedExecutionConfig(
   const directCredentials = parsed.LUCID_HOSTED_EXECUTION_TRANSPORT === 'direct'
     ? DirectExecutionHostCredentials.takeFromEnvironment(
         environment,
-        CREDENTIAL_ENV_NAMES,
+        DIRECT_CREDENTIAL_ENV_NAMES,
       )
     : undefined;
   const modelCredentials = directCredentials
     ?? EnvironmentHostedModelCredentials.take(
       environment,
-      CREDENTIAL_ENV_NAMES.modelApiKey,
+      DIRECT_CREDENTIAL_ENV_NAMES.modelApiKey,
+    );
+  const heartbeatDelegationCredentials =
+    HostedHeartbeatDelegationCredentials.takeOptional(
+      environment,
+      HEARTBEAT_COORDINATOR_TOKEN_ENV,
+    );
+  const heartbeatCoordinatorApiCredentials =
+    HostedHeartbeatCoordinatorApiCredentials.takeOptional(
+      environment,
+      HEARTBEAT_COORDINATOR_API_TOKEN_ENV,
     );
   const transport: HostedExecutionTransportConfig = directCredentials
     ? {
@@ -229,6 +305,19 @@ export function resolveHostedExecutionConfig(
     maxTurnMs: parsed.LUCID_HOSTED_EXECUTION_MAX_TURN_MS,
     transport: Object.freeze(transport),
     modelCredentials,
+    ...(heartbeatDelegationCredentials
+      ? { heartbeatDelegationCredentials }
+      : {}),
+    ...(heartbeatCoordinatorApiCredentials
+      ? {
+          heartbeatCoordinator: Object.freeze({
+            baseUrl: new URL(
+              parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL!,
+            ),
+            credentials: heartbeatCoordinatorApiCredentials,
+          }),
+        }
+      : {}),
   });
 }
 
