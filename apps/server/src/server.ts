@@ -17,9 +17,9 @@ import {
 } from './lucid/agent/heddle-runner.js';
 import { UserNetworkService } from './lucid/network/service.js';
 import {
-  AGENT_TASK_ID_PREFIX,
   AgentHeartbeatService,
 } from './lucid/agent/heartbeat-service.js';
+import { AGENT_TASK_ID_PREFIX } from './lucid/agent/heartbeat-task-identity.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
 import {
@@ -100,13 +100,17 @@ const hostedExecution = hostedExecutionConfig
       discoveryWorkspace,
       logger,
       conversationLifecycle: stores.conversationLifecycle,
+      heartbeatStore: stores.agent,
+      heartbeatTaskPolicy: {
+        intervalMs: config.heartbeatIntervalMs,
+        model: config.model,
+        maxSteps: config.maxSteps,
+      },
     })
   : undefined;
 const staticSpaRequestHandler = config.webRoot
   ? await createStaticSpaRequestHandler(config.webRoot)
   : undefined;
-heartbeats.start();
-
 const server = createHTTPServer({
   basePath: TRPC_BASE_PATH,
   router: createAppRouter(
@@ -179,16 +183,32 @@ const server = createHTTPServer({
 
 let shuttingDown = false;
 
-server.listen(config.port, config.host, () => {
-  logger.info({
-    address: `http://${config.host}:${config.port}`,
-    databaseDriver: 'postgres',
-    heartbeatHost: config.heartbeatHost,
-    hostedExecutionEnabled: Boolean(hostedExecution),
-    model: config.model,
-    webEnabled: Boolean(staticSpaRequestHandler),
-  }, 'lucid.server.ready');
-});
+try {
+  await listen(server, config.port, config.host);
+  await hostedExecution?.start();
+  if (!hostedExecutionConfig?.heartbeatCoordinator) {
+    heartbeats.start();
+  }
+} catch (error) {
+  logger.fatal({ error }, 'lucid.server.start_failed');
+  if (server.listening) {
+    await closeServer(server);
+  }
+  await hostedExecution?.close();
+  await persistence.close();
+  throw error;
+}
+logger.info({
+  address: `http://${config.host}:${config.port}`,
+  databaseDriver: 'postgres',
+  heartbeatCoordinatorEnabled: Boolean(
+    hostedExecutionConfig?.heartbeatCoordinator,
+  ),
+  heartbeatHost: config.heartbeatHost,
+  hostedExecutionEnabled: Boolean(hostedExecution),
+  model: config.model,
+  webEnabled: Boolean(staticSpaRequestHandler),
+}, 'lucid.server.ready');
 
 server.on('error', (error) => {
   logger.fatal({ error }, 'lucid.server.error');
@@ -226,4 +246,27 @@ function isTrpcRequest(requestUrl: string | undefined): boolean {
   const pathname = new URL(requestUrl ?? '/', 'http://localhost').pathname;
   return pathname === TRPC_BASE_PATH.slice(0, -1)
     || pathname.startsWith(TRPC_BASE_PATH);
+}
+
+async function listen(
+  server: ReturnType<typeof createHTTPServer>,
+  port: number,
+  host: string,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => reject(error);
+    server.once('error', onError);
+    server.listen(port, host, () => {
+      server.off('error', onError);
+      resolve();
+    });
+  });
+}
+
+async function closeServer(
+  server: ReturnType<typeof createHTTPServer>,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
 }

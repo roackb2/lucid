@@ -1,9 +1,10 @@
 # Hosted execution
 
-This application boundary lets Lucid act as an adopter control plane for an
-external Heddle Execution Host without importing the private host repository.
-It is deliberately separate from agent heartbeat execution, which
-still runs in process and retains its PostgreSQL task and wake authorities.
+This application boundary lets Lucid use an external Heddle Execution Host and
+the narrow autonomous-work coordinator without importing either private
+service repository. Foreground conversations invoke the Runtime directly.
+The coordinator receives desired heartbeat tasks and calls back for one
+short-lived execution delegation only when it owns a durable Heddle claim.
 
 ## Services
 
@@ -27,6 +28,7 @@ This directory contains only Lucid-owned behavior:
 | --- | --- |
 | `config.ts` | Validate Lucid's all-or-nothing hosted profile and select product identity, URLs, audiences, and limits |
 | `conversation/` | Admit an authenticated Lucid user, derive product-owned scope/identity/deadline, and query the newest 20 scoped lifecycle records |
+| `heartbeat/` | Publish Lucid-owned desired task state and issue one-run execution/MCP delegation without sharing product database credentials |
 | `http-router.ts` | Mount the package-owned HTTP and MCP services beside Lucid's tRPC routes |
 | `mcp/product-tools.ts` | Declare the exact Lucid tool names, schemas, descriptions, and product operations |
 | `mcp/workspace-projection-reader.ts` | Bind verified capability scope to Lucid's current workspace projection |
@@ -60,6 +62,28 @@ admission service derives product-owned identity and timing before the turn
 service issues one exact read-only MCP capability and invokes the configured
 host through either of the released direct HTTP or AgentCore `ExecutionHost`
 implementations.
+
+When the coordinator URL and its distinct API/delegation tokens are configured,
+startup first opens Lucid's HTTP authority/MCP routes, then reconciles the
+coordinator task catalog while coordinator admission is paused. This makes the
+local coordinator vertical testable without turning the coordinator into a
+foreground proxy. The existing Lucid heartbeat service still owns current
+product trigger and status flows during this bounded transition.
+
+Lucid also owns the product grounding supplied with each desired heartbeat
+task. Reconciliation carries the selected agent instructions plus an explicit
+requirement to inspect the read-only workspace snapshot before deciding whether
+anything is worth reporting. The coordinator and Runtime execute that context;
+they do not invent Lucid product policy or silently convert an ungrounded model
+turn into a useful finding.
+
+The real local vertical passed on 2026-08-23. One authenticated conversation
+turn and one coordinator-claimed heartbeat both used the direct HTTP Runtime,
+called `product__read_workspace_snapshot` through Lucid's scoped MCP endpoint,
+and reached truthful terminal states. The heartbeat additionally persisted its
+run record and loaded checkpoint through the official PostgreSQL authority.
+This proves the local product boundary, not managed AgentCore deployment or
+coordinator restart recovery.
 
 Two deterministic integration boundaries remain deliberately distinct. The
 public adopter fixture proves the package turn service and Lucid MCP contract

@@ -202,6 +202,21 @@ smoke remains separate evidence.
 For the portable ARM64 image, AgentCore transport variables, and explicit
 hosted migration sequence, see [Deploying the Lucid pilot](deploying.md).
 
+### Optional local heartbeat coordinator
+
+The local architecture gate uses the same direct Runtime for foreground turns
+and coordinator heartbeats. Configure the distinct delegation token,
+coordinator URL, and coordinator API token shown in `.env.example`. Start the
+Runtime and coordinator before Lucid; Lucid opens its JWKS/MCP/delegation
+routes, pauses coordinator admission, reconciles the desired task catalog, and
+resumes only when the product-wide background-work gate is enabled.
+
+This gate proves service boundaries and durable Heddle task settlement. Lucid's
+current product trigger/status controls remain on the embedded heartbeat host
+until a later selected migration. The exact container networking command is
+intentionally not prescribed until the real Runtime can reach Lucid's loopback
+MCP/JWKS endpoints without weakening the Runtime's non-loopback TLS rule.
+
 ## Checks
 
 Use a separate disposable PostgreSQL database for tests. The suite resets

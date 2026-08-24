@@ -37,12 +37,12 @@ import type {
 import type {
   AgentWorkingContextReader,
 } from '../workspace/store.js';
+import {
+  AGENT_TASK_ID_PREFIX,
+  agentIdFromTask,
+  taskIdForAgent,
+} from './heartbeat-task-identity.js';
 
-/**
- * Stable persisted Heddle task key. The value predates the user/agent vocabulary
- * and must not change without migrating task and run-record identities.
- */
-export const AGENT_TASK_ID_PREFIX = 'lucid-representative-';
 const UNSAFE_CANCELLATION_DISPOSITIONS = new Set<
   HeartbeatTaskCancellationDisposition
 >(['not-owned', 'not-found']);
@@ -642,16 +642,6 @@ export class AgentHeartbeatService {
   private async isExecutionAllowed(signal: AbortSignal): Promise<boolean> {
     return !signal.aborted && await this.isGlobalDispatchAllowed();
   }
-}
-
-function taskIdForAgent(agentId: string): string {
-  return `${AGENT_TASK_ID_PREFIX}${agentId}`;
-}
-
-function agentIdFromTask(taskId: string): string | undefined {
-  return taskId.startsWith(AGENT_TASK_ID_PREFIX)
-    ? taskId.slice(AGENT_TASK_ID_PREFIX.length)
-    : undefined;
 }
 
 function taskRequiresReplacement(

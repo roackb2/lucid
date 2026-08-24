@@ -1,0 +1,58 @@
+import type {
+  HostedHeartbeatDesiredTask,
+  HostedHeartbeatTaskReconciliationInput,
+} from '@heddleagent/execution-host-client/coordinator';
+import { taskIdForAgent } from '../../lucid/agent/heartbeat-task-identity.js';
+import type { AgentWakeStore } from '../../lucid/agent/store.js';
+
+type HeartbeatTaskPolicy = {
+  intervalMs: number;
+  model: string;
+  maxSteps: number;
+};
+
+type HeartbeatTaskCatalogStore = Pick<
+  AgentWakeStore,
+  'readWorkspace' | 'listAgents' | 'listUsers'
+>;
+
+/** Projects current Lucid ownership into Heddle's desired-task vocabulary. */
+export async function readLucidHeartbeatTaskReconciliationInput(
+  store: HeartbeatTaskCatalogStore,
+  policy: Readonly<HeartbeatTaskPolicy>,
+): Promise<Omit<HostedHeartbeatTaskReconciliationInput, 'signal'>> {
+  const [workspace, agents, users] = await Promise.all([
+    store.readWorkspace(),
+    store.listAgents(),
+    store.listUsers(),
+  ]);
+  const usersById = new Map(users.map((user) => [user.id, user]));
+  const desiredTasks = agents.flatMap((agent) => {
+    const user = usersById.get(agent.userId);
+    return !user || user.status === 'retired'
+      ? []
+      : [{
+          taskId: taskIdForAgent(agent.id),
+          input: {
+            workspaceId: workspace.versionId,
+            name: `${agent.name} background checks`,
+            task: agent.purpose,
+            enabled: user.status === 'active',
+            continuationMode: 'operator',
+            intervalMs: policy.intervalMs,
+            defer: true,
+            model: policy.model,
+            maxSteps: policy.maxSteps,
+            systemContext: [
+              agent.instructions,
+              'Before deciding whether anything is worth reporting, call the available read-only Lucid workspace snapshot tool and ground the decision in its result.',
+            ].filter(Boolean).join('\n\n'),
+          },
+        } satisfies HostedHeartbeatDesiredTask];
+  });
+
+  return {
+    desiredTasks,
+    resume: workspace.backgroundChecksEnabled,
+  };
+}

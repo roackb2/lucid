@@ -3,6 +3,8 @@ import { resolveHostedExecutionConfig } from './config.js';
 
 const LOCAL_TOKEN = 'local-token-'.padEnd(32, 'x');
 const MODEL_API_KEY = 'model-key-value';
+const DELEGATION_TOKEN = 'delegation-token-'.padEnd(32, 'x');
+const COORDINATOR_API_TOKEN = 'coordinator-api-token-'.padEnd(32, 'x');
 
 describe('hosted execution config', () => {
   it('is absent by default', () => {
@@ -37,7 +39,15 @@ describe('hosted execution config', () => {
     );
     expect(environment.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN).toBeUndefined();
     expect(environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY).toBeUndefined();
+    expect(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN)
+      .toBeUndefined();
+    expect(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN)
+      .toBeUndefined();
     expect(JSON.stringify(config?.modelCredentials)).toBe('{}');
+    expect(config?.heartbeatDelegationToken).toBe(DELEGATION_TOKEN);
+    expect(config?.heartbeatCoordinator?.baseUrl.href)
+      .toBe('http://127.0.0.1:18082/');
+    expect(config?.heartbeatCoordinator?.apiToken).toBe(COORDINATOR_API_TOKEN);
   });
 
   it('parses the AgentCore profile without direct-host credentials', async () => {
@@ -89,6 +99,12 @@ describe('hosted execution config', () => {
     ['direct profile with AgentCore config', {
       LUCID_HOSTED_EXECUTION_AGENTCORE_REGION: 'us-east-2',
     }],
+    ['coordinator URL without API token', {
+      LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: undefined,
+    }],
+    ['shared coordinator token', {
+      LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: DELEGATION_TOKEN,
+    }],
   ])('rejects %s', (_label, override) => {
     expect(() => resolveHostedExecutionConfig({
       ...enabledEnvironment(),
@@ -122,6 +138,9 @@ function enabledEnvironment(): NodeJS.ProcessEnv {
     LUCID_HOSTED_EXECUTION_HOST_URL: 'http://127.0.0.1:8080',
     LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: LOCAL_TOKEN,
     LUCID_HOSTED_EXECUTION_MODEL_API_KEY: MODEL_API_KEY,
+    LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN: DELEGATION_TOKEN,
+    LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: 'http://127.0.0.1:18082',
+    LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: COORDINATOR_API_TOKEN,
     LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH: 'local/authority.jwk.json',
   };
 }
