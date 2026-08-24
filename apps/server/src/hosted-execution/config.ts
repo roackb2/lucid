@@ -7,12 +7,11 @@ import {
 import type {
   HostedConversationModelCredentialProvider,
 } from '@heddleagent/execution-host-client/conversation';
+import {
+  takeHostedHeartbeatServiceToken,
+} from '@heddleagent/execution-host-client/coordinator/node';
 import { DirectExecutionHostCredentials } from '@heddleagent/execution-host-client/node';
 import { z } from 'zod';
-import {
-  HostedHeartbeatCoordinatorApiCredentials,
-  HostedHeartbeatDelegationCredentials,
-} from './heartbeat/coordinator-credentials.js';
 import { EnvironmentHostedModelCredentials } from './model-credentials.js';
 
 const ENABLED_ENV = 'LUCID_HOSTED_EXECUTION_ENABLED';
@@ -231,10 +230,10 @@ export type HostedExecutionConfig = {
   maxTurnMs: number;
   transport: HostedExecutionTransportConfig;
   modelCredentials: HostedConversationModelCredentialProvider;
-  heartbeatDelegationCredentials?: HostedHeartbeatDelegationCredentials;
+  heartbeatDelegationToken?: string;
   heartbeatCoordinator?: {
     baseUrl: URL;
-    credentials: HostedHeartbeatCoordinatorApiCredentials;
+    apiToken: string;
   };
 };
 
@@ -264,16 +263,14 @@ export function resolveHostedExecutionConfig(
       environment,
       DIRECT_CREDENTIAL_ENV_NAMES.modelApiKey,
     );
-  const heartbeatDelegationCredentials =
-    HostedHeartbeatDelegationCredentials.takeOptional(
-      environment,
-      HEARTBEAT_COORDINATOR_TOKEN_ENV,
-    );
-  const heartbeatCoordinatorApiCredentials =
-    HostedHeartbeatCoordinatorApiCredentials.takeOptional(
-      environment,
-      HEARTBEAT_COORDINATOR_API_TOKEN_ENV,
-    );
+  const heartbeatDelegationToken = takeHostedHeartbeatServiceToken(
+    environment,
+    HEARTBEAT_COORDINATOR_TOKEN_ENV,
+  );
+  const heartbeatCoordinatorApiToken = takeHostedHeartbeatServiceToken(
+    environment,
+    HEARTBEAT_COORDINATOR_API_TOKEN_ENV,
+  );
   const transport: HostedExecutionTransportConfig = directCredentials
     ? {
         mode: 'direct',
@@ -305,16 +302,16 @@ export function resolveHostedExecutionConfig(
     maxTurnMs: parsed.LUCID_HOSTED_EXECUTION_MAX_TURN_MS,
     transport: Object.freeze(transport),
     modelCredentials,
-    ...(heartbeatDelegationCredentials
-      ? { heartbeatDelegationCredentials }
+    ...(heartbeatDelegationToken
+      ? { heartbeatDelegationToken }
       : {}),
-    ...(heartbeatCoordinatorApiCredentials
+    ...(heartbeatCoordinatorApiToken
       ? {
           heartbeatCoordinator: Object.freeze({
             baseUrl: new URL(
               parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL!,
             ),
-            credentials: heartbeatCoordinatorApiCredentials,
+            apiToken: heartbeatCoordinatorApiToken,
           }),
         }
       : {}),

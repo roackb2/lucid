@@ -698,10 +698,10 @@
     jose "^6.2.8"
     zod "^4.3.6"
 
-"@heddleagent/execution-host-client@6.2.0":
-  version "6.2.0"
-  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-6.2.0.tgz#4296231cf39e760999206da2b0b6f7deb1583445"
-  integrity sha512-HXnQWsJ4W/1tgr+cbEZKJNjmTwBpQq8VRYD1ZTGmdOv4blv87M/WSbMyKW8CQG8OS4C97s3KiHmJxUux/OReaw==
+"@heddleagent/execution-host-client@6.4.0":
+  version "6.4.0"
+  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-6.4.0.tgz#56b57a49123bec1129f4124d572e49cab3414f20"
+  integrity sha512-VjnjNczHn/tL3sHaHtGAZoAYXIdPAzcStHHvWq4kA0X9Yoj+Xt/pPWdpIAR0CS4OjteaiQw4xgjTJQqRigp4Fw==
   dependencies:
     "@aws-sdk/client-bedrock-agentcore" "^3.1107.0"
     "@modelcontextprotocol/sdk" "^1.29.0"

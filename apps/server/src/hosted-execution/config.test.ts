@@ -44,10 +44,10 @@ describe('hosted execution config', () => {
     expect(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN)
       .toBeUndefined();
     expect(JSON.stringify(config?.modelCredentials)).toBe('{}');
-    expect(config?.heartbeatDelegationCredentials).toBeDefined();
+    expect(config?.heartbeatDelegationToken).toBe(DELEGATION_TOKEN);
     expect(config?.heartbeatCoordinator?.baseUrl.href)
       .toBe('http://127.0.0.1:18082/');
-    expect(JSON.stringify(config?.heartbeatCoordinator?.credentials)).toBe('{}');
+    expect(config?.heartbeatCoordinator?.apiToken).toBe(COORDINATOR_API_TOKEN);
   });
 
   it('parses the AgentCore profile without direct-host credentials', async () => {

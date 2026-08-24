@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { HostedConversationTurnRunner } from '@heddleagent/execution-host-client/conversation';
+import { createHostedRuntimeSessionId } from '@heddleagent/execution-host-client/coordinator';
 import dayjs from 'dayjs';
 import { principalHasRole } from '../../auth/request-principal.js';
 import type {
   HostedConversationRequest,
   HostedConversationRequestService,
 } from './types.js';
-import { createHostedRuntimeSessionId } from '../runtime-session-id.js';
 
 export class HostedConversationAuthorizationError extends Error {
   readonly name = 'HostedConversationAuthorizationError';
@@ -60,7 +60,10 @@ implements HostedConversationRequestService {
     };
     yield* this.turns.streamTurn({
       scope,
-      runtimeSessionId: createHostedRuntimeSessionId(scope),
+      runtimeSessionId: createHostedRuntimeSessionId({
+        namespace: 'lucid',
+        scope,
+      }),
       invocationId,
       prompt: input.prompt,
       deadlineAt,

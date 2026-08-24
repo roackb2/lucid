@@ -5,6 +5,14 @@ import {
   HostedConversationTurnService,
   type HostedConversationTurnLifecycleStore,
 } from '@heddleagent/execution-host-client/conversation';
+import {
+  HostedHeartbeatCoordinatorClient,
+  HostedHeartbeatDelegationService,
+  HostedHeartbeatTaskReconciler,
+} from '@heddleagent/execution-host-client/coordinator';
+import {
+  NodeHostedHeartbeatDelegationHttpService,
+} from '@heddleagent/execution-host-client/coordinator/node';
 import { DirectHttpExecutionHost, type ExecutionHost } from '@heddleagent/execution-host-client/http-sse';
 import { JwtMcpCapabilityVerifier } from '@heddleagent/execution-host-client/mcp';
 import { NodeStreamableHttpMcpService } from '@heddleagent/execution-host-client/mcp/node';
@@ -18,10 +26,8 @@ import {
   HostedConversationAuthorizationError,
   HostedConversationAdmissionService,
 } from '../hosted-execution/conversation/admission-service.js';
-import { HostedHeartbeatDelegationHttpHandler } from '../hosted-execution/heartbeat/delegation-http-handler.js';
-import { HostedHeartbeatDelegationService } from '../hosted-execution/heartbeat/delegation-service.js';
-import { HostedHeartbeatCoordinatorClient } from '../hosted-execution/heartbeat/coordinator-client.js';
-import { HostedHeartbeatTaskReconciler } from '../hosted-execution/heartbeat/coordinator-task-reconciler.js';
+import { LucidHeartbeatDelegationAuthorizer } from '../hosted-execution/heartbeat/delegation-authorizer.js';
+import { readLucidHeartbeatTaskReconciliationInput } from '../hosted-execution/heartbeat/desired-task-catalog.js';
 import {
   HOSTED_EXECUTION_JWKS_PATH,
   HOSTED_CONVERSATION_TURNS_PATH,
@@ -156,27 +162,37 @@ export async function createHostedExecutionComposition(input: {
       input.logger.warn(failure, 'lucid.hosted_execution.request_failed');
     },
   });
-  const heartbeatDelegations = input.config.heartbeatDelegationCredentials
-    ? new HostedHeartbeatDelegationHttpHandler(
-        new HostedHeartbeatDelegationService(authority, input.heartbeatStore, {
-          tenantId: input.config.tenantId,
-          productSessionId: input.config.productSessionId,
-          maxTurnMs: input.config.maxTurnMs,
-          allowedTools: LUCID_PRODUCT_MCP_TOOLS,
+  const heartbeatDelegations = input.config.heartbeatDelegationToken
+    ? new NodeHostedHeartbeatDelegationHttpService({
+        delegations: new HostedHeartbeatDelegationService({
+          authority,
+          authorizer: new LucidHeartbeatDelegationAuthorizer(
+            input.heartbeatStore,
+            {
+              tenantId: input.config.tenantId,
+              productSessionId: input.config.productSessionId,
+              allowedTools: LUCID_PRODUCT_MCP_TOOLS,
+            },
+          ),
+          runtimeSessionNamespace: 'lucid',
+          maxExecutionMs: input.config.maxTurnMs,
         }),
-        input.config.heartbeatDelegationCredentials,
-        input.logger,
-      )
+        apiToken: input.config.heartbeatDelegationToken,
+        reportFailure: (failure) => {
+          input.logger.error(
+            failure,
+            'lucid.hosted_heartbeat.delegation_failed',
+          );
+        },
+      })
     : undefined;
   const heartbeatTaskReconciler = input.config.heartbeatCoordinator
-    ? new HostedHeartbeatTaskReconciler(
-        input.heartbeatStore,
-        new HostedHeartbeatCoordinatorClient(
-          input.config.heartbeatCoordinator.baseUrl,
-          input.config.heartbeatCoordinator.credentials,
-        ),
-        input.heartbeatTaskPolicy,
-      )
+    ? new HostedHeartbeatTaskReconciler({
+        coordinator: new HostedHeartbeatCoordinatorClient({
+          baseUrl: input.config.heartbeatCoordinator.baseUrl,
+          apiToken: input.config.heartbeatCoordinator.apiToken,
+        }),
+      })
     : undefined;
   const http = new HostedExecutionHttpRouter(
     adopterHttp,
@@ -191,7 +207,11 @@ export async function createHostedExecutionComposition(input: {
       if (!heartbeatTaskReconciler) {
         return;
       }
-      const result = await heartbeatTaskReconciler.reconcile();
+      const desiredState = await readLucidHeartbeatTaskReconciliationInput(
+        input.heartbeatStore,
+        input.heartbeatTaskPolicy,
+      );
+      const result = await heartbeatTaskReconciler.reconcile(desiredState);
       input.logger.info(result, 'lucid.hosted_heartbeat.tasks_reconciled');
     },
     close: async () => {

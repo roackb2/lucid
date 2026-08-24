@@ -2,15 +2,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   NodeStreamableHttpMcpService,
 } from '@heddleagent/execution-host-client/mcp/node';
+import type {
+  NodeHostedHeartbeatDelegationHttpHandler,
+} from '@heddleagent/execution-host-client/coordinator/node';
 import {
   DEFAULT_ADOPTER_CONVERSATION_TURNS_PATH,
   DEFAULT_ADOPTER_JWKS_PATH,
   type NodeExecutionAdopterHttpHandler,
 } from '@heddleagent/execution-host-client/node';
 import type { LucidLogger } from '../logger.js';
-import type {
-  HostedHeartbeatDelegationHttpHandler,
-} from './heartbeat/delegation-http-handler.js';
 import type { LucidProductMcpToolName } from './mcp/types.js';
 
 export const HOSTED_EXECUTION_JWKS_PATH = DEFAULT_ADOPTER_JWKS_PATH;
@@ -29,7 +29,7 @@ export class HostedExecutionHttpRouter {
     private readonly adopterHttp: NodeExecutionAdopterHttpHandler,
     private readonly mcp: NodeStreamableHttpMcpService<LucidProductMcpToolName>,
     private readonly logger: LucidLogger,
-    private readonly heartbeatDelegations?: HostedHeartbeatDelegationHttpHandler,
+    private readonly heartbeatDelegations?: NodeHostedHeartbeatDelegationHttpHandler,
   ) {}
 
   /** Handles a hosted-execution route or returns false for the tRPC adapter. */
@@ -65,6 +65,7 @@ export class HostedExecutionHttpRouter {
     await Promise.all([
       this.adopterHttp.close(),
       this.mcp.close(),
+      this.heartbeatDelegations?.close(),
     ]);
   }
 }
