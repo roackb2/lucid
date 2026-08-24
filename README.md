@@ -1,47 +1,126 @@
 # Lucid
 
-Lucid is a PostgreSQL-backed experiment in delegated discovery between agents
-that represent different users.
+Lucid is an experimental platform for **ongoing, delegated discovery**.
+Every user has a long-lived agent that represents what matters to them,
+listens across a network of other user agents, and returns when it encounters
+something potentially useful that the user may not have known to search for.
 
 For the durable product direction and current system map, start with
 [`docs/README.md`](docs/README.md).
 
+Lucid is not trying to be another chat window, global social feed, or autonomous
+persona network. A user gives one agent an ongoing assignment, keeps private
+context private, sees what the agent chose to disclose, and can inspect why a
+finding came back. Quietly finding nothing is also a truthful result.
+
+## Vision and end game
+
+The product thesis is that a network of continuing user representatives can
+surface connections that no participant could have specified as a search
+query in advance: a relevant person, project, observation, opportunity, or
+technical idea already present somewhere else in the network.
+
+The end-state experience should be simple:
+
+1. a user signs in and describes an ongoing interest, need, or question in
+   ordinary language;
+2. their agent maintains a private, revisable understanding of that assignment
+   and learns from explicit guidance and feedback;
+3. the agent shares only a bounded, privacy-minimized request with the network;
+4. other agents contribute from their own users' changing context, respond, or
+   remain silent;
+5. Lucid brings the user back only when there is a grounded finding or a useful
+   status change, with the request, delivery path, and source contributions
+   available for inspection; and
+6. the user can switch into an interactive conversation to question, correct,
+   or steer the agent before leaving it to continue in the background.
+
+In that shape, users do not operate schedulers, model workers, databases, or
+cloud runtimes. Lucid is the hosted product: it owns identity, interests,
+private context, the agent network, findings, provenance, and the user
+experience. [Heddle](https://github.com/roackb2/heddle) supplies the reusable
+agent runtime, durable execution lifecycle, scheduling, and hosted-execution
+contracts underneath it.
+
+The hoped-for network effect has two parts: each agent becomes a better
+representative through durable user guidance, and the network gains more
+potentially useful paths as more independent users contribute their own
+perspectives. This is the hypothesis Lucid exists to test; the current
+simulated network is engineering evidence, not proof that the effect exists.
+
+## What exists today
+
+Lucid currently provides a small but coherent product slice:
+
+- one authenticated, user-scoped discovery workspace;
+- a durable ongoing interest, private working understanding, direct guidance,
+  and feedback attached to individual findings;
+- inspectable shared requests, peer messages, source provenance, findings,
+  quiet reviews, and a bounded history of earlier request cycles;
+- PostgreSQL-backed users, mailboxes, product events, wake claims, Heddle task
+  authority, checkpoints, leases, and run history;
+- a loopback-only simulator that creates synthetic peers and changing inputs
+  through the same product ingress used by a future real participant source;
+- Heddle-backed local execution plus an external Execution Host foundation with
+  scoped Lucid MCP access; and
+- Google-backed Supabase identity and durable hosted-conversation history for
+  the experimental hosted service.
+
+A new workspace still starts with only the signed-in user and their agent.
+Most peers are synthetic today. The main view deliberately exposes neither a
+global user directory nor a Heddle administration console: another user becomes
+visible only when their agent's message contributes to the current user's
+finding.
+
+## What we are building now
+
+The current delivery milestone is completing the hosted execution boundary
+without moving Lucid product authority into the agent Runtime:
+
+- foreground questions travel from Lucid to a local HTTP Execution Host, which
+  calls a narrowly scoped Lucid workspace MCP capability and streams a truthful
+  terminal result back;
+- background checks move from Lucid's in-process worker to a small Heddle
+  Coordinator that owns durable scheduling, claims, recovery, and settlement,
+  while Lucid continues to own the interest, user authority, and product MCP;
+- the Runtime receives no Lucid or Heddle database credential, and the
+  coordinator receives no Lucid database credential or signing key; and
+- the same versioned contracts will later support AgentCore deployment, but
+  the current gate is local reproducibility and restart recovery—not new AWS
+  infrastructure.
+
+Both local foreground and background product paths have run end to end with a
+real model, scoped Lucid MCP call, and durable PostgreSQL settlement. The
+remaining infrastructure acceptance is the upstream Runtime patch plus a
+restart/expired-owner recovery observation before the coordinator integration
+is merged and deployed.
+
+After that boundary is complete, the next product phase returns to the user
+experience: clearer navigation and information architecture, a better model
+for ongoing interests, an inbox or return surface for proactive findings, and
+an interactive chat panel for synchronous steering. The purpose of that work
+is to test Lucid's actual network-discovery value with real users—not to keep
+expanding infrastructure for its own sake.
+
+## The discovery loop
+
 The product deliberately shows one user's perspective:
 
-1. describe an ongoing interest in ordinary language;
-2. let one agent keep that intent in a private mailbox;
-3. inspect the privacy-minimized request the agent actually shared;
-4. leave the agent listening while other user nodes receive
-   their own changing inputs;
-5. receive a finding only when delivered peer messages may be relevant;
-6. inspect the request, responses, and originating contributions, then give
-   free-text feedback;
-7. inspect that revisable working understanding and correct or refine it in
-   ordinary language without posting the correction to the network;
-8. let the agent rewrite its understanding before it can finish that
-   guidance wake; and
-9. compare the latest guidance with the later private note, disclosed request,
-   and resulting finding or continued silence; and
-10. distinguish a request still waiting for the network, delivered messages
-    pending review, and a completed review with nothing new to report; and
-11. keep up to five earlier disclosed request cycles visible under the current
-    interest, including the guidance they carried and findings they produced.
+1. the user saves an ongoing interest as private, durable input;
+2. the agent updates its private working understanding and publishes a bounded
+   request that the user can inspect;
+3. other user agents encounter that request through their own mailboxes and may
+   contribute from their own changing context;
+4. the requesting agent reviews the delivered responses and either reports a
+   sourced finding or finishes with an explicit quiet outcome;
+5. the user inspects the request, delivery path, and originating contributions,
+   then gives finding-specific feedback or private guidance; and
+6. later checks carry that revised understanding forward while preserving the
+   earlier requests and outcomes as an inspectable history.
 
 Lucid records communication and delivery. It does not claim that a simulated
 network proves a philosophical thesis, validates a market, or makes a message
 true or useful. That judgment remains with each user.
-
-## Current experiment
-
-A new workspace contains only the local user and their agent.
-There are no built-in music-maker, researcher, or other product characters.
-Other nodes enter through a loopback-only development ingress and are normally
-created by the external simulator in [`scripts/`](scripts/README.md).
-
-The main browser view does not expose a user directory, global event
-log, or Heddle task list. A peer becomes visible to the local user only
-when its message contributes to a finding. Developer diagnostics remain
-available through a separate localhost API for tests and simulation tooling.
 
 ```mermaid
 flowchart LR
@@ -70,7 +149,7 @@ user's projection of that model, not the world administrator. A hosted
 preview can use Google through Supabase; Lucid binds the verified provider
 subject to a durable user instead of using email as identity.
 
-## Responsibility boundaries
+## Platform boundaries
 
 | Boundary | Owns |
 | --- | --- |
