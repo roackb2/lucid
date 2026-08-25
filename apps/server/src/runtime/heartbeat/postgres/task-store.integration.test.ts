@@ -11,11 +11,11 @@ import {
   type HeartbeatTask,
   type HeartbeatTaskExecution,
   type HeartbeatTargetedTaskStore,
-} from '@roackb2/heddle/advanced';
+} from '@heddleagent/runtime/advanced';
 import {
   HeartbeatTaskStoreConformance,
   type HeartbeatTaskStoreConformanceHarness,
-} from '@roackb2/heddle/heartbeat/testing';
+} from '@heddleagent/runtime/heartbeat/testing';
 import dayjs from 'dayjs';
 import { and, eq } from 'drizzle-orm';
 import {

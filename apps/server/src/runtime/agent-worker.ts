@@ -3,7 +3,7 @@ import {
   type HeartbeatTargetedTaskStore,
   type HeartbeatTaskHandler,
   type RunHeartbeatTaskOptions,
-} from '@roackb2/heddle/advanced';
+} from '@heddleagent/runtime/advanced';
 import type {
   AgentTaskInvocation,
   AgentTaskInvocationTarget,

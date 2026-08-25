@@ -2,10 +2,11 @@
 
 Lucid keeps hosted agent execution replaceable, but it does not embed or import
 the private Heddle execution-host or coordinator services. Foreground hosted
-conversations call the Runtime directly. The current product heartbeat UI
-still uses the embedded service, while an optional coordinator integration now
-publishes desired tasks and issues one-run authority for the local autonomous
-execution proof.
+conversations call the Runtime directly. With a complete coordinator profile,
+product heartbeat controls use Heddle's public coordinator API and Lucid
+publishes desired tasks plus one-run authority for autonomous execution.
+Without that profile, Lucid retains its embedded topology until the remaining
+state-changing product tools have crossed a claim-fenced MCP boundary.
 
 ## Current status
 
@@ -60,23 +61,27 @@ reasoning, and it does not yet provide replay or continuation.
 
 The separate coordinator now owns PostgreSQL-backed Heddle task claims,
 checkpoints, recovery, and fenced settlement. Lucid supplies only current
-desired task state and a just-in-time execution/MCP delegation. An external
-agent wake still requires:
+desired task state and a just-in-time execution/MCP delegation. Full product
+parity for an external agent wake still requires:
 
-- a Lucid wake claim and fixed mailbox horizon;
+- a fixed Lucid mailbox horizon bound to the Heddle execution claim;
 - stateful communication tools with visibility, provenance, and action-budget
   policy; and
 - durable Lucid completion or failure settlement.
 
-The conversation port must not be relabeled as agent execution. The remaining
-local gate is to run Lucid, the direct HTTP Runtime, and the coordinator
-together and observe one real MCP-backed heartbeat terminal. The existing
-product trigger/status paths are intentionally not migrated in this
-architecture-proof slice. Coordinator mode therefore leaves those product
-projections available but does not start the embedded heartbeat worker; the
-bounded proof triggers through the coordinator API and cannot execute twice.
+The conversation port must not be relabeled as agent execution. The complete
+local direct conversation and coordinator-owned heartbeat paths have both run
+through Lucid's scoped read-only MCP capability. Product trigger/status and
+preference controls now use the coordinator API when that topology is selected,
+and the embedded worker does not start, so a task cannot execute twice.
 
-## Why the current invocation target is local
+The remaining local product-parity gate is to expose Lucid's state-changing
+agent communication operations through scoped MCP without weakening mailbox
+horizons, action identities, or fenced settlement. Until then, coordinator
+mode can inspect and settle Heddle work but cannot reproduce the embedded
+runner's network-message, working-note, and finding writes.
+
+## Why the embedded fallback remains
 
 `AgentTaskInvocationTarget` is an internal delivery seam between the
 bounded dispatcher and `AgentWorker`. Its input contains an
@@ -84,16 +89,18 @@ bounded dispatcher and `AgentWorker`. Its input contains an
 both the PostgreSQL task store and the in-process heartbeat handler. It is not a
 serializable wire contract.
 
-The current targeted host remains valuable: it provides bounded local
+The embedded targeted host remains valuable: it provides bounded local
 concurrency, durable polling fallback, cancellation, recovery sweeps, and
-graceful shutdown over Heddle's public task authority. Those responsibilities
-stay in Lucid even when the model loop eventually runs elsewhere.
+graceful shutdown over Heddle's public task authority, and it currently binds
+the wake-local state-changing product tools. Heddle's coordinator already owns
+the scheduling responsibilities in coordinator mode; only the product tool
+boundary prevents removal of this fallback.
 
 ## Intended deployment boundary
 
 ```mermaid
 flowchart LR
-  Client["User client"] --> Backend["Lucid backend and control plane"]
+  Client["User client"] --> Backend["Lucid product backend"]
   Backend --> Database[("PostgreSQL")]
   Backend --> Runtime["External Heddle execution host"]
   Backend --> Coordinator["Heddle heartbeat coordinator"]
@@ -107,7 +114,7 @@ The Lucid backend owns:
 
 - end-user authentication and product authorization;
 - adopter, tenant, subject, product-session, and invocation identity;
-- desired heartbeat tasks, Lucid wake lifecycle, and one-run delegation;
+- desired heartbeat task content, product tool policy, and one-run delegation;
 - PostgreSQL access, migration execution, and authenticated history queries;
 - selection of the Heddle lifecycle store implementation;
 - execution-assertion issuance and replay policy; and
@@ -133,12 +140,15 @@ public `ExecutionHost` port without exposing host internals.
 
 ## Next integration sequence
 
-1. Prove the complete local direct path: Lucid -> Runtime -> scoped Lucid MCP.
-2. Prove one coordinator-owned heartbeat through that same Runtime and MCP,
-   including PostgreSQL task settlement and process restart recovery.
-3. Migrate Lucid's product trigger/status controls only after the local
-   architecture proof, without creating a second task authority.
-4. Defer AgentCore deployment until the same semantics are truthful locally.
+1. Define scoped, claim-fenced MCP operations for the Lucid-owned network
+   message, working-note, and finding mutations.
+2. Run one coordinator-owned heartbeat that exercises those stateful product
+   operations and remains truthful after coordinator restart and expired-owner
+   recovery.
+3. Remove the embedded runner and its duplicate Lucid-side Heddle task storage
+   only after that local product-parity gate passes.
+4. Defer AgentCore and ECS deployment until the same semantics are truthful
+   locally.
 
 ## Security invariants
 

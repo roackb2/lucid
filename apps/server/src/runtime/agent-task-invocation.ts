@@ -1,4 +1,4 @@
-import type { RunHeartbeatTaskResult } from '@roackb2/heddle/advanced';
+import type { RunHeartbeatTaskResult } from '@heddleagent/runtime/advanced';
 
 /**
  * One host-routed delivery of a durable agent task.

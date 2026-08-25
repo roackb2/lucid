@@ -6,17 +6,12 @@ import type {
   NodeHostedHeartbeatDelegationHttpHandler,
 } from '@heddleagent/execution-host-client/coordinator/node';
 import {
-  DEFAULT_ADOPTER_CONVERSATION_TURNS_PATH,
-  DEFAULT_ADOPTER_JWKS_PATH,
   type NodeExecutionAdopterHttpHandler,
 } from '@heddleagent/execution-host-client/node';
 import type { LucidLogger } from '../logger.js';
 import type { LucidProductMcpToolName } from './mcp/types.js';
 
-export const HOSTED_EXECUTION_JWKS_PATH = DEFAULT_ADOPTER_JWKS_PATH;
 export const HOSTED_EXECUTION_MCP_PATH = '/hosted-execution/mcp';
-export const HOSTED_CONVERSATION_TURNS_PATH =
-  DEFAULT_ADOPTER_CONVERSATION_TURNS_PATH;
 
 /**
  * Mounts generic adopter HTTP services at Lucid-owned paths.

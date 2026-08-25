@@ -2,7 +2,7 @@ import {
   type AgentHeartbeatEvent,
   type AgentHeartbeatResult,
   type HeartbeatExecutionContext,
-} from '@roackb2/heddle/advanced';
+} from '@heddleagent/runtime/advanced';
 import type { LucidConfig } from '../../config.js';
 import { AgentCommunicationToolService } from './communication/tool-service.js';
 import {

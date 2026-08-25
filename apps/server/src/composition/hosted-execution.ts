@@ -1,14 +1,16 @@
 import { JoseExecutionAuthority } from '@heddleagent/execution-host-client/authority';
 import { AgentCoreExecutionHost } from '@heddleagent/execution-host-client/agentcore';
 import {
+  DEFAULT_ADOPTER_CONVERSATION_TURNS_PATH,
+  DEFAULT_ADOPTER_JWKS_PATH,
+} from '@heddleagent/execution-host-client/adopter';
+import {
   DurableHostedConversationTurnService,
   HostedConversationTurnService,
   type HostedConversationTurnLifecycleStore,
 } from '@heddleagent/execution-host-client/conversation';
 import {
-  HostedHeartbeatCoordinatorClient,
   HostedHeartbeatDelegationService,
-  HostedHeartbeatTaskReconciler,
 } from '@heddleagent/execution-host-client/coordinator';
 import {
   NodeHostedHeartbeatDelegationHttpService,
@@ -27,10 +29,7 @@ import {
   HostedConversationAdmissionService,
 } from '../hosted-execution/conversation/admission-service.js';
 import { LucidHeartbeatDelegationAuthorizer } from '../hosted-execution/heartbeat/delegation-authorizer.js';
-import { readLucidHeartbeatTaskReconciliationInput } from '../hosted-execution/heartbeat/desired-task-catalog.js';
 import {
-  HOSTED_EXECUTION_JWKS_PATH,
-  HOSTED_CONVERSATION_TURNS_PATH,
   HostedExecutionHttpRouter,
 } from '../hosted-execution/http-router.js';
 import { createLucidProductToolset } from '../hosted-execution/mcp/product-tools.js';
@@ -45,7 +44,6 @@ import type { LucidLogger } from '../logger.js';
 
 export type HostedExecutionComposition = {
   http: HostedExecutionHttpRouter;
-  start(): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -62,11 +60,6 @@ export async function createHostedExecutionComposition(input: {
     AgentWakeStore,
     'readWorkspace' | 'listAgents' | 'listUsers'
   >;
-  heartbeatTaskPolicy: {
-    intervalMs: number;
-    model: string;
-    maxSteps: number;
-  };
   executionHost?: ExecutionHost;
 }): Promise<HostedExecutionComposition> {
   const maxTurnSeconds = Math.ceil(input.config.maxTurnMs / 1_000);
@@ -75,7 +68,7 @@ export async function createHostedExecutionComposition(input: {
   );
   const issuer = input.config.publicBaseUrl.origin;
   const jwksUrl = new URL(
-    HOSTED_EXECUTION_JWKS_PATH,
+    DEFAULT_ADOPTER_JWKS_PATH,
     input.config.publicBaseUrl,
   );
   const authority = await JoseExecutionAuthority.create({
@@ -150,8 +143,8 @@ export async function createHostedExecutionComposition(input: {
     authenticator: input.authenticator,
     conversations,
     paths: {
-      jwks: HOSTED_EXECUTION_JWKS_PATH,
-      conversationTurns: HOSTED_CONVERSATION_TURNS_PATH,
+      jwks: DEFAULT_ADOPTER_JWKS_PATH,
+      conversationTurns: DEFAULT_ADOPTER_CONVERSATION_TURNS_PATH,
     },
     projectError: (error) => (
       error instanceof HostedConversationAuthorizationError
@@ -186,14 +179,6 @@ export async function createHostedExecutionComposition(input: {
         },
       })
     : undefined;
-  const heartbeatTaskReconciler = input.config.heartbeatCoordinator
-    ? new HostedHeartbeatTaskReconciler({
-        coordinator: new HostedHeartbeatCoordinatorClient({
-          baseUrl: input.config.heartbeatCoordinator.baseUrl,
-          apiToken: input.config.heartbeatCoordinator.apiToken,
-        }),
-      })
-    : undefined;
   const http = new HostedExecutionHttpRouter(
     adopterHttp,
     mcp,
@@ -203,17 +188,6 @@ export async function createHostedExecutionComposition(input: {
 
   return {
     http,
-    start: async () => {
-      if (!heartbeatTaskReconciler) {
-        return;
-      }
-      const desiredState = await readLucidHeartbeatTaskReconciliationInput(
-        input.heartbeatStore,
-        input.heartbeatTaskPolicy,
-      );
-      const result = await heartbeatTaskReconciler.reconcile(desiredState);
-      input.logger.info(result, 'lucid.hosted_heartbeat.tasks_reconciled');
-    },
     close: async () => {
       try {
         await http.close();

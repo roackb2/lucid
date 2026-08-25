@@ -11,7 +11,7 @@ import {
   type AgentLoopCheckpoint,
   type AgentLoopState,
   type RunAgentHeartbeatOptions,
-} from '@roackb2/heddle/advanced';
+} from '@heddleagent/runtime/advanced';
 import {
   afterAll,
   afterEach,

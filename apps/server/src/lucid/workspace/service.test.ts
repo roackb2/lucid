@@ -15,8 +15,8 @@ import {
 import { LOCAL_USER_ID, LOCAL_AGENT_ID } from '../local-user.js';
 import { DiscoveryWorkspaceService } from './service.js';
 import type {
-  AgentHeartbeatService,
-} from '../agent/heartbeat-service.js';
+  AgentHeartbeatControl,
+} from '../agent/heartbeat-control.js';
 
 describe('discovery workspace service', () => {
   let database: PostgresDatabase;
@@ -53,7 +53,7 @@ describe('discovery workspace service', () => {
         }],
       }),
       triggerAgent,
-    } as unknown as AgentHeartbeatService;
+    } as unknown as AgentHeartbeatControl;
     const workspace = new DiscoveryWorkspaceService(
       stores.workspace,
       heartbeats,

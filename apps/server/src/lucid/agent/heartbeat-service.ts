@@ -14,7 +14,7 @@ import {
   type HeartbeatTask,
   type HeartbeatTaskCancellationDisposition,
   type HeartbeatTaskView,
-} from '@roackb2/heddle/advanced';
+} from '@heddleagent/runtime/advanced';
 import type { LucidConfig } from '../../config.js';
 import type { LucidLogger } from '../../logger.js';
 import type {

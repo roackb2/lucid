@@ -2,7 +2,7 @@ import type {
   HeartbeatTask,
   HeartbeatTaskRunRequestSignal,
   RunHeartbeatTaskResult,
-} from '@roackb2/heddle/advanced';
+} from '@heddleagent/runtime/advanced';
 import {
   afterEach,
   describe,

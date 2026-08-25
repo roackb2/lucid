@@ -18,8 +18,8 @@ import {
   type HostedConversationProgressItem,
 } from '@/components/lucid/hosted-conversation-progress';
 import {
-  streamHostedConversation,
-} from '@/lib/hosted-conversation-client';
+  HostedConversationClient,
+} from '@heddleagent/execution-host-client/adopter';
 import {
   getHostedAccessToken,
   type HostedConversationTurn,
@@ -30,6 +30,7 @@ import {
 } from '@/hooks/use-hosted-conversation-history';
 
 const MAX_PROMPT_CHARACTERS = 20_000;
+const hostedConversations = new HostedConversationClient();
 
 export function HostedConversation() {
   const [prompt, setPrompt] = useState('');
@@ -72,7 +73,7 @@ export function HostedConversation() {
     setRunning(true);
     setStatus('Starting an isolated agent workspace');
     try {
-      for await (const item of streamHostedConversation({
+      for await (const item of hostedConversations.streamTurn({
         prompt: candidate,
         accessToken,
         signal: controller.signal,

@@ -16,10 +16,15 @@ type HeartbeatTaskCatalogStore = Pick<
   'readWorkspace' | 'listAgents' | 'listUsers'
 >;
 
+type HeartbeatTaskCatalogOptions = {
+  enabledByTaskId?: ReadonlyMap<string, boolean>;
+};
+
 /** Projects current Lucid ownership into Heddle's desired-task vocabulary. */
 export async function readLucidHeartbeatTaskReconciliationInput(
   store: HeartbeatTaskCatalogStore,
   policy: Readonly<HeartbeatTaskPolicy>,
+  options: HeartbeatTaskCatalogOptions = {},
 ): Promise<Omit<HostedHeartbeatTaskReconciliationInput, 'signal'>> {
   const [workspace, agents, users] = await Promise.all([
     store.readWorkspace(),
@@ -37,7 +42,9 @@ export async function readLucidHeartbeatTaskReconciliationInput(
             workspaceId: workspace.versionId,
             name: `${agent.name} background checks`,
             task: agent.purpose,
-            enabled: user.status === 'active',
+            enabled: user.status === 'active'
+              && (options.enabledByTaskId?.get(taskIdForAgent(agent.id))
+                ?? true),
             continuationMode: 'operator',
             intervalMs: policy.intervalMs,
             defer: true,

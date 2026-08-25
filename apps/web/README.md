@@ -75,10 +75,9 @@ browser security controls.
 | `finding-card.tsx` | Show one finding, ambient/request origin, source attribution, causal messages, and private feedback |
 | `app-header.tsx` | Navigate the user workspace and summarize local agent status |
 | `hosted-access.tsx` | Collect the private-pilot user token without embedding it in the public build |
-| `hosted-conversation.tsx` | Submit and cancel one user-scoped hosted turn and present safe progress plus the terminal answer |
+| `hosted-conversation.tsx` | Use the package-owned `HostedConversationClient` to submit and cancel one user-scoped hosted turn, then present safe progress plus the terminal answer |
 | `hosted-conversation-history.tsx` | Present the bounded durable turn projection without treating failure, cancellation, or interruption as success |
 | `hosted-conversation-answer.tsx` | Render live and durable public summaries through one safe Markdown policy |
-| `hosted-conversation-client.ts` | Authenticate the same-origin request and validate the ordered Heddle adopter SSE contract |
 | `use-hosted-conversation-history.ts` | Synchronize the authenticated user's durable turn projection and isolated retry state |
 | `use-discovery-workspace.ts` | Own the scoped tRPC query, mutations, cache, polling, and notifications |
 | `network-request-progress.ts` | Give every user-facing surface consistent language for the server-derived request phase |

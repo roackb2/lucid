@@ -11,7 +11,7 @@ import {
   type HeartbeatTaskRunRequestSignal,
   type StartHeartbeatSchedulerOptions,
   type StopHeartbeatSchedulerOptions,
-} from '@roackb2/heddle/advanced';
+} from '@heddleagent/runtime/advanced';
 import {
   InProcessAgentTaskDispatcher,
   type InProcessAgentTaskDispatcherOptions,

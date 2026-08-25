@@ -211,11 +211,15 @@ Runtime and coordinator before Lucid; Lucid opens its JWKS/MCP/delegation
 routes, pauses coordinator admission, reconciles the desired task catalog, and
 resumes only when the product-wide background-work gate is enabled.
 
-This gate proves service boundaries and durable Heddle task settlement. Lucid's
-current product trigger/status controls remain on the embedded heartbeat host
-until a later selected migration. The exact container networking command is
-intentionally not prescribed until the real Runtime can reach Lucid's loopback
-MCP/JWKS endpoints without weakening the Runtime's non-loopback TLS rule.
+This gate proves service boundaries and durable Heddle task settlement. With
+the coordinator profile enabled, Lucid's product trigger/status and preference
+controls use the coordinator API and no embedded worker starts. The coordinator
+path currently has only the read-only workspace capability; keep the embedded
+topology for ordinary local product behavior until state-changing network,
+working-note, and finding operations have a scoped, claim-fenced MCP contract.
+The exact container networking command is intentionally not prescribed until
+the real Runtime can reach Lucid's loopback MCP/JWKS endpoints without
+weakening the Runtime's non-loopback TLS rule.
 
 ## Checks
 
