@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import heddlePackage from '@roackb2/heddle/package.json' with { type: 'json' };
+import heddlePackage from '@heddleagent/runtime/package.json' with { type: 'json' };
+import {
+  HostedHeartbeatCoordinatorClient,
+} from '@heddleagent/execution-host-client/coordinator';
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import { createLucidAuthenticator } from './auth/authenticator.js';
 import { resolveLucidConfig } from './config.js';
@@ -17,8 +20,11 @@ import {
 } from './lucid/agent/heddle-runner.js';
 import { UserNetworkService } from './lucid/network/service.js';
 import {
-  AgentHeartbeatService,
+  AgentHeartbeatService as EmbeddedAgentHeartbeatService,
 } from './lucid/agent/heartbeat-service.js';
+import {
+  CoordinatorAgentHeartbeatService,
+} from './hosted-execution/heartbeat/agent-heartbeat-service.js';
 import { AGENT_TASK_ID_PREFIX } from './lucid/agent/heartbeat-task-identity.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
@@ -42,32 +48,54 @@ const hostedExecutionConfig = resolveHostedExecutionConfig(
 );
 const logger = createLucidLogger(config.logLevel);
 const persistence = await createPostgresPersistence(config);
-const { stores, taskAuthority } = persistence;
+const { stores, heartbeatTaskAuthority } = persistence;
 const authenticator = createLucidAuthenticator(
   config.authentication,
   stores.network,
 );
-const agentRunner = new HeddleAgentRunner(
-  stores.communication,
-  config,
-);
-const executionHost = createAgentExecutionHost({
-  config,
-  store: stores.agent,
-  taskAuthority,
-  taskIdPrefix: AGENT_TASK_ID_PREFIX,
-  logger,
-});
-const heartbeats = new AgentHeartbeatService(
-  stores.agent,
-  stores.workspace,
-  agentRunner,
-  config,
-  logger,
-  taskAuthority,
-  executionHost,
-);
-await heartbeats.initialize();
+const coordinator = hostedExecutionConfig?.heartbeatCoordinator
+  ? new HostedHeartbeatCoordinatorClient({
+      baseUrl: hostedExecutionConfig.heartbeatCoordinator.baseUrl,
+      apiToken: hostedExecutionConfig.heartbeatCoordinator.apiToken,
+    })
+  : undefined;
+const heartbeatTopology = coordinator
+  ? {
+      kind: 'coordinator' as const,
+      control: new CoordinatorAgentHeartbeatService(
+        stores.agent,
+        coordinator,
+        {
+          intervalMs: config.heartbeatIntervalMs,
+          model: config.model,
+          maxSteps: config.maxSteps,
+        },
+        logger,
+      ),
+    }
+  : {
+      kind: 'embedded' as const,
+      control: new EmbeddedAgentHeartbeatService(
+        stores.agent,
+        stores.workspace,
+        new HeddleAgentRunner(stores.communication, config),
+        config,
+        logger,
+        heartbeatTaskAuthority.administration,
+        heartbeatTaskAuthority.store,
+        createAgentExecutionHost({
+          config,
+          store: stores.agent,
+          taskStore: heartbeatTaskAuthority.store,
+          taskIdPrefix: AGENT_TASK_ID_PREFIX,
+          logger,
+        }),
+      ),
+    };
+if (heartbeatTopology.kind === 'embedded') {
+  await heartbeatTopology.control.initialize();
+}
+const heartbeats = heartbeatTopology.control;
 const discoveryWorkspace = new DiscoveryWorkspaceService(
   stores.workspace,
   heartbeats,
@@ -101,11 +129,6 @@ const hostedExecution = hostedExecutionConfig
       logger,
       conversationLifecycle: stores.conversationLifecycle,
       heartbeatStore: stores.agent,
-      heartbeatTaskPolicy: {
-        intervalMs: config.heartbeatIntervalMs,
-        model: config.model,
-        maxSteps: config.maxSteps,
-      },
     })
   : undefined;
 const staticSpaRequestHandler = config.webRoot
@@ -185,9 +208,10 @@ let shuttingDown = false;
 
 try {
   await listen(server, config.port, config.host);
-  await hostedExecution?.start();
-  if (!hostedExecutionConfig?.heartbeatCoordinator) {
-    heartbeats.start();
+  if (heartbeatTopology.kind === 'coordinator') {
+    await heartbeatTopology.control.initialize();
+  } else {
+    heartbeatTopology.control.start();
   }
 } catch (error) {
   logger.fatal({ error }, 'lucid.server.start_failed');
@@ -204,7 +228,7 @@ logger.info({
   heartbeatCoordinatorEnabled: Boolean(
     hostedExecutionConfig?.heartbeatCoordinator,
   ),
-  heartbeatHost: config.heartbeatHost,
+  heartbeatHost: heartbeatTopology.kind,
   hostedExecutionEnabled: Boolean(hostedExecution),
   model: config.model,
   webEnabled: Boolean(staticSpaRequestHandler),

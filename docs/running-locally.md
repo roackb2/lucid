@@ -104,19 +104,12 @@ their feedback, or decide whether a finding is useful.
 
 ## Execution topology
 
-The default `targeted` host uses a bounded in-process dispatcher and one-shot
-workers over the PostgreSQL Heddle task authority. Its maximum independent
-agent concurrency is controlled by:
+The embedded fallback uses Heddle's supported targeted host and one-shot
+workers over the official PostgreSQL heartbeat authority. Its maximum
+independent agent concurrency is controlled by:
 
 ```dotenv
 LUCID_HEARTBEAT_MAX_CONCURRENCY=3
-```
-
-For a local topology comparison, select Heddle's long-lived scheduler while
-keeping the same database:
-
-```dotenv
-LUCID_HEARTBEAT_HOST=scheduler
 ```
 
 Do not shorten the execution lease below the invocation timeout. Configuration
@@ -211,11 +204,15 @@ Runtime and coordinator before Lucid; Lucid opens its JWKS/MCP/delegation
 routes, pauses coordinator admission, reconciles the desired task catalog, and
 resumes only when the product-wide background-work gate is enabled.
 
-This gate proves service boundaries and durable Heddle task settlement. Lucid's
-current product trigger/status controls remain on the embedded heartbeat host
-until a later selected migration. The exact container networking command is
-intentionally not prescribed until the real Runtime can reach Lucid's loopback
-MCP/JWKS endpoints without weakening the Runtime's non-loopback TLS rule.
+This gate proves service boundaries and durable Heddle task settlement. With
+the coordinator profile enabled, Lucid's product trigger/status and preference
+controls use the coordinator API and no embedded worker starts. The coordinator
+path currently has only the read-only workspace capability; keep the embedded
+topology for ordinary local product behavior until state-changing network,
+working-note, and finding operations have a scoped, claim-fenced MCP contract.
+The exact container networking command is intentionally not prescribed until
+the real Runtime can reach Lucid's loopback MCP/JWKS endpoints without
+weakening the Runtime's non-loopback TLS rule.
 
 ## Checks
 

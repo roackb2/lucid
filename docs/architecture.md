@@ -95,8 +95,8 @@ one domain transaction.
 | `apps/server/src/lucid/agent/communication/` | Bounded communication tools, store port, and PostgreSQL adapter |
 | `apps/server/src/lucid/persistence/postgres/` | Shared Lucid schema, policy-free record codecs, and disposable PostgreSQL test fixture only |
 | `apps/server/src/infrastructure/postgres/` | Neutral PostgreSQL pool and migration mechanics without Lucid product policy |
-| `apps/server/src/runtime/heartbeat/postgres/` | PostgreSQL adapter for Heddle's public task-authority contracts |
-| `apps/server/src/composition/postgres-persistence.ts` | Constructs the adapters over one pool and owns their shared shutdown boundary |
+| `@heddleagent/postgres/heartbeat` | Official PostgreSQL implementation of Heddle's task-authority contracts |
+| `apps/server/src/composition/postgres-persistence.ts` | Injects Lucid's Drizzle handle into the official Heddle adapters and owns the shared pool shutdown boundary |
 | `apps/server/src/hosted-execution/` | Lucid-owned product MCP tools and scope-to-projection binding; generic authority, verification, and host clients come from `@heddleagent/execution-host-client` |
 
 Transactions follow use-case ownership rather than table ownership. A

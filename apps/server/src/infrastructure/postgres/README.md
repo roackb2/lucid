@@ -14,9 +14,9 @@ mailbox policy, or heartbeat lifecycle policy.
 `PostgresDatabase` deliberately imports no Lucid or Heddle schema. The Lucid
 schema and policy-free record codecs live in `lucid/persistence/postgres`, while
 product queries live in service-local `postgres-store.ts` adapters. Heddle task
-state belongs in `runtime/heartbeat/postgres`. The composition root may share
-one pool between them, but no adapter reaches through this module to call
-another.
+state is implemented by `@heddleagent/postgres/heartbeat`; the composition root
+injects this module's Drizzle handle into that adapter. Both schemas may share
+one pool, but no adapter reaches through this module to call another.
 
 Runtime startup never runs migrations. Apply them through
 `yarn server:db:migrate` before starting a new version. Keep runtime and

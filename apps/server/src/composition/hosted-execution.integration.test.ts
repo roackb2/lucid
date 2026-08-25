@@ -25,10 +25,12 @@ import type {
 import { afterEach, describe, expect, it } from 'vitest';
 import { createLucidAuthenticator } from '../auth/authenticator.js';
 import {
-  HOSTED_CONVERSATION_TURNS_PATH,
-  HOSTED_EXECUTION_JWKS_PATH,
   HOSTED_EXECUTION_MCP_PATH,
 } from '../hosted-execution/http-router.js';
+import {
+  DEFAULT_ADOPTER_CONVERSATION_TURNS_PATH,
+  DEFAULT_ADOPTER_JWKS_PATH,
+} from '@heddleagent/execution-host-client/adopter';
 import { workspaceSnapshot } from '../hosted-execution/mcp/test-support.js';
 import { READ_WORKSPACE_SNAPSHOT_TOOL } from '../hosted-execution/mcp/types.js';
 import { createLucidLogger } from '../logger.js';
@@ -105,11 +107,6 @@ describe('hosted execution composition', () => {
         snapshot: async () => workspaceSnapshot(),
       },
       heartbeatStore: unusedHeartbeatStore(),
-      heartbeatTaskPolicy: {
-        intervalMs: 60_000,
-        model: 'test-model',
-        maxSteps: 3,
-      },
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
@@ -120,12 +117,12 @@ describe('hosted execution composition', () => {
     };
 
     const jwksResponse = await fetch(new URL(
-      HOSTED_EXECUTION_JWKS_PATH,
+      DEFAULT_ADOPTER_JWKS_PATH,
       lucidOrigin,
     ));
     const jwks = await jwksResponse.json() as { keys: Record<string, unknown>[] };
     const response = await fetch(new URL(
-      HOSTED_CONVERSATION_TURNS_PATH,
+      DEFAULT_ADOPTER_CONVERSATION_TURNS_PATH,
       lucidOrigin,
     ), {
       method: 'POST',
@@ -208,11 +205,6 @@ describe('hosted execution composition', () => {
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
       heartbeatStore: unusedHeartbeatStore(),
-      heartbeatTaskPolicy: {
-        intervalMs: 60_000,
-        model: 'test-model',
-        maxSteps: 3,
-      },
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
@@ -223,7 +215,7 @@ describe('hosted execution composition', () => {
     };
 
     const response = await fetch(new URL(
-      HOSTED_CONVERSATION_TURNS_PATH,
+      DEFAULT_ADOPTER_CONVERSATION_TURNS_PATH,
       lucidOrigin,
     ), {
       method: 'POST',

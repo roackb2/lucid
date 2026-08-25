@@ -42,7 +42,6 @@ const environmentSchema = z.object({
     .min(1)
     .max(16)
     .default(3),
-  LUCID_HEARTBEAT_HOST: z.enum(['scheduler', 'targeted']).optional(),
   LUCID_HEARTBEAT_NAMESPACE: z.string().trim().min(1).max(200)
     // Stable database namespace; changing it would create a second task catalog.
     .default('lucid:representatives'),
@@ -159,7 +158,6 @@ export type LucidConfig = {
   heartbeatIntervalMs: number;
   heartbeatPollMs: number;
   heartbeatMaxConcurrency: number;
-  heartbeatHost: 'scheduler' | 'targeted';
   heartbeatNamespace: string;
   heartbeatExecutionLeaseMs: number;
   heartbeatRecoveryIntervalMs: number;
@@ -191,7 +189,6 @@ export function resolveLucidConfig(): LucidConfig {
     heartbeatIntervalMs: environment.LUCID_HEARTBEAT_INTERVAL_MS,
     heartbeatPollMs: environment.LUCID_HEARTBEAT_POLL_MS,
     heartbeatMaxConcurrency: environment.LUCID_HEARTBEAT_MAX_CONCURRENCY,
-    heartbeatHost: environment.LUCID_HEARTBEAT_HOST ?? 'targeted',
     heartbeatNamespace: environment.LUCID_HEARTBEAT_NAMESPACE,
     heartbeatExecutionLeaseMs:
       environment.LUCID_HEARTBEAT_EXECUTION_LEASE_MS,

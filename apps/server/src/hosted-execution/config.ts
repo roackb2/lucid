@@ -4,6 +4,11 @@ import {
   OpaqueIdSchema,
   isSafeWebUrl,
 } from '@heddleagent/execution-host-client/contracts';
+import {
+  AgentCoreQualifierSchema,
+  AgentCoreRegionSchema,
+  AgentCoreRuntimeArnSchema,
+} from '@heddleagent/execution-host-client/agentcore';
 import type {
   HostedConversationModelCredentialProvider,
 } from '@heddleagent/execution-host-client/conversation';
@@ -27,19 +32,6 @@ const DIRECT_CREDENTIAL_ENV_NAMES = Object.freeze({
 });
 const HEARTBEAT_COORDINATOR_TOKEN_ENV = SECRET_ENV_NAMES[2];
 const HEARTBEAT_COORDINATOR_API_TOKEN_ENV = SECRET_ENV_NAMES[3];
-const AgentCoreRegionSchema = z.string().trim().min(1).max(64).regex(
-  /^[a-z]{2}(?:-[a-z0-9]+)+-\d+$/,
-  'must be an AWS region identifier',
-);
-const AgentCoreRuntimeArnSchema = z.string().trim().min(20).max(2_048).regex(
-  /^arn:[a-z0-9-]+:bedrock-agentcore:[a-z0-9-]+:\d{12}:runtime\/[A-Za-z0-9_-]+$/,
-  'must be an AgentCore Runtime ARN',
-);
-const AgentCoreQualifierSchema = z.string().trim().min(1).max(64).regex(
-  /^[A-Za-z0-9][A-Za-z0-9_-]*$/,
-  'must be an AgentCore endpoint qualifier',
-);
-
 const HostedExecutionEnvironmentSchema = z.object({
   LUCID_HOSTED_EXECUTION_ENABLED: z.literal('true'),
   LUCID_HOSTED_EXECUTION_TRANSPORT: z.enum(['direct', 'agentcore'])

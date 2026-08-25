@@ -13,7 +13,7 @@ import type {
   ToolDefinition,
   ToolPolicyHostContext,
   ToolResult,
-} from '@roackb2/heddle';
+} from '@heddleagent/runtime';
 import type {
   Agent,
   DiscoveryEvent,

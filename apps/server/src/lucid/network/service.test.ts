@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
-  AgentHeartbeatService,
-} from '../agent/heartbeat-service.js';
+  AgentHeartbeatControl,
+} from '../agent/heartbeat-control.js';
 import { UserNetworkService } from './service.js';
 import type {
   UserNetworkStore,
@@ -15,7 +15,7 @@ describe('user network identity enrollment', () => {
     const reconcileAgentTasks = vi.fn(async () => undefined);
     const service = new UserNetworkService(
       { enrollAuthenticatedUser } as unknown as UserNetworkStore,
-      { reconcileAgentTasks } as unknown as AgentHeartbeatService,
+      { reconcileAgentTasks } as unknown as AgentHeartbeatControl,
       { model: 'test-model', heddleVersion: 'test-version' },
     );
 

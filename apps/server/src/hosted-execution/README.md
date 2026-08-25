@@ -67,8 +67,20 @@ When the coordinator URL and its distinct API/delegation tokens are configured,
 startup first opens Lucid's HTTP authority/MCP routes, then reconciles the
 coordinator task catalog while coordinator admission is paused. This makes the
 local coordinator vertical testable without turning the coordinator into a
-foreground proxy. The existing Lucid heartbeat service still owns current
-product trigger and status flows during this bounded transition.
+foreground proxy. Product trigger, status, enable/disable, reset, and global
+gate operations then use the coordinator's public authenticated API. Lucid
+does not start an embedded scheduler in this mode, so there is only one task
+authority.
+
+The remaining compatibility gap is behavioral rather than transport-related.
+The coordinator Runtime can currently inspect Lucid through the read-only
+`read_workspace_snapshot` capability, while the embedded runner still owns the
+claim-fenced communication operations that post network messages, revise
+working notes, and report findings. Lucid therefore keeps the embedded
+topology only when no coordinator profile is selected. The safe removal gate
+is a scoped state-changing MCP contract that preserves mailbox horizons,
+action identities, and fenced settlement; until then coordinator mode is an
+architecture proof, not full autonomous-product parity.
 
 Lucid also owns the product grounding supplied with each desired heartbeat
 task. Reconciliation carries the selected agent instructions plus an explicit

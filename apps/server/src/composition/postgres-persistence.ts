@@ -22,18 +22,16 @@ import {
 } from '../lucid/workspace/postgres-store.js';
 import type { DiscoveryWorkspaceStore } from '../lucid/workspace/store.js';
 import { PostgresDatabase } from '../infrastructure/postgres/database.js';
-import type {
-  AgentHeartbeatTaskAuthority,
-} from '../runtime/agent-execution-host.js';
 import {
   createPostgresHostedConversationTurnLifecycleStore,
 } from '@heddleagent/postgres/execution-host/conversations';
+import {
+  createPostgresHeartbeatTaskAuthority,
+  type PostgresHeartbeatTaskAuthority,
+} from '@heddleagent/postgres/heartbeat';
 import type {
   HostedConversationTurnLifecycleStore,
 } from '@heddleagent/execution-host-client/conversation';
-import {
-  PostgresHeartbeatTaskStore,
-} from '../runtime/heartbeat/postgres/task-store.js';
 import {
   PostgresHostedConversationHistoryStore,
 } from '../hosted-execution/conversation/postgres-history-store.js';
@@ -50,7 +48,7 @@ export type PostgresPersistence = {
     conversationHistory: HostedConversationHistoryStore;
     conversationLifecycle: HostedConversationTurnLifecycleStore;
   };
-  taskAuthority: AgentHeartbeatTaskAuthority;
+  heartbeatTaskAuthority: PostgresHeartbeatTaskAuthority;
   close: () => Promise<void>;
 };
 
@@ -79,8 +77,8 @@ export async function createPostgresPersistence(
             database: database.orm,
           }),
       },
-      taskAuthority: new PostgresHeartbeatTaskStore({
-        database,
+      heartbeatTaskAuthority: createPostgresHeartbeatTaskAuthority({
+        database: database.orm,
         namespace: config.heartbeatNamespace,
         executionLeaseMs: config.heartbeatExecutionLeaseMs,
       }),

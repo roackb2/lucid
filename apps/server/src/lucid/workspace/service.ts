@@ -7,8 +7,8 @@
  */
 import type { DiscoveryWorkspaceSnapshot } from '../discovery-types.js';
 import type {
-  AgentHeartbeatService,
-} from '../agent/heartbeat-service.js';
+  AgentHeartbeatControl,
+} from '../agent/heartbeat-control.js';
 import type { DiscoveryWorkspaceStore } from './store.js';
 
 export class DiscoveryInputError extends Error {}
@@ -17,7 +17,7 @@ export class DiscoveryInputError extends Error {}
 export class DiscoveryWorkspaceService {
   constructor(
     private readonly store: DiscoveryWorkspaceStore,
-    private readonly heartbeats: AgentHeartbeatService,
+    private readonly heartbeats: AgentHeartbeatControl,
     private readonly runtime: { model: string; heddleVersion: string },
   ) {}
 

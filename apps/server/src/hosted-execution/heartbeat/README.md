@@ -31,11 +31,14 @@ deliberately limited to `heartbeat-task`. Credentials are returned once for the
 requested execution and must remain in memory only. The AgentCore Runtime still
 receives no Lucid or Heddle database credential.
 
-The only Lucid implementations in this folder are therefore:
+The Lucid implementations in this folder are therefore:
 
 - `desired-task-catalog.ts`: product state to Heddle desired tasks;
 - `delegation-authorizer.ts`: current product identity and policy for one
-  claimed task.
+  claimed task; and
+- `agent-heartbeat-service.ts`: the Lucid product-control port backed by the
+  public coordinator task API. It contains product projection and preference
+  rules, not scheduling, claims, retries, or HTTP client mechanics.
 
 The two directions use distinct secrets:
 
@@ -44,9 +47,15 @@ The two directions use distinct secrets:
 - `LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN` authenticates the coordinator's
   delegation calls back to Lucid.
 
-This slice reconciles the catalog at startup for the local architecture proof.
-Lucid's existing product trigger, status, enable/disable, and reset flows still
-use the embedded heartbeat service until that product-facing migration is
-selected explicitly. The embedded worker does not start while coordinator mode
-is configured, so the two authorities cannot execute the same autonomous work.
-The bounded local proof triggers through the coordinator API.
+When coordinator mode is configured, Lucid's product trigger, status,
+enable/disable, reset, and global gate flows use the public coordinator API.
+The embedded worker does not start, so the two authorities cannot execute the
+same autonomous work. Without a coordinator profile, the embedded topology
+remains available because its wake-local runner is still the only path with
+Lucid's state-changing communication and finding tools.
+
+Do not remove that fallback merely because coordinator task control is wired.
+First expose the state-changing Lucid operations through a scoped MCP contract
+that preserves the claimed task execution, mailbox horizon, action identity,
+and fenced completion. After that gate passes, the embedded runner and its
+Lucid-owned Heddle task tables can be removed together.

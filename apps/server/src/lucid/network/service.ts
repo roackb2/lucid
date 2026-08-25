@@ -13,8 +13,8 @@ import type {
   RegisterUserInput,
 } from '../discovery-types.js';
 import type {
-  AgentHeartbeatService,
-} from '../agent/heartbeat-service.js';
+  AgentHeartbeatControl,
+} from '../agent/heartbeat-control.js';
 import type {
   EnrollAuthenticatedUserInput,
   UserNetworkStore,
@@ -35,7 +35,7 @@ export type UserEnrollmentReceipt = {
 export class UserNetworkService {
   constructor(
     private readonly store: UserNetworkStore,
-    private readonly heartbeats: AgentHeartbeatService,
+    private readonly heartbeats: AgentHeartbeatControl,
     private readonly runtime: { model: string; heddleVersion: string },
   ) {}
 
