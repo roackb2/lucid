@@ -48,7 +48,7 @@ const hostedExecutionConfig = resolveHostedExecutionConfig(
 );
 const logger = createLucidLogger(config.logLevel);
 const persistence = await createPostgresPersistence(config);
-const { stores, taskAuthority } = persistence;
+const { stores, heartbeatTaskAuthority } = persistence;
 const authenticator = createLucidAuthenticator(
   config.authentication,
   stores.network,
@@ -81,11 +81,12 @@ const heartbeatTopology = coordinator
         new HeddleAgentRunner(stores.communication, config),
         config,
         logger,
-        taskAuthority,
+        heartbeatTaskAuthority.administration,
+        heartbeatTaskAuthority.store,
         createAgentExecutionHost({
           config,
           store: stores.agent,
-          taskAuthority,
+          taskStore: heartbeatTaskAuthority.store,
           taskIdPrefix: AGENT_TASK_ID_PREFIX,
           logger,
         }),
@@ -227,9 +228,7 @@ logger.info({
   heartbeatCoordinatorEnabled: Boolean(
     hostedExecutionConfig?.heartbeatCoordinator,
   ),
-  heartbeatHost: heartbeatTopology.kind === 'coordinator'
-    ? 'coordinator'
-    : config.heartbeatHost,
+  heartbeatHost: heartbeatTopology.kind,
   hostedExecutionEnabled: Boolean(hostedExecution),
   model: config.model,
   webEnabled: Boolean(staticSpaRequestHandler),

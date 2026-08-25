@@ -69,9 +69,9 @@ workers.
 
 `LUCID_DATABASE_URL` is required. The composition uses both schemas through one
 owned pool, an explicit Heddle namespace, and a lease longer than the bounded
-worker attempt; see
-`../../../runtime/heartbeat/postgres/README.md`. There is no runtime backend
-selector or fallback database.
+worker attempt. The adapter and schema come from
+`@heddleagent/postgres/heartbeat`; there is no local Heddle persistence copy,
+runtime backend selector, or fallback database.
 
 A newly initialized workspace starts with background checks disabled. This is
 the cost-safe deployment default; an authenticated operator must explicitly

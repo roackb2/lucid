@@ -1,58 +1,37 @@
+import {
+  HeartbeatTargetedTaskHost,
+  HeartbeatTargetedTaskWorker,
+  type HeartbeatTargetedTaskHostHandle,
+  type HeartbeatTargetedTaskStore,
+} from '@heddleagent/runtime/advanced';
 import type { LucidConfig } from '../config.js';
 import type { AgentWakeStore } from '../lucid/agent/store.js';
 import type { LucidLogger } from '../logger.js';
-import {
-  LongLivedAgentExecutionHost,
-  TargetedAgentExecutionHost,
-  type AgentExecutionHost,
-  type AgentHeartbeatTaskAuthority,
-} from './agent-execution-host.js';
-import { AgentWorker } from './agent-worker.js';
 
 export type AgentExecutionCompositionOptions = {
   config: LucidConfig;
   store: AgentWakeStore;
-  taskAuthority: AgentHeartbeatTaskAuthority;
+  taskStore: HeartbeatTargetedTaskStore;
   taskIdPrefix: string;
   logger: LucidLogger;
 };
 
-/** Selects and wires the configured execution topology at the process root. */
+/** Wires Lucid's product gate and runtime options into Heddle's targeted host. */
 export function createAgentExecutionHost(
   options: AgentExecutionCompositionOptions,
-): AgentExecutionHost {
+): HeartbeatTargetedTaskHostHandle {
   const {
     config,
     store,
-    taskAuthority,
+    taskStore,
     taskIdPrefix,
     logger,
   } = options;
-  if (config.heartbeatHost === 'scheduler') {
-    return new LongLivedAgentExecutionHost({
-      authority: taskAuthority,
-      workspaceRoot: config.repoRoot,
-      stateRoot: config.heddleStateRoot,
-      preferApiKey: config.preferApiKey,
-      model: config.model,
-      maxSteps: config.maxSteps,
-      pollIntervalMs: config.heartbeatPollMs,
-      maxConcurrentTasks: config.heartbeatMaxConcurrency,
-      onEvent: (event) => logger.debug({
-        eventType: event.type,
-        taskId: 'taskId' in event ? event.taskId : undefined,
-      }, 'lucid.heartbeat_scheduler.activity'),
-      onError: (error) => logger.error(
-        { error },
-        'lucid.heartbeat_scheduler.failed',
-      ),
-    });
-  }
 
-  return new TargetedAgentExecutionHost({
-    authority: taskAuthority,
-    createTarget: (handler) => new AgentWorker({
-      store: taskAuthority,
+  return new HeartbeatTargetedTaskHost({
+    store: taskStore,
+    createTarget: (handler) => new HeartbeatTargetedTaskWorker({
+      store: taskStore,
       handler,
       runtime: {
         workspaceRoot: config.repoRoot,
@@ -71,7 +50,7 @@ export function createAgentExecutionHost(
     maxConcurrentInvocations: config.heartbeatMaxConcurrency,
     invocationTimeoutMs: config.heartbeatInvocationTimeoutMs,
     recoveryIntervalMs: config.heartbeatRecoveryIntervalMs,
-    isGloballyEnabled: async () => (
+    isAdmissionEnabled: async () => (
       await store.readWorkspace()
     ).backgroundChecksEnabled,
     onOutcome: ({ taskId, invocationId, result, decision }) => logger.debug({

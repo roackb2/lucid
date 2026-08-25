@@ -30,8 +30,8 @@ import {
 } from '../persistence/postgres/test-context.js';
 import { createLucidLogger } from '../../logger.js';
 import {
-  LongLivedAgentExecutionHost,
-} from '../../runtime/agent-execution-host.js';
+  createAgentExecutionHost,
+} from '../../runtime/agent-execution-composition.js';
 import { AgentCommunicationToolService } from './communication/tool-service.js';
 import {
   LOCAL_USER_ID,
@@ -46,6 +46,7 @@ import { UserNetworkService } from '../network/service.js';
 import {
   AgentHeartbeatService,
 } from './heartbeat-service.js';
+import { AGENT_TASK_ID_PREFIX } from './heartbeat-task-identity.js';
 import type { AgentWorkingContextReader } from './store.js';
 
 const TEST_RUNTIME = { model: 'gpt-5.4-mini', heddleVersion: 'test' };
@@ -711,15 +712,12 @@ describe('agent heartbeat service', () => {
     const tasks = new FileHeartbeatTaskService({
       stateRoot: config.heddleStateRoot,
     });
-    const executionHost = new LongLivedAgentExecutionHost({
-      authority: tasks,
-      workspaceRoot: config.repoRoot,
-      stateRoot: config.heddleStateRoot,
-      model: config.model,
-      maxSteps: config.maxSteps,
-      preferApiKey: config.preferApiKey,
-      pollIntervalMs: config.heartbeatPollMs,
-      maxConcurrentTasks: config.heartbeatMaxConcurrency,
+    const executionHost = createAgentExecutionHost({
+      config,
+      store: stores.agent,
+      taskStore: tasks,
+      taskIdPrefix: AGENT_TASK_ID_PREFIX,
+      logger: createLucidLogger('silent'),
     });
     const heartbeat = new AgentHeartbeatService(
       stores.agent,
@@ -727,6 +725,7 @@ describe('agent heartbeat service', () => {
       runner,
       config,
       createLucidLogger('silent'),
+      tasks,
       tasks,
       executionHost,
     );
@@ -1062,7 +1061,6 @@ function createTestConfig(stateRoot: string): LucidConfig {
     heartbeatIntervalMs: 60_000,
     heartbeatPollMs: 5,
     heartbeatMaxConcurrency: 1,
-    heartbeatHost: 'scheduler',
     heartbeatNamespace: 'lucid:test:agents',
     heartbeatExecutionLeaseMs: 60_000,
     heartbeatRecoveryIntervalMs: 10_000,

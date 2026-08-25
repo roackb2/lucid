@@ -12,15 +12,14 @@ import {
   type HeartbeatExecutionContext,
   type HeartbeatHandlerOutcome,
   type HeartbeatTask,
+  type HeartbeatTaskAdministrationService,
   type HeartbeatTaskCancellationDisposition,
+  type HeartbeatTargetedTaskHostHandle,
+  type HeartbeatTargetedTaskStore,
   type HeartbeatTaskView,
 } from '@heddleagent/runtime/advanced';
 import type { LucidConfig } from '../../config.js';
 import type { LucidLogger } from '../../logger.js';
-import type {
-  AgentExecutionHost,
-  AgentHeartbeatTaskAuthority,
-} from '../../runtime/agent-execution-host.js';
 import {
   networkMessageRoleSchema,
   type AgentWakeClaim,
@@ -67,8 +66,9 @@ export class AgentHeartbeatService {
     private readonly runner: AgentHeartbeatRunner,
     private readonly config: LucidConfig,
     private readonly logger: LucidLogger,
-    private readonly tasks: AgentHeartbeatTaskAuthority,
-    private readonly executionHost: AgentExecutionHost,
+    private readonly tasks: HeartbeatTaskAdministrationService,
+    private readonly taskStore: HeartbeatTargetedTaskStore,
+    private readonly executionHost: HeartbeatTargetedTaskHostHandle,
   ) {}
 
   async initialize(): Promise<void> {
@@ -84,7 +84,7 @@ export class AgentHeartbeatService {
     this.hostStarted = true;
     this.executionHost.start({
       handler: (context) => this.runAgentTask(context),
-      globallyEnabled: this.globallyEnabled,
+      admissionEnabled: this.globallyEnabled,
     });
   }
 
@@ -165,7 +165,7 @@ export class AgentHeartbeatService {
 
     // Heddle persists level-triggered intent. Requests made while the task is
     // running coalesce into one follow-up generation without host polling.
-    const request = await this.tasks.requestTaskRun(task.id, {
+    const request = await this.taskStore.requestTaskRun(task.id, {
       reason: `lucid-mailbox:${agentId}`,
     });
     if ((await this.store.readWorkspace()).backgroundChecksEnabled) {
@@ -605,14 +605,14 @@ export class AgentHeartbeatService {
   }
 
   private async listManagedTasks(): Promise<HeartbeatTask[]> {
-    return (await this.tasks.listTasks()).filter(
+    return (await this.taskStore.listTasks()).filter(
       (task) => task.id.startsWith(AGENT_TASK_ID_PREFIX),
     );
   }
 
   private async requireManagedTask(agentId: string): Promise<HeartbeatTask> {
     const taskId = taskIdForAgent(agentId);
-    const task = await this.tasks.loadTask(taskId);
+    const task = await this.taskStore.loadTask(taskId);
     if (!task) {
       throw new Error(`Heartbeat task is missing for agent: ${agentId}`);
     }

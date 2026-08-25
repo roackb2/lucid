@@ -83,18 +83,15 @@ runner's network-message, working-note, and finding writes.
 
 ## Why the embedded fallback remains
 
-`AgentTaskInvocationTarget` is an internal delivery seam between the
-bounded dispatcher and `AgentWorker`. Its input contains an
-`AbortSignal`, its result is Heddle's targeted-task result, and its worker needs
-both the PostgreSQL task store and the in-process heartbeat handler. It is not a
-serializable wire contract.
+The embedded fallback directly composes Heddle's supported
+`HeartbeatTargetedTaskHost`, `HeartbeatTargetedTaskWorker`, and official
+PostgreSQL heartbeat authority. Lucid does not maintain renamed or copied host,
+dispatcher, worker, schema, or task-store implementations.
 
-The embedded targeted host remains valuable: it provides bounded local
-concurrency, durable polling fallback, cancellation, recovery sweeps, and
-graceful shutdown over Heddle's public task authority, and it currently binds
-the wake-local state-changing product tools. Heddle's coordinator already owns
-the scheduling responsibilities in coordinator mode; only the product tool
-boundary prevents removal of this fallback.
+The fallback remains because its in-process wake handler currently binds the
+state-changing product tools to a fixed mailbox horizon and fenced Lucid wake
+claim. Heddle's coordinator already owns scheduling in coordinator mode; only
+the product MCP and settlement boundary prevents removal of this fallback.
 
 ## Intended deployment boundary
 

@@ -39,8 +39,8 @@ bounded execution, and recovery predictable.
   owns only the bounded product history query.
 - `@heddleagent/postgres/execution-host/conversations` implements hosted-turn
   lifecycle writes over the same Lucid-owned pool.
-- `src/runtime/heartbeat/postgres/task-store.ts` implements Heddle's public
-  task authority contracts over the same owned pool.
+- `@heddleagent/postgres/heartbeat` implements Heddle's task authority over
+  the same Lucid-owned Drizzle pool.
 - `src/composition/postgres-persistence.ts` composes the product stores and
   selected Heddle adapters, then owns their shared pool shutdown.
 - `src/hosted-execution/` owns the adopter-side authority, MCP, and external
@@ -115,7 +115,7 @@ credential handling, signed authority, Node HTTP/JWKS/SSE, product-edge MCP,
 generic durable conversation lifecycle, browser turn transport, authenticated
 coordinator control, the versioned `ExecutionHost` contract, and its AgentCore
 transport. Its lifecycle store is supplied by
-`@heddleagent/postgres@6.1.0`; Lucid retains authenticated scope selection,
+`@heddleagent/postgres@6.1.1`; Lucid retains authenticated scope selection,
 migration execution, and its history query.
 
 `src/lucid` owns users, mailbox events, findings, feedback, wake claims,

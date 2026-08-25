@@ -631,10 +631,10 @@
     jose "^6.2.8"
     zod "^4.3.6"
 
-"@heddleagent/postgres@6.1.0":
-  version "6.1.0"
-  resolved "https://registry.npmjs.org/@heddleagent/postgres/-/postgres-6.1.0.tgz#8a85cbef60de1dad8336ab8c9c8d0c598c997cfd"
-  integrity sha512-330bRmTRnAz02gLdrOVlM6ekSGdX140AMPLO6/lZW/Y+gG8giuHW1boBJAS0Z33bnsOB36sNo/Zqtxx0FJQJDw==
+"@heddleagent/postgres@6.1.1":
+  version "6.1.1"
+  resolved "https://registry.npmjs.org/@heddleagent/postgres/-/postgres-6.1.1.tgz#e27d0888c2e8d12d0fbd5ebafa059b74b3ff22c6"
+  integrity sha512-9RDG0eEy41n4BlCT8fNjtKVahGSzNIFkWcGTpndRUwu4sdsB1mCediuZHHqzRgogR5H09OMa+CgihhapAqItUQ==
   dependencies:
     dayjs "^1.11.20"
 

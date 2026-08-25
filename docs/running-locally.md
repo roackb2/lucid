@@ -104,19 +104,12 @@ their feedback, or decide whether a finding is useful.
 
 ## Execution topology
 
-The default `targeted` host uses a bounded in-process dispatcher and one-shot
-workers over the PostgreSQL Heddle task authority. Its maximum independent
-agent concurrency is controlled by:
+The embedded fallback uses Heddle's supported targeted host and one-shot
+workers over the official PostgreSQL heartbeat authority. Its maximum
+independent agent concurrency is controlled by:
 
 ```dotenv
 LUCID_HEARTBEAT_MAX_CONCURRENCY=3
-```
-
-For a local topology comparison, select Heddle's long-lived scheduler while
-keeping the same database:
-
-```dotenv
-LUCID_HEARTBEAT_HOST=scheduler
 ```
 
 Do not shorten the execution lease below the invocation timeout. Configuration
