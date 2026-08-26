@@ -110,12 +110,12 @@ configuration and deployment sequence.
 
 The embedded fallback consumes `@heddleagent/runtime@6.3.0` directly; no
 deprecated `@roackb2/heddle` package remains. The external conversation and
-coordinator boundary uses `@heddleagent/execution-host-client@6.6.0` for signing-key and
+coordinator boundary uses `@heddleagent/execution-host-client@6.6.1` for signing-key and
 credential handling, signed authority, Node HTTP/JWKS/SSE, product-edge MCP,
 generic durable conversation lifecycle, browser turn transport, authenticated
 coordinator control, the versioned `ExecutionHost` contract, and its AgentCore
 transport. Its lifecycle store is supplied by
-`@heddleagent/postgres@6.1.1`; Lucid retains authenticated scope selection,
+`@heddleagent/postgres@6.1.2`; Lucid retains authenticated scope selection,
 migration execution, and its history query.
 
 `src/lucid` owns users, mailbox events, findings, feedback, wake claims,

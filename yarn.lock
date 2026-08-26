@@ -618,10 +618,10 @@
   resolved "https://registry.yarnpkg.com/@esbuild/win32-x64/-/win32-x64-0.27.7.tgz#8fe30b3088b89b4873c3a6cc87597ae3920c0a8b"
   integrity sha512-56hiAJPhwQ1R4i+21FVF7V8kSD5zZTdHcVuRFMW0hn753vVfQN8xlx4uOPT4xoGH0Z/oVATuR82AiqSTDIpaHg==
 
-"@heddleagent/execution-host-client@6.6.0":
-  version "6.6.0"
-  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-6.6.0.tgz#67741e782a41f143d6a79a84910c8bfac9f68029"
-  integrity sha512-9iMj9gmVprfpyCvT1h47kM9hITe1pjeftNknPA4rvh24O3rPkZbW4GkWWQL7wXdB7AW3dIVZroHf2IxygycLVA==
+"@heddleagent/execution-host-client@6.6.1":
+  version "6.6.1"
+  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-6.6.1.tgz#933db81711f62ccae601159eb89a2fb7f3d31d37"
+  integrity sha512-djQq9f9zKn2Kyx9OSHbyuJ8oZ1ARaNVd/on7qW+nWAqwZHN8h7AYKaG8NKH6MTOyL9UgOEZneLgyQGFeUBqskQ==
   dependencies:
     "@aws-sdk/client-bedrock-agentcore" "^3.1107.0"
     "@modelcontextprotocol/sdk" "^1.29.0"
@@ -631,10 +631,10 @@
     jose "^6.2.8"
     zod "^4.3.6"
 
-"@heddleagent/postgres@6.1.1":
-  version "6.1.1"
-  resolved "https://registry.npmjs.org/@heddleagent/postgres/-/postgres-6.1.1.tgz#e27d0888c2e8d12d0fbd5ebafa059b74b3ff22c6"
-  integrity sha512-9RDG0eEy41n4BlCT8fNjtKVahGSzNIFkWcGTpndRUwu4sdsB1mCediuZHHqzRgogR5H09OMa+CgihhapAqItUQ==
+"@heddleagent/postgres@6.1.2":
+  version "6.1.2"
+  resolved "https://registry.npmjs.org/@heddleagent/postgres/-/postgres-6.1.2.tgz#fcd146e234b30d526ccf64c09c92c7a746e132cc"
+  integrity sha512-N+RW6lWy6NhdT2sC1mtIidozmvFRwuCgREIPXtv55YN3ANr4maG6nOK2bb0c1IoqFbwl0VlSnW2NZkDVJbmuEg==
   dependencies:
     dayjs "^1.11.20"
 
