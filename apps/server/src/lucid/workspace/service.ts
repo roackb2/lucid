@@ -10,6 +10,7 @@ import type {
   AgentHeartbeatControl,
 } from '../agent/heartbeat-control.js';
 import type { DiscoveryWorkspaceStore } from './store.js';
+import { includeCurrentAgentTaskActivity } from './agent-activity.js';
 
 export class DiscoveryInputError extends Error {}
 
@@ -28,6 +29,11 @@ export class DiscoveryWorkspaceService {
     );
     return {
       ...workspace,
+      agentActivity: includeCurrentAgentTaskActivity(
+        workspace.agentActivity,
+        backgroundChecks,
+        workspace.agent,
+      ),
       backgroundChecks,
       runtime: this.runtime,
     };

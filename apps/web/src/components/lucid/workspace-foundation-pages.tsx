@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { DiscoverySnapshot } from '@/lib/trpc';
+import { AgentActivityTimeline } from './agent-activity-timeline';
 import { CurrentInterestEditor } from './current-interest-editor';
 import { NetworkFindingsLibrary } from './network-findings-library';
 
@@ -120,11 +121,10 @@ export function AgentFoundationPage({ snapshot }: FoundationPageProps) {
           </div>
         </dl>
       </section>
-      <div className="foundation-layout foundation-layout--split">
-        <FoundationPanel
-          title="Activity"
-          description="Background wakes, quiet checks, follow-ups, failures, and cancellations will appear here as product events."
-          icon={<Activity />}
+      <div className="foundation-layout agent-page-layout">
+        <AgentActivityTimeline
+          activity={snapshot.agentActivity}
+          hasInterest={Boolean(snapshot.interest)}
         />
         <FoundationPanel
           title="Agent understanding"
