@@ -1,23 +1,11 @@
-import {
-  CloudOff,
-  Clock3,
-  Network,
-  RefreshCw,
-} from 'lucide-react';
-import { AppHeader } from '@/components/lucid/app-header';
+import { CloudOff, RefreshCw } from 'lucide-react';
 import { GoogleSignIn } from '@/components/lucid/google-sign-in';
-import { BackgroundChecks } from '@/components/lucid/background-checks';
-import { GuidanceFollowThrough } from '@/components/lucid/guidance-follow-through';
-import { FindingsFeed } from '@/components/lucid/findings-feed';
 import { HostedAccess } from '@/components/lucid/hosted-access';
-import { HostedConversation } from '@/components/lucid/hosted-conversation';
-import { InterestComposer } from '@/components/lucid/interest-composer';
 import {
   UserOnboarding,
   type UserOnboardingInput,
 } from '@/components/lucid/user-onboarding';
-import { RecentNetworkRequests } from '@/components/lucid/recent-network-requests';
-import { AgentProgress } from '@/components/lucid/agent-progress';
+import { LucidAppShell } from '@/components/lucid/app-shell';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
 import { useLucidAuth } from '@/auth/supabase-auth';
@@ -115,142 +103,8 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
     return <ServiceUnavailable onRetry={() => discovery.snapshot.refetch()} />;
   }
 
-  const backgroundChecks = snapshot.backgroundChecks;
-  const agentTask = backgroundChecks.tasks.find(
-    ({ agentId }) => agentId === snapshot.agent.id,
-  );
-  const hasFailedWake = Boolean(
-    snapshot.agent.status === 'error'
-    || agentTask?.status === 'failed',
-  );
-  const currentAssignmentSequence = snapshot.interest?.sequence;
-  const currentFindings = currentAssignmentSequence
-    ? snapshot.findings.filter(({ assignmentSequence }) => (
-        assignmentSequence === currentAssignmentSequence
-      ))
-    : snapshot.findings;
-  const earlierFindings = currentAssignmentSequence
-    ? snapshot.findings.filter(({ assignmentSequence }) => (
-        assignmentSequence !== currentAssignmentSequence
-      ))
-    : [];
-
   return (
-    <div className="workspace-shell">
-      <AppHeader snapshot={snapshot} onSignOut={onSignOut} />
-
-      <main className="workspace">
-        <section className="workspace-intro">
-          <div>
-            <p className="section-label">Your discovery workspace</p>
-            <h1>Give your agent an ongoing assignment.</h1>
-            <p>
-              It keeps your interest, earlier findings, and guidance in view
-              while listening for something genuinely new from the network.
-            </p>
-          </div>
-          <dl className="workspace-stats">
-            <div>
-              <dt>Findings</dt>
-              <dd>{currentFindings.length}</dd>
-            </div>
-            <div>
-              <dt>Agent</dt>
-              <dd>
-                {hasFailedWake
-                  ? 'Attention'
-                  : backgroundChecks.running ? 'Working' : 'Ready'}
-              </dd>
-            </div>
-            <div>
-              <dt>Mode</dt>
-              <dd>{
-                !backgroundChecks.dispatchEnabled
-                  ? 'Demo paused'
-                  : backgroundChecks.enabled ? 'Listening' : 'Paused'
-              }</dd>
-            </div>
-          </dl>
-        </section>
-
-        <div className="workspace-layout">
-          <div className="workspace-main">
-            <InterestComposer
-              interest={snapshot.interest}
-              networkActivity={snapshot.networkActivity}
-              backgroundChecksEnabled={
-                backgroundChecks.enabled && backgroundChecks.dispatchEnabled
-              }
-              isChecking={backgroundChecks.running}
-              isSaving={discovery.saveInterest.isPending}
-              isRunningNow={discovery.runNow.isPending}
-              isRetrying={discovery.retryCurrentWake.isPending}
-              lastCheckedAt={backgroundChecks.lastRunAt}
-              failedTask={hasFailedWake ? agentTask : undefined}
-              onSaveInterest={(content) => (
-                discovery.saveInterest.mutateAsync(content)
-              )}
-              onRunNow={() => discovery.runNow.mutate()}
-              onRetry={() => discovery.retryCurrentWake.mutate()}
-            />
-
-            <HostedConversation />
-
-            <RecentNetworkRequests
-              requests={snapshot.networkActivity?.previousRequests ?? []}
-            />
-
-            <AgentProgress
-              isSubmittingGuidance={discovery.submitGuidance.isPending}
-              onGuidance={async (content) => {
-                await discovery.submitGuidance.mutateAsync(content);
-              }}
-              workingNote={snapshot.workingNote}
-            />
-
-            <GuidanceFollowThrough
-              activity={snapshot.guidanceFollowThrough}
-            />
-
-            <FindingsFeed
-              backgroundChecksEnabled={
-                backgroundChecks.enabled && backgroundChecks.dispatchEnabled
-              }
-              currentFindings={currentFindings}
-              earlierFindings={earlierFindings}
-              isChecking={backgroundChecks.running}
-              isSubmittingFeedback={discovery.submitFeedback.isPending}
-              requestProgress={snapshot.networkActivity?.requestProgress}
-              onFeedback={(findingSequence, content) => (
-                discovery.submitFeedback.mutateAsync({
-                  findingSequence,
-                  content,
-                })
-              )}
-            />
-
-            <BackgroundChecks
-              checks={backgroundChecks}
-              hasFailedWake={hasFailedWake}
-              isUpdating={discovery.setBackgroundChecksEnabled.isPending}
-              onSetEnabled={(enabled) => (
-                discovery.setBackgroundChecksEnabled.mutate(enabled)
-              )}
-            />
-          </div>
-
-          <aside className="workspace-sidebar">
-            <HowChecksWork />
-            <UserPerspective />
-          </aside>
-        </div>
-      </main>
-
-      <footer className="workspace-footer">
-        <span>Lucid · Heddle {snapshot.runtime.heddleVersion}</span>
-        <span>Your view · durable checks · inspectable delivery paths</span>
-      </footer>
-    </div>
+    <LucidAppShell snapshot={snapshot} onSignOut={onSignOut} />
   );
 }
 
@@ -269,55 +123,6 @@ function ServiceUnavailable({ onRetry }: { onRetry: () => unknown }) {
         Try again
       </Button>
     </main>
-  );
-}
-
-function HowChecksWork() {
-  return (
-    <section className="sidebar-card">
-      <header>
-        <Clock3 size={17} />
-        <h2>How checks work</h2>
-      </header>
-      <ol className="how-it-works">
-        <li>
-          <span>1</span>
-          <p><strong>You save an interest.</strong> The full text stays private to your agent.</p>
-        </li>
-        <li>
-          <span>2</span>
-          <p><strong>Your agent wakes.</strong> It can share a request or react to newly delivered messages.</p>
-        </li>
-        <li>
-          <span>3</span>
-          <p><strong>You receive a finding.</strong> You see the messages that caused it and decide its value.</p>
-        </li>
-        <li>
-          <span>4</span>
-          <p><strong>Your guidance carries forward.</strong> Give feedback on a finding or directly correct its working understanding for later checks.</p>
-        </li>
-      </ol>
-      <p className="prototype-note">
-        Empty wakes do not call the model. Your agent acts only when
-        it has unread input or another user’s message.
-      </p>
-    </section>
-  );
-}
-
-function UserPerspective() {
-  return (
-    <section className="sidebar-card">
-      <header>
-        <Network size={17} />
-        <h2>A user’s view</h2>
-      </header>
-      <p className="prototype-note">
-        There is no global user directory here. Other agents
-        become visible only when their messages contribute to one of your
-        findings.
-      </p>
-    </section>
   );
 }
 
