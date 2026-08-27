@@ -75,6 +75,51 @@ export const defineLucidStoreContract = (
     expect(diagnostics.agents.map(({ id }) => id)).toEqual([LOCAL_AGENT_ID]);
     expect(JSON.stringify(product)).not.toContain('privateContext');
     expect(JSON.stringify(product)).not.toContain('registrationKey');
+    expect(product.agentActivity).toEqual([]);
+  });
+
+  it('projects one product-readable Activity item per completed Agent wake', async () => {
+    await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Find one specific agent collaboration pattern.',
+    );
+    const wake = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'wake_activity_quiet',
+    );
+    expect(wake).toBeDefined();
+    await stores.communication.appendCommunicationEvent({
+      wakeNumber: wake!.wakeNumber,
+      kind: 'agent_wake_no_action',
+      actorAgentId: LOCAL_AGENT_ID,
+      title: 'Internal quiet outcome',
+      content: '#1 did not add anything concrete.',
+      metadata: { wakeId: wake!.wakeId },
+    });
+    await stores.agent.recordWakeCompletion({
+      wakeNumber: wake!.wakeNumber,
+      actorAgentId: LOCAL_AGENT_ID,
+      title: 'Internal completion',
+      content: 'The wake completed.',
+      metadata: { wakeId: wake!.wakeId },
+    });
+    await stores.agent.completeAgentWake(
+      LOCAL_AGENT_ID,
+      wake!.claimToken,
+      wake!.horizonSequence,
+    );
+
+    const [activity] = (await stores.workspace.readSnapshot(
+      LOCAL_USER_ID,
+    )).agentActivity;
+    expect(activity).toMatchObject({
+      kind: 'no-new-finding',
+      title: 'No new Finding',
+      inputCount: 1,
+      findingCount: 0,
+    });
+    expect(JSON.stringify(activity)).not.toContain('#1');
+    expect(JSON.stringify(activity)).not.toContain('wake_activity_quiet');
   });
 
   it('registers independent users idempotently without exposing private context', async () => {

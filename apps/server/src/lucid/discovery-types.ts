@@ -302,6 +302,33 @@ export type BackgroundChecksView = {
   tasks: AgentTaskView[];
 };
 
+export type AgentActivityKind =
+  | 'working'
+  | 'needs-attention'
+  | 'recovered'
+  | 'finding-returned'
+  | 'no-new-finding'
+  | 'network-request'
+  | 'network-contribution'
+  | 'understanding-updated'
+  | 'completed';
+
+/**
+ * One bounded, product-readable summary of an Agent wake. Raw task, trace,
+ * mailbox, and event identifiers remain internal.
+ */
+export type AgentActivityItemView = {
+  id: string;
+  kind: AgentActivityKind;
+  title: string;
+  summary: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  inputCount: number;
+  findingCount: number;
+};
+
 export type DiscoveryWorkspaceSnapshot = {
   workspace: DiscoveryWorkspace;
   user: UserView;
@@ -311,6 +338,7 @@ export type DiscoveryWorkspaceSnapshot = {
   networkActivity?: NetworkActivityView;
   guidanceFollowThrough?: GuidanceFollowThroughView;
   findings: FindingView[];
+  agentActivity: AgentActivityItemView[];
   backgroundChecks: BackgroundChecksView;
   runtime: {
     model: string;

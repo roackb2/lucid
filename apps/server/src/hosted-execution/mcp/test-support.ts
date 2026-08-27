@@ -140,6 +140,7 @@ export function workspaceSnapshot(): DiscoveryWorkspaceSnapshot {
       isCurrentUserAgent: true,
     },
     findings: [],
+    agentActivity: [],
     backgroundChecks: {
       enabled: true,
       dispatchEnabled: true,

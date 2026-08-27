@@ -6,6 +6,7 @@
  */
 import type {
   Agent,
+  AgentActivityItemView,
   AgentView,
   AppendDiscoveryEventInput,
   DiscoveryEvent,
@@ -26,6 +27,7 @@ export type DiscoveryWorkspaceStoreSnapshot = {
   networkActivity?: NetworkActivityView;
   guidanceFollowThrough?: GuidanceFollowThroughView;
   findings: FindingView[];
+  agentActivity: AgentActivityItemView[];
 };
 
 export type RecordCheckRequestInput = Omit<

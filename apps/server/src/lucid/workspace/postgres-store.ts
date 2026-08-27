@@ -16,6 +16,7 @@ import {
 import {
   type AppendDiscoveryEventInput,
   type Agent,
+  type AgentActivityItemView,
   type AgentView,
   type DiscoveryEvent,
   type DiscoveryWorkspace,
@@ -53,10 +54,15 @@ import type {
   RecordCheckRequestInput,
 } from './store.js';
 import { LUCID_WORKSPACE_ID } from './workspace-identity.js';
+import {
+  AGENT_ACTIVITY_EVENT_KINDS,
+  projectPersistedAgentActivity,
+} from './agent-activity.js';
 
 const FINDING_LIMIT = 12;
 const NETWORK_REQUEST_HISTORY_LIMIT = 5;
 const PRINCIPAL_INPUT_LIMIT = 6;
+const AGENT_ACTIVITY_EVENT_SCAN_LIMIT = 80;
 
 function resolveNetworkRequestProgressPhase(input: {
   responseCount: number;
@@ -107,7 +113,25 @@ implements DiscoveryWorkspaceStore {
         workingContext.findings,
       ),
       findings: workingContext.findings,
+      agentActivity: await this.readAgentActivity(agent.id),
     };
+  }
+
+  private async readAgentActivity(
+    agentId: string,
+  ): Promise<AgentActivityItemView[]> {
+    const events = (await this.database.orm
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(discoveryEvents.actorAgentId, agentId),
+        inArray(discoveryEvents.kind, AGENT_ACTIVITY_EVENT_KINDS),
+      ))
+      .orderBy(desc(discoveryEvents.sequence))
+      .limit(AGENT_ACTIVITY_EVENT_SCAN_LIMIT))
+      .map(toDiscoveryEvent);
+    return projectPersistedAgentActivity(events);
   }
 
   private async requireUser(id: string): Promise<User> {
