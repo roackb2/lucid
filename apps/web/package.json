@@ -6,9 +6,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "dev": "vite --port=3080",
+    "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port=3080"
+    "preview": "vite preview"
   },
   "devDependencies": {
     "@lucid/server": "0.0.0",
@@ -38,6 +38,7 @@
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "react-markdown": "^10.1.0",
+    "react-router-dom": "7.18.2",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "superjson": "^2.2.2",

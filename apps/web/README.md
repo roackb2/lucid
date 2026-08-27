@@ -4,39 +4,35 @@ This app is one user-scoped product projection. It depends on the
 server's typed tRPC router and does not reproduce mailbox, scheduling,
 visibility, or finding rules in React.
 
-## Product boundary
+## Current IA foundation boundary
 
-The primary path is:
+The current branch is an interface-led product-discovery slice. It establishes
+stable routes and spatial ownership before the experimental backend vocabulary
+is renamed:
 
-1. save or edit an ordinary-language interest;
-2. see the privacy-minimized request the agent actually shared and
-   whether network messages have arrived for review;
-3. see whether this user's agent is listening, working, or
-   needs a retry;
-4. optionally request an immediate check, or retry the same failed wake without
-   creating another request thread;
-5. inspect the agent's revisable working understanding and privately
-   correct or refine it without editing the agent-authored note directly;
-6. read findings for the current assignment separately from earlier work, with
-   ambient-network and request-response delivery paths distinguished; and
-7. leave private free-text feedback that carries into later checks; and
-8. trace the latest feedback or direct guidance through the revised note,
-   subsequent request, and later finding or continued silence; and
-9. distinguish network waiting, delivered messages pending durable review,
-   a reported finding, and a completed review with no new finding; and
-10. inspect up to five earlier disclosed requests for the current interest so
-    later checks do not erase completed silence, carried guidance, or findings;
-    and
-11. ask one authenticated, cancellable hosted-agent question whose execution
-    runs in AgentCore and whose only initial product capability is the
-    user-scoped workspace snapshot; and
-12. reload or return later and inspect the newest 20 user-scoped prompts,
-    truthful terminal states, and public Markdown answers.
+- `/reports` is the default return surface;
+- `/findings`, `/interests`, `/agent`, and `/settings` are independently
+  addressable page frames;
+- the persistent rail exposes one user-scoped Agent, never a fabricated fleet;
+- current snapshot facts may be summarized or explicitly labeled as
+  experimental records; and
+- Cowork is a collapsed contextual drawer frame, not a navigation destination
+  or a functional prompt surface yet.
 
-The app intentionally does not render a global user directory, event
-log, task list, reset control, or user administration. Those are
-developer concerns exposed through the server's loopback-only development
-router, not features of a user's social-network experience.
+Unsupported behavior is labeled **Not yet populated**. React does not invent
+Reports, multiple Interests, additional Agents, search results, settings, or
+conversation success. Each page will be populated only after its smallest
+server-owned product contract is accepted.
+
+The earlier one-page discovery controls remain in source as migration inputs,
+but the IA shell does not render them. Their existing server mutations,
+conversation lifecycle, and safety rules must be preserved or deliberately
+replaced in later vertical slices; their presence does not define the new
+product vocabulary.
+
+The app intentionally does not render a global user directory, event log, raw
+task list, reset control, or user administration. Those remain developer
+concerns, not features of the user's discovery experience.
 
 ## Browser transport and pilot access
 
@@ -44,7 +40,7 @@ The browser calls tRPC through same-origin `/api/trpc`. Vite proxies that path
 to the local server; the production server serves the built SPA and API from
 one origin.
 
-Hosted questions use same-origin
+The retained hosted-question implementation uses same-origin
 `/hosted-execution/conversation-turns` with the same tab-scoped user
 credential. The browser validates the canonical
 `@heddleagent/execution-host-client` event schema and ordering, renders only safe progress
@@ -54,6 +50,15 @@ Heddle lifecycle records through authenticated tRPC; that bounded product view
 survives a page refresh or process restart.
 It never receives execution authority, model credentials, MCP capabilities,
 or database credentials.
+
+The current Cowork drawer is intentionally frame-only and does not call that
+transport. Recomposition must retain streaming, cancellation, safe rendering,
+and durable history rather than replacing them with a visual-only imitation.
+
+For parallel local worktrees, set `LUCID_WEB_PORT` and
+`LUCID_SERVER_ORIGIN` together. The Vite server keeps both tRPC and hosted
+conversation traffic on the same browser origin and proxies them to that exact
+Lucid server. Changing only the web port is not an isolated local pair.
 
 The deployed private pilot uses the server's user static token. The
 access screen stores the supplied token only in `sessionStorage`, never in the
@@ -66,6 +71,11 @@ browser security controls.
 
 | Component | Responsibility |
 | --- | --- |
+| `app-shell.tsx` | Own the persistent rail, route map, global status, and Cowork trigger without projecting new product identities |
+| `workspace-foundation-pages.tsx` | Render the five reviewable page contracts using real snapshot summaries and explicit unpopulated states |
+| `cowork-drawer.tsx` | Provide the accessible responsive drawer frame and route-level context preview; it deliberately does not execute a turn yet |
+| `App.tsx` | Preserve authentication, onboarding/access gates, authoritative snapshot loading, and service-unavailable handling before entering the shell |
+| `main.tsx` | Own shared React Query, router, authentication, and notification providers |
 | `interest-composer.tsx` | Create/edit one interest, show its delivered request or failed wake, and choose between a new check and retrying current work |
 | `recent-network-requests.tsx` | Render the server's bounded history of earlier disclosed requests and their persisted outcomes |
 | `agent-progress.tsx` | Present the latest private working note and collect ordinary-language corrections without mutating it directly |
@@ -73,7 +83,7 @@ browser security controls.
 | `background-checks.tsx` | Present and control this agent's durable listening state |
 | `findings-feed.tsx` | Separate current-assignment findings from collapsible earlier-assignment history |
 | `finding-card.tsx` | Show one finding, ambient/request origin, source attribution, causal messages, and private feedback |
-| `app-header.tsx` | Navigate the user workspace and summarize local agent status |
+| `app-header.tsx` | Retained header from the superseded one-page dashboard; not rendered by the IA shell |
 | `hosted-access.tsx` | Collect the private-pilot user token without embedding it in the public build |
 | `hosted-conversation.tsx` | Use the package-owned `HostedConversationClient` to submit and cancel one user-scoped hosted turn, then present safe progress plus the terminal answer |
 | `hosted-conversation-history.tsx` | Present the bounded durable turn projection without treating failure, cancellation, or interruption as success |
