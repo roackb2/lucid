@@ -10,6 +10,7 @@ import {
   lte,
   ne,
   or,
+  sql,
 } from 'drizzle-orm';
 import type { PostgresDatabase } from '../../../infrastructure/postgres/database.js';
 import type {
@@ -220,7 +221,17 @@ implements AgentCommunicationStore {
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         eq(discoveryEvents.kind, 'shared_message'),
         eq(discoveryEvents.actorAgentId, agentId),
-        eq(discoveryEvents.replyToSequence, triggerSequence),
+        or(
+          eq(discoveryEvents.replyToSequence, triggerSequence),
+          and(
+            sql`${discoveryEvents.metadata} @> ${JSON.stringify({
+              messageRole: 'request',
+            })}::jsonb`,
+            sql`${discoveryEvents.metadata} @> ${JSON.stringify({
+              sourceEventIds: [triggerSequence],
+            })}::jsonb`,
+          ),
+        ),
       ))
       .orderBy(asc(discoveryEvents.sequence))
       .limit(1);
