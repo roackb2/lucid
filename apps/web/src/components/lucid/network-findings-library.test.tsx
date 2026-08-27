@@ -67,19 +67,26 @@ describe('network findings learning slice', () => {
   });
 
   it('keeps an honest empty state when only quiet checks exist', () => {
-    const markup = renderLibrary([QUIET_CHECK]);
+    const markup = renderLibrary([QUIET_CHECK], true);
 
     expect(markup).toContain('No network-derived findings yet');
     expect(markup).toContain('does not fabricate examples');
     expect(markup).toContain('1 completed check is intentionally');
     expect(markup).toContain('Review the current interest');
   });
+
+  it('makes a missing interest explicit before asking for network work', () => {
+    const markup = renderLibrary([]);
+
+    expect(markup).toContain('No interest is saved for the current local user');
+    expect(markup).toContain('Review Interests');
+  });
 });
 
-function renderLibrary(findings: FindingView[]): string {
+function renderLibrary(findings: FindingView[], hasInterest = false): string {
   return renderToStaticMarkup(
     <MemoryRouter>
-      <NetworkFindingsLibrary findings={findings} />
+      <NetworkFindingsLibrary findings={findings} hasInterest={hasInterest} />
     </MemoryRouter>,
   );
 }

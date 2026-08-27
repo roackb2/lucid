@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 
 type NetworkFindingsLibraryProps = {
   findings: FindingView[];
+  hasInterest: boolean;
 };
 
 type FindingSource = FindingView['originatingSources'][number];
@@ -22,6 +23,7 @@ type FindingSource = FindingView['originatingSources'][number];
  */
 export function NetworkFindingsLibrary({
   findings,
+  hasInterest,
 }: NetworkFindingsLibraryProps) {
   const networkFindings = findings.filter(({ noMatch }) => !noMatch);
   const quietCheckCount = findings.length - networkFindings.length;
@@ -33,7 +35,12 @@ export function NetworkFindingsLibrary({
   )) ?? networkFindings[0];
 
   if (!selectedFinding) {
-    return <EmptyFindingsState quietCheckCount={quietCheckCount} />;
+    return (
+      <EmptyFindingsState
+        hasInterest={hasInterest}
+        quietCheckCount={quietCheckCount}
+      />
+    );
   }
 
   return (
@@ -108,7 +115,13 @@ export function NetworkFindingsLibrary({
   );
 }
 
-function EmptyFindingsState({ quietCheckCount }: { quietCheckCount: number }) {
+function EmptyFindingsState({
+  hasInterest,
+  quietCheckCount,
+}: {
+  hasInterest: boolean;
+  quietCheckCount: number;
+}) {
   return (
     <section
       className="foundation-panel network-findings-empty"
@@ -127,7 +140,12 @@ function EmptyFindingsState({ quietCheckCount }: { quietCheckCount: number }) {
           to your interest, the finding and its original messages will appear
           here. This learning slice does not fabricate examples.
         </p>
-        {quietCheckCount > 0 ? (
+        {!hasInterest ? (
+          <small>
+            No interest is saved for the current local user. Lucid needs one
+            before the agent can judge which network contributions relate.
+          </small>
+        ) : quietCheckCount > 0 ? (
           <small>
             {quietCheckCount} completed
             {' '}{quietCheckCount === 1 ? 'check is' : 'checks are'}
@@ -136,7 +154,9 @@ function EmptyFindingsState({ quietCheckCount }: { quietCheckCount: number }) {
         ) : null}
       </div>
       <Button asChild className="network-findings-empty__action" variant="secondary">
-        <Link to="/interests">Review the current interest</Link>
+        <Link to="/interests">
+          {hasInterest ? 'Review the current interest' : 'Review Interests'}
+        </Link>
       </Button>
     </section>
   );

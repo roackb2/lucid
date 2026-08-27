@@ -49,7 +49,10 @@ export function FindingsFoundationPage({ snapshot }: FoundationPageProps) {
       description="Individual discoveries and their evidence, available across reports without pretending every network event is important."
       badge="Learning slice · real data"
     >
-      <NetworkFindingsLibrary findings={snapshot.findings} />
+      <NetworkFindingsLibrary
+        findings={snapshot.findings}
+        hasInterest={Boolean(snapshot.interest)}
+      />
     </PageFrame>
   );
 }
