@@ -3,12 +3,12 @@ import {
   Bot,
   FileText,
   Lightbulb,
-  Network,
   Search,
   Settings,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { DiscoverySnapshot } from '@/lib/trpc';
+import { NetworkFindingsLibrary } from './network-findings-library';
 
 type FoundationPageProps = {
   snapshot: DiscoverySnapshot;
@@ -47,32 +47,9 @@ export function FindingsFoundationPage({ snapshot }: FoundationPageProps) {
       eyebrow="Evidence library"
       title="Findings"
       description="Individual discoveries and their evidence, available across reports without pretending every network event is important."
+      badge="Learning slice · real data"
     >
-      <section className="foundation-callout">
-        <span className="foundation-callout__count">
-          {snapshot.findings.length}
-        </span>
-        <div>
-          <strong>Experimental finding records available</strong>
-          <p>
-            They remain in the existing backend shape. This foundation does
-            not relabel or display them as finished product objects yet.
-          </p>
-        </div>
-      </section>
-      <div className="foundation-layout foundation-layout--split">
-        <FoundationPanel
-          title="Finding library"
-          description="Search, grouping, and usefulness filters will live here after the Finding contract is accepted."
-          icon={<Search />}
-        />
-        <FoundationPanel
-          title="Evidence and provenance"
-          description="The selected finding will expose why it surfaced and which network messages support it."
-          icon={<Network />}
-          muted
-        />
-      </div>
+      <NetworkFindingsLibrary findings={snapshot.findings} />
     </PageFrame>
   );
 }
@@ -233,11 +210,13 @@ export function SettingsFoundationPage({ snapshot }: FoundationPageProps) {
 }
 
 function PageFrame({
+  badge = 'Foundation preview',
   children,
   description,
   eyebrow,
   title,
 }: {
+  badge?: string;
   children: ReactNode;
   description: string;
   eyebrow: string;
@@ -250,7 +229,7 @@ function PageFrame({
           <p>{eyebrow}</p>
           <h1>{title}</h1>
         </div>
-        <span className="foundation-badge">Foundation preview</span>
+        <span className="foundation-badge">{badge}</span>
         <p>{description}</p>
       </header>
       {children}

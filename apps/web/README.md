@@ -13,6 +13,10 @@ is renamed:
 - `/reports` is the default return surface;
 - `/findings`, `/interests`, `/agent`, and `/settings` are independently
   addressable page frames;
+- `/findings` contains the first read-only learning slice: existing
+  network-derived findings can be selected and inspected with their
+  server-projected original contributions, while quiet checks stay out of the
+  library;
 - the persistent rail exposes one user-scoped Agent, never a fabricated fleet;
 - current snapshot facts may be summarized or explicitly labeled as
   experimental records; and
@@ -73,6 +77,7 @@ browser security controls.
 | --- | --- |
 | `app-shell.tsx` | Own the persistent rail, route map, global status, and Cowork trigger without projecting new product identities |
 | `workspace-foundation-pages.tsx` | Render the five reviewable page contracts using real snapshot summaries and explicit unpopulated states |
+| `network-findings-library.tsx` | Test the Finding/Evidence vocabulary through one read-only list/detail surface over existing `FindingView` data; it does not define Reports or mutate findings |
 | `cowork-drawer.tsx` | Provide the accessible responsive drawer frame and route-level context preview; it deliberately does not execute a turn yet |
 | `App.tsx` | Preserve authentication, onboarding/access gates, authoritative snapshot loading, and service-unavailable handling before entering the shell |
 | `main.tsx` | Own shared React Query, router, authentication, and notification providers |
@@ -112,6 +117,9 @@ browser security controls.
   not disguise recovery as a new manual check.
 - Assignment membership and finding origin come from the server projection;
   React does not reconstruct causality from display text.
+- The Findings learning slice uses `originatingSources` for peer-authored
+  provenance and excludes `noMatch` records; it does not substitute relays as
+  corroboration or promote quiet checks into findings.
 - Components must not infer unread delivery, fabricate no-match results,
   schedule work locally, or assign truth/value scores.
 - Hosted history never reconstructs or stores live activity, tool payloads,
