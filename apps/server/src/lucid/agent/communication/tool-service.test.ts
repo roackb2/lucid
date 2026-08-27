@@ -625,6 +625,50 @@ You represent an explicitly simulated test user, not a real person or external s
     )).toBeDefined();
   });
 
+  it('lets one request satisfy every cited assignment trigger', async () => {
+    const firstInterest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Find concrete long-running agent experiments.',
+    );
+    const refinedInterest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Find concrete long-running agent experiments and sad love songs.',
+    );
+    const tools = toolsByName(await createUserTools(
+      stores,
+      'wake_coalesced_assignment',
+      8,
+      refinedInterest.sequence,
+      [firstInterest.sequence, refinedInterest.sequence],
+    ));
+
+    expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: refinedInterest.sequence,
+      content:
+        'Looking for concrete long-running agent experiments and sad love songs.',
+      source_event_ids: [firstInterest.sequence, refinedInterest.sequence],
+    })).ok).toBe(true);
+
+    const [firstRequest, refinedRequest] = await Promise.all([
+      stores.communication.findAgentPublishedRequestForTrigger(
+        LOCAL_AGENT_ID,
+        firstInterest.sequence,
+      ),
+      stores.communication.findAgentPublishedRequestForTrigger(
+        LOCAL_AGENT_ID,
+        refinedInterest.sequence,
+      ),
+    ]);
+    expect(firstRequest?.sequence).toBe(refinedRequest?.sequence);
+    expect(refinedRequest).toMatchObject({
+      replyToSequence: refinedInterest.sequence,
+      metadata: {
+        messageRole: 'request',
+        sourceEventIds: [firstInterest.sequence, refinedInterest.sequence],
+      },
+    });
+  });
+
   it('lets every agent report findings only to its own user', async () => {
     const source = await registerSynthetic(stores, 'finding-owner');
     const request = await stores.communication.appendCommunicationEvent({

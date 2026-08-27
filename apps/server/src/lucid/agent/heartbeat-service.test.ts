@@ -403,6 +403,51 @@ describe('agent heartbeat service', () => {
     )).toHaveLength(checkCount);
   });
 
+  it('settles one request that represents coalesced interest edits', async () => {
+    const runner = new CoalescedAssignmentHeartbeatRunner(stores);
+    const { heartbeat, workspace } = await startServices(runner);
+    await heartbeat.setGlobalBackgroundChecksEnabled(false);
+    await workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Find concrete long-running agent experiments.',
+    );
+    await workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Find concrete long-running agent experiments and sad love songs.',
+    );
+    const interestSequences = (
+      await stores.network.readNetworkDiagnostics()
+    ).events
+      .filter(({ kind }) => kind === 'interest_saved')
+      .map(({ sequence }) => sequence);
+    expect(interestSequences).toHaveLength(2);
+    const [firstInterestSequence, refinedInterestSequence] = interestSequences;
+    if (firstInterestSequence === undefined
+      || refinedInterestSequence === undefined) {
+      throw new Error('Expected two durable Interest events.');
+    }
+
+    await heartbeat.setGlobalBackgroundChecksEnabled(true);
+    await vi.waitFor(async () => {
+      const agent = await requireAgent(stores, LOCAL_AGENT_ID);
+      expect(agent).toMatchObject({
+        status: 'idle',
+        lastSeenSequence: refinedInterestSequence,
+      });
+    }, { interval: 10, timeout: 5_000 });
+
+    const requests = (await stores.network.readNetworkDiagnostics()).events
+      .filter((event) => (
+        event.kind === 'shared_message'
+        && event.actorAgentId === LOCAL_AGENT_ID
+        && event.metadata.messageRole === 'request'
+        && event.metadata.sourceEventIds?.includes(firstInterestSequence)
+        && event.metadata.sourceEventIds?.includes(refinedInterestSequence)
+      ));
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.replyToSequence).toBe(refinedInterestSequence);
+  });
+
   it('rejects a guidance wake that does not revise the durable working note', async () => {
     const interest = await stores.workspace.saveInterest(
       LOCAL_USER_ID,
@@ -895,6 +940,33 @@ implements AgentHeartbeatRunner {
       reason: 'Recovered the interrupted wake.',
     }));
     return await runTestAgent(input, 'Recovered wake completed.');
+  }
+}
+
+class CoalescedAssignmentHeartbeatRunner
+implements AgentHeartbeatRunner {
+  constructor(private readonly stores: PostgresTestStores['stores']) {}
+
+  async run(
+    input: RunAgentHeartbeatInput,
+  ): Promise<AgentHeartbeatResult> {
+    const assignmentEvents = input.wake.visibleEvents.filter(({ kind }) => (
+      kind === 'interest_saved' || kind === 'check_requested'
+    ));
+    const latestAssignment = assignmentEvents.at(-1);
+    if (!latestAssignment) {
+      throw new Error('Expected at least one assignment event.');
+    }
+    const tools = new Map(
+      (await createWakeTools(this.stores, input))
+        .map((tool) => [tool.name, tool]),
+    );
+    await requireSuccessfulToolResult(tools.get('post_shared_message')!.execute({
+      reply_to_event_id: latestAssignment.sequence,
+      content: 'Looking for the refined current assignment.',
+      source_event_ids: assignmentEvents.map(({ sequence }) => sequence),
+    }));
+    return await runTestAgent(input, 'Published one coalesced network request.');
   }
 }
 
