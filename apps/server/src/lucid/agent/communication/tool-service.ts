@@ -21,10 +21,14 @@ import type {
   User,
 } from '../../discovery-types.js';
 import type { AgentCommunicationStore } from './store.js';
+import { AGENT_PRINCIPAL_EVENT_KINDS } from '../mailbox-policy.js';
 
 const readMessagesInputSchema = z.object({
   after_sequence: z.number().int().min(0).optional(),
   limit: z.number().int().min(1).max(30).default(15),
+});
+const readOpenRequestsInputSchema = z.object({
+  limit: z.number().int().min(1).max(15).default(10),
 });
 const sharedMessageInputSchema = z.object({
   reply_to_event_id: z.number().int().positive(),
@@ -81,6 +85,10 @@ export class AgentCommunicationToolService {
   private addressableAgentIds = new Set<string>();
   private pendingRequiredRequestSourceIds = new Set<number>();
   private pendingRequiredWorkingNoteSourceIds = new Set<number>();
+  private principalInputRequiresOpenRequestReview = false;
+  private openRequestsReviewed = false;
+  private reviewedOpenRequestSequences: number[] = [];
+  private openRequestAnswered = false;
 
   constructor(
     private readonly store: AgentCommunicationStore,
@@ -149,6 +157,12 @@ export class AgentCommunicationToolService {
         .filter(({ satisfied }) => !satisfied)
         .map(({ sequence }) => sequence),
     );
+    this.principalInputRequiresOpenRequestReview = visibleEvents.some(
+      (event) => (
+        event.kind === 'user_input'
+        && event.sequence > this.agent.lastSeenSequence
+      ),
+    );
     const encounteredAgentIds = new Set(visibleEvents.flatMap((event) => (
       event.actorAgentId && event.actorAgentId !== this.agent.id
         ? [event.actorAgentId]
@@ -188,6 +202,26 @@ export class AgentCommunicationToolService {
         execute: async (input) => this.readAvailableMessages(input),
       },
       {
+        name: 'read_open_requests',
+        description:
+          'Read peer-authored network requests this agent has not answered. When new private principal input arrives, review these requests before reporting an incoming finding or finishing. If the input gives a concrete answer, reply with the smallest relevant detail and preserve every uncertainty; never send a no-match response.',
+        capabilities: ['lucid.discovery.read'],
+        hostPolicy: READ_DISCOVERY_STATE_POLICY,
+        parameters: {
+          type: 'object',
+          properties: {
+            limit: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 15,
+              default: 10,
+            },
+          },
+          additionalProperties: false,
+        },
+        execute: async (input) => this.readOpenRequests(input),
+      },
+      {
         name: 'update_working_note',
         description:
           'Replace this agent’s private working note when new user input, feedback, or a concrete finding changes the ongoing assignment. Preserve what matters, what to avoid, and what to try next in ordinary language. The note is an interpretation, not verified fact.',
@@ -206,7 +240,7 @@ export class AgentCommunicationToolService {
       {
         name: 'post_shared_message',
         description:
-          'Publish a concise network request, substantive response, or contribution. reply_to_event_id identifies the request or principal event this message continues. source_event_ids identify the information used in the content. A request representing check_requested must carry its current working constraints instead of only repeating the original interest. When answering a peer request, contribute this user’s own context instead of relaying another agent’s answer. Never post merely to say that no match or example is available.',
+          'Publish a concise network request, substantive response, or contribution. reply_to_event_id identifies the request or principal event this message continues. source_event_ids identify peer events used in the content. A request representing check_requested must carry its current working constraints instead of only repeating the original interest. When answering a peer request from private principal context, leave source_event_ids empty, share only the minimum needed, and retain every stated limit on causality, generality, or evidence strength. Never post merely to say that no match or example is available.',
         capabilities: ['lucid.discovery.write'],
         hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
         parameters: {
@@ -346,6 +380,50 @@ export class AgentCommunicationToolService {
     };
   }
 
+  private async readOpenRequests(input: unknown): Promise<ToolResult> {
+    const parsed = readOpenRequestsInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return invalidInput(parsed.error);
+    }
+
+    const [visibleEvents, agents] = await Promise.all([
+      this.store.listEventsVisibleToAgent(
+        this.agent.id,
+        0,
+        1_000,
+        this.horizonSequence,
+      ),
+      this.store.listAgents(),
+    ]);
+    const requests = visibleEvents.filter((event) => (
+      event.kind === 'shared_message'
+      && event.actorAgentId !== this.agent.id
+      && event.metadata.messageRole === 'request'
+    ));
+    const unanswered = (await Promise.all(requests.map(async (request) => ({
+      request,
+      answered: await this.store.hasAgentContributedToRequestThread(
+        this.agent.id,
+        request.sequence,
+      ),
+    }))))
+      .filter(({ answered }) => !answered)
+      .map(({ request }) => request)
+      .slice(-parsed.data.limit);
+    const agentById = new Map(agents.map((agent) => [agent.id, agent]));
+
+    this.openRequestsReviewed = true;
+    this.reviewedOpenRequestSequences = unanswered.map(
+      ({ sequence }) => sequence,
+    );
+    return {
+      ok: true,
+      output: {
+        requests: unanswered.map((event) => projectEvent(event, agentById)),
+      },
+    };
+  }
+
   private async updateWorkingNote(input: unknown): Promise<ToolResult> {
     const parsed = workingNoteInputSchema.safeParse(input);
     if (!parsed.success) {
@@ -409,6 +487,12 @@ export class AgentCommunicationToolService {
     if (!replyToEvent.ok) {
       return replyToEvent.error;
     }
+    const messageRole = networkMessageRoleFor(replyToEvent.event);
+    const responseSourceFailure = await this
+      .validateSharedResponseSources(messageRole, sourceEventIds);
+    if (responseSourceFailure) {
+      return responseSourceFailure;
+    }
     const referenceFailure = this.validateTextEventReferences(
       parsed.data.content,
       parsed.data.reply_to_event_id,
@@ -457,9 +541,13 @@ export class AgentCommunicationToolService {
         visibility: 'shared',
         wakeId: this.wakeId,
         sourceEventIds,
-        messageRole: networkMessageRoleFor(replyToEvent.event),
+        messageRole,
       },
     });
+    if (messageRole === 'response') {
+      this.openRequestsReviewed = true;
+      this.openRequestAnswered = true;
+    }
     sourceEventIds.forEach((sequence) => {
       this.pendingRequiredRequestSourceIds.delete(sequence);
     });
@@ -535,7 +623,7 @@ export class AgentCommunicationToolService {
       return actionIndex;
     }
 
-    return eventResult(await this.store.appendCommunicationEvent({
+    const event = await this.store.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'direct_message',
       actorAgentId: this.agent.id,
@@ -550,7 +638,10 @@ export class AgentCommunicationToolService {
         sourceEventIds,
         messageRole: 'response',
       },
-    }));
+    });
+    this.openRequestsReviewed = true;
+    this.openRequestAnswered = true;
+    return eventResult(event);
   }
 
   private async reportFinding(input: unknown): Promise<ToolResult> {
@@ -565,6 +656,14 @@ export class AgentCommunicationToolService {
     const prerequisiteFailure = this.requireNetworkRequestFirst();
     if (prerequisiteFailure) {
       return prerequisiteFailure;
+    }
+    const openRequestReviewFailure = this.requireOpenRequestReview();
+    if (openRequestReviewFailure) {
+      return openRequestReviewFailure;
+    }
+    const outboundPriorityFailure = this.requireOutboundResponseBeforeFinding();
+    if (outboundPriorityFailure) {
+      return outboundPriorityFailure;
     }
     const sourceEventIds = uniq(parsed.data.source_event_ids);
     const sourceFailure = await this.validateSources(sourceEventIds);
@@ -585,16 +684,17 @@ export class AgentCommunicationToolService {
       this.agent.id,
       sourceEventIds,
     );
-    const hasPeerMessage = visibleSources.some((event) => (
-      event.actorAgentId
-      && event.actorAgentId !== this.agent.id
-      && ['shared_message', 'direct_message'].includes(event.kind)
+    const invalidSources = visibleSources.filter((event) => (
+      !event.actorAgentId
+      || event.actorAgentId === this.agent.id
+      || !['shared_message', 'direct_message'].includes(event.kind)
+      || event.metadata.messageRole === 'request'
     ));
-    if (!hasPeerMessage) {
+    if (invalidSources.length) {
       return {
         ok: false,
         error:
-          'A finding must cite at least one visible shared or direct message from another agent.',
+          'A finding may cite only peer-authored responses or contributions, never private principal input or a network request.',
       };
     }
     if (await this.store.hasUserFindingUsingAnyOrigin(
@@ -639,6 +739,10 @@ export class AgentCommunicationToolService {
     const prerequisiteFailure = this.requireNetworkRequestFirst();
     if (prerequisiteFailure) {
       return prerequisiteFailure;
+    }
+    const openRequestReviewFailure = this.requireOpenRequestReview();
+    if (openRequestReviewFailure) {
+      return openRequestReviewFailure;
     }
     const actionIndex = this.reserveMutation();
     if (typeof actionIndex !== 'number') {
@@ -739,6 +843,29 @@ export class AgentCommunicationToolService {
     };
   }
 
+  private requireOpenRequestReview(): ToolResult | undefined {
+    return this.principalInputRequiresOpenRequestReview
+      && !this.openRequestsReviewed
+      ? {
+          ok: false,
+          error:
+            'First use read_open_requests to compare the new private principal input with unanswered network requests. Reply when there is a concrete match; otherwise do not fabricate a response.',
+        }
+      : undefined;
+  }
+
+  private requireOutboundResponseBeforeFinding(): ToolResult | undefined {
+    return this.principalInputRequiresOpenRequestReview
+      && this.reviewedOpenRequestSequences.length > 0
+      && !this.openRequestAnswered
+      ? {
+          ok: false,
+          error:
+            'Before reporting an incoming finding, answer a matching request from the new private principal input. If none matches, use finish_without_action rather than consuming peer mail in this principal-input wake.',
+        }
+      : undefined;
+  }
+
   private requiredNetworkRequestError(): ToolResult {
     const sourceReferences = [...this.pendingRequiredRequestSourceIds]
       .sort((left, right) => left - right)
@@ -784,6 +911,30 @@ export class AgentCommunicationToolService {
       ? {
           ok: false,
           error: `Unknown or invisible source event sequences: ${unavailable.join(', ')}`,
+        }
+      : undefined;
+  }
+
+  private async validateSharedResponseSources(
+    messageRole: NetworkMessageRole,
+    sourceEventIds: number[],
+  ): Promise<ToolResult | undefined> {
+    if (messageRole !== 'response' || !sourceEventIds.length) {
+      return undefined;
+    }
+    const sources = await this.store.readVisibleEventsBySequence(
+      this.agent.id,
+      sourceEventIds,
+    );
+    const privatePrincipalSources = sources.filter((event) => (
+      event.targetAgentId === this.agent.id
+      && AGENT_PRINCIPAL_EVENT_KINDS.includes(event.kind)
+    ));
+    return privatePrincipalSources.length
+      ? {
+          ok: false,
+          error:
+            'A shared response cannot expose private principal event references. Use an empty source_event_ids array when the answer comes from this user’s private context.',
         }
       : undefined;
   }

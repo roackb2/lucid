@@ -22,6 +22,18 @@ messages addressed to it, and its own user's private inputs after the
 mailbox floor. Source IDs must resolve inside that same visible set. Recursive
 origin resolution prevents relays from appearing as independent evidence.
 
+`read_open_requests` projects only peer-authored request threads the current
+agent has not answered. A wake containing new private principal input must
+review that queue before it can report an incoming finding or finish quietly;
+the model still decides semantic relevance. When that review returns an open
+request, incoming Findings remain unavailable until the agent answers or ends
+the wake with no match. Findings accept only peer-authored responses or
+contributions as direct provenance, so private principal input cannot be echoed
+back as if the network discovered it. A shared response based on private
+principal context must also leave `source_event_ids` empty: the message
+discloses its deliberately minimized content, not a public link to the private
+event.
+
 `appendCommunicationEvent` accepts only working-note updates, shared or direct
 messages, findings, and no-action records. Other event kinds stay owned by
 their workspace, network, or wake stores, and the raw insert remains private.

@@ -147,7 +147,7 @@ You represent an explicitly simulated test user, not a real person or external s
     expect(prompt).toContain(`Finding #${finding.sequence}: Abandoned drafts may preserve useful decision context.`);
     expect(prompt).toContain(`User feedback: #${feedback.sequence}: Only report this direction again with a named workflow.`);
     expect(prompt).toContain('A different source is not automatically a new finding');
-    expect(prompt).toContain('Prioritize answering a matching peer request');
+    expect(prompt).toContain('Answer a matching peer request');
     expect(prompt).toContain('Never send a message merely to announce');
     expect(prompt).toContain('pending lead awaiting user feedback');
     expect(prompt).toContain(
@@ -160,6 +160,112 @@ You represent an explicitly simulated test user, not a real person or external s
     expect(prompt).toContain('report_finding never replies to the source agent.');
     expect(prompt.indexOf('Ongoing assignment context:'))
       .toBeLessThan(prompt.indexOf('Unread events visible to this agent:'));
+  });
+
+  it('reviews unanswered requests before a principal-input wake can consume peer mail', async () => {
+    const peer = await registerSynthetic(stores, 'longitudinal-return');
+    const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Find concrete patterns for preserving unfinished agent work.',
+    );
+    const request = await stores.communication.appendCommunicationEvent({
+      kind: 'shared_message',
+      actorAgentId: LOCAL_AGENT_ID,
+      replyToSequence: interest.sequence,
+      title: 'Lucid posts a shared request',
+      content: 'Who has a concrete pattern for preserving unfinished agent work?',
+      metadata: { messageRole: 'request', sourceEventIds: [interest.sequence] },
+    });
+    const privateInput = await stores.network.saveUserInput(
+      peer.user.id,
+      'A builder replaced persona setup with an active-problem prompt and a returning-work queue after unfinished handoffs disappeared.',
+      'longitudinal-return:input:1',
+    );
+    const tools = toolsByName(await new AgentCommunicationToolService(
+      stores.communication,
+      peer.agent,
+      peer.user,
+      'wake_longitudinal_return',
+      1,
+      privateInput.sequence,
+    ).definitions());
+
+    expect(await tools.get('report_finding')!.execute({
+      content: 'The network is looking for unfinished-work patterns.',
+      source_event_ids: [request.sequence],
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('read_open_requests'),
+    });
+    expect(await tools.get('read_open_requests')!.execute({ limit: 5 }))
+      .toMatchObject({
+        ok: true,
+        output: {
+          requests: [{ sequence: request.sequence }],
+        },
+      });
+    expect(await tools.get('report_finding')!.execute({
+      content: 'Incoming findings wait until the outbound request is resolved.',
+      source_event_ids: [request.sequence],
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('answer a matching request'),
+    });
+    expect(await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: request.sequence,
+      content: 'A response cannot publicly link its private principal input.',
+      source_event_ids: [privateInput.sequence],
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('private principal'),
+    });
+    expect((await tools.get('post_shared_message')!.execute({
+      reply_to_event_id: request.sequence,
+      content:
+        'A simulated builder replaced persona setup with an active-problem prompt and a returning-work queue after unfinished handoffs disappeared; the observation came from a support conversation, not analytics.',
+      source_event_ids: [],
+    })).ok).toBe(true);
+
+    const laterTools = toolsByName(await new AgentCommunicationToolService(
+      stores.communication,
+      peer.agent,
+      peer.user,
+      'wake_longitudinal_return_later',
+      2,
+      Number.MAX_SAFE_INTEGER,
+    ).definitions());
+    expect(await laterTools.get('read_open_requests')!.execute({ limit: 5 }))
+      .toMatchObject({ ok: true, output: { requests: [] } });
+  });
+
+  it('rejects private principal input as finding provenance', async () => {
+    const peer = await registerSynthetic(stores, 'finding-private-source');
+    const peerMessageEvent = await peerMessage(
+      stores,
+      peer.agent.id,
+      LOCAL_AGENT_ID,
+      'A peer supplied one concrete network observation.',
+    );
+    const privateInput = await stores.network.saveUserInput(
+      LOCAL_USER_ID,
+      'This private correction belongs to the principal, not the network.',
+      'finding-private-source:input:1',
+    );
+    const tools = toolsByName(await createUserTools(
+      stores,
+      'wake_finding_private_source',
+      1,
+      privateInput.sequence,
+    ));
+    expect((await tools.get('read_open_requests')!.execute({})).ok).toBe(true);
+
+    expect(await tools.get('report_finding')!.execute({
+      content: 'A finding cannot present private principal input as peer evidence.',
+      source_event_ids: [peerMessageEvent.sequence, privateInput.sequence],
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('only peer-authored'),
+    });
   });
 
   it('keeps reads and source references inside the claimed wake horizon', async () => {

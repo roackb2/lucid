@@ -270,7 +270,7 @@ implements AgentCommunicationStore {
   async hasAgentContributedToRequestThread(
     agentId: string,
     replyToSequence: number,
-    currentWakeId: string,
+    excludedWakeId?: string,
   ): Promise<boolean> {
     const requestRoot = await this.findReplyThreadRoot(replyToSequence);
     if (!requestRoot) {
@@ -289,7 +289,9 @@ implements AgentCommunicationStore {
         ),
       )))
       .map(toDiscoveryEvent)
-      .filter((event) => event.metadata.wakeId !== currentWakeId);
+      .filter((event) => (
+        !excludedWakeId || event.metadata.wakeId !== excludedWakeId
+      ));
     return (await Promise.all(priorMessages.map(
       async (event) => await this.findReplyThreadRoot(event.sequence),
     ))).some((root) => root === requestRoot);
