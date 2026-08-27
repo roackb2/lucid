@@ -210,6 +210,47 @@ export const defineLucidStoreContract = (
     expect(snapshot).not.toHaveProperty('events');
   });
 
+  it('limits genuine findings after excluding legacy quiet checks', async () => {
+    const source = await registerSynthetic(stores, 'finding-limit-source');
+    const sourceMessage = await stores.communication.appendCommunicationEvent({
+      kind: 'direct_message',
+      actorAgentId: source.agent.id,
+      targetAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
+      title: 'A genuine network contribution',
+      content: 'A durable agent kept its product memory outside the execution host.',
+    });
+    const genuineFinding = await stores.communication.appendCommunicationEvent({
+      kind: 'finding_reported',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
+      title: 'A genuine older finding',
+      content: 'Durable product memory can remain independent of execution.',
+      metadata: { sourceEventIds: [sourceMessage.sequence] },
+    });
+
+    await Promise.all(Array.from({ length: 12 }, async (_, index) => (
+      await stores.communication.appendCommunicationEvent({
+        kind: 'finding_reported',
+        actorAgentId: LOCAL_AGENT_ID,
+        targetUserId: LOCAL_USER_ID,
+        title: `Legacy quiet check ${index + 1}`,
+        content: 'No relevant network contribution surfaced.',
+        metadata: { noMatch: true, sourceEventIds: [] },
+      })
+    )));
+
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).findings)
+      .toEqual([
+        expect.objectContaining({
+          finding: expect.objectContaining({
+            sequence: genuineFinding.sequence,
+          }),
+          noMatch: false,
+        }),
+      ]);
+  });
+
   it('projects the latest user-owned network request lifecycle', async () => {
     const source = await registerSynthetic(stores, 'request-source');
     const interest = await stores.workspace.saveInterest(

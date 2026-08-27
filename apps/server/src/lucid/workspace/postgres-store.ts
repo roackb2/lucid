@@ -11,6 +11,7 @@ import {
   lte,
   ne,
   or,
+  sql,
 } from 'drizzle-orm';
 import {
   type AppendDiscoveryEventInput,
@@ -487,6 +488,9 @@ implements DiscoveryWorkspaceStore {
         eq(discoveryEvents.kind, 'finding_reported'),
         eq(discoveryEvents.targetUserId, userId),
         lte(discoveryEvents.sequence, throughSequence),
+        // Legacy quiet outcomes are completion facts, not findings. Exclude
+        // them in PostgreSQL so they cannot consume the bounded result window.
+        sql`${discoveryEvents.metadata} ->> 'noMatch' is distinct from 'true'`,
       ))
       .orderBy(desc(discoveryEvents.sequence))
       .limit(FINDING_LIMIT))
