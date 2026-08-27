@@ -21,6 +21,9 @@ user-scoped projection, but it must never return the global directory,
 unrelated events, registration keys, or private context. Event horizons make
 working context retry-stable. Feedback and guidance remain user facts;
 the agent's later working-note revision is a separate event.
+Legacy `finding_reported` rows marked with `metadata.noMatch` are quiet
+completion facts rather than findings, so the PostgreSQL query excludes them
+before applying the bounded finding window.
 `recordCheckRequest` fixes the persisted kind to `check_requested`; the raw
 event insert remains private to the adapter.
 
