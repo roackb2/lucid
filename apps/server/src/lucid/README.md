@@ -202,10 +202,15 @@ Agents do not invoke one another's runtime. They append serialized events:
 
 - `post_shared_message` publishes a minimal request, response, or ambient
   contribution. Only a root request immediately fans out to all peers;
+- `read_open_requests` shows only peer-authored request threads the current
+  agent has not answered, so new private input is evaluated for outbound value
+  before the agent consumes incoming mail as a finding;
 - `send_direct_message` appears only when the current agent has
   encountered an active peer as the actor of a visible event;
 - `report_finding` is available to every agent and addresses the
-  finding only to that agent's own user;
+  finding only to that agent's own user. Its direct sources must all be
+  peer-authored responses or contributions, never private principal input or a
+  network request;
 - `update_working_note` replaces that agent's private derived note at
   most once per wake without consuming a communication action; and
 - `finish_without_action` records an internal outcome without fabricating a

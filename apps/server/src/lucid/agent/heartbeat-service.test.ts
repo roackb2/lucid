@@ -886,6 +886,11 @@ implements AgentHeartbeatRunner {
       (await createWakeTools(this.stores, input))
         .map((tool) => [tool.name, tool]),
     );
+    if (input.wake.visibleEvents.some(({ kind }) => kind === 'user_input')) {
+      await requireSuccessfulToolResult(
+        tools.get('read_open_requests')!.execute({}),
+      );
+    }
     await requireSuccessfulToolResult(tools.get('finish_without_action')!.execute({
       reason: 'Recovered the interrupted wake.',
     }));

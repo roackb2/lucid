@@ -51,7 +51,7 @@ export interface AgentCommunicationStore {
   hasAgentContributedToRequestThread(
     agentId: string,
     replyToSequence: number,
-    currentWakeId: string,
+    excludedWakeId?: string,
   ): Promise<boolean>;
   appendCommunicationEvent(
     input: AppendCommunicationEventInput,
