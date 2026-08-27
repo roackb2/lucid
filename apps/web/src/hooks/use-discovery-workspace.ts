@@ -38,7 +38,7 @@ export function useDiscoveryWorkspace() {
     onSuccess: (nextSnapshot) => {
       installSnapshot(nextSnapshot);
       toast.success(
-        'Interest saved. Your agent is preparing a network request.',
+        'Current interest saved. Your agent will use it in future work.',
       );
     },
     onError: notifyError,

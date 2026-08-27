@@ -104,7 +104,12 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
   }
 
   return (
-    <LucidAppShell snapshot={snapshot} onSignOut={onSignOut} />
+    <LucidAppShell
+      isSavingInterest={discovery.saveInterest.isPending}
+      onSaveInterest={discovery.saveInterest.mutateAsync}
+      onSignOut={onSignOut}
+      snapshot={snapshot}
+    />
   );
 }
 

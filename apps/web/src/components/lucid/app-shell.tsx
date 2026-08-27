@@ -29,6 +29,8 @@ import {
 
 type LucidAppShellProps = {
   snapshot: DiscoverySnapshot;
+  isSavingInterest: boolean;
+  onSaveInterest(content: string): Promise<unknown>;
   onSignOut?: () => Promise<void>;
 };
 
@@ -53,7 +55,12 @@ const routeLabels = new Map([
   ['/settings', 'Settings'],
 ]);
 
-export function LucidAppShell({ snapshot, onSignOut }: LucidAppShellProps) {
+export function LucidAppShell({
+  isSavingInterest,
+  onSaveInterest,
+  onSignOut,
+  snapshot,
+}: LucidAppShellProps) {
   const location = useLocation();
   const pageLabel = routeLabels.get(location.pathname) ?? 'Reports';
   const agentState = resolveAgentState(snapshot);
@@ -124,8 +131,8 @@ export function LucidAppShell({ snapshot, onSignOut }: LucidAppShellProps) {
               <strong>{snapshot.interest?.title ?? 'No interest saved'}</strong>
               <small>
                 {snapshot.interest
-                  ? 'Experimental backend record'
-                  : 'Ready when the product shape is clearer'}
+                  ? 'Used for background discovery'
+                  : 'Set the first current interest'}
               </small>
             </span>
           </NavLink>
@@ -199,7 +206,13 @@ export function LucidAppShell({ snapshot, onSignOut }: LucidAppShellProps) {
             />
             <Route
               path="/interests"
-              element={<InterestsFoundationPage snapshot={snapshot} />}
+              element={(
+                <InterestsFoundationPage
+                  isSaving={isSavingInterest}
+                  onSaveInterest={onSaveInterest}
+                  snapshot={snapshot}
+                />
+              )}
             />
             <Route
               path="/agent"
