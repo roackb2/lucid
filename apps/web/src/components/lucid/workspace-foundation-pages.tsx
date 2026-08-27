@@ -2,12 +2,12 @@ import {
   Activity,
   Bot,
   FileText,
-  Lightbulb,
   Search,
   Settings,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { DiscoverySnapshot } from '@/lib/trpc';
+import { CurrentInterestEditor } from './current-interest-editor';
 import { NetworkFindingsLibrary } from './network-findings-library';
 
 type FoundationPageProps = {
@@ -57,50 +57,26 @@ export function FindingsFoundationPage({ snapshot }: FoundationPageProps) {
   );
 }
 
-export function InterestsFoundationPage({ snapshot }: FoundationPageProps) {
+export function InterestsFoundationPage({
+  isSaving,
+  onSaveInterest,
+  snapshot,
+}: FoundationPageProps & {
+  isSaving: boolean;
+  onSaveInterest(content: string): Promise<unknown>;
+}) {
   return (
     <PageFrame
       eyebrow="What the agent should care about"
       title="Interests"
-      description="Durable areas of curiosity or need. This page is intentionally waiting for us to decide whether several can be active at once."
+      description="Lucid keeps one current Interest in focus for this experiment. Refine it whenever you want your agent’s future background work to change."
+      badge="Current scope · real data"
     >
-      {snapshot.interest ? (
-        <section className="existing-record">
-          <div className="existing-record__heading">
-            <span className="existing-record__icon" aria-hidden="true">
-              <Lightbulb />
-            </span>
-            <div>
-              <span>Current experimental assignment</span>
-              <h2>{snapshot.interest.title}</h2>
-            </div>
-          </div>
-          <p>{snapshot.interest.content}</p>
-          <footer>
-            <span>Existing backend shape</span>
-            <span>Not yet migrated into an Interest product contract</span>
-          </footer>
-        </section>
-      ) : (
-        <FoundationPanel
-          title="No current experimental assignment"
-          description="Creating an Interest will be added after its lifecycle and cardinality are decided."
-          icon={<Lightbulb />}
-        />
-      )}
-      <div className="foundation-layout foundation-layout--split">
-        <FoundationPanel
-          title="Interest list"
-          description="Active, paused, and archived interests will be organized here if the multi-interest direction is accepted."
-          icon={<Lightbulb />}
-        />
-        <FoundationPanel
-          title="Interest detail"
-          description="Purpose, agent direction, related reports, and background-work state will share one context."
-          icon={<FileText />}
-          muted
-        />
-      </div>
+      <CurrentInterestEditor
+        interest={snapshot.interest}
+        isSaving={isSaving}
+        onSave={onSaveInterest}
+      />
     </PageFrame>
   );
 }
