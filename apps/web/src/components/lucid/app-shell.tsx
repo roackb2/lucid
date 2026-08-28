@@ -29,8 +29,14 @@ import {
 
 type LucidAppShellProps = {
   snapshot: DiscoverySnapshot;
+  isRetryingCurrentWake: boolean;
+  isRunningNow: boolean;
   isSavingInterest: boolean;
+  isUpdatingBackground: boolean;
+  onRetryCurrentWake(): Promise<unknown>;
+  onRunNow(): Promise<unknown>;
   onSaveInterest(content: string): Promise<unknown>;
+  onSetBackgroundChecksEnabled(enabled: boolean): Promise<unknown>;
   onSignOut?: () => Promise<void>;
 };
 
@@ -56,8 +62,14 @@ const routeLabels = new Map([
 ]);
 
 export function LucidAppShell({
+  isRetryingCurrentWake,
+  isRunningNow,
   isSavingInterest,
+  isUpdatingBackground,
+  onRetryCurrentWake,
+  onRunNow,
   onSaveInterest,
+  onSetBackgroundChecksEnabled,
   onSignOut,
   snapshot,
 }: LucidAppShellProps) {
@@ -216,7 +228,19 @@ export function LucidAppShell({
             />
             <Route
               path="/agent"
-              element={<AgentFoundationPage snapshot={snapshot} />}
+              element={(
+                <AgentFoundationPage
+                  isRetrying={isRetryingCurrentWake}
+                  isRunningNow={isRunningNow}
+                  isUpdatingBackground={isUpdatingBackground}
+                  onRetry={onRetryCurrentWake}
+                  onRunNow={onRunNow}
+                  onSetBackgroundChecksEnabled={
+                    onSetBackgroundChecksEnabled
+                  }
+                  snapshot={snapshot}
+                />
+              )}
             />
             <Route
               path="/settings"

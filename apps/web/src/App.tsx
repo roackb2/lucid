@@ -105,8 +105,18 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
 
   return (
     <LucidAppShell
+      isRetryingCurrentWake={discovery.retryCurrentWake.isPending}
+      isRunningNow={discovery.runNow.isPending}
       isSavingInterest={discovery.saveInterest.isPending}
+      isUpdatingBackground={
+        discovery.setBackgroundChecksEnabled.isPending
+      }
+      onRetryCurrentWake={() => discovery.retryCurrentWake.mutateAsync()}
+      onRunNow={() => discovery.runNow.mutateAsync()}
       onSaveInterest={discovery.saveInterest.mutateAsync}
+      onSetBackgroundChecksEnabled={
+        discovery.setBackgroundChecksEnabled.mutateAsync
+      }
       onSignOut={onSignOut}
       snapshot={snapshot}
     />
