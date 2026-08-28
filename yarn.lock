@@ -618,10 +618,10 @@
   resolved "https://registry.yarnpkg.com/@esbuild/win32-x64/-/win32-x64-0.27.7.tgz#8fe30b3088b89b4873c3a6cc87597ae3920c0a8b"
   integrity sha512-56hiAJPhwQ1R4i+21FVF7V8kSD5zZTdHcVuRFMW0hn753vVfQN8xlx4uOPT4xoGH0Z/oVATuR82AiqSTDIpaHg==
 
-"@heddleagent/execution-host-client@6.6.1":
-  version "6.6.1"
-  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-6.6.1.tgz#933db81711f62ccae601159eb89a2fb7f3d31d37"
-  integrity sha512-djQq9f9zKn2Kyx9OSHbyuJ8oZ1ARaNVd/on7qW+nWAqwZHN8h7AYKaG8NKH6MTOyL9UgOEZneLgyQGFeUBqskQ==
+"@heddleagent/execution-host-client@7.0.0":
+  version "7.0.0"
+  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-7.0.0.tgz#5d402bdc29ab4d2888e3ed747d8693620cc11c46"
+  integrity sha512-ZvZ97WvIr9N1fqF1QgHbTK6dcpVmYRVM9zr/y+UVPQbHKXPcwu1lO065krvXMuKIjXmZa64KOB7sBUKW2z0zRQ==
   dependencies:
     "@aws-sdk/client-bedrock-agentcore" "^3.1107.0"
     "@modelcontextprotocol/sdk" "^1.29.0"
@@ -638,10 +638,10 @@
   dependencies:
     dayjs "^1.11.20"
 
-"@heddleagent/runtime@6.3.0":
-  version "6.3.0"
-  resolved "https://registry.npmjs.org/@heddleagent/runtime/-/runtime-6.3.0.tgz#85af25ab7ade1bee47a1a2ce73d989d3b0767f11"
-  integrity sha512-In4pqyHJiCXZAHADBiDtfx82xGj6F+dwkGXVKjKkiKEt15bDwokvuYR1EfQq7v2cvf1dorG/1g408zD/GbRBLg==
+"@heddleagent/runtime@6.7.0":
+  version "6.7.0"
+  resolved "https://registry.npmjs.org/@heddleagent/runtime/-/runtime-6.7.0.tgz#0419738c7493b7936efba425cfe7a21cdc9dd150"
+  integrity sha512-vKv/lAmGn4QJc1BK2LzQtEZEAafJ83eKadWFCPkcfG2PRCtWkkYpWeBE8J0zIRhFMWcavk6SJNlBsbG5xushLw==
   dependencies:
     "@anthropic-ai/sdk" "^0.54.0"
     "@modelcontextprotocol/sdk" "^1.29.0"

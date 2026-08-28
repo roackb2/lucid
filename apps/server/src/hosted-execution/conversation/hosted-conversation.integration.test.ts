@@ -96,7 +96,10 @@ describe('Lucid hosted conversation control-plane round trip', () => {
     });
     const modelApiKey = 'model-key-local-round-trip';
     const modelCredentials = {
-      resolveModelApiKey: vi.fn(async () => modelApiKey),
+      resolveModelCredential: vi.fn(async () => ({
+        type: 'api-key' as const,
+        apiKey: modelApiKey,
+      })),
     };
     const service = new HostedConversationTurnService({
       authority,
@@ -146,7 +149,7 @@ describe('Lucid hosted conversation control-plane round trip', () => {
         'local-discovery-workspace',
       );
       expect(source.snapshot).toHaveBeenCalledOnce();
-      expect(modelCredentials.resolveModelApiKey).toHaveBeenCalledOnce();
+      expect(modelCredentials.resolveModelCredential).toHaveBeenCalledOnce();
       expect(safeInvocationMetadata).toBe(JSON.stringify({
         schemaVersion: 1,
         kind: 'conversation-turn',

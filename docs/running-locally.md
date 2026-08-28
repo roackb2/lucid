@@ -10,7 +10,8 @@ histories.
 - Node.js 22
 - Yarn 1.22
 - PostgreSQL 14 or newer
-- a local or managed Heddle Execution Host and Coordinator checkout;
+- the `lucid-deployment` checkout for the standard local Runtime and
+  Coordinator composition;
 - a model credential supplied to the hosted profile and Coordinator through
   their documented secret inputs
 
@@ -43,16 +44,17 @@ LUCID_AUTH_MODE=development
 Development authentication is rejected when the server binds to a non-loopback
 host.
 
-Apply Lucid's checked-in migrations first. Then apply the Coordinator's
-checked-in migration against the same application database; it recreates the
-two heartbeat tables under the Coordinator's separate Drizzle history. Start
-the Runtime and Coordinator before the Lucid API and web app:
+Apply Lucid's checked-in migrations first. Then follow
+`lucid-deployment/operations/lucid-local/README.md` to initialize credentials,
+configure the two operator-only secret files, and start the Runtime and
+Coordinator. Its Compose project runs the Coordinator's one-shot migration
+against the same application database before starting the service:
 
 ```bash
 yarn server:db:migrate
-# From the Heddle Execution Host checkout:
-yarn coordinator:migrate
-# Start its Runtime and Coordinator, then return here:
+# From the lucid-deployment checkout:
+yarn local:heddle:up
+# Then return here:
 yarn dev
 ```
 
@@ -174,18 +176,63 @@ loopback-only in every authentication mode.
 
 ## Required external Execution Host
 
-Generate Lucid's ignored local signing key once:
+Lucid uses the isolated Execution Host over direct HTTP without AgentCore, AWS
+credentials, or a local model. The browser calls Lucid; Lucid signs the
+user-scoped invocation, supplies an access-token-only view of the user's
+existing Heddle Codex login, and durably consumes the Runtime's SSE stream.
+
+Runtime and Coordinator deployables belong to the private Execution Host, but
+Lucid's concrete lifecycle and wiring belong to the private
+`lucid-deployment` repository. Its `operations/lucid-local/README.md` records
+the one-time image build and setup. The deployment keeps its Heddle-only
+database URL and heartbeat model key in ignored files, not environment values.
+Then run:
 
 ```bash
-yarn hosted:generate-key
+cd /path/to/lucid-deployment
+yarn install
+yarn local:heddle:credentials
+yarn local:heddle:config
+yarn local:heddle:up
 ```
 
-Then enable the complete profile in `.env`. The raw local token must match the
-token whose SHA-256 digest is configured in the private Execution Host; the two
-audiences, adopter ID, MCP server ID, issuer, JWKS URL, and MCP URL must also
-match exactly. Lucid deletes the raw local token and model key from its process
-environment after startup and retains them only in non-enumerable credential
-objects for outbound calls.
+The narrow Heddle CLI creates or validates a generic owner-only credential
+bundle without printing values. Copy the deployment's `lucid.env.example` to
+this checkout as `.env.heddle.local` and set its one absolute bundle-directory
+path. Docker Compose then starts the prebuilt database-free Runtime plus one
+Lucid-scoped Coordinator, using a one-shot migration service and health-gated
+dependencies. It does not create, reset, or replace a database. The
+Coordinator database URL must address this application's `heddle` boundary in
+the same physical product database; another application must use its own
+database and Coordinator.
+
+Start Lucid normally in its own terminal:
+
+```bash
+yarn dev
+```
+
+Lucid loads `.env.heddle.local` before `.env`. Shell variables keep highest
+precedence. The credential-directory profile supplies safe local defaults;
+Lucid's authentication, product database, model, and other product settings
+remain in `.env`.
+
+Do not set `LUCID_HOSTED_EXECUTION_MODEL_API_KEY` for Codex subscription mode.
+Lucid uses the OpenAI credential already stored at
+`LUCID_STATE_ROOT/heddle/auth.json`; the default location is
+`local/discovery-home/heddle/auth.json`. Heddle keeps and refreshes the refresh
+token in Lucid's process. Only the short-lived access token, expiry, and
+optional account identifier cross the authenticated Runtime request. If this
+store has no login, Lucid rejects the turn with an explicit reconnect error
+instead of falling back to Ollama or an ambient API key.
+
+Operate the exact local stack from the `lucid-deployment` repository:
+
+```bash
+yarn local:heddle:status
+yarn local:heddle:logs
+yarn local:heddle:down
+```
 
 The user endpoint is:
 
@@ -201,38 +248,35 @@ It returns the versioned Execution Host SSE stream. Lucid additionally serves
 `POST /hosted-execution/mcp` endpoint; neither endpoint exposes the signing
 key or database credential.
 
-An isolated Docker container cannot reach a host-machine Lucid server through
-`127.0.0.1`; that address is the container itself. For a real container smoke,
-set `LUCID_HOSTED_EXECUTION_PUBLIC_URL` to an HTTPS origin reachable from the
-container and configure the host's JWKS and MCP URLs from that same origin. If
-a tunnel or reverse proxy makes Lucid reachable beyond this machine, switch to
-`static-token` authentication; a loopback proxy must never turn arbitrary
-Internet callers into the development identity. Do not weaken the host's
-non-loopback TLS check or run its shell-enabled workstation natively just to
-avoid this boundary. The deterministic integration suite exercises the
-complete HTTP/JWKS/MCP/SSE composition without a model; the isolated-container
-smoke remains separate evidence.
+Inside Docker, `127.0.0.1` names the container. The deployment composition keeps
+Lucid's authority issuer on loopback and explicitly configures Docker Desktop's
+`host.docker.internal` alias for Runtime-to-Lucid JWKS and MCP callbacks.
+Lucid's browser origin and outbound Runtime URL remain loopback. Other non-TLS
+hosts are rejected. If a tunnel or
+reverse proxy makes Lucid reachable beyond this machine, switch to
+`static-token` authentication; a proxy must never turn Internet callers into
+the development identity. Do not run the shell-enabled Runtime natively merely
+to avoid its container isolation boundary.
 
 For the portable ARM64 image, AgentCore transport variables, and explicit
 hosted migration sequence, see [Deploying the Lucid pilot](deploying.md).
 
 ### Required local heartbeat coordinator
 
-The local architecture gate uses the same direct Runtime for foreground turns
-and coordinator heartbeats. Configure the distinct delegation token,
-coordinator URL, and coordinator API token shown in `.env.example`. Start the
-Runtime and coordinator before Lucid; Lucid opens its JWKS/MCP/delegation
-routes, pauses coordinator admission, reconciles the desired task catalog, and
-resumes only when the product-wide background-work gate is enabled.
+The Heddle command above uses the same direct Runtime for foreground turns and
+Coordinator heartbeats. Lucid opens its JWKS, MCP, and delegation routes;
+pauses Coordinator admission; reconciles the desired task catalog; and resumes
+only when the product-wide background-work gate is enabled.
 
-This gate proves service boundaries and durable Heddle task settlement.
-Lucid's product trigger/status and preference controls always use the
-coordinator API; missing configuration fails startup. The coordinator path
-currently has only the read-only workspace capability. State-changing network,
-working-note, and finding operations remain a scoped, claim-fenced MCP follow-up.
-The exact container networking command is intentionally not prescribed until
-the real Runtime can reach Lucid's loopback MCP/JWKS endpoints without
-weakening the Runtime's non-loopback TLS rule.
+The Coordinator owns Lucid's Heddle heartbeat tables, claims, checkpoints,
+recovery, and settlement through its authenticated API. It does not manage
+other applications or relay foreground Chat. The Runtime never receives a
+database credential. The first local proof may reuse Lucid's broader database
+credential in memory; production must use the Heddle-only Coordinator
+credential. Missing Runtime or Coordinator configuration fails startup. The
+currently integrated agent capability is read-only workspace access;
+state-changing network, working-note, and finding operations remain a scoped,
+claim-fenced MCP follow-up.
 
 ## Checks
 

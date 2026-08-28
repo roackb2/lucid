@@ -33,7 +33,10 @@ const TRPC_BASE_PATH = '/api/trpc/';
 const config = resolveLucidConfig();
 const hostedExecutionConfig = resolveHostedExecutionConfig(
   process.env,
-  config.repoRoot,
+  {
+    repoRoot: config.repoRoot,
+    model: config.model,
+  },
 );
 if (!hostedExecutionConfig?.heartbeatCoordinator) {
   throw new Error(

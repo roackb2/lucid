@@ -6,6 +6,7 @@ Thumbs.db
 
 # Environment
 .env
+.env.heddle.local
 !.env.example
 
 # Dependencies and build output

@@ -35,6 +35,15 @@ configured host through either the strict direct HTTP/SSE adapter or the
 AgentCore AWS SDK adapter without importing private host code or sending a
 database credential.
 
+Model access is also request-scoped. By default Lucid asks Heddle to acquire a
+fresh access-token-only credential from Lucid's existing OpenAI/Codex account
+store. Heddle owns refresh and persistence at the Lucid boundary; neither the
+Execution Host client nor Runtime receives refresh material. An explicitly
+configured `LUCID_HOSTED_EXECUTION_MODEL_API_KEY` selects API-key mode instead.
+The direct local profile can reach Lucid's JWKS and MCP endpoints through the
+exact Docker Desktop `host.docker.internal` alias while keeping the browser and
+Lucid-to-Runtime call on loopback.
+
 The local control-plane contract test runs the package-owned
 `HostedConversationTurnService` through the public adopter contract fixture.
 It mints real execution and MCP authority, traverses the strict HTTP/SSE wire,
@@ -155,6 +164,8 @@ public `ExecutionHost` port without exposing host internals.
   it receives a short-lived execution bundle only after claiming one task.
 - Secrets do not enter prompts, filesystem snapshots, child-process
   environments, traces, logs, or streamed activity.
+- OAuth refresh material remains in Lucid's Heddle credential store; only one
+  validated access-token credential crosses an invocation header.
 - An accepted stream that ends without a terminal event is interrupted or
   unknown, never successful and never automatically replayed.
 - AgentCore isolation is an additional tenant boundary, not a replacement for

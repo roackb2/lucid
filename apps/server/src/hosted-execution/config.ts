@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   McpServerIdSchema,
   OpaqueIdSchema,
@@ -10,37 +10,56 @@ import {
   AgentCoreRuntimeArnSchema,
 } from '@heddleagent/execution-host-client/agentcore';
 import type {
-  HostedConversationModelCredentialProvider,
+  HostedModelCredentialProvider,
 } from '@heddleagent/execution-host-client/conversation';
 import {
-  takeHostedHeartbeatServiceToken,
-} from '@heddleagent/execution-host-client/coordinator/node';
-import { DirectExecutionHostCredentials } from '@heddleagent/execution-host-client/node';
+  DirectExecutionHostCredentials,
+  LOCAL_CREDENTIAL_BUNDLE_FILES,
+  takeEnvironmentValuesOrFiles,
+} from '@heddleagent/execution-host-client/node';
 import { z } from 'zod';
-import { EnvironmentHostedModelCredentials } from './model-credentials.js';
+import {
+  EnvironmentHostedModelCredentials,
+  HeddleStoredOAuthModelCredentials,
+} from './model-credentials.js';
 
 const ENABLED_ENV = 'LUCID_HOSTED_EXECUTION_ENABLED';
+const CREDENTIAL_DIRECTORY_ENV =
+  'LUCID_HOSTED_EXECUTION_CREDENTIAL_DIRECTORY';
 const SECRET_ENV_NAMES = [
   'LUCID_HOSTED_EXECUTION_LOCAL_TOKEN',
   'LUCID_HOSTED_EXECUTION_MODEL_API_KEY',
   'LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN',
   'LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN',
 ] as const;
-const DIRECT_CREDENTIAL_ENV_NAMES = Object.freeze({
-  localToken: SECRET_ENV_NAMES[0],
-  modelApiKey: SECRET_ENV_NAMES[1],
-});
-const HEARTBEAT_COORDINATOR_TOKEN_ENV = SECRET_ENV_NAMES[2];
-const HEARTBEAT_COORDINATOR_API_TOKEN_ENV = SECRET_ENV_NAMES[3];
+const LOCAL_BUNDLE_SECRET_FILES = [
+  [
+    SECRET_ENV_NAMES[0],
+    LOCAL_CREDENTIAL_BUNDLE_FILES.executionHostLocalToken,
+  ],
+  [
+    SECRET_ENV_NAMES[2],
+    LOCAL_CREDENTIAL_BUNDLE_FILES.coordinatorAdopterDelegationToken,
+  ],
+  [
+    SECRET_ENV_NAMES[3],
+    LOCAL_CREDENTIAL_BUNDLE_FILES.coordinatorApiToken,
+  ],
+] as const;
+const MODEL_CREDENTIAL_COMPLETION_MARGIN_MS = 60_000;
 const HostedExecutionEnvironmentSchema = z.object({
   LUCID_HOSTED_EXECUTION_ENABLED: z.literal('true'),
+  LUCID_HOSTED_EXECUTION_CREDENTIAL_DIRECTORY: z.string().trim().min(1)
+    .optional(),
+  LUCID_STATE_ROOT: z.string().trim().min(1).optional(),
   LUCID_HOSTED_EXECUTION_TRANSPORT: z.enum(['direct', 'agentcore'])
     .default('direct'),
   LUCID_HOSTED_EXECUTION_PUBLIC_URL: z.url(),
   LUCID_HOSTED_EXECUTION_HOST_URL: z.url().optional(),
   LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: z.string().trim().min(32).max(4_096)
     .optional(),
-  LUCID_HOSTED_EXECUTION_MODEL_API_KEY: z.string().trim().min(8).max(4_096),
+  LUCID_HOSTED_EXECUTION_MODEL_API_KEY: z.string().trim().min(8).max(4_096)
+    .optional(),
   LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN: z.string().trim().min(32)
     .max(4_096),
   LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: z.url(),
@@ -196,7 +215,7 @@ export type HostedExecutionConfig = {
   mcpServerId: string;
   maxTurnMs: number;
   transport: HostedExecutionTransportConfig;
-  modelCredentials: HostedConversationModelCredentialProvider;
+  modelCredentials: HostedModelCredentialProvider;
   heartbeatDelegationToken: string;
   heartbeatCoordinator: {
     baseUrl: URL;
@@ -207,7 +226,10 @@ export type HostedExecutionConfig = {
 /** Resolves one optional hosted profile and removes credentials from env. */
 export function resolveHostedExecutionConfig(
   environment: NodeJS.ProcessEnv = process.env,
-  repoRoot: string,
+  runtime: {
+    repoRoot: string;
+    model: string;
+  },
 ): HostedExecutionConfig | undefined {
   const enabled = environment[ENABLED_ENV]?.trim() ?? 'false';
   if (enabled === 'false') {
@@ -218,26 +240,34 @@ export function resolveHostedExecutionConfig(
     throw new Error(`${ENABLED_ENV} must be true or false.`);
   }
 
-  const parsed = HostedExecutionEnvironmentSchema.parse(environment);
+  applyLocalCredentialBundleDefaults(environment, runtime.repoRoot);
+  const secretValues = takeEnvironmentValuesOrFiles(
+    environment,
+    SECRET_ENV_NAMES,
+  );
+  const parsed = HostedExecutionEnvironmentSchema.parse({
+    ...environment,
+    ...secretValues,
+  });
   const directCredentials = parsed.LUCID_HOSTED_EXECUTION_TRANSPORT === 'direct'
-    ? DirectExecutionHostCredentials.takeFromEnvironment(
-        environment,
-        DIRECT_CREDENTIAL_ENV_NAMES,
-      )
+    ? new DirectExecutionHostCredentials({
+        localToken: parsed.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN!,
+      })
     : undefined;
-  const modelCredentials = directCredentials
-    ?? EnvironmentHostedModelCredentials.take(
-      environment,
-      DIRECT_CREDENTIAL_ENV_NAMES.modelApiKey,
-    );
-  const heartbeatDelegationToken = takeHostedHeartbeatServiceToken(
-    environment,
-    HEARTBEAT_COORDINATOR_TOKEN_ENV,
-  )!;
-  const heartbeatCoordinatorApiToken = takeHostedHeartbeatServiceToken(
-    environment,
-    HEARTBEAT_COORDINATOR_API_TOKEN_ENV,
-  )!;
+  const stateRoot = resolve(
+    parsed.LUCID_STATE_ROOT
+      ?? join(runtime.repoRoot, 'local', 'discovery-home'),
+  );
+  const modelCredentials = parsed.LUCID_HOSTED_EXECUTION_MODEL_API_KEY
+    ? EnvironmentHostedModelCredentials.fromValue(
+        parsed.LUCID_HOSTED_EXECUTION_MODEL_API_KEY,
+      )
+    : new HeddleStoredOAuthModelCredentials(
+        runtime.model,
+        join(stateRoot, 'heddle'),
+        parsed.LUCID_HOSTED_EXECUTION_MAX_TURN_MS
+          + MODEL_CREDENTIAL_COMPLETION_MARGIN_MS,
+      );
   const transport: HostedExecutionTransportConfig = directCredentials
     ? {
         mode: 'direct',
@@ -256,7 +286,7 @@ export function resolveHostedExecutionConfig(
   return Object.freeze({
     publicBaseUrl: new URL(parsed.LUCID_HOSTED_EXECUTION_PUBLIC_URL),
     signingJwkPath: resolve(
-      repoRoot,
+      runtime.repoRoot,
       parsed.LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH,
     ),
     adopterId: parsed.LUCID_HOSTED_EXECUTION_ADOPTER_ID,
@@ -269,21 +299,71 @@ export function resolveHostedExecutionConfig(
     maxTurnMs: parsed.LUCID_HOSTED_EXECUTION_MAX_TURN_MS,
     transport: Object.freeze(transport),
     modelCredentials,
-    heartbeatDelegationToken,
+    heartbeatDelegationToken:
+      parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN,
     heartbeatCoordinator: Object.freeze({
       baseUrl: new URL(parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL),
-      apiToken: heartbeatCoordinatorApiToken,
+      apiToken: parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN,
     }),
   });
 }
 
 function assertNoDisabledSecrets(environment: NodeJS.ProcessEnv): void {
-  const configured = SECRET_ENV_NAMES.filter((name) => environment[name]?.trim());
+  const configured = [
+    CREDENTIAL_DIRECTORY_ENV,
+    ...SECRET_ENV_NAMES.flatMap((name) => [name, `${name}_FILE`]),
+  ].filter((name) => environment[name] !== undefined);
   if (configured.length > 0) {
     throw new Error(
       `Hosted execution credentials are configured while ${ENABLED_ENV} is false.`,
     );
   }
+}
+
+function applyLocalCredentialBundleDefaults(
+  environment: NodeJS.ProcessEnv,
+  repoRoot: string,
+): void {
+  const configuredDirectory = environment[CREDENTIAL_DIRECTORY_ENV]?.trim();
+  if (!configuredDirectory) {
+    return;
+  }
+  if (environment.LUCID_HOSTED_EXECUTION_TRANSPORT === 'agentcore') {
+    throw new Error(
+      `${CREDENTIAL_DIRECTORY_ENV} is only supported with direct local transport.`,
+    );
+  }
+
+  const bundleControlledNames = [
+    ...LOCAL_BUNDLE_SECRET_FILES.flatMap(([name]) => [
+      name,
+      `${name}_FILE`,
+    ]),
+    'LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH',
+  ];
+  const conflicting = bundleControlledNames.filter(
+    (name) => environment[name] !== undefined,
+  );
+  if (conflicting.length > 0) {
+    throw new Error(
+      `${CREDENTIAL_DIRECTORY_ENV} cannot be combined with ${conflicting.join(', ')}.`,
+    );
+  }
+
+  const directory = resolve(repoRoot, configuredDirectory);
+  LOCAL_BUNDLE_SECRET_FILES.forEach(([name, fileName]) => {
+    environment[`${name}_FILE`] = join(directory, fileName);
+  });
+  environment.LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH = join(
+    directory,
+    LOCAL_CREDENTIAL_BUNDLE_FILES.executionAuthorityPrivateJwk,
+  );
+  environment.LUCID_HOSTED_EXECUTION_PUBLIC_URL ??=
+    'http://127.0.0.1:8081';
+  environment.LUCID_HOSTED_EXECUTION_HOST_URL ??=
+    'http://127.0.0.1:18080';
+  environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL ??=
+    'http://127.0.0.1:18082';
 }
 
 function isOriginUrl(url: URL): boolean {
