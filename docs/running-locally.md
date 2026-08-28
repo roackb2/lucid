@@ -179,26 +179,26 @@ credentials, or a local model. The browser calls Lucid; Lucid signs the
 user-scoped invocation, supplies an access-token-only view of the user's
 existing Heddle Codex login, and durably consumes the Runtime's SSE stream.
 
-Runtime and Coordinator lifecycle belongs to the sibling private Execution
-Host repository. The local command reads `LUCID_DATABASE_URL` and
-`OPENAI_API_KEY` from this repository's ignored `.env` in memory for the first
-proof; it neither prints nor copies them. An optional Execution Host
-`.env.local` can override both with a Heddle-only database credential and a
-separate funded key. Then run:
+Runtime and Coordinator deployables belong to the private Execution Host, but
+Lucid's concrete lifecycle and wiring belong to the private
+`lucid-deployment` repository. Configure its ignored `.env.local` with the
+Lucid checkout path, an application-scoped Heddle database credential, and a
+separate funded model key. Its `operations/lucid-local/README.md` also records
+the one-time generic Runtime and Coordinator image build. Then run:
 
 ```bash
-cd /path/to/heddle-execution-host
+cd /path/to/lucid-deployment
 yarn install
-yarn local:lucid up --lucid-root /absolute/path/to/lucid
+yarn local:heddle up
 ```
 
-That one command builds and starts the database-free Runtime plus one
-Lucid-scoped Coordinator. It generates the shared local tokens and signing key
-without printing them and writes only the product-consumed values to Lucid's
-ignored `.env.heddle.local`. It does not create, migrate, reset, or replace a
-database. The Coordinator database URL must address this application's
-`heddle` boundary in the same physical product database; another application
-must use its own database and Coordinator.
+That command starts the prebuilt database-free Runtime plus one Lucid-scoped
+Coordinator. It generates the shared local tokens and signing key without
+printing them, writes only product-consumed values to Lucid's ignored
+`.env.heddle.local`, and applies the Coordinator migration explicitly. It does
+not create, reset, or replace a database. The Coordinator database URL must
+address this application's `heddle` boundary in the same physical product
+database; another application must use its own database and Coordinator.
 
 Start Lucid normally in its own terminal:
 
@@ -220,12 +220,12 @@ optional account identifier cross the authenticated Runtime request. If this
 store has no login, Lucid rejects the turn with an explicit reconnect error
 instead of falling back to Ollama or an ambient API key.
 
-Operate the exact local stack from the Execution Host repository:
+Operate the exact local stack from the `lucid-deployment` repository:
 
 ```bash
-yarn local:lucid status --lucid-root /absolute/path/to/lucid
-yarn local:lucid logs --lucid-root /absolute/path/to/lucid
-yarn local:lucid down --lucid-root /absolute/path/to/lucid
+yarn local:heddle status
+yarn local:heddle logs
+yarn local:heddle down
 ```
 
 The user endpoint is:
@@ -242,7 +242,7 @@ It returns the versioned Execution Host SSE stream. Lucid additionally serves
 `POST /hosted-execution/mcp` endpoint; neither endpoint exposes the signing
 key or database credential.
 
-Inside Docker, `127.0.0.1` names the container. The local Runtime command keeps
+Inside Docker, `127.0.0.1` names the container. The deployment composition keeps
 Lucid's authority issuer on loopback and derives Docker Desktop's exact
 `host.docker.internal` alias only for Runtime-to-Lucid JWKS and MCP callbacks.
 Lucid's browser origin and outbound Runtime URL remain loopback. Other non-TLS
