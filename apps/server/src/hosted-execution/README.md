@@ -50,11 +50,11 @@ tokens and ambient model credentials. The browser never receives either form.
 
 `conversation-turn` grants only `read_workspace_snapshot`.
 
-`heartbeat-task` grants only `read_available_messages` and
-`post_shared_message`. Preparation claims a fixed Lucid event horizon before
-the model runs. Every tool call re-resolves that claim from verified capability
-scope. Completion advances the Lucid cursor only after required durable effects
-exist under the same execution fence.
+`heartbeat-task` grants only `read_available_messages`, `update_working_note`,
+and `post_shared_message`. Preparation claims a fixed Lucid event horizon
+before the model runs. Every tool call re-resolves that claim from verified
+capability scope. Completion advances the Lucid cursor only after required
+durable effects exist under the same execution fence.
 
 The Coordinator decides when an attempt runs. `AgentWorkService` decides what
 product work that attempt owns and whether its product effects are complete.

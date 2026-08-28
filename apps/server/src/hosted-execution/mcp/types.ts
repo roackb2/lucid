@@ -1,9 +1,10 @@
 import type { McpInvocationScope } from '@heddleagent/execution-host-client/mcp';
 import type { DiscoveryWorkspaceSnapshot } from '../../lucid/discovery-types.js';
 
-/** The first product capability is deliberately small and read-only. */
+/** Stable workflow-specific product tool names exposed through signed MCP. */
 export const READ_WORKSPACE_SNAPSHOT_TOOL = 'read_workspace_snapshot';
 export const READ_AVAILABLE_MESSAGES_TOOL = 'read_available_messages';
+export const UPDATE_WORKING_NOTE_TOOL = 'update_working_note';
 export const POST_SHARED_MESSAGE_TOOL = 'post_shared_message';
 
 export const LUCID_CONVERSATION_MCP_TOOLS = Object.freeze([
@@ -12,6 +13,7 @@ export const LUCID_CONVERSATION_MCP_TOOLS = Object.freeze([
 
 export const LUCID_HEARTBEAT_MCP_TOOLS = Object.freeze([
   READ_AVAILABLE_MESSAGES_TOOL,
+  UPDATE_WORKING_NOTE_TOOL,
   POST_SHARED_MESSAGE_TOOL,
 ] as const);
 

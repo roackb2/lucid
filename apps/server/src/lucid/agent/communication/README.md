@@ -47,8 +47,9 @@ This slice does not enumerate unknown users, decide whether content is
 true or useful, schedule agents, or expose private user context.
 
 The hosted happy-path surface currently exports only
-`read_available_messages` and `post_shared_message`. The remaining definitions
-stay product-owned but are not granted to the Runtime until their product
-workflow is intentionally added. The signed capability and the active
-Coordinator execution fence select the work claim; model arguments never carry
-user, agent, work, execution, or horizon identifiers.
+`read_available_messages`, `update_working_note`, and `post_shared_message`.
+The remaining definitions stay product-owned but are not granted to the
+Runtime until their product workflow is intentionally added. The signed
+capability and the active Coordinator execution fence select the work claim;
+model arguments never carry user, agent, work, execution, or horizon
+identifiers.

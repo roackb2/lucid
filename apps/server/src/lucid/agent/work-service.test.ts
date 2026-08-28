@@ -94,7 +94,12 @@ describe('AgentWorkService', () => {
     const fixture = createFixture();
     const service = new AgentWorkService(
       fixture.workStore,
-      { readAgentWorkingContext: async () => ({ principalInputs: [], findings: [] }) },
+      {
+        readAgentWorkingContext: async () => ({
+          principalInputs: [],
+          findings: [],
+        }),
+      },
       fixture.communicationStore,
       { triggerAgent: async () => undefined },
       createLucidLogger('silent'),
@@ -128,9 +133,55 @@ describe('AgentWorkService', () => {
     );
     expect(fixture.completeAgentWake).not.toHaveBeenCalled();
   });
+
+  it('settles guidance only after a claim-fenced working-note update', async () => {
+    const fixture = createFixture('guidance_saved');
+    const service = new AgentWorkService(
+      fixture.workStore,
+      { readAgentWorkingContext: async () => ({ principalInputs: [], findings: [] }) },
+      fixture.communicationStore,
+      { triggerAgent: async () => undefined },
+      createLucidLogger('silent'),
+      { retryDelayMs: 10_000 },
+    );
+    const signal = new AbortController().signal;
+    await service.claimWork({
+      agentId: fixture.agent.id,
+      executionId: 'execution-1',
+      signal,
+    });
+
+    await expect(service.executeTool({
+      userId: fixture.user.id,
+      executionId: 'execution-1',
+      toolName: 'update_working_note',
+      arguments: {
+        content: 'Prioritize examples that satisfy the latest guidance.',
+      },
+      signal,
+    })).resolves.toMatchObject({ ok: true });
+    await expect(service.completeWork({
+      agentId: fixture.agent.id,
+      executionId: 'execution-1',
+      result: {
+        decision: 'complete',
+        summary: 'Updated the durable working context.',
+        runId: 'run-1',
+        outcome: 'done',
+      },
+      signal,
+    })).resolves.toEqual({ kind: 'accepted' });
+    expect(fixture.completeAgentWake).toHaveBeenCalledWith(
+      fixture.agent.id,
+      'execution-1',
+      fixture.trigger.sequence,
+    );
+  });
 });
 
-function createFixture() {
+function createFixture(
+  triggerKind: DiscoveryEvent['kind'] = 'check_requested',
+) {
   const timestamp = '2026-08-28T00:00:00.000Z';
   const workspace: DiscoveryWorkspace = {
     id: 'workspace-1',
@@ -173,7 +224,7 @@ function createFixture() {
   };
   const trigger = event({
     sequence: 1,
-    kind: 'check_requested',
+    kind: triggerKind,
     targetAgentId: agent.id,
     targetUserId: user.id,
     title: 'Check now',
@@ -190,6 +241,7 @@ function createFixture() {
   };
   let activeClaim = false;
   let sharedMessage: DiscoveryEvent | undefined;
+  let workingNoteUpdated = false;
   const completeAgentWake = vi.fn(async () => {
     activeClaim = false;
   });
@@ -227,7 +279,7 @@ function createFixture() {
     interruptAgentWake: async () => undefined,
     recoverInterruptedAgentWake: async () => false,
     findAgentPublishedRequestForTrigger: async () => sharedMessage,
-    hasAgentUpdatedWorkingNoteThrough: async () => true,
+    hasAgentUpdatedWorkingNoteThrough: async () => workingNoteUpdated,
     recordWakeCompletion,
   } satisfies AgentWakeStore;
 
@@ -243,11 +295,11 @@ function createFixture() {
       sharedMessage ? 1 : 0
     ),
     findAgentPublishedRequestForTrigger: async () => sharedMessage,
-    hasAgentUpdatedWorkingNoteThrough: async () => true,
+    hasAgentUpdatedWorkingNoteThrough: async () => workingNoteUpdated,
     hasUserFindingUsingAnyOrigin: async () => false,
     hasAgentContributedToRequestThread: async () => false,
     appendCommunicationEvent: async (input) => {
-      sharedMessage = event({
+      const appended = event({
         sequence: 2,
         kind: input.kind,
         actorAgentId: input.actorAgentId,
@@ -259,7 +311,13 @@ function createFixture() {
         content: input.content,
         metadata: input.metadata,
       });
-      return sharedMessage;
+      if (input.kind === 'shared_message') {
+        sharedMessage = appended;
+      }
+      if (input.kind === 'agent_note_updated') {
+        workingNoteUpdated = true;
+      }
+      return appended;
     },
   } satisfies AgentCommunicationStore;
 

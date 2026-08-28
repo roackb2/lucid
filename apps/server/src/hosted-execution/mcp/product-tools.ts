@@ -6,11 +6,13 @@ import { z } from 'zod';
 import {
   postSharedMessageInputSchema,
   readAvailableMessagesInputSchema,
+  workingNoteInputSchema,
 } from '../../lucid/agent/communication/tool-service.js';
 import {
   POST_SHARED_MESSAGE_TOOL,
   READ_AVAILABLE_MESSAGES_TOOL,
   READ_WORKSPACE_SNAPSHOT_TOOL,
+  UPDATE_WORKING_NOTE_TOOL,
   type HostedWorkspaceProjection,
   type LucidProductMcpToolName,
   type ScopedAgentWorkToolExecutor,
@@ -71,6 +73,27 @@ export function createLucidProductToolset(
           await agentWork.executeAgentWorkTool({
             scope: capability.scope,
             toolName: READ_AVAILABLE_MESSAGES_TOOL,
+            arguments: arguments_,
+            signal,
+          })
+        ),
+      }),
+      defineNodeMcpJsonTool({
+        name: UPDATE_WORKING_NOTE_TOOL,
+        description:
+          'Update the private working note required by guidance in the current claimed Lucid work.',
+        inputSchema: workingNoteInputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        failureMessage: 'Lucid could not update the working note.',
+        execute: async (arguments_, { capability, signal }) => (
+          await agentWork.executeAgentWorkTool({
+            scope: capability.scope,
+            toolName: UPDATE_WORKING_NOTE_TOOL,
             arguments: arguments_,
             signal,
           })

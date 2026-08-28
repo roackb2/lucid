@@ -45,15 +45,16 @@ const findingInputSchema = z.object({
   content: z.string().trim().min(1).max(1_200),
   source_event_ids: z.array(z.number().int().positive()).min(1).max(8),
 });
-const workingNoteInputSchema = z.object({
+export const workingNoteInputSchema = z.object({
   content: z.string().trim().min(1).max(2_400),
-});
+}).strict();
 const noActionInputSchema = z.object({
   reason: z.string().trim().min(1).max(500),
 });
 
 export const AGENT_WORK_COMMUNICATION_TOOLS = Object.freeze([
   'read_available_messages',
+  'update_working_note',
   'post_shared_message',
 ] as const);
 

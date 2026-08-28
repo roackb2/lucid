@@ -14,7 +14,9 @@ projection and accepts no identity arguments.
 Autonomous `heartbeat-task` authority grants only:
 
 - `read_available_messages`, bounded by the current fixed product work
-  horizon; and
+  horizon;
+- `update_working_note`, which records guidance-derived durable context under
+  the retry-stable work ID; and
 - `post_shared_message`, which applies Lucid's reply, provenance, visibility,
   budget, and retry-idempotency rules.
 

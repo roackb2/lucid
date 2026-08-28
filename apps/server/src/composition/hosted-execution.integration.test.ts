@@ -42,6 +42,7 @@ import {
   POST_SHARED_MESSAGE_TOOL,
   READ_AVAILABLE_MESSAGES_TOOL,
   READ_WORKSPACE_SNAPSHOT_TOOL,
+  UPDATE_WORKING_NOTE_TOOL,
 } from '../hosted-execution/mcp/types.js';
 import { createLucidLogger } from '../logger.js';
 import { createHostedExecutionComposition } from './hosted-execution.js';
@@ -367,6 +368,7 @@ describe('hosted execution composition', () => {
             mcp: {
               allowedTools: [
                 READ_AVAILABLE_MESSAGES_TOOL,
+                UPDATE_WORKING_NOTE_TOOL,
                 POST_SHARED_MESSAGE_TOOL,
               ],
             },
@@ -401,11 +403,18 @@ describe('hosted execution composition', () => {
       expect((await mcpClient.listTools()).tools.map(({ name }) => name))
         .toEqual([
           READ_AVAILABLE_MESSAGES_TOOL,
+          UPDATE_WORKING_NOTE_TOOL,
           POST_SHARED_MESSAGE_TOOL,
         ]);
       await mcpClient.callTool({
         name: READ_AVAILABLE_MESSAGES_TOOL,
         arguments: {},
+      });
+      await mcpClient.callTool({
+        name: UPDATE_WORKING_NOTE_TOOL,
+        arguments: {
+          content: 'Look for a concrete example under the latest constraints.',
+        },
       });
       await mcpClient.callTool({
         name: POST_SHARED_MESSAGE_TOOL,
@@ -428,6 +437,11 @@ describe('hosted execution composition', () => {
       toolName: READ_AVAILABLE_MESSAGES_TOOL,
     }));
     expect(executeTool).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      userId: 'user-1',
+      executionId,
+      toolName: UPDATE_WORKING_NOTE_TOOL,
+    }));
+    expect(executeTool).toHaveBeenNthCalledWith(3, expect.objectContaining({
       userId: 'user-1',
       executionId,
       toolName: POST_SHARED_MESSAGE_TOOL,

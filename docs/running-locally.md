@@ -278,10 +278,10 @@ database credential. The first local proof may reuse Lucid's broader database
 credential in memory; production must use the Heddle-only Coordinator
 credential. Missing Runtime or Coordinator configuration fails startup.
 Lucid's product trigger, status, and preference controls always use the
-Coordinator API. The heartbeat path
-claims a fixed product horizon and exposes only `read_available_messages` and
-`post_shared_message`. Broader working-note, direct-message, and finding
-operations remain separate scoped product slices.
+Coordinator API. The heartbeat path claims a fixed product horizon and exposes
+only `read_available_messages`, `update_working_note`, and
+`post_shared_message`. Broader direct-message and finding operations remain
+separate scoped product slices.
 The exact container networking command is intentionally not prescribed until
 the real Runtime can reach Lucid's loopback MCP/JWKS endpoints without
 weakening the Runtime's non-loopback TLS rule.

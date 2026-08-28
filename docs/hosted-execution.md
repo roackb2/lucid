@@ -147,16 +147,17 @@ Foreground `conversation-turn` authority grants only
 `read_workspace_snapshot`.
 
 Autonomous `heartbeat-task` authority grants only
-`read_available_messages` and `post_shared_message`. The intended happy path
-is:
+`read_available_messages`, `update_working_note`, and `post_shared_message`.
+The intended happy path is:
 
 1. product input is durably appended and the corresponding Coordinator task is
    triggered;
 2. the Coordinator owns a Heddle execution ID and calls Lucid `prepare`;
 3. Lucid claims a fixed work horizon or skips empty work before model cost;
 4. Heddle mints execution and heartbeat-only MCP authority;
-5. the Runtime reads the claim and publishes the required privacy-minimized
-   request through Lucid MCP;
+5. the Runtime reads the claim, updates guidance-derived working context when
+   required, and publishes the required privacy-minimized request through
+   Lucid MCP;
 6. the Coordinator sends a narrow terminal projection to Lucid `settle`;
 7. Lucid validates the durable effect, records completion, and advances its
    cursor under the same execution fence; and
