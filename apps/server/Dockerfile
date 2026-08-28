@@ -42,7 +42,6 @@ WORKDIR /opt/lucid
 ENV NODE_ENV=production \
   HOST=0.0.0.0 \
   PORT=8081 \
-  LUCID_STATE_ROOT=/var/lib/lucid \
   LUCID_WEB_ROOT=/opt/lucid/apps/web/dist
 COPY --chown=node:node package.json ./
 COPY --chown=node:node apps/server/package.json ./apps/server/package.json
@@ -50,8 +49,6 @@ COPY --chown=node:node --from=production-dependencies /opt/lucid/node_modules ./
 COPY --chown=node:node --from=build /opt/lucid/apps/server/dist ./apps/server/dist
 COPY --chown=node:node --from=build /opt/lucid/apps/web/dist ./apps/web/dist
 COPY --chown=node:node apps/server/drizzle ./apps/server/drizzle
-RUN mkdir -p /var/lib/lucid \
-  && chown node:node /var/lib/lucid
 USER node
 EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \

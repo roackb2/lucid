@@ -38,6 +38,8 @@ import { createHostedExecutionComposition } from './hosted-execution.js';
 
 const LOCAL_TOKEN = 'local-execution-host-token-value';
 const MODEL_API_KEY = 'model-api-key-value';
+const HEARTBEAT_DELEGATION_TOKEN = 'heartbeat-delegation-token-value';
+const COORDINATOR_API_TOKEN = 'coordinator-api-token-value-value';
 const servers = new Set<ReturnType<typeof createServer>>();
 const temporaryRoots = new Set<string>();
 
@@ -101,6 +103,11 @@ describe('hosted execution composition', () => {
           credentials,
         },
         modelCredentials: credentials,
+        heartbeatDelegationToken: HEARTBEAT_DELEGATION_TOKEN,
+        heartbeatCoordinator: {
+          baseUrl: new URL('http://127.0.0.1:18082'),
+          apiToken: COORDINATOR_API_TOKEN,
+        },
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: {
@@ -201,6 +208,11 @@ describe('hosted execution composition', () => {
           credentials,
         },
         modelCredentials: credentials,
+        heartbeatDelegationToken: HEARTBEAT_DELEGATION_TOKEN,
+        heartbeatCoordinator: {
+          baseUrl: new URL('http://127.0.0.1:18082'),
+          apiToken: COORDINATOR_API_TOKEN,
+        },
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },

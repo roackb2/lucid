@@ -1,5 +1,5 @@
 /**
- * Builds and owns Lucid's paired PostgreSQL product and heartbeat authorities.
+ * Builds and owns Lucid's PostgreSQL product persistence.
  *
  * Runtime startup never mutates the shared schema. Deployments and local
  * development must run the explicit migration command first.
@@ -25,10 +25,6 @@ import { PostgresDatabase } from '../infrastructure/postgres/database.js';
 import {
   createPostgresHostedConversationTurnLifecycleStore,
 } from '@heddleagent/postgres/execution-host/conversations';
-import {
-  createPostgresHeartbeatTaskAuthority,
-  type PostgresHeartbeatTaskAuthority,
-} from '@heddleagent/postgres/heartbeat';
 import type {
   HostedConversationTurnLifecycleStore,
 } from '@heddleagent/execution-host-client/conversation';
@@ -48,7 +44,6 @@ export type PostgresPersistence = {
     conversationHistory: HostedConversationHistoryStore;
     conversationLifecycle: HostedConversationTurnLifecycleStore;
   };
-  heartbeatTaskAuthority: PostgresHeartbeatTaskAuthority;
   close: () => Promise<void>;
 };
 
@@ -77,11 +72,6 @@ export async function createPostgresPersistence(
             database: database.orm,
           }),
       },
-      heartbeatTaskAuthority: createPostgresHeartbeatTaskAuthority({
-        database: database.orm,
-        namespace: config.heartbeatNamespace,
-        executionLeaseMs: config.heartbeatExecutionLeaseMs,
-      }),
       close: async () => database.close(),
     };
   } catch (error) {

@@ -22,7 +22,6 @@ const environmentSchema = z.object({
   LUCID_OPERATOR_TOKEN: z.string().trim().min(32).optional(),
   LUCID_SUPABASE_PROJECT_URL: z.url().optional(),
   LUCID_ALLOW_SELF_ENROLLMENT: z.enum(['true', 'false']).default('false'),
-  LUCID_STATE_ROOT: z.string().trim().min(1).optional(),
   LUCID_DATABASE_URL: z.string().trim().min(1),
   LUCID_MODEL: z.string().trim().min(1).default('gpt-5.4-mini'),
   LUCID_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(7),
@@ -31,39 +30,6 @@ const environmentSchema = z.object({
     .int()
     .min(10_000)
     .default(15 * 60_000),
-  LUCID_HEARTBEAT_POLL_MS: z.coerce
-    .number()
-    .int()
-    .min(250)
-    .default(1_000),
-  LUCID_HEARTBEAT_MAX_CONCURRENCY: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(16)
-    .default(3),
-  LUCID_HEARTBEAT_NAMESPACE: z.string().trim().min(1).max(200)
-    // Stable database namespace; changing it would create a second task catalog.
-    .default('lucid:representatives'),
-  LUCID_HEARTBEAT_EXECUTION_LEASE_MS: z.coerce
-    .number()
-    .int()
-    .min(60_000)
-    .max(8 * 60 * 60_000)
-    .default(20 * 60_000),
-  LUCID_HEARTBEAT_RECOVERY_INTERVAL_MS: z.coerce
-    .number()
-    .int()
-    .min(10_000)
-    .max(10 * 60_000)
-    .default(60_000),
-  LUCID_HEARTBEAT_INVOCATION_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .min(60_000)
-    .max(15 * 60_000)
-    .default(12 * 60_000),
-  LUCID_PREFER_API_KEY: z.enum(['true', 'false']).default('false'),
 }).superRefine((environment, context) => {
   if (
     environment.LUCID_AUTH_MODE === 'development'
@@ -118,26 +84,6 @@ const environmentSchema = z.object({
       });
     }
   }
-  if (
-    environment.LUCID_HEARTBEAT_RECOVERY_INTERVAL_MS
-    >= environment.LUCID_HEARTBEAT_EXECUTION_LEASE_MS
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['LUCID_HEARTBEAT_RECOVERY_INTERVAL_MS'],
-      message: 'Heartbeat recovery interval must be shorter than the execution lease.',
-    });
-  }
-  if (
-    environment.LUCID_HEARTBEAT_INVOCATION_TIMEOUT_MS
-    >= environment.LUCID_HEARTBEAT_EXECUTION_LEASE_MS
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['LUCID_HEARTBEAT_INVOCATION_TIMEOUT_MS'],
-      message: 'Heartbeat invocation timeout must be shorter than the execution lease.',
-    });
-  }
 });
 
 const environment = environmentSchema.parse(process.env);
@@ -150,25 +96,13 @@ export type LucidConfig = {
   webRoot?: string;
   authentication: LucidAuthenticationConfig;
   repoRoot: string;
-  stateRoot: string;
   databaseUrl: string;
-  heddleStateRoot: string;
   model: string;
   maxSteps: number;
   heartbeatIntervalMs: number;
-  heartbeatPollMs: number;
-  heartbeatMaxConcurrency: number;
-  heartbeatNamespace: string;
-  heartbeatExecutionLeaseMs: number;
-  heartbeatRecoveryIntervalMs: number;
-  heartbeatInvocationTimeoutMs: number;
-  preferApiKey: boolean;
 };
 
 export function resolveLucidConfig(): LucidConfig {
-  const stateRoot = resolve(
-    environment.LUCID_STATE_ROOT ?? join(LUCID_REPO_ROOT, 'local', 'discovery-home'),
-  );
   const authentication = resolveAuthenticationConfig(environment);
 
   return {
@@ -181,22 +115,10 @@ export function resolveLucidConfig(): LucidConfig {
       : undefined,
     authentication,
     repoRoot: LUCID_REPO_ROOT,
-    stateRoot,
     databaseUrl: environment.LUCID_DATABASE_URL,
-    heddleStateRoot: join(stateRoot, 'heddle'),
     model: environment.LUCID_MODEL,
     maxSteps: environment.LUCID_MAX_STEPS,
     heartbeatIntervalMs: environment.LUCID_HEARTBEAT_INTERVAL_MS,
-    heartbeatPollMs: environment.LUCID_HEARTBEAT_POLL_MS,
-    heartbeatMaxConcurrency: environment.LUCID_HEARTBEAT_MAX_CONCURRENCY,
-    heartbeatNamespace: environment.LUCID_HEARTBEAT_NAMESPACE,
-    heartbeatExecutionLeaseMs:
-      environment.LUCID_HEARTBEAT_EXECUTION_LEASE_MS,
-    heartbeatRecoveryIntervalMs:
-      environment.LUCID_HEARTBEAT_RECOVERY_INTERVAL_MS,
-    heartbeatInvocationTimeoutMs:
-      environment.LUCID_HEARTBEAT_INVOCATION_TIMEOUT_MS,
-    preferApiKey: environment.LUCID_PREFER_API_KEY === 'true',
   };
 }
 

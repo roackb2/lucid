@@ -103,12 +103,10 @@ Heddle owns:
 - claim-fenced task settlement and interrupted-task recovery;
 - non-agent skipped outcomes for empty scheduled mailboxes.
 
-The composition root injects one structural task authority implementing both
-Heddle's targeted store and administration contracts. Lucid never constructs a
-file store inside the domain service and never rewrites task lifecycle state
-directly. The same service therefore works with the zero-setup file authority
-and long-lived scheduler or a shared PostgreSQL authority plus targeted worker
-host.
+Lucid never constructs a Heddle task store or rewrites task lifecycle state.
+The coordinator-backed product adapter reconciles desired tasks and invokes the
+public control API; the Coordinator is the sole PostgreSQL authority and
+scheduler.
 
 The development simulator owns scenario characters and input timing. No domain
 module imports simulator scenarios.
@@ -133,38 +131,19 @@ remains recoverable by startup or a later trigger.
 
 ## Mailbox and heartbeat lifecycle
 
-1. Principal input or peer communication is appended durably.
-2. Principal input requests its own agent's Heddle task. A new shared
-   request fans out once to active peers, a response requests only the agent it
-   answers, and an ambient contribution waits for normal scheduled listening.
-   Requests while a task is busy coalesce into one follow-up generation.
-3. Heddle selects the task. Lucid atomically claims currently visible unread
-   events and freezes the highest sequence as the wake horizon.
-4. The runner receives private context, claimed events, bounded prior
-   findings/feedback, the latest working note, Heddle continuation, and only
-   Lucid communication tools.
-5. Communication writes use `<wake-id>:action:<slot>`, and required network
-   requests are additionally identified by their assignment/check trigger.
-   A retry therefore reuses the committed request even if the model regenerates
-   it after a checkpoint. The tool service also reconstructs its action count
-   from persisted events instead of resetting the ordinal in memory.
-6. A direct-guidance wake exposes no communication or no-action operation
-   until the agent rewrites its private working note. The final
-   heartbeat postcondition verifies the same durable revision before cursor
-   advancement.
-7. An interest/check wake exposes no other communication operation until a
-   shared request cites every required trigger. The final heartbeat
-   postcondition verifies the same fact before cursor advancement.
-8. A wake produced by an older version that already consumed both action slots
-   receives one deterministic required-request repair key. This is a recovery
-   exception; newly claimed wakes cannot enter that invalid state.
-9. Successful execution appends completion and advances the cursor only to the
-   original horizon. Later mail remains unread.
-10. Newly addressed agents receive durable run requests without
-   rescanning every unread mailbox or recursively rebroadcasting responses.
+1. Principal input or peer communication is appended durably in Lucid.
+2. Product input triggers the corresponding Coordinator-owned Heddle task;
+   periodic listening remains expressed by its desired cadence.
+3. The Coordinator claims the task, obtains one scoped execution delegation,
+   and invokes the database-free Runtime.
+4. The current MCP contract exposes a read-only user workspace projection. It
+   does not yet claim a fixed mailbox horizon, write network messages or
+   findings, or advance Lucid's wake cursor.
 
-An empty due task calls `context.skip()` before model execution. It creates a
-lightweight Heddle run record but no model checkpoint and no Lucid wake.
+The product stores and communication tool policy retain the fixed-horizon,
+idempotency, provenance, and fenced-settlement rules required for the next
+state-changing MCP slice. They are not a second scheduler or an active local
+runner.
 
 The local `Run now` operation appends a private `check_requested` event that
 includes the saved assignment, current working direction, and latest guidance,
@@ -300,23 +279,8 @@ ownership, visibility, reply/source integrity, and retry safety only.
 
 ## Recovery and concurrency
 
-Failed, interrupted, or escalated wakes keep their cursor and active claim.
-Retry reuses the same wake ID, number, horizon, and action slots. Ordinary
-store startup never steals a claim. After a Heddle execution lease
-expires, Heddle claim-fenced recovery returns the task to a runnable state and
-passes that exact interrupted execution ID to Lucid. Lucid releases only the
-matching product wake claim; a stale recovery cannot release a newer worker.
-
-User disable/retire uses Heddle task-scoped cancellation. A `not-owned`
-or `not-found` cancellation blocks the domain mutation because another runtime
-could still retain old private context. Unrelated agents continue running.
-
-Independent agents execute concurrently up to
-`LUCID_HEARTBEAT_MAX_CONCURRENCY`. Each wake keeps tool concurrency at one so
-dependent writes and the action budget remain ordered.
-
-The optional long-lived scheduler host is single-process. PostgreSQL provides
-atomic task claims, execution leases, and fenced settlement, but it is not a
-delivery service. A hosted multi-replica design still needs a durable queue or
-request executor; the current in-process targeted dispatcher is the local
-proof of that replaceable host boundary.
+The Coordinator owns bounded concurrency, execution leases, recovery, and
+claim-fenced Heddle settlement. Lucid owns only product lifecycle commands and
+the future claim-fenced mailbox settlement contract. Missing Coordinator
+configuration fails startup; Lucid never recovers by starting an embedded
+scheduler.

@@ -105,9 +105,9 @@ unread mail is skipped before model execution. Heddle records a lightweight run
 outcome, but Lucid does not manufacture a product event, model checkpoint, or
 finding.
 
-The default targeted host also receives low-latency notifications when mail is
-persisted. Polling the durable task catalog remains the fallback for lost
-notifications, periodic due work, and process restart.
+Lucid sends explicit run requests to the Coordinator when product input should
+accelerate a task. Coordinator polling of its durable task catalog remains the
+correctness path for periodic due work, lost requests, and process restart.
 
 ## Pause and user lifecycle
 
@@ -117,7 +117,7 @@ mail. Resume enables and triggers the same task, so accumulated mail is handled
 without creating a replacement agent.
 
 The operator-level global background gate is different. It stops new dispatch
-and cancels work owned by the current host without overwriting each task's
+and cancels work owned by the Coordinator without overwriting each task's
 personal enabled preference. Durable run intent can continue to accumulate and
 is dispatched after global resume.
 
@@ -146,7 +146,7 @@ recovers the task and reports the exact interrupted execution ID to Lucid.
 Lucid releases only the product wake whose claim token matches that ID. A late
 recovery or stale worker therefore cannot release or settle a newer claim.
 
-During graceful shutdown, Lucid stops admission, aborts and awaits work owned
-by the process, and closes PostgreSQL only after settlement. After an abrupt
-loss, the durable lease and fenced recovery path restore eligibility without
-pretending the interrupted work succeeded.
+During graceful shutdown, Lucid pauses Coordinator admission before closing its
+product database pool. After an abrupt Coordinator loss, the durable lease and
+fenced recovery path restore eligibility without pretending the interrupted
+work succeeded.

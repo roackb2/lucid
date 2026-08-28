@@ -45,9 +45,9 @@ describe('hosted execution config', () => {
       .toBeUndefined();
     expect(JSON.stringify(config?.modelCredentials)).toBe('{}');
     expect(config?.heartbeatDelegationToken).toBe(DELEGATION_TOKEN);
-    expect(config?.heartbeatCoordinator?.baseUrl.href)
+    expect(config?.heartbeatCoordinator.baseUrl.href)
       .toBe('http://127.0.0.1:18082/');
-    expect(config?.heartbeatCoordinator?.apiToken).toBe(COORDINATOR_API_TOKEN);
+    expect(config?.heartbeatCoordinator.apiToken).toBe(COORDINATOR_API_TOKEN);
   });
 
   it('parses the AgentCore profile without direct-host credentials', async () => {
@@ -101,6 +101,12 @@ describe('hosted execution config', () => {
     }],
     ['coordinator URL without API token', {
       LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: undefined,
+    }],
+    ['coordinator API token without URL', {
+      LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: undefined,
+    }],
+    ['coordinator profile without delegation token', {
+      LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN: undefined,
     }],
     ['shared coordinator token', {
       LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: DELEGATION_TOKEN,

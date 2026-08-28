@@ -2,11 +2,10 @@
 
 Lucid keeps hosted agent execution replaceable, but it does not embed or import
 the private Heddle execution-host or coordinator services. Foreground hosted
-conversations call the Runtime directly. With a complete coordinator profile,
-product heartbeat controls use Heddle's public coordinator API and Lucid
-publishes desired tasks plus one-run authority for autonomous execution.
-Without that profile, Lucid retains its embedded topology until the remaining
-state-changing product tools have crossed a claim-fenced MCP boundary.
+conversations call the Runtime directly. Product heartbeat controls use
+Heddle's public coordinator API and Lucid publishes desired tasks plus one-run
+authority for autonomous execution. The complete coordinator profile is
+required; Lucid has no embedded scheduler.
 
 ## Current status
 
@@ -72,26 +71,21 @@ parity for an external agent wake still requires:
 The conversation port must not be relabeled as agent execution. The complete
 local direct conversation and coordinator-owned heartbeat paths have both run
 through Lucid's scoped read-only MCP capability. Product trigger/status and
-preference controls now use the coordinator API when that topology is selected,
-and the embedded worker does not start, so a task cannot execute twice.
+preference controls use the coordinator API, and no second scheduler can start.
 
 The remaining local product-parity gate is to expose Lucid's state-changing
 agent communication operations through scoped MCP without weakening mailbox
 horizons, action identities, or fenced settlement. Until then, coordinator
-mode can inspect and settle Heddle work but cannot reproduce the embedded
-runner's network-message, working-note, and finding writes.
+execution can inspect and settle Heddle work but cannot yet perform
+network-message, working-note, and finding writes.
 
-## Why the embedded fallback remains
+## Coordinator-only heartbeat boundary
 
-The embedded fallback directly composes Heddle's supported
-`HeartbeatTargetedTaskHost`, `HeartbeatTargetedTaskWorker`, and official
-PostgreSQL heartbeat authority. Lucid does not maintain renamed or copied host,
-dispatcher, worker, schema, or task-store implementations.
-
-The fallback remains because its in-process wake handler currently binds the
-state-changing product tools to a fixed mailbox horizon and fenced Lucid wake
-claim. Heddle's coordinator already owns scheduling in coordinator mode; only
-the product MCP and settlement boundary prevents removal of this fallback.
+The Heddle Coordinator is the sole scheduler and PostgreSQL heartbeat-table
+owner. Missing coordinator configuration fails Lucid startup rather than
+silently selecting another topology. Lucid retains product mailbox and finding
+state, but those operations must cross the scoped MCP boundary before hosted
+heartbeats regain full autonomous-product parity.
 
 ## Intended deployment boundary
 
@@ -142,10 +136,10 @@ public `ExecutionHost` port without exposing host internals.
 2. Run one coordinator-owned heartbeat that exercises those stateful product
    operations and remains truthful after coordinator restart and expired-owner
    recovery.
-3. Remove the embedded runner and its duplicate Lucid-side Heddle task storage
-   only after that local product-parity gate passes.
-4. Defer AgentCore and ECS deployment until the same semantics are truthful
-   locally.
+3. Deploy the coordinator-owned Drizzle authority and verify the same semantics
+   through AgentCore and ECS.
+4. Keep the database-free Runtime and per-application coordinator boundary
+   unchanged while adding product capabilities.
 
 ## Security invariants
 

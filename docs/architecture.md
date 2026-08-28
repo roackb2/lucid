@@ -121,10 +121,9 @@ lucid
 └── discovery_events
 
 heddle
-├── task definitions and schedule state
-├── run requests and execution leases
-├── checkpoints
-└── immutable run history
+├── coordinator-owned task definitions and schedule state
+├── coordinator-owned run requests, leases, checkpoints, and run history
+└── Lucid-owned hosted conversation lifecycle
 ```
 
 Lucid is event-centered but not purely event-sourced. User and
@@ -134,44 +133,26 @@ guidance, working-note revisions, and wake outcomes. Read models such as
 network progress and guidance follow-through are derived from these durable
 facts rather than stored model judgments.
 
-The `lucid` and `heddle` schemas share a PostgreSQL pool in the current server,
-but their ownership remains separate. Migrations are checked in and applied by
-an explicit command before startup. `LUCID_STATE_ROOT` contains local Heddle
-execution artifacts only.
+The `lucid` and `heddle` schemas share one application database, but Lucid and
+the Coordinator use separate credentials and Drizzle histories. Lucid never
+opens the heartbeat tables; the database-free Runtime receives neither
+credential. Migrations are checked in and applied explicitly before startup.
 
 ## Agent execution
 
-Every non-retired user has a derived Heddle heartbeat task. User
-registration reconciles that task; persisting new mailbox input creates a
-durable Heddle run request. The default targeted host then:
+Every non-retired user has a derived Heddle heartbeat task. User lifecycle and
+product controls reconcile desired tasks through the long-running Heddle
+Coordinator. The Coordinator is the only scheduler and owns PostgreSQL task
+authority, polling, claims, checkpoints, recovery, and settlement.
 
-1. receives an in-process low-latency notification;
-2. retains polling of the durable task catalog as the correctness fallback;
-3. admits at most the configured number of independent tasks;
-4. invokes one addressed worker for one task; and
-5. lets Heddle perform the final due check, claim, checkpoint continuation,
-   model/tool loop, and fenced settlement.
-
-The optional long-lived scheduler uses the same PostgreSQL authorities. It is
-useful for topology comparison, not a second persistence mode.
-
-The embedded invocation-target interface remains local infrastructure for the
-current product UI. It carries an `AbortSignal`, returns Heddle's targeted-task
-result, and delegates to a worker that needs both the PostgreSQL task store and
-an in-process heartbeat handler.
-
-The optional hosted profile adds a separate architecture-proof path. Lucid
-publishes desired tasks to the long-running Heddle Coordinator, which owns its
-own PostgreSQL task authority, claims, checkpoints, recovery, and settlement.
 For each claim, the coordinator requests one short-lived execution/MCP bundle
 from Lucid and invokes the same external Runtime used by foreground
 conversations. Neither service receives Lucid database credentials; the
 Runtime calls curated product operations through scoped MCP capabilities.
 
-Startup reconciliation is intentionally the only product integration in this
-slice. Product trigger, status, enable/disable, and reset flows remain on the
-embedded host until the local coordinator vertical proves the architecture and
-a single task authority can replace the old path cleanly. See
+Product trigger, status, enable/disable, reset, and global pause flows use the
+coordinator API. The current autonomous MCP surface is read-only; state-changing
+mailbox and finding operations are the next product-capability slice. See
 [External Heddle execution host](hosted-execution.md).
 
 ## Agent boundary

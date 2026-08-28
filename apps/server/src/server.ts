@@ -15,29 +15,18 @@ import {
 } from './hosted-execution/config.js';
 import { handleHealthRequest } from './health.js';
 import { DiscoveryWorkspaceService } from './lucid/workspace/service.js';
-import {
-  HeddleAgentRunner,
-} from './lucid/agent/heddle-runner.js';
 import { UserNetworkService } from './lucid/network/service.js';
-import {
-  AgentHeartbeatService as EmbeddedAgentHeartbeatService,
-} from './lucid/agent/heartbeat-service.js';
 import {
   CoordinatorAgentHeartbeatService,
 } from './hosted-execution/heartbeat/agent-heartbeat-service.js';
-import { AGENT_TASK_ID_PREFIX } from './lucid/agent/heartbeat-task-identity.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
-import {
-  createAgentExecutionHost,
-} from './runtime/agent-execution-composition.js';
 import {
   createStaticSpaRequestHandler,
 } from './static-spa/static-spa-request-handler.js';
 import {
   HostedConversationHistoryService,
 } from './hosted-execution/conversation/history-service.js';
-import { LUCID_WORKSPACE_ID } from './lucid/workspace/workspace-identity.js';
 
 const TRPC_BASE_PATH = '/api/trpc/';
 
@@ -46,56 +35,32 @@ const hostedExecutionConfig = resolveHostedExecutionConfig(
   process.env,
   config.repoRoot,
 );
+if (!hostedExecutionConfig?.heartbeatCoordinator) {
+  throw new Error(
+    'Lucid requires the hosted Execution Host and heartbeat coordinator profile; embedded heartbeat scheduling has been removed.',
+  );
+}
 const logger = createLucidLogger(config.logLevel);
 const persistence = await createPostgresPersistence(config);
-const { stores, heartbeatTaskAuthority } = persistence;
+const { stores } = persistence;
 const authenticator = createLucidAuthenticator(
   config.authentication,
   stores.network,
 );
-const coordinator = hostedExecutionConfig?.heartbeatCoordinator
-  ? new HostedHeartbeatCoordinatorClient({
-      baseUrl: hostedExecutionConfig.heartbeatCoordinator.baseUrl,
-      apiToken: hostedExecutionConfig.heartbeatCoordinator.apiToken,
-    })
-  : undefined;
-const heartbeatTopology = coordinator
-  ? {
-      kind: 'coordinator' as const,
-      control: new CoordinatorAgentHeartbeatService(
-        stores.agent,
-        coordinator,
-        {
-          intervalMs: config.heartbeatIntervalMs,
-          model: config.model,
-          maxSteps: config.maxSteps,
-        },
-        logger,
-      ),
-    }
-  : {
-      kind: 'embedded' as const,
-      control: new EmbeddedAgentHeartbeatService(
-        stores.agent,
-        stores.workspace,
-        new HeddleAgentRunner(stores.communication, config),
-        config,
-        logger,
-        heartbeatTaskAuthority.administration,
-        heartbeatTaskAuthority.store,
-        createAgentExecutionHost({
-          config,
-          store: stores.agent,
-          taskStore: heartbeatTaskAuthority.store,
-          taskIdPrefix: AGENT_TASK_ID_PREFIX,
-          logger,
-        }),
-      ),
-    };
-if (heartbeatTopology.kind === 'embedded') {
-  await heartbeatTopology.control.initialize();
-}
-const heartbeats = heartbeatTopology.control;
+const coordinator = new HostedHeartbeatCoordinatorClient({
+  baseUrl: hostedExecutionConfig.heartbeatCoordinator.baseUrl,
+  apiToken: hostedExecutionConfig.heartbeatCoordinator.apiToken,
+});
+const heartbeats = new CoordinatorAgentHeartbeatService(
+  stores.agent,
+  coordinator,
+  {
+    intervalMs: config.heartbeatIntervalMs,
+    model: config.model,
+    maxSteps: config.maxSteps,
+  },
+  logger,
+);
 const discoveryWorkspace = new DiscoveryWorkspaceService(
   stores.workspace,
   heartbeats,
@@ -116,21 +81,18 @@ const conversationHistory = new HostedConversationHistoryService(
   stores.conversationHistory,
   stores.conversationLifecycle,
   {
-    tenantId: hostedExecutionConfig?.tenantId ?? 'lucid-local',
-    productSessionId:
-      hostedExecutionConfig?.productSessionId ?? LUCID_WORKSPACE_ID,
+    tenantId: hostedExecutionConfig.tenantId,
+    productSessionId: hostedExecutionConfig.productSessionId,
   },
 );
-const hostedExecution = hostedExecutionConfig
-  ? await createHostedExecutionComposition({
-      config: hostedExecutionConfig,
-      authenticator,
-      discoveryWorkspace,
-      logger,
-      conversationLifecycle: stores.conversationLifecycle,
-      heartbeatStore: stores.agent,
-    })
-  : undefined;
+const hostedExecution = await createHostedExecutionComposition({
+  config: hostedExecutionConfig,
+  authenticator,
+  discoveryWorkspace,
+  logger,
+  conversationLifecycle: stores.conversationLifecycle,
+  heartbeatStore: stores.agent,
+});
 const staticSpaRequestHandler = config.webRoot
   ? await createStaticSpaRequestHandler(config.webRoot)
   : undefined;
@@ -182,7 +144,7 @@ const server = createHTTPServer({
       return;
     }
 
-    if (hostedExecution?.http.handle(request, response)) {
+    if (hostedExecution.http.handle(request, response)) {
       return;
     }
 
@@ -208,28 +170,21 @@ let shuttingDown = false;
 
 try {
   await listen(server, config.port, config.host);
-  if (heartbeatTopology.kind === 'coordinator') {
-    await heartbeatTopology.control.initialize();
-  } else {
-    heartbeatTopology.control.start();
-  }
+  await heartbeats.initialize();
 } catch (error) {
   logger.fatal({ error }, 'lucid.server.start_failed');
   if (server.listening) {
     await closeServer(server);
   }
-  await hostedExecution?.close();
+  await hostedExecution.close();
   await persistence.close();
   throw error;
 }
 logger.info({
   address: `http://${config.host}:${config.port}`,
   databaseDriver: 'postgres',
-  heartbeatCoordinatorEnabled: Boolean(
-    hostedExecutionConfig?.heartbeatCoordinator,
-  ),
-  heartbeatHost: heartbeatTopology.kind,
-  hostedExecutionEnabled: Boolean(hostedExecution),
+  heartbeatHost: 'coordinator',
+  hostedExecutionEnabled: true,
   model: config.model,
   webEnabled: Boolean(staticSpaRequestHandler),
 }, 'lucid.server.ready');
@@ -256,7 +211,7 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
     server.close((error) => resolve(error));
   });
   await heartbeats.stop();
-  await hostedExecution?.close();
+  await hostedExecution.close();
 
   const closeError = await serverClosed;
   if (closeError) {

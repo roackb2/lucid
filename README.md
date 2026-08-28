@@ -311,8 +311,7 @@ network for every shared message.
 | `UserNetworkService` | Trusted ingress, user lifecycle, and development diagnostics |
 | Service-owned store ports | Narrow storage-independent contracts beside workspace, network, wake, and communication services |
 | Service-local PostgreSQL stores | Drizzle adapters preserving each use case's multi-table transactions, projections, and fencing |
-| `AgentHeartbeatService` | Reconciles users to Heddle tasks and settles mailbox wakes |
-| `HeddleAgentRunner` | Supplies one claimed wake's prompt and tools to Heddle execution |
+| `CoordinatorAgentHeartbeatService` | Reconciles product lifecycle and controls the sole Heddle Coordinator task authority |
 | `AgentCommunicationToolService` | Enforces visibility, reply targets, content provenance, peer addressing, budgets, and idempotency |
 
 Service-level maintenance notes live in
@@ -341,19 +340,19 @@ test schemas and never falls back to `LUCID_DATABASE_URL`.
 
 ## Persistence
 
-PostgreSQL is Lucid's sole product and task authority:
+Lucid and the Coordinator colocate durable state in one application database
+with separate ownership:
 
 ```text
 PostgreSQL database
-├── lucid schema    # users, mailboxes, findings, product wake claims
-└── heddle schema   # tasks, checkpoints, leases, run requests, run history
+├── lucid schema    # Lucid-owned users, mailboxes, findings, product wake claims
+└── heddle schema   # coordinator-owned heartbeat authority plus hosted-turn lifecycle
 ```
 
-`LUCID_STATE_ROOT` remains local scratch space for Heddle execution artifacts;
-it is not Lucid's durable product database. The targeted host is the default
-and uses PostgreSQL leases plus bounded workers. The long-lived scheduler is an
-optional single-process execution topology over the same PostgreSQL authority.
-Migrations are an explicit deployment step and never run silently at startup.
+Lucid's Drizzle history does not manage heartbeat tables. The Coordinator owns
+their schema, migrations, schedules, leases, checkpoints, and run history
+through its separate database credential. Both migration commands are explicit
+deployment steps and never run silently at startup.
 
 Older experiments remain available in Git history. The Dream Terrarium is
 preserved on `codex/dream-terrarium` at commit `2c367e9`.
@@ -362,7 +361,7 @@ preserved on `codex/dream-terrarium` at commit `2c367e9`.
 
 ```text
 apps/
-├── server/   # tRPC, service-owned domain ports, PostgreSQL adapters, Heddle host
+├── server/   # tRPC, product ports, PostgreSQL adapters, hosted/coordinator edge
 └── web/      # user-scoped discovery workspace
 docs/         # product posture, architecture, flows, and local operation
 scripts/      # replaceable local network simulation tools and scenarios

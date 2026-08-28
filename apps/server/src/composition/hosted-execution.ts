@@ -155,30 +155,28 @@ export async function createHostedExecutionComposition(input: {
       input.logger.warn(failure, 'lucid.hosted_execution.request_failed');
     },
   });
-  const heartbeatDelegations = input.config.heartbeatDelegationToken
-    ? new NodeHostedHeartbeatDelegationHttpService({
-        delegations: new HostedHeartbeatDelegationService({
-          authority,
-          authorizer: new LucidHeartbeatDelegationAuthorizer(
-            input.heartbeatStore,
-            {
-              tenantId: input.config.tenantId,
-              productSessionId: input.config.productSessionId,
-              allowedTools: LUCID_PRODUCT_MCP_TOOLS,
-            },
-          ),
-          runtimeSessionNamespace: 'lucid',
-          maxExecutionMs: input.config.maxTurnMs,
-        }),
-        apiToken: input.config.heartbeatDelegationToken,
-        reportFailure: (failure) => {
-          input.logger.error(
-            failure,
-            'lucid.hosted_heartbeat.delegation_failed',
-          );
+  const heartbeatDelegations = new NodeHostedHeartbeatDelegationHttpService({
+    delegations: new HostedHeartbeatDelegationService({
+      authority,
+      authorizer: new LucidHeartbeatDelegationAuthorizer(
+        input.heartbeatStore,
+        {
+          tenantId: input.config.tenantId,
+          productSessionId: input.config.productSessionId,
+          allowedTools: LUCID_PRODUCT_MCP_TOOLS,
         },
-      })
-    : undefined;
+      ),
+      runtimeSessionNamespace: 'lucid',
+      maxExecutionMs: input.config.maxTurnMs,
+    }),
+    apiToken: input.config.heartbeatDelegationToken,
+    reportFailure: (failure) => {
+      input.logger.error(
+        failure,
+        'lucid.hosted_heartbeat.delegation_failed',
+      );
+    },
+  });
   const http = new HostedExecutionHttpRouter(
     adopterHttp,
     mcp,

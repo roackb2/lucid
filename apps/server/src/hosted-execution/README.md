@@ -43,18 +43,17 @@ Do not recreate wrappers around the public SDK here. Composition should import
 its services and types directly, then inject Lucid-owned ports.
 
 The first supported product capability is the read-only
-`read_workspace_snapshot` tool for a `conversation-turn`. A trusted,
+`read_workspace_snapshot` tool for conversation and heartbeat execution. A trusted,
 product-authorized application service supplies tenant, subject, session, and
 the fixed Lucid tool policy; untrusted or model-controlled input cannot choose
-that authority or an MCP destination. Stateful
-agent communication tools remain behind the wake-local runner until
-an autonomous-task wire contract can preserve task claims, mailbox horizons,
-action identities, and fenced settlement.
+that authority or an MCP destination. Stateful agent communication tools remain
+deferred until an autonomous-task wire contract can preserve task claims,
+mailbox horizons, action identities, and fenced settlement.
 
 ## Current integration state
 
-Ordinary server startup now composes this boundary only when
-`LUCID_HOSTED_EXECUTION_ENABLED=true` and the complete profile validates. It
+Ordinary server startup requires `LUCID_HOSTED_EXECUTION_ENABLED=true` and a
+complete Execution Host plus Coordinator profile. It
 loads the signing key, publishes `/.well-known/jwks.json`, mounts
 `/hosted-execution/mcp`, and exposes
 `/hosted-execution/conversation-turns` as an authenticated SSE endpoint. The
@@ -63,24 +62,20 @@ service issues one exact read-only MCP capability and invokes the configured
 host through either of the released direct HTTP or AgentCore `ExecutionHost`
 implementations.
 
-When the coordinator URL and its distinct API/delegation tokens are configured,
-startup first opens Lucid's HTTP authority/MCP routes, then reconciles the
+The coordinator URL and its distinct API/delegation tokens are required.
+Startup first opens Lucid's HTTP authority/MCP routes, then reconciles the
 coordinator task catalog while coordinator admission is paused. This makes the
 local coordinator vertical testable without turning the coordinator into a
 foreground proxy. Product trigger, status, enable/disable, reset, and global
-gate operations then use the coordinator's public authenticated API. Lucid
-does not start an embedded scheduler in this mode, so there is only one task
-authority.
+gate operations use the coordinator's public authenticated API. Lucid contains
+no embedded scheduler, so there is only one task authority.
 
 The remaining compatibility gap is behavioral rather than transport-related.
 The coordinator Runtime can currently inspect Lucid through the read-only
-`read_workspace_snapshot` capability, while the embedded runner still owns the
-claim-fenced communication operations that post network messages, revise
-working notes, and report findings. Lucid therefore keeps the embedded
-topology only when no coordinator profile is selected. The safe removal gate
-is a scoped state-changing MCP contract that preserves mailbox horizons,
-action identities, and fenced settlement; until then coordinator mode is an
-architecture proof, not full autonomous-product parity.
+`read_workspace_snapshot` capability. Claim-fenced communication operations
+that post network messages, revise working notes, and report findings still
+need a scoped state-changing MCP contract; coordinator execution is therefore
+an architecture proof rather than full autonomous-product parity.
 
 Lucid also owns the product grounding supplied with each desired heartbeat
 task. Reconciliation carries the selected agent instructions plus an explicit

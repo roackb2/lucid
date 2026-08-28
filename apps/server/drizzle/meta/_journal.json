@@ -43,6 +43,13 @@
       "when": 1786772460851,
       "tag": "0005_execution_host_conversations",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787913566506,
+      "tag": "0006_remove_lucid_heartbeat_authority",
+      "breakpoints": true
     }
   ]
 }
