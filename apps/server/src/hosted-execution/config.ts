@@ -42,12 +42,10 @@ const HostedExecutionEnvironmentSchema = z.object({
     .optional(),
   LUCID_HOSTED_EXECUTION_MODEL_API_KEY: z.string().trim().min(8).max(4_096),
   LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN: z.string().trim().min(32)
-    .max(4_096)
-    .optional(),
-  LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: z.url().optional(),
+    .max(4_096),
+  LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: z.url(),
   LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: z.string().trim().min(32)
-    .max(4_096)
-    .optional(),
+    .max(4_096),
   LUCID_HOSTED_EXECUTION_AGENTCORE_REGION: AgentCoreRegionSchema.optional(),
   LUCID_HOSTED_EXECUTION_AGENTCORE_RUNTIME_ARN:
     AgentCoreRuntimeArnSchema.optional(),
@@ -90,12 +88,11 @@ const HostedExecutionEnvironmentSchema = z.object({
     });
   }
 
-  const coordinatorUrl = environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL
-    ? new URL(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL)
-    : undefined;
+  const coordinatorUrl = new URL(
+    environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL,
+  );
   if (
-    coordinatorUrl
-    && (!isSafeWebUrl(coordinatorUrl) || !isOriginUrl(coordinatorUrl))
+    !isSafeWebUrl(coordinatorUrl) || !isOriginUrl(coordinatorUrl)
   ) {
     context.addIssue({
       code: 'custom',
@@ -104,30 +101,8 @@ const HostedExecutionEnvironmentSchema = z.object({
     });
   }
   if (
-    Boolean(coordinatorUrl)
-    !== Boolean(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN)
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL'],
-      message: 'and its API token must be configured together',
-    });
-  }
-  if (
-    coordinatorUrl
-    && !environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN
-  ) {
-    context.addIssue({
-      code: 'custom',
-      path: ['LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN'],
-      message: 'is required when Lucid publishes tasks to a coordinator',
-    });
-  }
-  if (
     environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN
-    && environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN
-    && environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN
-      === environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN
+    === environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN
   ) {
     context.addIssue({
       code: 'custom',
@@ -222,8 +197,8 @@ export type HostedExecutionConfig = {
   maxTurnMs: number;
   transport: HostedExecutionTransportConfig;
   modelCredentials: HostedConversationModelCredentialProvider;
-  heartbeatDelegationToken?: string;
-  heartbeatCoordinator?: {
+  heartbeatDelegationToken: string;
+  heartbeatCoordinator: {
     baseUrl: URL;
     apiToken: string;
   };
@@ -258,11 +233,11 @@ export function resolveHostedExecutionConfig(
   const heartbeatDelegationToken = takeHostedHeartbeatServiceToken(
     environment,
     HEARTBEAT_COORDINATOR_TOKEN_ENV,
-  );
+  )!;
   const heartbeatCoordinatorApiToken = takeHostedHeartbeatServiceToken(
     environment,
     HEARTBEAT_COORDINATOR_API_TOKEN_ENV,
-  );
+  )!;
   const transport: HostedExecutionTransportConfig = directCredentials
     ? {
         mode: 'direct',
@@ -294,19 +269,11 @@ export function resolveHostedExecutionConfig(
     maxTurnMs: parsed.LUCID_HOSTED_EXECUTION_MAX_TURN_MS,
     transport: Object.freeze(transport),
     modelCredentials,
-    ...(heartbeatDelegationToken
-      ? { heartbeatDelegationToken }
-      : {}),
-    ...(heartbeatCoordinatorApiToken
-      ? {
-          heartbeatCoordinator: Object.freeze({
-            baseUrl: new URL(
-              parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL!,
-            ),
-            apiToken: heartbeatCoordinatorApiToken,
-          }),
-        }
-      : {}),
+    heartbeatDelegationToken,
+    heartbeatCoordinator: Object.freeze({
+      baseUrl: new URL(parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL),
+      apiToken: heartbeatCoordinatorApiToken,
+    }),
   });
 }
 

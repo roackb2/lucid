@@ -1,22 +1,20 @@
 # Lucid server
 
 The server is the composition root for Lucid's PostgreSQL-backed
-delegated-discovery runtime. When the complete hosted coordinator profile is
-configured, product heartbeat controls use the separate Heddle Coordinator as
-their task authority. Without that profile, Lucid preserves the embedded
-heartbeat topology for local product behavior that has not yet crossed the
-scoped MCP boundary. The optional `src/hosted-execution/` boundary composes
-execution authority, scoped product MCP, direct foreground turns, and narrow
-coordinator task/delegation edges.
+delegated-discovery product. A complete hosted Execution Host and Coordinator
+profile is required. Product heartbeat controls use the separate Heddle
+Coordinator as their sole task authority; Lucid does not embed a scheduler or
+open the heartbeat tables. `src/hosted-execution/` composes execution
+authority, scoped product MCP, direct foreground turns, and coordinator
+task/delegation edges.
 
 It owns:
 
 - HTTP/tRPC transport and CORS policy;
 - optional same-origin serving of the pre-built user SPA;
 - PostgreSQL pool lifecycle and checked-in Drizzle migrations;
-- construction of the service-owned product stores and Heddle task authority;
-- construction and startup of the selected embedded or coordinator heartbeat
-  topology;
+- construction of the service-owned product stores;
+- coordinator-backed heartbeat product control and desired-task projection;
 - graceful shutdown ordering.
 
 The server does not decide whether a message is true or useful. It makes
@@ -25,12 +23,13 @@ bounded execution, and recovery predictable.
 
 ## Entrypoints
 
-- `src/server.ts` selects one heartbeat topology, constructs the product
-  services, and starts the HTTP server.
+- `src/server.ts` requires and composes the coordinator-backed heartbeat
+  topology, constructs the product services, and starts the HTTP server.
 - `src/auth/` verifies loopback, static-token, or Supabase sessions and maps
   provider subjects to product-owned user identities.
-- `src/migrate.ts` applies checked-in PostgreSQL product and Heddle migrations
-  as an explicit deployment step.
+- `src/migrate.ts` applies checked-in Lucid PostgreSQL migrations as an
+  explicit deployment step. The final ownership-transfer migration removes
+  Lucid's historical heartbeat tables before the coordinator creates them.
 - `src/infrastructure/postgres/database.ts` owns the shared PostgreSQL pool and
   migration mechanism without importing product schemas.
 - `src/lucid/{workspace,network,agent}/postgres-store.ts` and
@@ -39,10 +38,8 @@ bounded execution, and recovery predictable.
   owns only the bounded product history query.
 - `@heddleagent/postgres/execution-host/conversations` implements hosted-turn
   lifecycle writes over the same Lucid-owned pool.
-- `@heddleagent/postgres/heartbeat` implements Heddle's task authority over
-  the same Lucid-owned Drizzle pool.
 - `src/composition/postgres-persistence.ts` composes the product stores and
-  selected Heddle adapters, then owns their shared pool shutdown.
+  hosted-conversation lifecycle adapter, then owns their shared pool shutdown.
 - `src/hosted-execution/` owns the adopter-side authority, MCP, and external
   conversation host ports without importing private host code. The released
   Execution Host client owns both direct and AgentCore transport mechanics.
@@ -73,29 +70,18 @@ development.
 Startup order is:
 
 1. validate the PostgreSQL and authentication configuration;
-2. construct product stores and exactly one heartbeat control topology;
-3. for the embedded topology, initialize product defaults and recover expired
-   Heddle executions through the lease- and claim-fenced API;
-4. open HTTP so JWKS, MCP, and delegation routes are reachable;
-5. either reconcile and resume the external coordinator task catalog, or start
-   the already-initialized embedded host.
+2. construct product stores and the coordinator-backed heartbeat control;
+3. open HTTP so JWKS, MCP, and delegation routes are reachable;
+4. reconcile the desired task catalog and resume coordinator admission.
 
-Shutdown first stops new HTTP work, then aborts and settles heartbeat
-execution, and closes PostgreSQL last. Persistence code must remain available
-until every claimed wake has either completed or been returned to unread state.
+Shutdown first stops new HTTP work, pauses coordinator admission, closes the
+hosted boundary, and closes PostgreSQL last.
 
-The targeted host is the default. It invokes one addressed task at a time,
-retains a correctness poll fallback, and uses the database task lease as the
-authority for recovery. The optional scheduler host is useful for a
-single-process demo but does not change persistence or create a second task
-authority.
-
-Coordinator mode exposes product trigger, status, enable/disable, reset, and
-global-gate operations through Heddle's public coordinator client. It does not
-start a second embedded scheduler. The embedded topology remains the fallback
-until Lucid's state-changing mailbox and finding capabilities have a scoped,
-claim-fenced MCP contract; deleting it earlier would silently remove product
-behavior. See
+Product trigger, status, enable/disable, reset, and global-gate operations use
+Heddle's public coordinator client. Missing coordinator configuration fails
+startup rather than silently starting a second scheduler. The current hosted
+heartbeat capability is read-only; state-changing mailbox and finding tools
+remain a subsequent scoped-MCP slice. See
 [`src/hosted-execution/README.md`](src/hosted-execution/README.md) and
 [`../../docs/hosted-execution.md`](../../docs/hosted-execution.md) before
 composing the external execution boundary or changing autonomous work.
@@ -108,9 +94,8 @@ image, run `node apps/server/dist/migrate.js` as a separate release step. See
 [`../../docs/deploying.md`](../../docs/deploying.md) for the generic
 configuration and deployment sequence.
 
-The embedded fallback consumes `@heddleagent/runtime@6.3.0` directly; no
-deprecated `@roackb2/heddle` package remains. The external conversation and
-coordinator boundary uses `@heddleagent/execution-host-client@6.6.1` for signing-key and
+The conversation and coordinator boundary uses
+`@heddleagent/execution-host-client@6.6.1` for signing-key and
 credential handling, signed authority, Node HTTP/JWKS/SSE, product-edge MCP,
 generic durable conversation lifecycle, browser turn transport, authenticated
 coordinator control, the versioned `ExecutionHost` contract, and its AgentCore
@@ -118,11 +103,11 @@ transport. Its lifecycle store is supplied by
 `@heddleagent/postgres@6.1.2`; Lucid retains authenticated scope selection,
 migration execution, and its history query.
 
-`src/lucid` owns users, mailbox events, findings, feedback, wake claims,
-and the service-owned store ports. Heddle owns provider
-credentials, unattended approval policy, execution cancellation, checkpoints,
-run requests, and task settlement. It is integrated through
-`HeddleAgentRunner` and `AgentHeartbeatService`.
+`src/lucid` owns users, mailbox events, findings, feedback, wake claims, and
+the service-owned store ports. Heddle owns provider credentials, unattended
+approval policy, execution cancellation, task scheduling, checkpoints, run
+requests, and task settlement. Lucid integrates through
+`CoordinatorAgentHeartbeatService` and the scoped delegation/MCP boundary.
 
 Read [`src/infrastructure/postgres/README.md`](src/infrastructure/postgres/README.md)
 before changing pool or migration infrastructure,

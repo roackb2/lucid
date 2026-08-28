@@ -1,16 +1,18 @@
 # Running Lucid locally
 
-Local development runs the web app, API, PostgreSQL authorities, network
-simulator, and agent workers on one machine. PostgreSQL is the only
-supported durable backend.
+Local development runs the web app and product API beside a separate Heddle
+Coordinator and Execution Host Runtime. PostgreSQL is the durable backend, but
+Lucid and the Coordinator own distinct schemas, credentials, and Drizzle
+histories.
 
 ## Requirements
 
 - Node.js 22
 - Yarn 1.22
 - PostgreSQL 14 or newer
-- a model credential usable by Heddle: an existing Codex login by default, or
-  an OpenAI API key when API-key mode is selected
+- a local or managed Heddle Execution Host and Coordinator checkout;
+- a model credential supplied to the hosted profile and Coordinator through
+  their documented secret inputs
 
 Do not put real credentials, bearer tokens, or hosted database URLs in Git.
 
@@ -41,10 +43,16 @@ LUCID_AUTH_MODE=development
 Development authentication is rejected when the server binds to a non-loopback
 host.
 
-Apply the checked-in migrations, then start the API and web app:
+Apply Lucid's checked-in migrations first. Then apply the Coordinator's
+checked-in migration against the same application database; it recreates the
+two heartbeat tables under the Coordinator's separate Drizzle history. Start
+the Runtime and Coordinator before the Lucid API and web app:
 
 ```bash
 yarn server:db:migrate
+# From the Heddle Execution Host checkout:
+yarn coordinator:migrate
+# Start its Runtime and Coordinator, then return here:
 yarn dev
 ```
 
@@ -55,18 +63,9 @@ Migrations never run automatically during server startup. Run the migration
 command explicitly after pulling a change that adds a migration and before
 starting a newly built server.
 
-## Model authentication
-
-Lucid lets Heddle use an existing Codex login by default. To prefer a direct
-API key, configure the key outside version control and opt in:
-
-```dotenv
-LUCID_PREFER_API_KEY=true
-OPENAI_API_KEY=your-secret-from-a-secure-source
-```
-
-The example value above is a placeholder. Never paste a real key into docs,
-commits, logs, screenshots, or shell history that will be shared.
+The complete hosted profile in `.env.example` is required. The example values
+are placeholders. Never paste real keys into docs, commits, logs, screenshots,
+or shell history that will be shared.
 
 ## Create a small network
 
@@ -133,17 +132,10 @@ development routes in the app.
 
 ## Execution topology
 
-The embedded fallback uses Heddle's supported targeted host and one-shot
-workers over the official PostgreSQL heartbeat authority. Its maximum
-independent agent concurrency is controlled by:
-
-```dotenv
-LUCID_HEARTBEAT_MAX_CONCURRENCY=3
-```
-
-Do not shorten the execution lease below the invocation timeout. Configuration
-validation requires both the invocation timeout and recovery interval to be
-shorter than the lease.
+The Heddle Coordinator is the only heartbeat scheduler. Lucid publishes
+desired tasks and calls its authenticated control API; the Coordinator owns
+polling, claims, leases, checkpoints, recovery, and run history. The Runtime is
+database-free and executes only one explicitly claimed invocation.
 
 ## Authentication modes
 
@@ -180,7 +172,7 @@ Add the local origin and `/auth/callback` URL to the provider's redirect
 allowlist. Development user administration and simulation routes remain
 loopback-only in every authentication mode.
 
-## Optional external Execution Host conversation
+## Required external Execution Host
 
 Generate Lucid's ignored local signing key once:
 
@@ -224,7 +216,7 @@ smoke remains separate evidence.
 For the portable ARM64 image, AgentCore transport variables, and explicit
 hosted migration sequence, see [Deploying the Lucid pilot](deploying.md).
 
-### Optional local heartbeat coordinator
+### Required local heartbeat coordinator
 
 The local architecture gate uses the same direct Runtime for foreground turns
 and coordinator heartbeats. Configure the distinct delegation token,
@@ -233,12 +225,11 @@ Runtime and coordinator before Lucid; Lucid opens its JWKS/MCP/delegation
 routes, pauses coordinator admission, reconciles the desired task catalog, and
 resumes only when the product-wide background-work gate is enabled.
 
-This gate proves service boundaries and durable Heddle task settlement. With
-the coordinator profile enabled, Lucid's product trigger/status and preference
-controls use the coordinator API and no embedded worker starts. The coordinator
-path currently has only the read-only workspace capability; keep the embedded
-topology for ordinary local product behavior until state-changing network,
-working-note, and finding operations have a scoped, claim-fenced MCP contract.
+This gate proves service boundaries and durable Heddle task settlement.
+Lucid's product trigger/status and preference controls always use the
+coordinator API; missing configuration fails startup. The coordinator path
+currently has only the read-only workspace capability. State-changing network,
+working-note, and finding operations remain a scoped, claim-fenced MCP follow-up.
 The exact container networking command is intentionally not prescribed until
 the real Runtime can reach Lucid's loopback MCP/JWKS endpoints without
 weakening the Runtime's non-loopback TLS rule.
@@ -269,14 +260,10 @@ Review the generated SQL and snapshot before committing it. Apply migrations
 to a specific database only by setting that database's
 `LUCID_DATABASE_URL` explicitly.
 
-## Local state and shutdown
+## Shutdown
 
-`LUCID_STATE_ROOT` defaults to `local/discovery-home`. It holds local Heddle
-execution artifacts; durable product, task, checkpoint, lease, and run state
-remain in PostgreSQL.
-
-Stop `yarn dev` with `Ctrl-C`. The server stops HTTP admission and
-agent work before closing PostgreSQL. Pausing a agent in the
+Stop `yarn dev` with `Ctrl-C`. The server stops HTTP admission and pauses
+Coordinator dispatch before closing PostgreSQL. Pausing an agent in the
 web app is different from stopping the process: pause is durable and mail can
 accumulate until that agent resumes.
 

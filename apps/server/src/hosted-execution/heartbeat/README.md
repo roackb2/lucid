@@ -47,15 +47,13 @@ The two directions use distinct secrets:
 - `LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN` authenticates the coordinator's
   delegation calls back to Lucid.
 
-When coordinator mode is configured, Lucid's product trigger, status,
-enable/disable, reset, and global gate flows use the public coordinator API.
-The embedded worker does not start, so the two authorities cannot execute the
-same autonomous work. Without a coordinator profile, the embedded topology
-remains available because its wake-local runner is still the only path with
-Lucid's state-changing communication and finding tools.
+Lucid's product trigger, status, enable/disable, reset, and global gate flows
+always use the public coordinator API. A complete coordinator profile is a
+startup requirement; Lucid has no embedded scheduler or direct heartbeat-table
+authority.
 
-Do not remove that fallback merely because coordinator task control is wired.
-First expose the state-changing Lucid operations through a scoped MCP contract
-that preserves the claimed task execution, mailbox horizon, action identity,
-and fenced completion. After that gate passes, the embedded runner and its
-Lucid-owned Heddle task tables can be removed together.
+The currently exposed autonomous capability is the read-only workspace
+snapshot. State-changing communication and finding operations still require a
+scoped MCP contract that preserves the claimed task execution, mailbox
+horizon, action identity, and fenced completion. That product-capability gap
+does not create a second scheduling topology.
