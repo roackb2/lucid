@@ -5,16 +5,20 @@ const LOCAL_TOKEN = 'local-token-'.padEnd(32, 'x');
 const MODEL_API_KEY = 'model-key-value';
 const DELEGATION_TOKEN = 'delegation-token-'.padEnd(32, 'x');
 const COORDINATOR_API_TOKEN = 'coordinator-api-token-'.padEnd(32, 'x');
+const RUNTIME = {
+  repoRoot: '/repo',
+  model: 'gpt-5.4-mini',
+};
 
 describe('hosted execution config', () => {
   it('is absent by default', () => {
-    expect(resolveHostedExecutionConfig({}, '/repo')).toBeUndefined();
+    expect(resolveHostedExecutionConfig({}, RUNTIME)).toBeUndefined();
   });
 
   it('parses the complete direct profile and removes ambient credentials', async () => {
     const environment = enabledEnvironment();
 
-    const config = resolveHostedExecutionConfig(environment, '/repo');
+    const config = resolveHostedExecutionConfig(environment, RUNTIME);
 
     expect(config).toMatchObject({
       adopterId: 'lucid-local',
@@ -27,16 +31,17 @@ describe('hosted execution config', () => {
     expect(config?.transport.mode === 'direct'
       ? config.transport.credentials.localToken()
       : undefined).toBe(LOCAL_TOKEN);
-    await expect(config?.modelCredentials.resolveModelApiKey({
+    await expect(config?.modelCredentials.resolveModelCredential({
       scope: {
         tenantId: 'tenant',
         subjectId: 'subject',
         productSessionId: 'session',
       },
       invocationId: 'invocation',
-    })).resolves.toBe(
-      MODEL_API_KEY,
-    );
+    })).resolves.toEqual({
+      type: 'api-key',
+      apiKey: MODEL_API_KEY,
+    });
     expect(environment.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN).toBeUndefined();
     expect(environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY).toBeUndefined();
     expect(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN)
@@ -53,7 +58,7 @@ describe('hosted execution config', () => {
   it('parses the AgentCore profile without direct-host credentials', async () => {
     const environment = agentCoreEnvironment();
 
-    const config = resolveHostedExecutionConfig(environment, '/repo');
+    const config = resolveHostedExecutionConfig(environment, RUNTIME);
 
     expect(config).toMatchObject({
       transport: {
@@ -64,23 +69,45 @@ describe('hosted execution config', () => {
         qualifier: 'pilot',
       },
     });
-    await expect(config?.modelCredentials.resolveModelApiKey({
+    await expect(config?.modelCredentials.resolveModelCredential({
       scope: {
         tenantId: 'tenant',
         subjectId: 'subject',
         productSessionId: 'session',
       },
       invocationId: 'invocation',
-    })).resolves.toBe(MODEL_API_KEY);
+    })).resolves.toEqual({
+      type: 'api-key',
+      apiKey: MODEL_API_KEY,
+    });
     expect(environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY).toBeUndefined();
     expect(JSON.stringify(config?.modelCredentials)).toBe('{}');
+  });
+
+  it('uses the Heddle account credential when no hosted API key is configured', () => {
+    const environment = enabledEnvironment();
+    delete environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY;
+
+    const config = resolveHostedExecutionConfig(environment, RUNTIME);
+
+    expect(config).toBeDefined();
+    expect(environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY).toBeUndefined();
+    expect(JSON.stringify(config?.modelCredentials)).toBe('{}');
+  });
+
+  it('rejects the Docker-only callback alias as an authority issuer', () => {
+    const environment = enabledEnvironment();
+    environment.LUCID_HOSTED_EXECUTION_PUBLIC_URL =
+      'http://host.docker.internal:8081';
+
+    expect(() => resolveHostedExecutionConfig(environment, RUNTIME)).toThrow();
   });
 
   it('rejects credentials when the profile is disabled', () => {
     expect(() => resolveHostedExecutionConfig({
       LUCID_HOSTED_EXECUTION_ENABLED: 'false',
       LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: LOCAL_TOKEN,
-    }, '/repo')).toThrow(
+    }, RUNTIME)).toThrow(
       'Hosted execution credentials are configured',
     );
   });
@@ -115,7 +142,7 @@ describe('hosted execution config', () => {
     expect(() => resolveHostedExecutionConfig({
       ...enabledEnvironment(),
       ...override,
-    }, '/repo')).toThrow();
+    }, RUNTIME)).toThrow();
   });
 
   it.each([
@@ -133,7 +160,7 @@ describe('hosted execution config', () => {
     expect(() => resolveHostedExecutionConfig({
       ...agentCoreEnvironment(),
       ...override,
-    }, '/repo')).toThrow();
+    }, RUNTIME)).toThrow();
   });
 });
 

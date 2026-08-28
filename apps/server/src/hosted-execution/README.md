@@ -27,6 +27,7 @@ This directory contains only Lucid-owned behavior:
 | Path | Responsibility |
 | --- | --- |
 | `config.ts` | Validate Lucid's all-or-nothing hosted profile and select product identity, URLs, audiences, and limits |
+| `model-credentials.ts` | Select an explicit API key or ask Heddle for an access-token-only view of Lucid's stored Codex login |
 | `conversation/` | Admit an authenticated Lucid user, derive product-owned scope/identity/deadline, and query the newest 20 scoped lifecycle records |
 | `heartbeat/` | Publish Lucid-owned desired task state and issue one-run execution/MCP delegation without sharing product database credentials |
 | `http-router.ts` | Mount the package-owned HTTP and MCP services beside Lucid's tRPC routes |
@@ -38,6 +39,11 @@ credentials, authority and capability verification, hosted-turn orchestration,
 direct and AgentCore transports, durable lifecycle transitions, bounded Node
 HTTP/JWKS/SSE service, declarative JSON-tool registry, and stateless Streamable
 HTTP MCP lifecycle. Those implementations must not be copied back into Lucid.
+
+Heddle owns OAuth refresh and persistence in Lucid's process. Lucid selects the
+product credential source and passes the resulting request-scoped credential
+to the public Execution Host client. The Runtime contract rejects refresh
+tokens and ambient model credentials. The browser never receives either form.
 
 Do not recreate wrappers around the public SDK here. Composition should import
 its services and types directly, then inject Lucid-owned ports.

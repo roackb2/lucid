@@ -12,7 +12,8 @@ import {
   EXECUTION_ASSERTION_HEADER,
   EXECUTION_HOST_LOCAL_TOKEN_HEADER,
   MCP_CAPABILITY_HEADER,
-  MODEL_API_KEY_HEADER,
+  MODEL_CREDENTIAL_HEADER,
+  type ExecutionHostModelCredential,
   type ExecutionHostStreamEvent,
 } from '@heddleagent/execution-host-client/contracts';
 import {
@@ -66,7 +67,7 @@ describe('hosted execution composition', () => {
     const lucidOrigin = await listen(lucidServer);
     const observed = {
       localToken: '',
-      modelApiKey: '',
+      modelCredential: undefined as ExecutionHostModelCredential | undefined,
       executionAssertion: '',
       mcpCapability: '',
       runtimeSessionId: '',
@@ -83,8 +84,8 @@ describe('hosted execution composition', () => {
     const executionHostOrigin = await listen(executionHostServer);
     const credentials = new DirectExecutionHostCredentials({
       localToken: LOCAL_TOKEN,
-      modelApiKey: MODEL_API_KEY,
     });
+    const modelCredentials = apiKeyModelCredentials();
     const composition = await createHostedExecutionComposition({
       config: {
         publicBaseUrl: lucidOrigin,
@@ -102,7 +103,7 @@ describe('hosted execution composition', () => {
           baseUrl: executionHostOrigin,
           credentials,
         },
-        modelCredentials: credentials,
+        modelCredentials,
         heartbeatDelegationToken: HEARTBEAT_DELEGATION_TOKEN,
         heartbeatCoordinator: {
           baseUrl: new URL('http://127.0.0.1:18082'),
@@ -160,7 +161,10 @@ describe('hosted execution composition', () => {
     });
     expect(observed).toMatchObject({
       localToken: LOCAL_TOKEN,
-      modelApiKey: MODEL_API_KEY,
+      modelCredential: {
+        type: 'api-key',
+        apiKey: MODEL_API_KEY,
+      },
       workspaceId: 'local-discovery-workspace',
     });
     expect(observed.executionAssertion.split('.')).toHaveLength(3);
@@ -188,7 +192,6 @@ describe('hosted execution composition', () => {
     const executionHostOrigin = await listen(executionHostServer);
     const credentials = new DirectExecutionHostCredentials({
       localToken: LOCAL_TOKEN,
-      modelApiKey: MODEL_API_KEY,
     });
     const composition = await createHostedExecutionComposition({
       config: {
@@ -207,7 +210,7 @@ describe('hosted execution composition', () => {
           baseUrl: executionHostOrigin,
           credentials,
         },
-        modelCredentials: credentials,
+        modelCredentials: apiKeyModelCredentials(),
         heartbeatDelegationToken: HEARTBEAT_DELEGATION_TOKEN,
         heartbeatCoordinator: {
           baseUrl: new URL('http://127.0.0.1:18082'),
@@ -271,7 +274,7 @@ async function handleFakeExecutionHost(
   mcpEndpoint: URL,
   observed: {
     localToken: string;
-    modelApiKey: string;
+    modelCredential: ExecutionHostModelCredential | undefined;
     executionAssertion: string;
     mcpCapability: string;
     runtimeSessionId: string;
@@ -282,7 +285,9 @@ async function handleFakeExecutionHost(
     invocationId: string;
   };
   observed.localToken = readHeader(request, EXECUTION_HOST_LOCAL_TOKEN_HEADER);
-  observed.modelApiKey = readHeader(request, MODEL_API_KEY_HEADER);
+  observed.modelCredential = JSON.parse(
+    readHeader(request, MODEL_CREDENTIAL_HEADER),
+  ) as ExecutionHostModelCredential;
   observed.executionAssertion = readHeader(request, EXECUTION_ASSERTION_HEADER);
   observed.mcpCapability = readHeader(request, MCP_CAPABILITY_HEADER);
   observed.runtimeSessionId = readHeader(
@@ -361,6 +366,15 @@ async function handleFakeExecutionHost(
   } finally {
     await client.close().catch(() => undefined);
   }
+}
+
+function apiKeyModelCredentials() {
+  return {
+    resolveModelCredential: async () => ({
+      type: 'api-key' as const,
+      apiKey: MODEL_API_KEY,
+    }),
+  };
 }
 
 async function respondWithInterruptedStream(

@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   McpServerIdSchema,
   OpaqueIdSchema,
@@ -10,14 +10,17 @@ import {
   AgentCoreRuntimeArnSchema,
 } from '@heddleagent/execution-host-client/agentcore';
 import type {
-  HostedConversationModelCredentialProvider,
+  HostedModelCredentialProvider,
 } from '@heddleagent/execution-host-client/conversation';
 import {
   takeHostedHeartbeatServiceToken,
 } from '@heddleagent/execution-host-client/coordinator/node';
 import { DirectExecutionHostCredentials } from '@heddleagent/execution-host-client/node';
 import { z } from 'zod';
-import { EnvironmentHostedModelCredentials } from './model-credentials.js';
+import {
+  EnvironmentHostedModelCredentials,
+  HeddleStoredOAuthModelCredentials,
+} from './model-credentials.js';
 
 const ENABLED_ENV = 'LUCID_HOSTED_EXECUTION_ENABLED';
 const SECRET_ENV_NAMES = [
@@ -28,19 +31,21 @@ const SECRET_ENV_NAMES = [
 ] as const;
 const DIRECT_CREDENTIAL_ENV_NAMES = Object.freeze({
   localToken: SECRET_ENV_NAMES[0],
-  modelApiKey: SECRET_ENV_NAMES[1],
 });
 const HEARTBEAT_COORDINATOR_TOKEN_ENV = SECRET_ENV_NAMES[2];
 const HEARTBEAT_COORDINATOR_API_TOKEN_ENV = SECRET_ENV_NAMES[3];
+const MODEL_CREDENTIAL_COMPLETION_MARGIN_MS = 60_000;
 const HostedExecutionEnvironmentSchema = z.object({
   LUCID_HOSTED_EXECUTION_ENABLED: z.literal('true'),
+  LUCID_STATE_ROOT: z.string().trim().min(1).optional(),
   LUCID_HOSTED_EXECUTION_TRANSPORT: z.enum(['direct', 'agentcore'])
     .default('direct'),
   LUCID_HOSTED_EXECUTION_PUBLIC_URL: z.url(),
   LUCID_HOSTED_EXECUTION_HOST_URL: z.url().optional(),
   LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: z.string().trim().min(32).max(4_096)
     .optional(),
-  LUCID_HOSTED_EXECUTION_MODEL_API_KEY: z.string().trim().min(8).max(4_096),
+  LUCID_HOSTED_EXECUTION_MODEL_API_KEY: z.string().trim().min(8).max(4_096)
+    .optional(),
   LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN: z.string().trim().min(32)
     .max(4_096),
   LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: z.url(),
@@ -196,7 +201,7 @@ export type HostedExecutionConfig = {
   mcpServerId: string;
   maxTurnMs: number;
   transport: HostedExecutionTransportConfig;
-  modelCredentials: HostedConversationModelCredentialProvider;
+  modelCredentials: HostedModelCredentialProvider;
   heartbeatDelegationToken: string;
   heartbeatCoordinator: {
     baseUrl: URL;
@@ -207,7 +212,10 @@ export type HostedExecutionConfig = {
 /** Resolves one optional hosted profile and removes credentials from env. */
 export function resolveHostedExecutionConfig(
   environment: NodeJS.ProcessEnv = process.env,
-  repoRoot: string,
+  runtime: {
+    repoRoot: string;
+    model: string;
+  },
 ): HostedExecutionConfig | undefined {
   const enabled = environment[ENABLED_ENV]?.trim() ?? 'false';
   if (enabled === 'false') {
@@ -225,11 +233,21 @@ export function resolveHostedExecutionConfig(
         DIRECT_CREDENTIAL_ENV_NAMES,
       )
     : undefined;
-  const modelCredentials = directCredentials
-    ?? EnvironmentHostedModelCredentials.take(
-      environment,
-      DIRECT_CREDENTIAL_ENV_NAMES.modelApiKey,
-    );
+  const stateRoot = resolve(
+    parsed.LUCID_STATE_ROOT
+      ?? join(runtime.repoRoot, 'local', 'discovery-home'),
+  );
+  const modelCredentials = parsed.LUCID_HOSTED_EXECUTION_MODEL_API_KEY
+    ? EnvironmentHostedModelCredentials.take(
+        environment,
+        SECRET_ENV_NAMES[1],
+      )
+    : new HeddleStoredOAuthModelCredentials(
+        runtime.model,
+        join(stateRoot, 'heddle'),
+        parsed.LUCID_HOSTED_EXECUTION_MAX_TURN_MS
+          + MODEL_CREDENTIAL_COMPLETION_MARGIN_MS,
+      );
   const heartbeatDelegationToken = takeHostedHeartbeatServiceToken(
     environment,
     HEARTBEAT_COORDINATOR_TOKEN_ENV,
@@ -256,7 +274,7 @@ export function resolveHostedExecutionConfig(
   return Object.freeze({
     publicBaseUrl: new URL(parsed.LUCID_HOSTED_EXECUTION_PUBLIC_URL),
     signingJwkPath: resolve(
-      repoRoot,
+      runtime.repoRoot,
       parsed.LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH,
     ),
     adopterId: parsed.LUCID_HOSTED_EXECUTION_ADOPTER_ID,

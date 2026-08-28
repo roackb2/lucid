@@ -174,18 +174,68 @@ loopback-only in every authentication mode.
 
 ## Required external Execution Host
 
-Generate Lucid's ignored local signing key once:
+Lucid can use the isolated Execution Host over direct HTTP without AgentCore,
+AWS credentials, an API key, or a local model. The browser still calls Lucid;
+Lucid signs the user-scoped invocation, supplies an access-token-only view of
+its existing Heddle Codex login, and consumes the Runtime's SSE stream.
+
+First build the reviewed Runtime image from the sibling Execution Host
+repository:
 
 ```bash
-yarn hosted:generate-key
+cd /path/to/heddle-execution-host
+yarn install
+yarn docker:build
 ```
 
-Then enable the complete profile in `.env`. The raw local token must match the
-token whose SHA-256 digest is configured in the private Execution Host; the two
-audiences, adopter ID, MCP server ID, issuer, JWKS URL, and MCP URL must also
-match exactly. Lucid deletes the raw local token and model key from its process
-environment after startup and retains them only in non-enumerable credential
-objects for outbound calls.
+Configure Lucid's ignored local signing key, ingress token, and direct transport
+once:
+
+```bash
+cd /path/to/lucid
+yarn hosted:runtime:configure
+```
+
+The command preserves existing non-hosted settings and adds this direct profile
+to Lucid's ignored `.env`:
+
+```dotenv
+LUCID_HOSTED_EXECUTION_ENABLED=true
+LUCID_HOSTED_EXECUTION_TRANSPORT=direct
+LUCID_HOSTED_EXECUTION_PUBLIC_URL=http://127.0.0.1:8081
+LUCID_HOSTED_EXECUTION_HOST_URL=http://127.0.0.1:18080
+LUCID_HOSTED_EXECUTION_LOCAL_TOKEN=<generated without being printed>
+LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH=local/hosted-execution/es256-private.jwk.json
+```
+
+Do not set `LUCID_HOSTED_EXECUTION_MODEL_API_KEY` for Codex subscription mode.
+Lucid uses the OpenAI credential already stored at
+`LUCID_STATE_ROOT/heddle/auth.json`; the default location is
+`local/discovery-home/heddle/auth.json`. Heddle keeps and refreshes the refresh
+token in Lucid's process. Only the short-lived access token, expiry, and
+optional account identifier cross the authenticated Runtime request. If this
+store has no login, Lucid rejects the turn with an explicit reconnect error
+instead of falling back to Ollama or an ambient API key.
+
+After starting the separately configured Coordinator, start the Runtime from
+one Lucid terminal and the app from another:
+
+```bash
+yarn hosted:runtime:local
+```
+
+```bash
+yarn dev
+```
+
+The Lucid command reads the reviewed non-secret topology plus the raw ingress
+token from `.env`, computes the one-way verifier supplied to Docker, and starts
+`heddle-execution-host:local` on `127.0.0.1:18080`. It derives matching issuer,
+JWKS, MCP, audience, adopter, model, and timeout settings so those values are
+not duplicated across two shell commands. It never passes the raw ingress
+token or OAuth refresh token into the container. Stop it with Ctrl-C. Set
+`LUCID_HOSTED_EXECUTION_LOCAL_IMAGE` only when testing another reviewed local
+image tag.
 
 The user endpoint is:
 
@@ -201,17 +251,15 @@ It returns the versioned Execution Host SSE stream. Lucid additionally serves
 `POST /hosted-execution/mcp` endpoint; neither endpoint exposes the signing
 key or database credential.
 
-An isolated Docker container cannot reach a host-machine Lucid server through
-`127.0.0.1`; that address is the container itself. For a real container smoke,
-set `LUCID_HOSTED_EXECUTION_PUBLIC_URL` to an HTTPS origin reachable from the
-container and configure the host's JWKS and MCP URLs from that same origin. If
-a tunnel or reverse proxy makes Lucid reachable beyond this machine, switch to
-`static-token` authentication; a loopback proxy must never turn arbitrary
-Internet callers into the development identity. Do not weaken the host's
-non-loopback TLS check or run its shell-enabled workstation natively just to
-avoid this boundary. The deterministic integration suite exercises the
-complete HTTP/JWKS/MCP/SSE composition without a model; the isolated-container
-smoke remains separate evidence.
+Inside Docker, `127.0.0.1` names the container. The local Runtime command keeps
+Lucid's authority issuer on loopback and derives Docker Desktop's exact
+`host.docker.internal` alias only for Runtime-to-Lucid JWKS and MCP callbacks.
+Lucid's browser origin and outbound Runtime URL remain loopback. Other non-TLS
+hosts are rejected. If a tunnel or
+reverse proxy makes Lucid reachable beyond this machine, switch to
+`static-token` authentication; a proxy must never turn Internet callers into
+the development identity. Do not run the shell-enabled Runtime natively merely
+to avoid its container isolation boundary.
 
 For the portable ARM64 image, AgentCore transport variables, and explicit
 hosted migration sequence, see [Deploying the Lucid pilot](deploying.md).
@@ -227,12 +275,13 @@ resumes only when the product-wide background-work gate is enabled.
 
 This gate proves service boundaries and durable Heddle task settlement.
 Lucid's product trigger/status and preference controls always use the
-coordinator API; missing configuration fails startup. The coordinator path
-currently has only the read-only workspace capability. State-changing network,
-working-note, and finding operations remain a scoped, claim-fenced MCP follow-up.
-The exact container networking command is intentionally not prescribed until
-the real Runtime can reach Lucid's loopback MCP/JWKS endpoints without
-weakening the Runtime's non-loopback TLS rule.
+coordinator API; missing configuration fails startup. Starting the Runtime
+with `yarn hosted:runtime:local` enables foreground
+conversation; it does not start the Coordinator or activate a heartbeat. Start
+and configure the Coordinator separately as required above. The currently
+integrated agent capability is read-only workspace access. State-changing
+network, working-note, and finding operations remain a scoped, claim-fenced
+MCP follow-up.
 
 ## Checks
 
