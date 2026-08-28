@@ -21,8 +21,6 @@
     "operator:pause-dispatch": "tsx scripts/operator-control.ts pause-dispatch",
     "operator:resume-dispatch": "tsx scripts/operator-control.ts resume-dispatch",
     "hosted:generate-key": "tsx scripts/generate-hosted-execution-key.ts",
-    "hosted:runtime:configure": "tsx scripts/configure-local-execution-host.ts",
-    "hosted:runtime:local": "tsx scripts/start-local-execution-host.ts",
     "server:dev": "yarn workspace @lucid/server dev",
     "server:build": "yarn workspace @lucid/server build",
     "server:start": "yarn workspace @lucid/server start",

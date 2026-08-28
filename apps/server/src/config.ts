@@ -6,6 +6,7 @@ import type { LucidAuthenticationConfig } from './auth/authenticator.js';
 
 export const LUCID_REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 
+loadDotEnv({ path: join(LUCID_REPO_ROOT, '.env.heddle.local'), quiet: true });
 loadDotEnv({ path: join(LUCID_REPO_ROOT, '.env'), quiet: true });
 
 const environmentSchema = z.object({
