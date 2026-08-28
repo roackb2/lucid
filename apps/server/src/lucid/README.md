@@ -189,6 +189,12 @@ active. Mail accumulates, the preference survives restart in Heddle's task
 store, and Resume enables and triggers the same task. Other user nodes
 continue running.
 
+The loopback operator boundary can similarly pause or resume every active
+synthetic peer Agent task without changing those users' lifecycle state. Lucid
+owns peer selection and count validation; Heddle owns task cancellation and
+the durable enabled state. This is experiment administration, not a normal
+user-facing Agent control.
+
 The workspace-level background flag is a durable operator dispatch gate, not
 the normal user product control. Global pause preserves every task's
 personal `enabled` preference, continues to persist/coalesce run intent,

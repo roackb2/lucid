@@ -171,6 +171,25 @@ describe('Agent work controls', () => {
     expect(markup).toContain('Pause background work');
     expect(markup.match(/disabled=""/g)).toHaveLength(2);
   });
+
+  it('keeps Check now discoverable while operator dispatch is paused', () => {
+    const markup = renderControls({
+      ...BASE_SNAPSHOT,
+      workspace: {
+        ...BASE_SNAPSHOT.workspace,
+        backgroundChecksEnabled: false,
+      },
+      backgroundChecks: {
+        ...BASE_SNAPSHOT.backgroundChecks,
+        dispatchEnabled: false,
+      },
+    });
+
+    expect(markup).toContain('Background dispatch is paused');
+    expect(markup).toContain('Only the service operator can resume dispatch');
+    expect(markup).toContain('>Check now<');
+    expect(markup).toContain('disabled=""');
+  });
 });
 
 function renderControls(snapshot: DiscoverySnapshot): string {

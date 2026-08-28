@@ -8,6 +8,7 @@
  */
 import { LOCAL_USER_ID } from '../local-user.js';
 import type {
+  AgentTaskView,
   BackgroundChecksView,
   NetworkDiagnosticsSnapshot,
   RegisterUserInput,
@@ -145,6 +146,54 @@ export class UserNetworkService {
     }
   }
 
+  /**
+   * Changes only the Heddle task preference for active synthetic peers.
+   * Their Lucid user lifecycle and mailbox eligibility remain untouched.
+   */
+  async setSyntheticPeerAgentTasksEnabled(
+    enabled: boolean,
+    expectedCount?: number,
+  ): Promise<NetworkDiagnosticsSnapshot> {
+    try {
+      const [network, backgroundChecks] = await Promise.all([
+        this.store.readNetworkDiagnostics(),
+        this.heartbeats.snapshot(),
+      ]);
+      const peerAgentIds = network.agents
+        .filter(({ user }) => (
+          user.kind === 'synthetic' && user.status === 'active'
+        ))
+        .map(({ id }) => id);
+
+      if (
+        expectedCount !== undefined
+        && peerAgentIds.length !== expectedCount
+      ) {
+        throw new Error(
+          `Expected ${expectedCount} active synthetic peer Agents, found ${peerAgentIds.length}.`,
+        );
+      }
+      if (!peerAgentIds.length) {
+        throw new Error('No active synthetic peer Agents exist.');
+      }
+
+      if (enabled) {
+        await this.enableAgentTasksWithCompensation(
+          peerAgentIds,
+          backgroundChecks.tasks,
+        );
+      } else {
+        await this.heartbeats.disableAgentTasks(peerAgentIds);
+      }
+      return await this.diagnostics();
+    } catch (error) {
+      throw new UserNetworkInputError(inputErrorMessage(
+        error,
+        'Lucid could not change synthetic peer Agent tasks.',
+      ));
+    }
+  }
+
   async retireUser(
     userId: string,
   ): Promise<NetworkDiagnosticsSnapshot> {
@@ -234,6 +283,37 @@ export class UserNetworkService {
       displayName: registered.user.displayName,
       kind: registered.user.kind,
     };
+  }
+
+  private async enableAgentTasksWithCompensation(
+    agentIds: string[],
+    tasks: AgentTaskView[],
+  ): Promise<void> {
+    const taskByAgentId = new Map(
+      tasks.map((task) => [task.agentId, task]),
+    );
+    const agentIdsToEnable = agentIds.filter((agentId) => {
+      const task = taskByAgentId.get(agentId);
+      return task?.enabled !== true || task.status === 'blocked';
+    });
+    const enabledAgentIds: string[] = [];
+
+    try {
+      for (const agentId of agentIdsToEnable) {
+        await this.heartbeats.enableAgentTask(agentId);
+        enabledAgentIds.push(agentId);
+      }
+    } catch (error) {
+      try {
+        await this.heartbeats.disableAgentTasks(enabledAgentIds);
+      } catch (compensationError) {
+        throw new AggregateError(
+          [error, compensationError],
+          'Synthetic peer Agent task enable failed and rollback did not complete.',
+        );
+      }
+      throw error;
+    }
   }
 }
 

@@ -273,8 +273,8 @@ function resolvePrimaryAction({
   if (globallyPaused) {
     return (
       <Button disabled type="button">
-        <Pause aria-hidden="true" />
-        Operator paused
+        <RefreshCw aria-hidden="true" />
+        Check now
       </Button>
     );
   }
