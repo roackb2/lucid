@@ -62,7 +62,7 @@ authentication in a deployed service.
 
 | Record | Meaning |
 | --- | --- |
-| `DiscoveryWorkspace` | One local network generation and global scheduler master state |
+| `DiscoveryWorkspace` | One local network generation and the product-wide background dispatch gate |
 | `User` | A human or explicit synthetic principal with stable registration identity and private context |
 | `Agent` | The executable agent, delivery cursor, and optional active wake |
 | `DiscoveryEvent` | Append-only principal input, communication, result, feedback, and lifecycle history |
@@ -134,16 +134,17 @@ remains recoverable by startup or a later trigger.
 1. Principal input or peer communication is appended durably in Lucid.
 2. Product input triggers the corresponding Coordinator-owned Heddle task;
    periodic listening remains expressed by its desired cadence.
-3. The Coordinator claims the task, obtains one scoped execution delegation,
-   and invokes the database-free Runtime.
-4. The current MCP contract exposes a read-only user workspace projection. It
-   does not yet claim a fixed mailbox horizon, write network messages or
-   findings, or advance Lucid's wake cursor.
+3. The Coordinator claims the task and calls Lucid's execution lifecycle with
+   the Heddle execution ID.
+4. `AgentWorkService` claims a fixed product horizon or skips empty work;
+   Heddle then mints heartbeat-only execution and MCP authority.
+5. The Runtime reads the claimed messages and may publish the required shared
+   request through scoped Lucid MCP.
+6. Lucid validates and commits the product effects under the same execution
+   fence before the Coordinator settles its Heddle run.
 
-The product stores and communication tool policy retain the fixed-horizon,
-idempotency, provenance, and fenced-settlement rules required for the next
-state-changing MCP slice. They are not a second scheduler or an active local
-runner.
+The product claim is not a scheduler. It fixes which product input an
+already-owned Coordinator attempt may inspect and mutate.
 
 The local `Run now` operation appends a private `check_requested` event that
 includes the saved assignment, current working direction, and latest guidance,
@@ -280,7 +281,7 @@ ownership, visibility, reply/source integrity, and retry safety only.
 ## Recovery and concurrency
 
 The Coordinator owns bounded concurrency, execution leases, recovery, and
-claim-fenced Heddle settlement. Lucid owns only product lifecycle commands and
-the future claim-fenced mailbox settlement contract. Missing Coordinator
-configuration fails startup; Lucid never recovers by starting an embedded
-scheduler.
+claim-fenced Heddle settlement. Lucid owns its fixed-horizon `AgentWorkClaim`,
+durable effects, cursor, and product settlement under the Coordinator execution
+ID. Missing Coordinator configuration fails startup; Lucid never recovers by
+starting an embedded scheduler.

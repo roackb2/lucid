@@ -9,7 +9,7 @@ import { resolveHostedExecutionConfig } from './config.js';
 
 const LOCAL_TOKEN = 'local-token-'.padEnd(32, 'x');
 const MODEL_API_KEY = 'model-key-value';
-const DELEGATION_TOKEN = 'delegation-token-'.padEnd(32, 'x');
+const EXECUTION_TOKEN = 'execution-token-'.padEnd(32, 'x');
 const COORDINATOR_API_TOKEN = 'coordinator-api-token-'.padEnd(32, 'x');
 const RUNTIME = {
   repoRoot: '/repo',
@@ -50,12 +50,12 @@ describe('hosted execution config', () => {
     });
     expect(environment.LUCID_HOSTED_EXECUTION_LOCAL_TOKEN).toBeUndefined();
     expect(environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY).toBeUndefined();
-    expect(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN)
+    expect(environment.LUCID_HOSTED_HEARTBEAT_EXECUTION_TOKEN)
       .toBeUndefined();
     expect(environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN)
       .toBeUndefined();
     expect(JSON.stringify(config?.modelCredentials)).toBe('{}');
-    expect(config?.heartbeatDelegationToken).toBe(DELEGATION_TOKEN);
+    expect(config?.heartbeatExecutionToken).toBe(EXECUTION_TOKEN);
     expect(config?.heartbeatCoordinator.baseUrl.href)
       .toBe('http://127.0.0.1:18082/');
     expect(config?.heartbeatCoordinator.apiToken).toBe(COORDINATOR_API_TOKEN);
@@ -70,8 +70,8 @@ describe('hosted execution config', () => {
       initialized.paths.executionHostLocalToken,
       'utf8',
     )).trimEnd();
-    const delegationToken = (await readFile(
-      initialized.paths.coordinatorAdopterDelegationToken,
+    const productExecutionToken = (await readFile(
+      initialized.paths.coordinatorProductExecutionToken,
       'utf8',
     )).trimEnd();
     const coordinatorApiToken = (await readFile(
@@ -90,7 +90,7 @@ describe('hosted execution config', () => {
       expect(config).toMatchObject({
         publicBaseUrl: new URL('http://127.0.0.1:8081'),
         signingJwkPath: initialized.paths.executionAuthorityPrivateJwk,
-        heartbeatDelegationToken: delegationToken,
+        heartbeatExecutionToken: productExecutionToken,
         heartbeatCoordinator: {
           baseUrl: new URL('http://127.0.0.1:18082'),
           apiToken: coordinatorApiToken,
@@ -107,7 +107,7 @@ describe('hosted execution config', () => {
         'LUCID_HOSTED_EXECUTION_LOCAL_TOKEN_FILE',
       );
       expect(environment).not.toHaveProperty(
-        'LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN_FILE',
+        'LUCID_HOSTED_HEARTBEAT_EXECUTION_TOKEN_FILE',
       );
       expect(environment).not.toHaveProperty(
         'LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN_FILE',
@@ -237,11 +237,11 @@ describe('hosted execution config', () => {
     ['profile without a coordinator URL', {
       LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: undefined,
     }],
-    ['coordinator profile without delegation token', {
-      LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN: undefined,
+    ['coordinator profile without execution token', {
+      LUCID_HOSTED_HEARTBEAT_EXECUTION_TOKEN: undefined,
     }],
     ['shared coordinator token', {
-      LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: DELEGATION_TOKEN,
+      LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: EXECUTION_TOKEN,
     }],
   ])('rejects %s', (_label, override) => {
     expect(() => resolveHostedExecutionConfig({
@@ -276,7 +276,7 @@ function enabledEnvironment(): NodeJS.ProcessEnv {
     LUCID_HOSTED_EXECUTION_HOST_URL: 'http://127.0.0.1:8080',
     LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: LOCAL_TOKEN,
     LUCID_HOSTED_EXECUTION_MODEL_API_KEY: MODEL_API_KEY,
-    LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN: DELEGATION_TOKEN,
+    LUCID_HOSTED_HEARTBEAT_EXECUTION_TOKEN: EXECUTION_TOKEN,
     LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: 'http://127.0.0.1:18082',
     LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: COORDINATOR_API_TOKEN,
     LUCID_HOSTED_EXECUTION_SIGNING_JWK_PATH: 'local/authority.jwk.json',

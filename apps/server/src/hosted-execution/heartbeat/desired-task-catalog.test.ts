@@ -36,7 +36,7 @@ describe('readLucidHeartbeatTaskReconciliationInput', () => {
           model: 'test-model',
           maxSteps: 4,
           systemContext:
-            'Before deciding whether anything is worth reporting, call the available read-only Lucid workspace snapshot tool and ground the decision in its result.',
+            'You are processing one Lucid product work claim with a fixed mailbox horizon. First call read_available_messages. For every interest_saved or check_requested event in that claim, call post_shared_message with the triggering event as reply_to_event_id and include every triggering sequence in source_event_ids. Publish the smallest privacy-preserving request that carries the user’s current constraints. Finish only after the required product action succeeds.',
         }),
       }],
       resume: true,

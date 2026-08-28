@@ -5,6 +5,11 @@ during one claimed wake. It owns mailbox visibility, reply routing, source
 validation, peer eligibility, action budgets, provenance, and idempotent event
 writes.
 
+`AgentWorkService` constructs this service from a durable `AgentWorkClaim` on
+every hosted MCP call. That deliberate rehydration means retries and separate
+HTTP requests reload action ordinals and required-effect state from PostgreSQL;
+the MCP process does not become an in-memory work authority.
+
 ## Shape
 
 - `tool-service.ts` validates every model-requested communication action.
@@ -40,3 +45,10 @@ their workspace, network, or wake stores, and the raw insert remains private.
 
 This slice does not enumerate unknown users, decide whether content is
 true or useful, schedule agents, or expose private user context.
+
+The hosted happy-path surface currently exports only
+`read_available_messages` and `post_shared_message`. The remaining definitions
+stay product-owned but are not granted to the Runtime until their product
+workflow is intentionally added. The signed capability and the active
+Coordinator execution fence select the work claim; model arguments never carry
+user, agent, work, execution, or horizon identifiers.

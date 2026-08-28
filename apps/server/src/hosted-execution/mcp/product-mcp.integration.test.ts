@@ -326,7 +326,15 @@ function createProductMcpService(
 ): ProductMcpService {
   return new NodeStreamableHttpMcpService({
     capabilityVerifier,
-    toolset: createLucidProductToolset(workspaceReader, options),
+    toolset: createLucidProductToolset(
+      workspaceReader,
+      {
+        executeAgentWorkTool: async () => {
+          throw new Error('Agent work is unavailable in this fixture.');
+        },
+      },
+      options,
+    ),
     ...(options.maxBodyBytes
       ? { maxBodyBytes: options.maxBodyBytes }
       : {}),

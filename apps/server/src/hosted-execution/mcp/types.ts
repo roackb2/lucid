@@ -3,13 +3,25 @@ import type { DiscoveryWorkspaceSnapshot } from '../../lucid/discovery-types.js'
 
 /** The first product capability is deliberately small and read-only. */
 export const READ_WORKSPACE_SNAPSHOT_TOOL = 'read_workspace_snapshot';
+export const READ_AVAILABLE_MESSAGES_TOOL = 'read_available_messages';
+export const POST_SHARED_MESSAGE_TOOL = 'post_shared_message';
+
+export const LUCID_CONVERSATION_MCP_TOOLS = Object.freeze([
+  READ_WORKSPACE_SNAPSHOT_TOOL,
+] as const);
+
+export const LUCID_HEARTBEAT_MCP_TOOLS = Object.freeze([
+  READ_AVAILABLE_MESSAGES_TOOL,
+  POST_SHARED_MESSAGE_TOOL,
+] as const);
 
 /**
  * Stable raw MCP names which Lucid is willing to expose. A signed capability
  * may only select names from this list; model input can never expand it.
  */
 export const LUCID_PRODUCT_MCP_TOOLS = Object.freeze([
-  READ_WORKSPACE_SNAPSHOT_TOOL,
+  ...LUCID_CONVERSATION_MCP_TOOLS,
+  ...LUCID_HEARTBEAT_MCP_TOOLS,
 ] as const);
 
 export type LucidProductMcpToolName =
@@ -48,4 +60,14 @@ export interface ScopedWorkspaceProjectionReader {
     scope: McpInvocationScope;
     signal: AbortSignal;
   }): Promise<DiscoveryWorkspaceSnapshot>;
+}
+
+/** Product work tools resolve identity only from the verified capability. */
+export interface ScopedAgentWorkToolExecutor {
+  executeAgentWorkTool(input: {
+    scope: McpInvocationScope;
+    toolName: typeof LUCID_HEARTBEAT_MCP_TOOLS[number];
+    arguments: unknown;
+    signal: AbortSignal;
+  }): Promise<unknown>;
 }

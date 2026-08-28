@@ -23,7 +23,12 @@ import {
 import type {
   HostedConversationTurnLifecycleStore,
 } from '@heddleagent/execution-host-client/conversation';
-import { afterEach, describe, expect, it } from 'vitest';
+import {
+  HOSTED_HEARTBEAT_EXECUTION_PATHS,
+  type HostedHeartbeatExecutionPreparation,
+  type HostedHeartbeatExecutionSettlement,
+} from '@heddleagent/execution-host-client/coordinator';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLucidAuthenticator } from '../auth/authenticator.js';
 import {
   HOSTED_EXECUTION_MCP_PATH,
@@ -33,13 +38,17 @@ import {
   DEFAULT_ADOPTER_JWKS_PATH,
 } from '@heddleagent/execution-host-client/adopter';
 import { workspaceSnapshot } from '../hosted-execution/mcp/test-support.js';
-import { READ_WORKSPACE_SNAPSHOT_TOOL } from '../hosted-execution/mcp/types.js';
+import {
+  POST_SHARED_MESSAGE_TOOL,
+  READ_AVAILABLE_MESSAGES_TOOL,
+  READ_WORKSPACE_SNAPSHOT_TOOL,
+} from '../hosted-execution/mcp/types.js';
 import { createLucidLogger } from '../logger.js';
 import { createHostedExecutionComposition } from './hosted-execution.js';
 
 const LOCAL_TOKEN = 'local-execution-host-token-value';
 const MODEL_API_KEY = 'model-api-key-value';
-const HEARTBEAT_DELEGATION_TOKEN = 'heartbeat-delegation-token-value';
+const HEARTBEAT_EXECUTION_TOKEN = 'heartbeat-execution-token-'.padEnd(32, 'x');
 const COORDINATOR_API_TOKEN = 'coordinator-api-token-value-value';
 const servers = new Set<ReturnType<typeof createServer>>();
 const temporaryRoots = new Set<string>();
@@ -104,7 +113,7 @@ describe('hosted execution composition', () => {
           credentials,
         },
         modelCredentials,
-        heartbeatDelegationToken: HEARTBEAT_DELEGATION_TOKEN,
+        heartbeatExecutionToken: HEARTBEAT_EXECUTION_TOKEN,
         heartbeatCoordinator: {
           baseUrl: new URL('http://127.0.0.1:18082'),
           apiToken: COORDINATOR_API_TOKEN,
@@ -114,7 +123,7 @@ describe('hosted execution composition', () => {
       discoveryWorkspace: {
         snapshot: async () => workspaceSnapshot(),
       },
-      heartbeatStore: unusedHeartbeatStore(),
+      agentWork: unusedAgentWork(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
@@ -211,7 +220,7 @@ describe('hosted execution composition', () => {
           credentials,
         },
         modelCredentials: apiKeyModelCredentials(),
-        heartbeatDelegationToken: HEARTBEAT_DELEGATION_TOKEN,
+        heartbeatExecutionToken: HEARTBEAT_EXECUTION_TOKEN,
         heartbeatCoordinator: {
           baseUrl: new URL('http://127.0.0.1:18082'),
           apiToken: COORDINATOR_API_TOKEN,
@@ -219,7 +228,7 @@ describe('hosted execution composition', () => {
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
-      heartbeatStore: unusedHeartbeatStore(),
+      agentWork: unusedAgentWork(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
@@ -247,7 +256,236 @@ describe('hosted execution composition', () => {
 
     await composition.close();
   });
+
+  it('binds one Coordinator execution to Lucid work tools and settlement', async () => {
+    let handleLucidRequest: (
+      request: IncomingMessage,
+      response: ServerResponse,
+    ) => void = (_request, response) => {
+      response.writeHead(503).end();
+    };
+    const lucidServer = createServer((request, response) => {
+      handleLucidRequest(request, response);
+    });
+    const lucidOrigin = await listen(lucidServer);
+    const executionHostServer = createServer((_request, response) => {
+      response.writeHead(503).end();
+    });
+    const executionHostOrigin = await listen(executionHostServer);
+    const claimWork = vi.fn(async (input: { executionId: string }) => ({
+      kind: 'claimed' as const,
+      work: {
+        agent: { id: 'agent-1' },
+        user: { id: 'user-1' },
+        workId: 'work-1',
+        executionId: input.executionId,
+        workNumber: 1,
+        visibleEvents: [],
+        horizonSequence: 1,
+        workingContext: { principalInputs: [], findings: [] },
+      },
+    }));
+    const completeWork = vi.fn(async () => ({ kind: 'accepted' as const }));
+    const executeTool = vi.fn(async (input: { toolName: string }) => ({
+      ok: true,
+      output: { toolName: input.toolName },
+    }));
+    const agentWork = {
+      claimWork,
+      completeWork,
+      failWork: vi.fn(async () => undefined),
+      interruptWork: vi.fn(async () => undefined),
+      executeTool,
+    };
+    const composition = await createHostedExecutionComposition({
+      config: {
+        publicBaseUrl: lucidOrigin,
+        signingJwkPath: await writePrivateJwk(),
+        adopterId: 'lucid-local',
+        tenantId: 'lucid-local',
+        productSessionId: 'local-discovery-workspace',
+        keyId: 'lucid-local-key',
+        executionAudience: 'urn:execution-host:test',
+        mcpAudience: 'urn:lucid:mcp:test',
+        mcpServerId: 'lucid_product',
+        maxTurnMs: 60_000,
+        transport: {
+          mode: 'direct',
+          baseUrl: executionHostOrigin,
+          credentials: new DirectExecutionHostCredentials({
+            localToken: LOCAL_TOKEN,
+          }),
+        },
+        modelCredentials: apiKeyModelCredentials(),
+        heartbeatExecutionToken: HEARTBEAT_EXECUTION_TOKEN,
+        heartbeatCoordinator: {
+          baseUrl: new URL('http://127.0.0.1:18082'),
+          apiToken: COORDINATOR_API_TOKEN,
+        },
+      },
+      authenticator: createLucidAuthenticator({ mode: 'development' }),
+      discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
+      agentWork,
+      conversationLifecycle: memoryConversationLifecycle(),
+      logger: createLucidLogger('silent'),
+    });
+    handleLucidRequest = (request, response) => {
+      if (!composition.http.handle(request, response)) {
+        response.writeHead(404).end();
+      }
+    };
+
+    const taskId = 'lucid-representative-agent-1';
+    const executionId = 'execution-1';
+    const preparationResponse = await postHeartbeatExecution(
+      lucidOrigin,
+      HOSTED_HEARTBEAT_EXECUTION_PATHS.prepare,
+      {
+        schemaVersion: 1,
+        taskId,
+        executionId,
+      },
+    );
+    const preparation = await preparationResponse.json() as
+      HostedHeartbeatExecutionPreparation;
+
+    expect(preparationResponse.status).toBe(200);
+    expect(preparation).toMatchObject({
+      kind: 'execute',
+      delegation: {
+        taskId,
+        executionId,
+        scope: {
+          tenantId: 'lucid-local',
+          subjectId: 'user-1',
+          productSessionId: 'local-discovery-workspace',
+        },
+        authority: {
+          metadata: {
+            invocationId: executionId,
+            workflow: 'heartbeat-task',
+            mcp: {
+              allowedTools: [
+                READ_AVAILABLE_MESSAGES_TOOL,
+                POST_SHARED_MESSAGE_TOOL,
+              ],
+            },
+          },
+        },
+      },
+    });
+    expect(claimWork).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'agent-1',
+      executionId,
+    }));
+    if (preparation.kind !== 'execute') {
+      throw new Error('Expected Lucid to prepare one heartbeat execution.');
+    }
+
+    const mcpClient = new Client({
+      name: 'coordinator-execution-test',
+      version: '1.0.0',
+    });
+    await mcpClient.connect(new StreamableHTTPClientTransport(
+      new URL(HOSTED_EXECUTION_MCP_PATH, lucidOrigin),
+      {
+        requestInit: {
+          headers: {
+            authorization:
+              `Bearer ${preparation.delegation.authority.mcpCapability}`,
+          },
+        },
+      },
+    ));
+    try {
+      expect((await mcpClient.listTools()).tools.map(({ name }) => name))
+        .toEqual([
+          READ_AVAILABLE_MESSAGES_TOOL,
+          POST_SHARED_MESSAGE_TOOL,
+        ]);
+      await mcpClient.callTool({
+        name: READ_AVAILABLE_MESSAGES_TOOL,
+        arguments: {},
+      });
+      await mcpClient.callTool({
+        name: POST_SHARED_MESSAGE_TOOL,
+        arguments: {
+          reply_to_event_id: 1,
+          content: 'Who has a concrete example?',
+          source_event_ids: [1],
+        },
+      });
+      await expect(mcpClient.callTool({
+        name: READ_AVAILABLE_MESSAGES_TOOL,
+        arguments: { executionId: 'model-selected-execution' },
+      })).resolves.toMatchObject({ isError: true });
+    } finally {
+      await mcpClient.close();
+    }
+    expect(executeTool).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      userId: 'user-1',
+      executionId,
+      toolName: READ_AVAILABLE_MESSAGES_TOOL,
+    }));
+    expect(executeTool).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      userId: 'user-1',
+      executionId,
+      toolName: POST_SHARED_MESSAGE_TOOL,
+    }));
+
+    const settlementResponse = await postHeartbeatExecution(
+      lucidOrigin,
+      HOSTED_HEARTBEAT_EXECUTION_PATHS.settle,
+      {
+        schemaVersion: 1,
+        kind: 'completed',
+        taskId,
+        executionId,
+        result: {
+          decision: 'complete',
+          summary: 'Published the required request.',
+          runId: 'run-1',
+          outcome: 'done',
+        },
+      },
+    );
+    const settlement = await settlementResponse.json() as
+      HostedHeartbeatExecutionSettlement;
+
+    expect(settlementResponse.status).toBe(200);
+    expect(settlement).toEqual({
+      schemaVersion: 1,
+      taskId,
+      executionId,
+      disposition: { kind: 'accepted' },
+    });
+    expect(completeWork).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'agent-1',
+      executionId,
+      result: expect.objectContaining({
+        decision: 'complete',
+        outcome: 'done',
+      }),
+    }));
+
+    await composition.close();
+  });
 });
+
+async function postHeartbeatExecution(
+  origin: URL,
+  path: string,
+  body: unknown,
+): Promise<Response> {
+  return await fetch(new URL(path, origin), {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${HEARTBEAT_EXECUTION_TOKEN}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
 
 function memoryConversationLifecycle(): HostedConversationTurnLifecycleStore {
   return {
@@ -258,13 +496,17 @@ function memoryConversationLifecycle(): HostedConversationTurnLifecycleStore {
   };
 }
 
-function unusedHeartbeatStore() {
+function unusedAgentWork() {
   return {
-    readWorkspace: async () => {
-      throw new Error('Heartbeat delegation is disabled in this fixture.');
+    claimWork: async () => {
+      throw new Error('Agent work is disabled in this fixture.');
     },
-    listAgents: async () => [],
-    listUsers: async () => [],
+    completeWork: async () => ({ kind: 'accepted' as const }),
+    failWork: async () => undefined,
+    interruptWork: async () => undefined,
+    executeTool: async () => {
+      throw new Error('Agent work is disabled in this fixture.');
+    },
   };
 }
 

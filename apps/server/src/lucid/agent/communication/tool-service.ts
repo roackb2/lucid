@@ -23,18 +23,18 @@ import type {
 import type { AgentCommunicationStore } from './store.js';
 import { AGENT_PRINCIPAL_EVENT_KINDS } from '../mailbox-policy.js';
 
-const readMessagesInputSchema = z.object({
+export const readAvailableMessagesInputSchema = z.object({
   after_sequence: z.number().int().min(0).optional(),
   limit: z.number().int().min(1).max(30).default(15),
-});
+}).strict();
 const readOpenRequestsInputSchema = z.object({
   limit: z.number().int().min(1).max(15).default(10),
 });
-const sharedMessageInputSchema = z.object({
+export const postSharedMessageInputSchema = z.object({
   reply_to_event_id: z.number().int().positive(),
   content: z.string().trim().min(1).max(900),
   source_event_ids: z.array(z.number().int().positive()).max(8),
-});
+}).strict();
 const directMessageInputSchema = z.object({
   target_agent_id: z.string().trim().min(1),
   reply_to_event_id: z.number().int().positive(),
@@ -51,6 +51,14 @@ const workingNoteInputSchema = z.object({
 const noActionInputSchema = z.object({
   reason: z.string().trim().min(1).max(500),
 });
+
+export const AGENT_WORK_COMMUNICATION_TOOLS = Object.freeze([
+  'read_available_messages',
+  'post_shared_message',
+] as const);
+
+export type AgentWorkCommunicationToolName =
+  typeof AGENT_WORK_COMMUNICATION_TOOLS[number];
 
 const READ_DISCOVERY_STATE_POLICY = {
   authority: {
@@ -100,6 +108,23 @@ export class AgentCommunicationToolService {
     private readonly requiredRequestSourceIds: number[] = [],
     private readonly requiredWorkingNoteSourceIds: number[] = [],
   ) {}
+
+  /** Executes one capability-selected operation against this durable claim. */
+  async execute(
+    toolName: AgentWorkCommunicationToolName,
+    input: unknown,
+    signal?: AbortSignal,
+  ): Promise<ToolResult> {
+    signal?.throwIfAborted();
+    const tool = (await this.definitions())
+      .find(({ name }) => name === toolName);
+    if (!tool) {
+      throw new Error(`Agent communication tool is unavailable: ${toolName}`);
+    }
+    const result = await tool.execute(input, { signal });
+    signal?.throwIfAborted();
+    return result;
+  }
 
   async definitions(): Promise<ToolDefinition[]> {
     // A agent discovers peers from delivered messages, never from a
@@ -354,7 +379,7 @@ export class AgentCommunicationToolService {
   }
 
   private async readAvailableMessages(input: unknown): Promise<ToolResult> {
-    const parsed = readMessagesInputSchema.safeParse(input);
+    const parsed = readAvailableMessagesInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
@@ -461,7 +486,7 @@ export class AgentCommunicationToolService {
   }
 
   private async postSharedMessage(input: unknown): Promise<ToolResult> {
-    const parsed = sharedMessageInputSchema.safeParse(input);
+    const parsed = postSharedMessageInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }

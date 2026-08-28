@@ -3,7 +3,7 @@ import type {
   NodeStreamableHttpMcpService,
 } from '@heddleagent/execution-host-client/mcp/node';
 import type {
-  NodeHostedHeartbeatDelegationHttpHandler,
+  NodeHostedHeartbeatExecutionHttpHandler,
 } from '@heddleagent/execution-host-client/coordinator/node';
 import {
   type NodeExecutionAdopterHttpHandler,
@@ -24,12 +24,12 @@ export class HostedExecutionHttpRouter {
     private readonly adopterHttp: NodeExecutionAdopterHttpHandler,
     private readonly mcp: NodeStreamableHttpMcpService<LucidProductMcpToolName>,
     private readonly logger: LucidLogger,
-    private readonly heartbeatDelegations?: NodeHostedHeartbeatDelegationHttpHandler,
+    private readonly heartbeatExecutions?: NodeHostedHeartbeatExecutionHttpHandler,
   ) {}
 
   /** Handles a hosted-execution route or returns false for the tRPC adapter. */
   handle(request: IncomingMessage, response: ServerResponse): boolean {
-    if (this.heartbeatDelegations?.handle(request, response)) {
+    if (this.heartbeatExecutions?.handle(request, response)) {
       return true;
     }
     if (readPathname(request.url) === HOSTED_EXECUTION_MCP_PATH) {
@@ -60,7 +60,7 @@ export class HostedExecutionHttpRouter {
     await Promise.all([
       this.adopterHttp.close(),
       this.mcp.close(),
-      this.heartbeatDelegations?.close(),
+      this.heartbeatExecutions?.close(),
     ]);
   }
 }
