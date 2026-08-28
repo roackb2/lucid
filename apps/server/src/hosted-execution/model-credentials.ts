@@ -18,14 +18,9 @@ implements HostedModelCredentialProvider {
     this.#modelApiKey = ModelApiKeySchema.parse(modelApiKey);
   }
 
-  /** Takes the credential out of the process environment before use. */
-  static take(
-    environment: NodeJS.ProcessEnv,
-    name: string,
-  ): EnvironmentHostedModelCredentials {
-    const modelApiKey = environment[name];
-    delete environment[name];
-    return new EnvironmentHostedModelCredentials(modelApiKey ?? '');
+  /** Keeps one already-resolved deployment value behind the provider port. */
+  static fromValue(modelApiKey: string): EnvironmentHostedModelCredentials {
+    return new EnvironmentHostedModelCredentials(modelApiKey);
   }
 
   async resolveModelCredential(

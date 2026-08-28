@@ -1,3 +1,9 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  initializeLocalCredentialBundle,
+} from '@heddleagent/execution-host-client/node';
 import { describe, expect, it } from 'vitest';
 import { resolveHostedExecutionConfig } from './config.js';
 
@@ -55,6 +61,89 @@ describe('hosted execution config', () => {
     expect(config?.heartbeatCoordinator.apiToken).toBe(COORDINATOR_API_TOKEN);
   });
 
+  it('consumes one generic local credential bundle with local defaults', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'lucid-hosted-credentials-'));
+    const initialized = await initializeLocalCredentialBundle(
+      join(root, 'credentials'),
+    );
+    const localToken = (await readFile(
+      initialized.paths.executionHostLocalToken,
+      'utf8',
+    )).trimEnd();
+    const delegationToken = (await readFile(
+      initialized.paths.coordinatorAdopterDelegationToken,
+      'utf8',
+    )).trimEnd();
+    const coordinatorApiToken = (await readFile(
+      initialized.paths.coordinatorApiToken,
+      'utf8',
+    )).trimEnd();
+    const environment = {
+      LUCID_HOSTED_EXECUTION_ENABLED: 'true',
+      LUCID_HOSTED_EXECUTION_CREDENTIAL_DIRECTORY:
+        initialized.paths.directory,
+    };
+
+    try {
+      const config = resolveHostedExecutionConfig(environment, RUNTIME);
+
+      expect(config).toMatchObject({
+        publicBaseUrl: new URL('http://127.0.0.1:8081'),
+        signingJwkPath: initialized.paths.executionAuthorityPrivateJwk,
+        heartbeatDelegationToken: delegationToken,
+        heartbeatCoordinator: {
+          baseUrl: new URL('http://127.0.0.1:18082'),
+          apiToken: coordinatorApiToken,
+        },
+        transport: {
+          mode: 'direct',
+          baseUrl: new URL('http://127.0.0.1:18080'),
+        },
+      });
+      expect(config?.transport.mode === 'direct'
+        ? config.transport.credentials.localToken()
+        : undefined).toBe(localToken);
+      expect(environment).not.toHaveProperty(
+        'LUCID_HOSTED_EXECUTION_LOCAL_TOKEN_FILE',
+      );
+      expect(environment).not.toHaveProperty(
+        'LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN_FILE',
+      );
+      expect(environment).not.toHaveProperty(
+        'LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN_FILE',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts an explicit mounted model credential', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'lucid-model-credential-'));
+    const modelKeyPath = join(root, 'model-api-key');
+    await writeFile(modelKeyPath, `${MODEL_API_KEY}\n`, { mode: 0o400 });
+    const environment = {
+      ...enabledEnvironment(),
+      LUCID_HOSTED_EXECUTION_MODEL_API_KEY: undefined,
+      LUCID_HOSTED_EXECUTION_MODEL_API_KEY_FILE: modelKeyPath,
+    };
+
+    try {
+      const config = resolveHostedExecutionConfig(environment, RUNTIME);
+      await expect(config?.modelCredentials.resolveModelCredential({
+        scope: {
+          tenantId: 'tenant',
+          subjectId: 'subject',
+          productSessionId: 'session',
+        },
+        invocationId: 'invocation',
+      })).resolves.toEqual({ type: 'api-key', apiKey: MODEL_API_KEY });
+      expect(environment.LUCID_HOSTED_EXECUTION_MODEL_API_KEY_FILE)
+        .toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('parses the AgentCore profile without direct-host credentials', async () => {
     const environment = agentCoreEnvironment();
 
@@ -110,6 +199,19 @@ describe('hosted execution config', () => {
     }, RUNTIME)).toThrow(
       'Hosted execution credentials are configured',
     );
+
+    expect(() => resolveHostedExecutionConfig({
+      LUCID_HOSTED_EXECUTION_ENABLED: 'false',
+      LUCID_HOSTED_EXECUTION_LOCAL_TOKEN_FILE: '/run/secrets/local-token',
+    }, RUNTIME)).toThrow('Hosted execution credentials are configured');
+  });
+
+  it('rejects mixing the bundle directory with individual bundle fields', () => {
+    expect(() => resolveHostedExecutionConfig({
+      LUCID_HOSTED_EXECUTION_ENABLED: 'true',
+      LUCID_HOSTED_EXECUTION_CREDENTIAL_DIRECTORY: '/credentials',
+      LUCID_HOSTED_EXECUTION_LOCAL_TOKEN: LOCAL_TOKEN,
+    }, RUNTIME)).toThrow(/cannot be combined/);
   });
 
   it.each([
@@ -129,7 +231,10 @@ describe('hosted execution config', () => {
     ['coordinator URL without API token', {
       LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: undefined,
     }],
-    ['coordinator API token without URL', {
+    ['profile without a public URL', {
+      LUCID_HOSTED_EXECUTION_PUBLIC_URL: undefined,
+    }],
+    ['profile without a coordinator URL', {
       LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: undefined,
     }],
     ['coordinator profile without delegation token', {

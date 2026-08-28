@@ -10,7 +10,8 @@ histories.
 - Node.js 22
 - Yarn 1.22
 - PostgreSQL 14 or newer
-- a local or managed Heddle Execution Host and Coordinator checkout;
+- the `lucid-deployment` checkout for the standard local Runtime and
+  Coordinator composition;
 - a model credential supplied to the hosted profile and Coordinator through
   their documented secret inputs
 
@@ -43,16 +44,17 @@ LUCID_AUTH_MODE=development
 Development authentication is rejected when the server binds to a non-loopback
 host.
 
-Apply Lucid's checked-in migrations first. Then apply the Coordinator's
-checked-in migration against the same application database; it recreates the
-two heartbeat tables under the Coordinator's separate Drizzle history. Start
-the Runtime and Coordinator before the Lucid API and web app:
+Apply Lucid's checked-in migrations first. Then follow
+`lucid-deployment/operations/lucid-local/README.md` to initialize credentials,
+configure the two operator-only secret files, and start the Runtime and
+Coordinator. Its Compose project runs the Coordinator's one-shot migration
+against the same application database before starting the service:
 
 ```bash
 yarn server:db:migrate
-# From the Heddle Execution Host checkout:
-yarn coordinator:migrate
-# Start its Runtime and Coordinator, then return here:
+# From the lucid-deployment checkout:
+yarn local:heddle:up
+# Then return here:
 yarn dev
 ```
 
@@ -181,24 +183,28 @@ existing Heddle Codex login, and durably consumes the Runtime's SSE stream.
 
 Runtime and Coordinator deployables belong to the private Execution Host, but
 Lucid's concrete lifecycle and wiring belong to the private
-`lucid-deployment` repository. Configure its ignored `.env.local` with the
-Lucid checkout path, an application-scoped Heddle database credential, and a
-separate funded model key. Its `operations/lucid-local/README.md` also records
-the one-time generic Runtime and Coordinator image build. Then run:
+`lucid-deployment` repository. Its `operations/lucid-local/README.md` records
+the one-time image build and setup. The deployment keeps its Heddle-only
+database URL and heartbeat model key in ignored files, not environment values.
+Then run:
 
 ```bash
 cd /path/to/lucid-deployment
 yarn install
-yarn local:heddle up
+yarn local:heddle:credentials
+yarn local:heddle:config
+yarn local:heddle:up
 ```
 
-That command starts the prebuilt database-free Runtime plus one Lucid-scoped
-Coordinator. It generates the shared local tokens and signing key without
-printing them, writes only product-consumed values to Lucid's ignored
-`.env.heddle.local`, and applies the Coordinator migration explicitly. It does
-not create, reset, or replace a database. The Coordinator database URL must
-address this application's `heddle` boundary in the same physical product
-database; another application must use its own database and Coordinator.
+The narrow Heddle CLI creates or validates a generic owner-only credential
+bundle without printing values. Copy the deployment's `lucid.env.example` to
+this checkout as `.env.heddle.local` and set its one absolute bundle-directory
+path. Docker Compose then starts the prebuilt database-free Runtime plus one
+Lucid-scoped Coordinator, using a one-shot migration service and health-gated
+dependencies. It does not create, reset, or replace a database. The
+Coordinator database URL must address this application's `heddle` boundary in
+the same physical product database; another application must use its own
+database and Coordinator.
 
 Start Lucid normally in its own terminal:
 
@@ -207,9 +213,9 @@ yarn dev
 ```
 
 Lucid loads `.env.heddle.local` before `.env`. Shell variables keep highest
-precedence, the generated host profile wins over stale host fields in `.env`,
-and Lucid's authentication, product database, model, and other product
-settings remain in `.env`.
+precedence. The credential-directory profile supplies safe local defaults;
+Lucid's authentication, product database, model, and other product settings
+remain in `.env`.
 
 Do not set `LUCID_HOSTED_EXECUTION_MODEL_API_KEY` for Codex subscription mode.
 Lucid uses the OpenAI credential already stored at
@@ -223,9 +229,9 @@ instead of falling back to Ollama or an ambient API key.
 Operate the exact local stack from the `lucid-deployment` repository:
 
 ```bash
-yarn local:heddle status
-yarn local:heddle logs
-yarn local:heddle down
+yarn local:heddle:status
+yarn local:heddle:logs
+yarn local:heddle:down
 ```
 
 The user endpoint is:
@@ -243,8 +249,8 @@ It returns the versioned Execution Host SSE stream. Lucid additionally serves
 key or database credential.
 
 Inside Docker, `127.0.0.1` names the container. The deployment composition keeps
-Lucid's authority issuer on loopback and derives Docker Desktop's exact
-`host.docker.internal` alias only for Runtime-to-Lucid JWKS and MCP callbacks.
+Lucid's authority issuer on loopback and explicitly configures Docker Desktop's
+`host.docker.internal` alias for Runtime-to-Lucid JWKS and MCP callbacks.
 Lucid's browser origin and outbound Runtime URL remain loopback. Other non-TLS
 hosts are rejected. If a tunnel or
 reverse proxy makes Lucid reachable beyond this machine, switch to
