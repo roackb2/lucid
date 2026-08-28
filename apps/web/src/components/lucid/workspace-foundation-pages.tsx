@@ -16,33 +16,6 @@ type FoundationPageProps = {
   snapshot: DiscoverySnapshot;
 };
 
-export function ReportsFoundationPage({ snapshot }: FoundationPageProps) {
-  return (
-    <PageFrame
-      eyebrow="Primary return surface"
-      title="Reports"
-      description="What your agent believes is worth bringing back, grouped into something you can understand and act on."
-    >
-      <SnapshotSummary snapshot={snapshot} />
-      <div className="foundation-layout foundation-layout--reports">
-        <FoundationPanel
-          title="Report feed"
-          description={snapshot.findings.length > 0
-            ? `${snapshot.findings.length} experimental finding ${snapshot.findings.length === 1 ? 'record exists' : 'records exist'}, but report grouping is not defined yet.`
-            : 'No report records exist yet, and the report contract has not been defined.'}
-          icon={<FileText />}
-        />
-        <FoundationPanel
-          title="Report detail"
-          description="Selecting a report will eventually keep its summary, grouped findings, evidence, and next actions in view."
-          icon={<Search />}
-          muted
-        />
-      </div>
-    </PageFrame>
-  );
-}
-
 export function FindingsFoundationPage({ snapshot }: FoundationPageProps) {
   return (
     <PageFrame
@@ -239,31 +212,6 @@ function PageFrame({
       </header>
       {children}
     </div>
-  );
-}
-
-function SnapshotSummary({ snapshot }: FoundationPageProps) {
-  const backgroundState = snapshot.backgroundChecks.running
-    ? 'Working'
-    : snapshot.backgroundChecks.enabled
-      ? 'Ready'
-      : 'Paused';
-
-  return (
-    <dl className="snapshot-summary">
-      <div>
-        <dt>Existing findings</dt>
-        <dd className="tabular-nums">{snapshot.findings.length}</dd>
-      </div>
-      <div>
-        <dt>Current interest</dt>
-        <dd>{snapshot.interest ? 'Saved' : 'None'}</dd>
-      </div>
-      <div>
-        <dt>Agent</dt>
-        <dd>{backgroundState}</dd>
-      </div>
-    </dl>
   );
 }
 

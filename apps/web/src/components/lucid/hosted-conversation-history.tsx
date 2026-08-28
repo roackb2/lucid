@@ -1,5 +1,9 @@
 import dayjs from 'dayjs';
-import { ChevronDown, History, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
+import {
+  Message,
+  MessageContent,
+} from '@/components/ai-elements/message';
 import { HostedConversationAnswer } from './hosted-conversation-answer';
 import { Button } from '@/components/ui/button';
 import type { HostedConversationTurn } from '@/lib/trpc';
@@ -20,82 +24,18 @@ export function HostedConversationHistory({
   const visibleTurns = turns.filter(
     ({ invocationId }) => invocationId !== activeInvocationId,
   );
+  const chronologicalTurns = orderHostedConversationTurns(visibleTurns);
   const hasCachedTurns = turns.length > 0;
 
   return (
-    <section className="hosted-conversation-history" aria-label="Recent conversations">
-      <header>
-        <div>
-          <History size={15} />
-          <h3>Recent conversations</h3>
-        </div>
-        <span>Saved for your account</span>
-      </header>
-
-      {isPending ? (
+    <>
+      {isPending && !hasCachedTurns ? (
         <p className="hosted-conversation-history__state">
-          Loading recent conversations…
+          Restoring your conversation…
         </p>
       ) : error && !hasCachedTurns ? (
         <div className="hosted-conversation-history__state" role="alert">
-          <p>Lucid could not load recent conversations.</p>
-          <Button
-            onClick={() => void onRetry()}
-            size="small"
-            type="button"
-            variant="secondary"
-          >
-            <RefreshCw size={13} />
-            Try again
-          </Button>
-        </div>
-      ) : visibleTurns.length === 0 ? (
-        <p className="hosted-conversation-history__state">
-          Conversation results will remain available here after you return.
-        </p>
-      ) : (
-        <ol>
-          {visibleTurns.map((turn, index) => (
-            <li key={turn.invocationId}>
-              <details open={index === 0}>
-                <summary>
-                  <span
-                    className="hosted-conversation-history__status"
-                    data-status={turn.status}
-                  >
-                    {describeHostedConversationStatus(turn.status)}
-                  </span>
-                  <strong>{turn.prompt}</strong>
-                  <time dateTime={turn.requestedAt}>
-                    {dayjs(turn.requestedAt).format('MMM D, HH:mm')}
-                  </time>
-                  <ChevronDown
-                    aria-hidden="true"
-                    className="hosted-conversation-history__chevron"
-                    size={14}
-                  />
-                </summary>
-                <div className="hosted-conversation-history__content">
-                  {turn.summary ? (
-                    <HostedConversationAnswer
-                      markdown={turn.summary}
-                      status={turn.status}
-                    />
-                  ) : (
-                    <p>{describeEmptyTerminal(turn.status)}</p>
-                  )}
-                </div>
-              </details>
-            </li>
-          ))}
-        </ol>
-      )}
-      {error && hasCachedTurns ? (
-        <div
-          className="hosted-conversation-history__state hosted-conversation-history__state--refresh"
-          role="alert"
-        >
-          <p>Lucid could not refresh recent conversations.</p>
+          <p>Lucid could not restore this conversation.</p>
           <Button
             onClick={() => void onRetry()}
             size="small"
@@ -107,8 +47,89 @@ export function HostedConversationHistory({
           </Button>
         </div>
       ) : null}
-    </section>
+
+      {chronologicalTurns.length > 0 ? (
+        <ol className="chat-thread__turns" aria-label="Saved conversation">
+          {chronologicalTurns.map((turn) => (
+            <li className="chat-thread__turn" key={turn.invocationId}>
+              <HostedConversationUserMessage
+                prompt={turn.prompt}
+                requestedAt={turn.requestedAt}
+              />
+              {turn.summary ? (
+                <HostedConversationAnswer
+                  markdown={turn.summary}
+                  status={turn.status}
+                />
+              ) : (
+                <div
+                  className="chat-message chat-message--agent chat-message--state"
+                  data-status={turn.status}
+                >
+                  <strong>Agent</strong>
+                  <p>{describeEmptyTerminal(turn.status)}</p>
+                </div>
+              )}
+              <footer className="chat-thread__turn-meta">
+                <span data-status={turn.status}>
+                  {describeHostedConversationStatus(turn.status)}
+                </span>
+                <time dateTime={turn.settledAt ?? turn.requestedAt}>
+                  {dayjs(turn.settledAt ?? turn.requestedAt).format('MMM D, HH:mm')}
+                </time>
+              </footer>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+
+      {error && hasCachedTurns ? (
+        <div
+          className="hosted-conversation-history__state hosted-conversation-history__state--refresh"
+          role="alert"
+        >
+          <p>Lucid could not refresh the saved conversation.</p>
+          <Button
+            onClick={() => void onRetry()}
+            size="small"
+            type="button"
+            variant="secondary"
+          >
+            <RefreshCw size={13} />
+            Try again
+          </Button>
+        </div>
+      ) : null}
+    </>
   );
+}
+
+export function HostedConversationUserMessage({
+  prompt,
+  requestedAt,
+}: {
+  prompt: string;
+  requestedAt: string;
+}) {
+  return (
+    <Message className="chat-message chat-message--user" from="user">
+      <MessageContent>
+        <span>You</span>
+        <p>{prompt}</p>
+        <time dateTime={requestedAt}>
+          {dayjs(requestedAt).format('HH:mm')}
+        </time>
+      </MessageContent>
+    </Message>
+  );
+}
+
+export function orderHostedConversationTurns(
+  turns: HostedConversationTurn[],
+): HostedConversationTurn[] {
+  return [...turns].sort((left, right) => (
+    Date.parse(left.requestedAt) - Date.parse(right.requestedAt)
+  ));
 }
 
 export function describeHostedConversationStatus(
@@ -124,7 +145,6 @@ export function describeHostedConversationStatus(
     interrupted: 'Interrupted',
   }[status];
 }
-
 function describeEmptyTerminal(
   status: HostedConversationTurn['status'],
 ): string {

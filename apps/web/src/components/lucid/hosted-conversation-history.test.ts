@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   describeHostedConversationStatus,
+  orderHostedConversationTurns,
 } from './hosted-conversation-history';
 import { presentHostedConversationResult } from './hosted-conversation';
 import {
@@ -42,5 +43,29 @@ describe('hosted conversation history presentation', () => {
       { status: 'completed' },
       { status: 'interrupted' },
     ])).toBe(false);
+  });
+
+  it('renders server history as one oldest-first conversation', () => {
+    const newer = {
+      invocationId: 'newer',
+      prompt: 'Second turn',
+      status: 'completed',
+      summary: 'Second answer',
+      failureCode: null,
+      requestedAt: '2026-08-28T12:02:00.000Z',
+      settledAt: '2026-08-28T12:03:00.000Z',
+    } as const;
+    const older = {
+      ...newer,
+      invocationId: 'older',
+      prompt: 'First turn',
+      requestedAt: '2026-08-28T12:00:00.000Z',
+      settledAt: '2026-08-28T12:01:00.000Z',
+    } as const;
+
+    expect(orderHostedConversationTurns([newer, older])).toEqual([
+      older,
+      newer,
+    ]);
   });
 });

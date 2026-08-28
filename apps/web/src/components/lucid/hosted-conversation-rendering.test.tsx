@@ -29,14 +29,12 @@ describe('hosted conversation durable rendering', () => {
 
   it('renders distinct loading, blocking-error, and empty states', () => {
     expect(renderHistory({ isPending: true })).toContain(
-      'Loading recent conversations',
+      'Restoring your conversation',
     );
     expect(renderHistory({ error: new Error('load failed') })).toContain(
-      'could not load',
+      'could not restore',
     );
-    expect(renderHistory()).toContain(
-      'Conversation results will remain available',
-    );
+    expect(renderHistory()).toBe('');
   });
 
   it('blocks raw HTML and images and hardens external links', () => {

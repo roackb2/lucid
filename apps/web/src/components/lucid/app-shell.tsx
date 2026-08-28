@@ -1,6 +1,5 @@
 import {
   Bot,
-  FileText,
   Lightbulb,
   LogOut,
   MessageCircle,
@@ -18,12 +17,11 @@ import type { ComponentType, SVGProps } from 'react';
 import type { DiscoverySnapshot } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { CoworkDrawer } from '@/components/lucid/cowork-drawer';
+import { ChatDrawer } from '@/components/lucid/chat-drawer';
 import {
   AgentFoundationPage,
   FindingsFoundationPage,
   InterestsFoundationPage,
-  ReportsFoundationPage,
   SettingsFoundationPage,
 } from '@/components/lucid/workspace-foundation-pages';
 
@@ -46,15 +44,15 @@ type NavigationItem = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
 };
 
-const navigationItems: NavigationItem[] = [
-  { label: 'Reports', path: '/reports', icon: FileText },
+export const FOUNDATION_HOME_PATH = '/findings';
+
+export const foundationNavigationItems: NavigationItem[] = [
   { label: 'Findings', path: '/findings', icon: Search },
   { label: 'Interests', path: '/interests', icon: Lightbulb },
   { label: 'Agent', path: '/agent', icon: Bot },
 ];
 
 const routeLabels = new Map([
-  ['/reports', 'Reports'],
   ['/findings', 'Findings'],
   ['/interests', 'Interests'],
   ['/agent', 'Agent'],
@@ -74,7 +72,7 @@ export function LucidAppShell({
   snapshot,
 }: LucidAppShellProps) {
   const location = useLocation();
-  const pageLabel = routeLabels.get(location.pathname) ?? 'Reports';
+  const pageLabel = routeLabels.get(location.pathname) ?? 'Findings';
   const agentState = resolveAgentState(snapshot);
 
   return (
@@ -93,7 +91,7 @@ export function LucidAppShell({
 
         <nav className="lucid-shell__nav" aria-label="Lucid workspace">
           <p className="lucid-shell__nav-label">Workspace</p>
-          {navigationItems.map(({ icon: Icon, label, path }) => (
+          {foundationNavigationItems.map(({ icon: Icon, label, path }) => (
             <NavLink
               aria-label={label}
               className={({ isActive }) => cn(
@@ -195,12 +193,11 @@ export function LucidAppShell({
             <span className="lucid-shell__eyebrow">IA foundation</span>
             <strong>{pageLabel}</strong>
           </div>
-          <CoworkDrawer
-            context={`${pageLabel} · no item selected`}
+          <ChatDrawer
             trigger={(
               <Button variant="secondary">
                 <MessageCircle aria-hidden="true" />
-                Cowork
+                Chat
               </Button>
             )}
           />
@@ -208,10 +205,6 @@ export function LucidAppShell({
 
         <main className="lucid-shell__content" id="main-content">
           <Routes>
-            <Route
-              path="/reports"
-              element={<ReportsFoundationPage snapshot={snapshot} />}
-            />
             <Route
               path="/findings"
               element={<FindingsFoundationPage snapshot={snapshot} />}
@@ -246,8 +239,14 @@ export function LucidAppShell({
               path="/settings"
               element={<SettingsFoundationPage snapshot={snapshot} />}
             />
-            <Route path="/" element={<Navigate replace to="/reports" />} />
-            <Route path="*" element={<Navigate replace to="/reports" />} />
+            <Route
+              path="/"
+              element={<Navigate replace to={FOUNDATION_HOME_PATH} />}
+            />
+            <Route
+              path="*"
+              element={<Navigate replace to={FOUNDATION_HOME_PATH} />}
+            />
           </Routes>
         </main>
       </div>
