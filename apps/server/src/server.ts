@@ -143,6 +143,13 @@ const server = createHTTPServer({
     {
       allowSelfEnrollment: config.authentication.mode === 'supabase'
         && config.authentication.allowSelfEnrollment,
+      hostedConversation: {
+        enabled: Boolean(hostedExecution),
+        transport: hostedExecutionConfig?.transport.mode ?? null,
+        authorization: config.authentication.mode === 'development'
+          ? 'development-loopback'
+          : 'bearer',
+      },
     },
   ),
   createContext: async ({ req }) => {

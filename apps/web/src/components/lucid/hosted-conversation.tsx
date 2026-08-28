@@ -38,7 +38,12 @@ import {
 import type { ExecutionHostStreamEvent } from '@heddleagent/execution-host-client/contracts';
 import {
   useHostedConversationHistory,
+  useHostedConversationStatus,
 } from '@/hooks/use-hosted-conversation-history';
+import {
+  presentHostedConversationAvailability,
+  resolveHostedConversationAccessToken,
+} from './hosted-conversation-access';
 
 const MAX_PROMPT_CHARACTERS = 20_000;
 const hostedConversations = new HostedConversationClient();
@@ -61,6 +66,14 @@ export function useHostedConversation() {
   const [liveTurn, setLiveTurn] = useState<LiveConversationTurn>();
   const active = useRef<AbortController | undefined>(undefined);
   const history = useHostedConversationHistory();
+  const status = useHostedConversationStatus();
+  const bearerAccessToken = getHostedAccessToken();
+  const availability = presentHostedConversationAvailability({
+    error: status.error,
+    hasBearerAccessToken: Boolean(bearerAccessToken),
+    isPending: status.isPending,
+    status: status.data,
+  });
 
   useEffect(() => () => active.current?.abort(), []);
 
@@ -69,13 +82,20 @@ export function useHostedConversation() {
       return;
     }
     const candidate = draft.trim();
-    const accessToken = getHostedAccessToken();
     if (!candidate) {
       setComposerError('Ask a question about your Lucid workspace.');
       return;
     }
+    if (!availability.canStartTurn) {
+      setComposerError(availability.message ?? 'Chat is not available.');
+      return;
+    }
+    const accessToken = resolveHostedConversationAccessToken(
+      status.data,
+      bearerAccessToken,
+    );
     if (!accessToken) {
-      setComposerError('Sign in again before starting a Chat turn.');
+      setComposerError('Your session expired. Sign in again before starting a Chat turn.');
       return;
     }
 
@@ -180,6 +200,7 @@ export function useHostedConversation() {
   };
 
   return {
+    availability,
     cancel: () => active.current?.abort(),
     composerError,
     draft,
@@ -202,6 +223,7 @@ export function HostedConversation({
   controller: HostedConversationController;
 }) {
   const {
+    availability,
     cancel,
     composerError,
     draft,
@@ -211,6 +233,15 @@ export function HostedConversation({
     submit,
   } = controller;
   const hasSavedTurns = (history.data?.length ?? 0) > 0;
+  const unavailable = !availability.canStartTurn;
+  const availabilityNoticeId = unavailable
+    ? 'hosted-conversation-availability'
+    : undefined;
+  const composerDescription = [
+    composerError ? 'hosted-conversation-error' : undefined,
+    availabilityNoticeId,
+    'hosted-conversation-help',
+  ].filter(Boolean).join(' ');
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -294,18 +325,31 @@ export function HostedConversation({
 
       <form className="chat-composer" onSubmit={handleSubmit}>
         <label htmlFor="hosted-conversation-prompt">Message your Agent</label>
-        <div className="chat-composer__frame">
+        {availabilityNoticeId ? (
+          <p
+            aria-live="polite"
+            className="chat-composer__notice"
+            data-state={availability.state}
+            id={availabilityNoticeId}
+          >
+            {availability.message}
+          </p>
+        ) : null}
+        <div
+          className="chat-composer__frame"
+          data-disabled={unavailable}
+        >
           <textarea
-            aria-describedby={composerError
-              ? 'hosted-conversation-error'
-              : 'hosted-conversation-help'}
+            aria-describedby={composerDescription}
             aria-invalid={Boolean(composerError)}
-            disabled={liveTurn?.running}
+            disabled={Boolean(liveTurn?.running) || unavailable}
             id="hosted-conversation-prompt"
             maxLength={MAX_PROMPT_CHARACTERS}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleComposerKeyDown}
-            placeholder="Ask about your Lucid workspace…"
+            placeholder={unavailable
+              ? 'Chat is unavailable in this environment.'
+              : 'Ask about your Lucid workspace…'}
             ref={composerRef}
             rows={3}
             value={draft}
@@ -323,7 +367,7 @@ export function HostedConversation({
           ) : (
             <Button
               aria-label="Send message"
-              disabled={!draft.trim()}
+              disabled={!draft.trim() || unavailable}
               size="icon"
               type="submit"
             >

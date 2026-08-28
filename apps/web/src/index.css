@@ -3806,6 +3806,27 @@ div.hosted-conversation-history__state > p {
   color: var(--green);
 }
 
+.chat-drawer__runtime[data-state='unavailable'],
+.chat-drawer__runtime[data-state='checking'] {
+  color: var(--faint);
+}
+
+.chat-drawer__runtime[data-state='unavailable'] svg,
+.chat-drawer__runtime[data-state='checking'] svg {
+  color: var(--faint);
+}
+
+.chat-drawer__runtime[data-state='sign-in-required'],
+.chat-drawer__runtime[data-state='error'] {
+  border-color: rgba(164, 64, 52, 0.18);
+  color: var(--danger);
+}
+
+.chat-drawer__runtime[data-state='sign-in-required'] svg,
+.chat-drawer__runtime[data-state='error'] svg {
+  color: var(--danger);
+}
+
 .hosted-conversation {
   display: grid;
   min-height: 0;
@@ -4097,6 +4118,18 @@ div.hosted-conversation-history__state {
   text-transform: uppercase;
 }
 
+.chat-composer__notice {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.chat-composer__notice[data-state='sign-in-required'],
+.chat-composer__notice[data-state='error'] {
+  color: var(--danger);
+}
+
 .chat-composer__frame {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -4112,6 +4145,10 @@ div.hosted-conversation-history__state {
 .chat-composer__frame:focus-within {
   border-color: rgba(23, 107, 91, 0.65);
   box-shadow: 0 0 0 4px rgba(23, 107, 91, 0.08);
+}
+
+.chat-composer__frame[data-disabled='true'] {
+  background: #f5f7f5;
 }
 
 .chat-composer textarea {
@@ -4132,6 +4169,7 @@ div.hosted-conversation-history__state {
 
 .chat-composer textarea:disabled {
   color: var(--muted);
+  cursor: not-allowed;
 }
 
 .chat-composer > footer {

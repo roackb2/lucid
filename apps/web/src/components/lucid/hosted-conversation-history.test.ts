@@ -5,6 +5,10 @@ import {
 } from './hosted-conversation-history';
 import { presentHostedConversationResult } from './hosted-conversation';
 import {
+  presentHostedConversationAvailability,
+  resolveHostedConversationAccessToken,
+} from './hosted-conversation-access';
+import {
   hasOpenHostedConversationTurns,
 } from '@/hooks/use-hosted-conversation-history';
 
@@ -67,5 +71,67 @@ describe('hosted conversation history presentation', () => {
       older,
       newer,
     ]);
+  });
+
+  it('presents disabled hosted execution instead of a false sign-in error', () => {
+    expect(presentHostedConversationAvailability({
+      hasBearerAccessToken: false,
+      isPending: false,
+      status: {
+        enabled: false,
+        transport: null,
+        authorization: 'development-loopback',
+      },
+    })).toMatchObject({
+      canStartTurn: false,
+      runtimeLabel: 'Not connected',
+      state: 'unavailable',
+    });
+  });
+
+  it('requires bearer identity only for bearer-authorized Chat', () => {
+    const status = {
+      enabled: true,
+      transport: 'agentcore',
+      authorization: 'bearer',
+    } as const;
+
+    expect(presentHostedConversationAvailability({
+      hasBearerAccessToken: false,
+      isPending: false,
+      status,
+    })).toMatchObject({
+      canStartTurn: false,
+      state: 'sign-in-required',
+    });
+    expect(presentHostedConversationAvailability({
+      hasBearerAccessToken: true,
+      isPending: false,
+      status,
+    })).toEqual({
+      canStartTurn: true,
+      runtimeLabel: 'AgentCore',
+      state: 'ready',
+    });
+  });
+
+  it('adapts verified loopback development identity without a browser secret', () => {
+    const status = {
+      enabled: true,
+      transport: 'direct',
+      authorization: 'development-loopback',
+    } as const;
+
+    expect(presentHostedConversationAvailability({
+      hasBearerAccessToken: false,
+      isPending: false,
+      status,
+    })).toEqual({
+      canStartTurn: true,
+      runtimeLabel: 'Execution Host',
+      state: 'ready',
+    });
+    expect(resolveHostedConversationAccessToken(status, undefined))
+      .toBeTruthy();
   });
 });

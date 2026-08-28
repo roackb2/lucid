@@ -51,6 +51,8 @@ describe('Lucid router authorization', () => {
     });
     await expect(anonymous.caller.hostedConversation.recent())
       .rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(anonymous.caller.hostedConversation.status())
+      .rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
     const unbound = createCaller({
       requestId: 'unbound-history',
@@ -76,6 +78,30 @@ describe('Lucid router authorization', () => {
     await expect(user.caller.hostedConversation.recent())
       .resolves.toEqual([]);
     expect(user.recentConversations).toHaveBeenCalledWith('local-user');
+  });
+
+  it('reports authenticated Chat readiness without exposing credentials', async () => {
+    const { caller } = createCaller({
+      requestId: 'user-chat-status',
+      remoteAddress: '127.0.0.1',
+      principal: {
+        subject: 'development:local-user',
+        userId: 'local-user',
+        roles: ['user'],
+      },
+    }, {
+      hostedConversation: {
+        enabled: true,
+        transport: 'agentcore',
+        authorization: 'development-loopback',
+      },
+    });
+
+    await expect(caller.hostedConversation.status()).resolves.toEqual({
+      enabled: true,
+      transport: 'agentcore',
+      authorization: 'development-loopback',
+    });
   });
 
   it('lets a verified unbound identity enroll only when deployment permits it', async () => {
@@ -202,7 +228,7 @@ describe('Lucid router authorization', () => {
 
 function createCaller(
   context: LucidRequestContext,
-  options: { allowSelfEnrollment?: boolean } = {},
+  options: Parameters<typeof createAppRouter>[3] = {},
 ) {
   const snapshot = vi.fn(async () => ({ ok: true }));
   const diagnostics = vi.fn(async () => ({ ok: true }));

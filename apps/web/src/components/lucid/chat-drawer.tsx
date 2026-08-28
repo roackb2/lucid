@@ -1,5 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import {
+  CircleOff,
   Eye,
   MessageCircle,
   ShieldCheck,
@@ -28,7 +29,9 @@ export function ChatDrawer({ trigger }: { trigger: ReactNode }) {
           className="chat-drawer__content"
           onOpenAutoFocus={(event) => {
             event.preventDefault();
-            window.requestAnimationFrame(() => composerRef.current?.focus());
+            if (conversation.availability.canStartTurn) {
+              window.requestAnimationFrame(() => composerRef.current?.focus());
+            }
           }}
         >
           <header className="chat-drawer__header">
@@ -59,9 +62,17 @@ export function ChatDrawer({ trigger }: { trigger: ReactNode }) {
               <strong>Read-only Lucid context</strong>
               <p>Current Interest, Agent understanding, Activity, and Findings.</p>
             </div>
-            <span className="chat-drawer__runtime">
-              <ShieldCheck aria-hidden="true" />
-              AgentCore
+            <span
+              aria-label={`Chat runtime: ${conversation.availability.runtimeLabel}`}
+              className="chat-drawer__runtime"
+              data-state={conversation.availability.state}
+            >
+              {conversation.availability.state === 'ready' ? (
+                <ShieldCheck aria-hidden="true" />
+              ) : (
+                <CircleOff aria-hidden="true" />
+              )}
+              {conversation.availability.runtimeLabel}
             </span>
           </section>
 
