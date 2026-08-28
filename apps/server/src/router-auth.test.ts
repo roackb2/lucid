@@ -140,6 +140,12 @@ describe('Lucid router authorization', () => {
     });
     await expect(remoteOperator.caller.development.diagnostics())
       .rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(remoteOperator.caller.development
+      .setSyntheticPeerAgentTasksEnabled({
+        enabled: false,
+        expectedCount: 4,
+      }))
+      .rejects.toMatchObject({ code: 'FORBIDDEN' });
 
     const localOperator = createCaller({
       requestId: 'local-operator',
@@ -151,7 +157,15 @@ describe('Lucid router authorization', () => {
     });
     await expect(localOperator.caller.development.diagnostics())
       .resolves.toEqual({ ok: true });
+    await expect(localOperator.caller.development
+      .setSyntheticPeerAgentTasksEnabled({
+        enabled: false,
+        expectedCount: 4,
+      }))
+      .resolves.toEqual({ ok: true });
     expect(localOperator.diagnostics).toHaveBeenCalledOnce();
+    expect(localOperator.setSyntheticPeerAgentTasksEnabled)
+      .toHaveBeenCalledWith(false, 4);
   });
 
   it('allows only an authenticated operator to control the global dispatch gate', async () => {
@@ -196,6 +210,7 @@ function createCaller(
   const setGlobalBackgroundChecksEnabled = vi.fn(async (enabled: boolean) => ({
     enabled,
   }));
+  const setSyntheticPeerAgentTasksEnabled = vi.fn(async () => ({ ok: true }));
   const enrollAuthenticatedUser = vi.fn(async () => ({
     userId: 'user_avery',
   }));
@@ -207,6 +222,7 @@ function createCaller(
     diagnostics,
     backgroundChecks,
     setGlobalBackgroundChecksEnabled,
+    setSyntheticPeerAgentTasksEnabled,
     enrollAuthenticatedUser,
   } as unknown as UserNetworkService;
   const caller = createAppRouter(
@@ -221,6 +237,7 @@ function createCaller(
     snapshot,
     backgroundChecks,
     setGlobalBackgroundChecksEnabled,
+    setSyntheticPeerAgentTasksEnabled,
     enrollAuthenticatedUser,
     recentConversations,
   };

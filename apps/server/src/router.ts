@@ -66,6 +66,11 @@ const userEnabledInputSchema = z.object({
   enabled: z.boolean(),
 });
 
+const syntheticPeerAgentTasksInputSchema = z.object({
+  enabled: z.boolean(),
+  expectedCount: z.number().int().nonnegative().optional(),
+});
+
 const userIdSchema = z.object({
   userId: z.string().trim().min(1),
 });
@@ -254,6 +259,14 @@ export function createAppRouter(
           () => userNetwork.setUserEnabled(
             input.userId,
             input.enabled,
+          ),
+        )),
+      setSyntheticPeerAgentTasksEnabled: developmentOperatorProcedure
+        .input(syntheticPeerAgentTasksInputSchema)
+        .mutation(({ input }) => resolveUserNetworkError(
+          () => userNetwork.setSyntheticPeerAgentTasksEnabled(
+            input.enabled,
+            input.expectedCount,
           ),
         )),
       retireUser: developmentOperatorProcedure

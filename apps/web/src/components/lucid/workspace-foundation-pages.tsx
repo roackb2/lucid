@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from 'react';
 import type { DiscoverySnapshot } from '@/lib/trpc';
 import { AgentActivityTimeline } from './agent-activity-timeline';
+import { AgentWorkControls } from './agent-work-controls';
 import { CurrentInterestEditor } from './current-interest-editor';
 import { NetworkFindingsLibrary } from './network-findings-library';
 
@@ -82,7 +83,22 @@ export function InterestsFoundationPage({
   );
 }
 
-export function AgentFoundationPage({ snapshot }: FoundationPageProps) {
+export function AgentFoundationPage({
+  isRetrying,
+  isRunningNow,
+  isUpdatingBackground,
+  onRetry,
+  onRunNow,
+  onSetBackgroundChecksEnabled,
+  snapshot,
+}: FoundationPageProps & {
+  isRetrying: boolean;
+  isRunningNow: boolean;
+  isUpdatingBackground: boolean;
+  onRetry(): Promise<unknown>;
+  onRunNow(): Promise<unknown>;
+  onSetBackgroundChecksEnabled(enabled: boolean): Promise<unknown>;
+}) {
   const backgroundState = !snapshot.backgroundChecks.dispatchEnabled
     ? 'Operator paused'
     : snapshot.backgroundChecks.running
@@ -96,6 +112,7 @@ export function AgentFoundationPage({ snapshot }: FoundationPageProps) {
       eyebrow="Your delegated worker"
       title="Agent"
       description="A product-readable view of what the agent is doing, what it currently understands, and where it needs your attention."
+      badge="Check now · real data"
     >
       <section className="agent-overview">
         <span className="agent-overview__avatar" aria-hidden="true">
@@ -121,6 +138,15 @@ export function AgentFoundationPage({ snapshot }: FoundationPageProps) {
           </div>
         </dl>
       </section>
+      <AgentWorkControls
+        isRetrying={isRetrying}
+        isRunningNow={isRunningNow}
+        isUpdatingBackground={isUpdatingBackground}
+        onRetry={onRetry}
+        onRunNow={onRunNow}
+        onSetBackgroundChecksEnabled={onSetBackgroundChecksEnabled}
+        snapshot={snapshot}
+      />
       <div className="foundation-layout agent-page-layout">
         <AgentActivityTimeline
           activity={snapshot.agentActivity}

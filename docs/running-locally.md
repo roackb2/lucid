@@ -102,6 +102,35 @@ The simulator calls only loopback development APIs. It does not connect to the
 database, run Heddle directly, save the local user's interest, submit
 their feedback, or decide whether a finding is useful.
 
+## Local operator controls
+
+Use the checked-in operator commands instead of ad hoc tRPC calls. They default
+to the local API at `http://127.0.0.1:8081/api/trpc`; pass `--url` when the
+server uses another local port.
+
+```bash
+yarn operator:status
+yarn operator:pause-peers --expect-peers 4
+yarn operator:resume-dispatch
+```
+
+`operator:pause-peers` disables only the durable Heddle tasks belonging to
+active synthetic users. It does not disable or retire those Lucid users, move
+their mailbox floors, or affect the local user's Agent task. The expected count
+is optional, but it is a useful fail-closed guard before reopening dispatch in
+a known experiment. Reverse the controls explicitly when needed:
+
+```bash
+yarn operator:pause-dispatch
+yarn operator:resume-peers --expect-peers 4
+```
+
+These commands use loopback-only development APIs. Lucid intentionally keeps
+service-wide and synthetic-world controls out of the single-user product
+navigation. A hosted multi-tenant deployment would need a separately
+authenticated and audited administration surface rather than exposing these
+development routes in the app.
+
 ## Execution topology
 
 The embedded fallback uses Heddle's supported targeted host and one-shot
