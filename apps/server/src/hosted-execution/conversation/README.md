@@ -31,6 +31,12 @@ receives prompt, status, public summary, safe failure code, and public
 timestamps only; activity, tool payloads, assertions, credentials, traces,
 reasoning, and raw errors remain excluded.
 
+The authenticated product router also projects whether foreground Chat is
+enabled, which transport is configured, and whether the local loopback or
+bearer boundary authorizes the request. This lets the browser distinguish an
+unconfigured Runtime from an expired user session without exposing a token,
+Runtime ARN, host URL, region, or signing configuration.
+
 ## Composition and migration
 
 `composition/postgres-persistence.ts` creates the official Heddle lifecycle

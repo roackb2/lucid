@@ -9,11 +9,11 @@ import { LucidAppShell } from '@/components/lucid/app-shell';
 import { Button } from '@/components/ui/button';
 import { useDiscoveryWorkspace } from '@/hooks/use-discovery-workspace';
 import { useLucidAuth } from '@/auth/supabase-auth';
+import { replaceLegacyHostedAccessToken } from '@/auth/legacy-hosted-access';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   hasHostedAccessToken,
   isAuthenticationRequired,
-  setHostedAccessToken,
   lucidClient,
 } from '@/lib/trpc';
 
@@ -78,6 +78,7 @@ function LegacyWorkspaceApp() {
 }
 
 function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
+  const queryClient = useQueryClient();
   const discovery = useDiscoveryWorkspace();
   const snapshot = discovery.snapshot.data;
 
@@ -86,7 +87,7 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
       <HostedAccess
         storedTokenRejected={hasHostedAccessToken()}
         onUnlock={async (token) => {
-          setHostedAccessToken(token);
+          replaceLegacyHostedAccessToken(queryClient, token);
           const result = await discovery.snapshot.refetch();
           return Boolean(result.data)
             && !isAuthenticationRequired(result.error);

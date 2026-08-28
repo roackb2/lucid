@@ -28,7 +28,7 @@ export function createLucidProductToolset(
     tools: [defineNodeMcpJsonTool({
       name: READ_WORKSPACE_SNAPSHOT_TOOL,
       description:
-        'Read the user-scoped Lucid workspace, current assignment, working direction, findings, user background-check preference, and operator dispatch gate.',
+        'Read the user-scoped Lucid workspace, current Interest, Agent understanding and Activity, Findings, background-check preference, and operator dispatch gate.',
       inputSchema: z.object({}).strict(),
       annotations: {
         readOnlyHint: true,

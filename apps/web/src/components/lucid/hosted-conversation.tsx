@@ -1,17 +1,28 @@
 import {
-  FormEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type RefObject,
   useEffect,
   useRef,
   useState,
 } from 'react';
 import {
-  MessageSquareText,
+  MessageCircle,
   Send,
   Square,
 } from 'lucide-react';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
 import { Button } from '@/components/ui/button';
 import { HostedConversationAnswer } from './hosted-conversation-answer';
-import { HostedConversationHistory } from './hosted-conversation-history';
+import {
+  HostedConversationHistory,
+  HostedConversationUserMessage,
+} from './hosted-conversation-history';
 import {
   mergeHostedConversationProgress,
   presentHostedConversationActivity,
@@ -27,51 +38,83 @@ import {
 import type { ExecutionHostStreamEvent } from '@heddleagent/execution-host-client/contracts';
 import {
   useHostedConversationHistory,
+  useHostedConversationStatus,
 } from '@/hooks/use-hosted-conversation-history';
+import {
+  presentHostedConversationAvailability,
+  resolveHostedConversationAccessToken,
+} from './hosted-conversation-access';
 
 const MAX_PROMPT_CHARACTERS = 20_000;
 const hostedConversations = new HostedConversationClient();
 
-export function HostedConversation() {
-  const [prompt, setPrompt] = useState('');
-  const [submittedPrompt, setSubmittedPrompt] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [answerStatus, setAnswerStatus] = useState<
-    HostedConversationTurn['status']
-  >('completed');
-  const [status, setStatus] = useState('Ready');
-  const [progress, setProgress] = useState<HostedConversationProgressItem[]>([]);
-  const [error, setError] = useState('');
-  const [running, setRunning] = useState(false);
-  const [activeInvocationId, setActiveInvocationId] = useState<string>();
+type LiveConversationTurn = {
+  answer: string;
+  answerStatus: HostedConversationTurn['status'];
+  error: string;
+  invocationId?: string;
+  progress: HostedConversationProgressItem[];
+  prompt: string;
+  requestedAt: string;
+  running: boolean;
+  status: string;
+};
+
+export function useHostedConversation() {
+  const [draft, setDraft] = useState('');
+  const [composerError, setComposerError] = useState('');
+  const [liveTurn, setLiveTurn] = useState<LiveConversationTurn>();
   const active = useRef<AbortController | undefined>(undefined);
   const history = useHostedConversationHistory();
+  const status = useHostedConversationStatus();
+  const bearerAccessToken = getHostedAccessToken();
+  const availability = presentHostedConversationAvailability({
+    error: status.error,
+    hasBearerAccessToken: Boolean(bearerAccessToken),
+    isPending: status.isPending,
+    status: status.data,
+  });
 
   useEffect(() => () => active.current?.abort(), []);
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const candidate = prompt.trim();
-    const accessToken = getHostedAccessToken();
-    if (!candidate) {
-      setError('Ask a question about your workspace.');
+  const submit = async () => {
+    if (active.current) {
       return;
     }
+    const candidate = draft.trim();
+    if (!candidate) {
+      setComposerError('Ask a question about your Lucid workspace.');
+      return;
+    }
+    if (!availability.canStartTurn) {
+      setComposerError(availability.message ?? 'Chat is not available.');
+      return;
+    }
+    const accessToken = resolveHostedConversationAccessToken(
+      status.data,
+      bearerAccessToken,
+    );
     if (!accessToken) {
-      setError('Reopen the workspace with your user access token.');
+      setComposerError('Your session expired. Sign in again before starting a Chat turn.');
       return;
     }
 
     const controller = new AbortController();
+    let terminalReceived = false;
     active.current = controller;
-    setActiveInvocationId(undefined);
-    setSubmittedPrompt(candidate);
-    setAnswer('');
-    setAnswerStatus('completed');
-    setProgress([]);
-    setError('');
-    setRunning(true);
-    setStatus('Starting an isolated agent workspace');
+    setComposerError('');
+    setDraft('');
+    setLiveTurn({
+      answer: '',
+      answerStatus: 'completed',
+      error: '',
+      progress: [],
+      prompt: candidate,
+      requestedAt: new Date().toISOString(),
+      running: true,
+      status: 'Connecting to your agent',
+    });
+
     try {
       for await (const item of hostedConversations.streamTurn({
         prompt: candidate,
@@ -79,158 +122,275 @@ export function HostedConversation() {
         signal: controller.signal,
       })) {
         if (item.kind === 'accepted') {
-          setActiveInvocationId(item.invocationId);
-          setStatus('Agent workspace ready');
+          setLiveTurn((current) => current ? {
+            ...current,
+            invocationId: item.invocationId,
+            status: 'Agent workspace ready',
+          } : current);
         } else if (item.kind === 'activity') {
           const presentation = presentHostedConversationActivity(item.activity);
-          setStatus(presentation.status);
-          const progressItem = presentation.progress;
-          if (progressItem) {
-            setProgress((current) => mergeHostedConversationProgress(
-              current,
-              progressItem,
-            ));
-          }
+          setLiveTurn((current) => current ? {
+            ...current,
+            progress: presentation.progress
+              ? mergeHostedConversationProgress(
+                current.progress,
+                presentation.progress,
+              )
+              : current.progress,
+            status: presentation.status,
+          } : current);
         } else if (item.kind === 'result') {
+          terminalReceived = true;
           const presentation = presentHostedConversationResult(item.result);
-          setAnswer(presentation.answerMarkdown);
-          setAnswerStatus(presentation.status);
-          setStatus(describeOutcome(item.result.outcome));
+          setLiveTurn((current) => current ? {
+            ...current,
+            answer: presentation.answerMarkdown,
+            answerStatus: presentation.status,
+            running: false,
+            status: describeOutcome(item.result.outcome),
+          } : current);
         } else if (item.kind === 'cancelled') {
-          setStatus('Cancelled');
+          terminalReceived = true;
+          setLiveTurn((current) => current ? {
+            ...current,
+            answerStatus: 'cancelled',
+            running: false,
+            status: 'Cancelled',
+          } : current);
         } else {
-          setError(item.error.message);
-          setStatus('Could not complete');
+          terminalReceived = true;
+          setLiveTurn((current) => current ? {
+            ...current,
+            answerStatus: 'failed',
+            error: item.error.message,
+            running: false,
+            status: 'Could not complete',
+          } : current);
         }
       }
+
+      if (!terminalReceived && !controller.signal.aborted) {
+        setLiveTurn((current) => current ? {
+          ...current,
+          answerStatus: 'interrupted',
+          error: 'The connection ended before Lucid received a final answer.',
+          running: false,
+          status: 'Connection interrupted',
+        } : current);
+      }
     } catch (cause) {
-      if (controller.signal.aborted) {
-        setStatus('Cancelled');
-      } else {
-        setError(
-          cause instanceof Error
+      setLiveTurn((current) => current ? {
+        ...current,
+        answerStatus: controller.signal.aborted ? 'cancelled' : 'failed',
+        error: controller.signal.aborted
+          ? ''
+          : cause instanceof Error
             ? cause.message
             : 'The hosted conversation could not complete.',
-        );
-        setStatus('Could not complete');
-      }
+        running: false,
+        status: controller.signal.aborted ? 'Cancelled' : 'Could not complete',
+      } : current);
     } finally {
       if (active.current === controller) {
         active.current = undefined;
       }
-      setRunning(false);
-      void history.refetch();
+      setLiveTurn((current) => current ? { ...current, running: false } : current);
+      await history.refetch();
+    }
+  };
+
+  return {
+    availability,
+    cancel: () => active.current?.abort(),
+    composerError,
+    draft,
+    history,
+    liveTurn,
+    setDraft,
+    submit,
+  };
+}
+
+export type HostedConversationController = ReturnType<
+  typeof useHostedConversation
+>;
+
+export function HostedConversation({
+  composerRef,
+  controller,
+}: {
+  composerRef: RefObject<HTMLTextAreaElement | null>;
+  controller: HostedConversationController;
+}) {
+  const {
+    availability,
+    cancel,
+    composerError,
+    draft,
+    history,
+    liveTurn,
+    setDraft,
+    submit,
+  } = controller;
+  const hasSavedTurns = (history.data?.length ?? 0) > 0;
+  const unavailable = !availability.canStartTurn;
+  const availabilityNoticeId = unavailable
+    ? 'hosted-conversation-availability'
+    : undefined;
+  const composerDescription = [
+    composerError ? 'hosted-conversation-error' : undefined,
+    availabilityNoticeId,
+    'hosted-conversation-help',
+  ].filter(Boolean).join(' ');
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void submit();
+  };
+
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.key === 'Enter'
+      && !event.shiftKey
+      && !event.nativeEvent.isComposing
+    ) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
     }
   };
 
   return (
-    <section className="hosted-conversation-card" id="conversation">
-      <header className="card-heading">
-        <span className="card-heading__icon" aria-hidden="true">
-          <MessageSquareText size={19} />
-        </span>
-        <div>
-          <p className="section-label">Hosted conversation</p>
-          <h2 className="text-balance">Ask your agent directly.</h2>
-          <p className="text-pretty">
-            A Heddle agent runs in an isolated AgentCore workspace and can read
-            only the Lucid capabilities granted for this turn.
-          </p>
-        </div>
-      </header>
+    <section className="hosted-conversation" aria-label="Chat with Lucid">
+      <Conversation className="chat-thread">
+        <ConversationContent className="chat-thread__content">
+          <HostedConversationHistory
+            activeInvocationId={liveTurn?.invocationId}
+            error={history.error}
+            isPending={history.isPending}
+            onRetry={() => history.refetch()}
+            turns={history.data ?? []}
+          />
+          {!hasSavedTurns && !liveTurn && !history.isPending && !history.error ? (
+            <ConversationEmptyState
+              className="chat-thread__empty"
+              description="Ask about your current Interest, Agent activity, or Findings. Ordinary Chat cannot change them."
+              icon={<MessageCircle aria-hidden="true" />}
+              title="Start a conversation"
+            />
+          ) : null}
+          {liveTurn ? (
+            <ol className="chat-thread__turns chat-thread__turns--live">
+              <li className="chat-thread__turn">
+                <HostedConversationUserMessage
+                  prompt={liveTurn.prompt}
+                  requestedAt={liveTurn.requestedAt}
+                />
+                <section
+                  aria-live="polite"
+                  className="hosted-conversation-progress"
+                  data-running={liveTurn.running}
+                >
+                  <header>
+                    <span aria-hidden="true" />
+                    <strong>{liveTurn.status}</strong>
+                  </header>
+                  {liveTurn.progress.length > 0 ? (
+                    <ol aria-label="Live agent activity">
+                      {liveTurn.progress.map((item) => (
+                        <li data-kind={item.kind} key={item.id}>
+                          <span aria-hidden="true" />
+                          <p>{item.text}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+                  {liveTurn.error ? (
+                    <p className="hosted-conversation-error" role="alert">
+                      {liveTurn.error}
+                    </p>
+                  ) : null}
+                </section>
+                {liveTurn.answer ? (
+                  <HostedConversationAnswer
+                    markdown={liveTurn.answer}
+                    status={liveTurn.answerStatus}
+                  />
+                ) : null}
+              </li>
+            </ol>
+          ) : null}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
 
-      <form className="hosted-conversation-form" onSubmit={submit}>
-        <label htmlFor="hosted-conversation-prompt">Question</label>
-        <textarea
-          aria-describedby={error ? 'hosted-conversation-error' : undefined}
-          aria-invalid={Boolean(error)}
-          disabled={running}
-          id="hosted-conversation-prompt"
-          maxLength={MAX_PROMPT_CHARACTERS}
-          onChange={(event) => setPrompt(event.target.value)}
-          placeholder="What should I know about my current workspace?"
-          rows={4}
-          value={prompt}
-        />
-        {error ? (
+      <form className="chat-composer" onSubmit={handleSubmit}>
+        <label htmlFor="hosted-conversation-prompt">Message your Agent</label>
+        {availabilityNoticeId ? (
+          <p
+            aria-live="polite"
+            className="chat-composer__notice"
+            data-state={availability.state}
+            id={availabilityNoticeId}
+          >
+            {availability.message}
+          </p>
+        ) : null}
+        <div
+          className="chat-composer__frame"
+          data-disabled={unavailable}
+        >
+          <textarea
+            aria-describedby={composerDescription}
+            aria-invalid={Boolean(composerError)}
+            disabled={Boolean(liveTurn?.running) || unavailable}
+            id="hosted-conversation-prompt"
+            maxLength={MAX_PROMPT_CHARACTERS}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleComposerKeyDown}
+            placeholder={unavailable
+              ? 'Chat is unavailable in this environment.'
+              : 'Ask about your Lucid workspace…'}
+            ref={composerRef}
+            rows={3}
+            value={draft}
+          />
+          {liveTurn?.running ? (
+            <Button
+              aria-label="Cancel current Chat turn"
+              onClick={cancel}
+              size="icon"
+              type="button"
+              variant="secondary"
+            >
+              <Square aria-hidden="true" />
+            </Button>
+          ) : (
+            <Button
+              aria-label="Send message"
+              disabled={!draft.trim() || unavailable}
+              size="icon"
+              type="submit"
+            >
+              <Send aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+        {composerError ? (
           <p
             className="hosted-conversation-error"
             id="hosted-conversation-error"
             role="alert"
           >
-            {error}
+            {composerError}
           </p>
         ) : null}
-        <footer>
+        <footer id="hosted-conversation-help">
+          <span>Enter to send · Shift+Enter for a new line</span>
           <span className="tabular-nums">
-            {prompt.length.toLocaleString()} / {MAX_PROMPT_CHARACTERS.toLocaleString()}
+            {draft.length.toLocaleString()} / {MAX_PROMPT_CHARACTERS.toLocaleString()}
           </span>
-          <div>
-            {running ? (
-              <Button
-                onClick={() => active.current?.abort()}
-                type="button"
-                variant="secondary"
-              >
-                <Square size={13} />
-                Cancel
-              </Button>
-            ) : null}
-            <Button disabled={running || !prompt.trim()} type="submit">
-              <Send size={14} />
-              {running ? 'Working…' : 'Ask agent'}
-            </Button>
-          </div>
         </footer>
       </form>
-
-      {submittedPrompt || answer || running ? (
-        <section className="hosted-conversation-result">
-          <header aria-live="polite">
-            <span className={running ? 'hosted-conversation-status--active' : ''} />
-            <strong>{status}</strong>
-          </header>
-          {submittedPrompt ? (
-            <p className="hosted-conversation-question">{submittedPrompt}</p>
-          ) : null}
-          {progress.length > 0 ? (
-            <section
-              className="hosted-conversation-progress"
-              aria-label="Live agent activity"
-              aria-live="polite"
-            >
-              <h3>Live agent activity</h3>
-              <ol>
-                {progress.map((item) => (
-                  <li data-kind={item.kind} key={item.id}>
-                    <span aria-hidden="true" />
-                    <p>{item.text}</p>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          ) : null}
-          {answer ? (
-            <HostedConversationAnswer
-              markdown={answer}
-              status={answerStatus}
-            />
-          ) : null}
-        </section>
-      ) : (
-        <p className="hosted-conversation-empty text-pretty">
-          Start with a bounded read-only question. The first pilot capability
-          lets the agent inspect your user-scoped workspace snapshot.
-        </p>
-      )}
-
-      <HostedConversationHistory
-        activeInvocationId={activeInvocationId}
-        error={history.error}
-        isPending={history.isPending}
-        onRetry={() => history.refetch()}
-        turns={history.data ?? []}
-      />
     </section>
   );
 }

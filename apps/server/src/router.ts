@@ -148,8 +148,23 @@ export function createAppRouter(
   discoveryWorkspace: DiscoveryWorkspaceService,
   userNetwork: UserNetworkService,
   conversationHistory: HostedConversationHistoryReader,
-  options: { allowSelfEnrollment?: boolean } = {},
+  options: {
+    allowSelfEnrollment?: boolean;
+    hostedConversation?: {
+      enabled: boolean;
+      transport: 'agentcore' | 'direct' | null;
+      authorization: 'bearer' | 'development-loopback';
+    };
+  } = {},
 ) {
+  const hostedConversationStatus = Object.freeze(
+    options.hostedConversation ?? {
+      enabled: false,
+      transport: null,
+      authorization: 'bearer',
+    } as const,
+  );
+
   return trpc.router({
     system: trpc.router({
       health: trpc.procedure.query(() => ({
@@ -228,6 +243,7 @@ export function createAppRouter(
         )),
     }),
     hostedConversation: trpc.router({
+      status: userProcedure.query(() => hostedConversationStatus),
       recent: userProcedure.query(({ ctx }) => (
         conversationHistory.recentForUser(ctx.principal.userId)
       )),
