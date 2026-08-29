@@ -618,10 +618,10 @@
   resolved "https://registry.yarnpkg.com/@esbuild/win32-x64/-/win32-x64-0.27.7.tgz#8fe30b3088b89b4873c3a6cc87597ae3920c0a8b"
   integrity sha512-56hiAJPhwQ1R4i+21FVF7V8kSD5zZTdHcVuRFMW0hn753vVfQN8xlx4uOPT4xoGH0Z/oVATuR82AiqSTDIpaHg==
 
-"@heddleagent/execution-host-client@8.0.0":
-  version "8.0.0"
-  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-8.0.0.tgz#0dcdd63bd728267575aa0fdce11b1719566d0db0"
-  integrity sha512-tmMtRwCO1dpNFneq74KeUF3rs6Aeim364piVOwm/fP9uwYOD7hqeYaRsQEMIoDzPVKiGXt1WECWaS4lo5+9MsQ==
+"@heddleagent/execution-host-client@8.0.1":
+  version "8.0.1"
+  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-8.0.1.tgz#aea2fa69af12c21111d7f899443b95d6e775a970"
+  integrity sha512-1fmBCySIr5hrj7QaHBRHCNEoqgnXOK5ToqtZP0691FBHA6naKojkH/CbSGxxLnW7PWUI5xBTBFe87T2rRYBwgA==
   dependencies:
     "@aws-sdk/client-bedrock-agentcore" "^3.1107.0"
     "@modelcontextprotocol/sdk" "^1.29.0"
