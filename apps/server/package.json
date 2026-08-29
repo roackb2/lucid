@@ -20,8 +20,8 @@
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
-    "@heddleagent/execution-host-client": "7.0.0",
-    "@heddleagent/postgres": "6.1.2",
+    "@heddleagent/execution-host-client": "8.0.0",
+    "@heddleagent/postgres": "6.1.3",
     "@heddleagent/runtime": "6.7.0",
     "@trpc/server": "11.16.0",
     "async-mutex": "0.5.0",

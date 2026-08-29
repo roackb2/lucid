@@ -101,7 +101,7 @@ credential handling, signed authority, Node HTTP/JWKS/SSE, product-edge MCP,
 generic durable conversation lifecycle, browser turn transport, authenticated
 coordinator control, the versioned `ExecutionHost` contract, and its AgentCore
 transport. Its lifecycle store is supplied by
-`@heddleagent/postgres@6.1.2`; Lucid retains authenticated scope selection,
+`@heddleagent/postgres@6.1.3`; Lucid retains authenticated scope selection,
 migration execution, and its history query.
 
 `src/lucid` owns users, mailbox events, findings, feedback, wake claims, and
