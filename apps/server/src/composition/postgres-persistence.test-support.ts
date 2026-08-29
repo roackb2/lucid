@@ -1090,6 +1090,19 @@ export const defineLucidStoreContract = (
       wakeNumber: firstWake!.wakeNumber,
       horizonSequence: firstWake!.horizonSequence,
     });
+    expect(await stores.agent.readClaimedAgentWake(
+      LOCAL_AGENT_ID,
+      firstWake!.claimToken,
+    )).toBeUndefined();
+    expect(await stores.agent.readClaimedAgentWake(
+      LOCAL_AGENT_ID,
+      retriedWake!.claimToken,
+    )).toMatchObject({
+      wakeId: retriedWake!.wakeId,
+      claimToken: retriedWake!.claimToken,
+      horizonSequence: retriedWake!.horizonSequence,
+      visibleEvents: retriedWake!.visibleEvents,
+    });
     expect(await stores.workspace.readAgentWorkingContext(
       LOCAL_AGENT_ID,
       retriedWake!.horizonSequence,

@@ -46,6 +46,11 @@ describe('Lucid hosted conversation control-plane round trip', () => {
           tenantId: 'tenant-a',
           productSessionId: 'product-session-a',
         }, source),
+        {
+          executeAgentWorkTool: async () => {
+            throw new Error('Agent work is unavailable in this fixture.');
+          },
+        },
         { now: () => MCP_TEST_NOW },
       ),
     });

@@ -145,14 +145,16 @@ product controls reconcile desired tasks through the long-running Heddle
 Coordinator. The Coordinator is the only scheduler and owns PostgreSQL task
 authority, polling, claims, checkpoints, recovery, and settlement.
 
-For each claim, the coordinator requests one short-lived execution/MCP bundle
-from Lucid and invokes the same external Runtime used by foreground
-conversations. Neither service receives Lucid database credentials; the
-Runtime calls curated product operations through scoped MCP capabilities.
+For each claim, the Coordinator asks Lucid to prepare one fixed-horizon product
+work claim, receives one short-lived execution/MCP bundle, invokes the same
+external Runtime used by foreground conversations, and returns the narrow
+terminal projection for product settlement. The Runtime receives no database
+credential and calls curated product operations through scoped MCP capability.
 
 Product trigger, status, enable/disable, reset, and global pause flows use the
-coordinator API. The current autonomous MCP surface is read-only; state-changing
-mailbox and finding operations are the next product-capability slice. See
+Coordinator API. The current autonomous MCP surface reads the active work
+horizon and can publish the required shared request; broader agent
+communication and finding tools remain separate product slices. See
 [External Heddle execution host](hosted-execution.md).
 
 ## Agent boundary

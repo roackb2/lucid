@@ -10,10 +10,10 @@ import {
   type HostedConversationTurnLifecycleStore,
 } from '@heddleagent/execution-host-client/conversation';
 import {
-  HostedHeartbeatDelegationService,
+  HostedHeartbeatExecutionService,
 } from '@heddleagent/execution-host-client/coordinator';
 import {
-  NodeHostedHeartbeatDelegationHttpService,
+  NodeHostedHeartbeatExecutionHttpService,
 } from '@heddleagent/execution-host-client/coordinator/node';
 import { DirectHttpExecutionHost, type ExecutionHost } from '@heddleagent/execution-host-client/http-sse';
 import { JwtMcpCapabilityVerifier } from '@heddleagent/execution-host-client/mcp';
@@ -28,18 +28,23 @@ import {
   HostedConversationAuthorizationError,
   HostedConversationAdmissionService,
 } from '../hosted-execution/conversation/admission-service.js';
-import { LucidHeartbeatDelegationAuthorizer } from '../hosted-execution/heartbeat/delegation-authorizer.js';
+import { LucidHeartbeatExecutionLifecycle } from '../hosted-execution/heartbeat/execution-lifecycle.js';
 import {
   HostedExecutionHttpRouter,
 } from '../hosted-execution/http-router.js';
 import { createLucidProductToolset } from '../hosted-execution/mcp/product-tools.js';
 import {
+  LUCID_CONVERSATION_MCP_TOOLS,
+  LUCID_HEARTBEAT_MCP_TOOLS,
   LUCID_PRODUCT_MCP_TOOLS,
   type LucidProductMcpToolName,
 } from '../hosted-execution/mcp/types.js';
 import { UserWorkspaceProjectionReader } from '../hosted-execution/mcp/workspace-projection-reader.js';
+import {
+  CapabilityScopedAgentWorkToolExecutor,
+} from '../hosted-execution/mcp/agent-work-tool-executor.js';
 import type { DiscoveryWorkspaceSnapshot } from '../lucid/discovery-types.js';
-import type { AgentWakeStore } from '../lucid/agent/store.js';
+import type { AgentWorkService } from '../lucid/agent/work-service.js';
 import type { LucidLogger } from '../logger.js';
 
 export type HostedExecutionComposition = {
@@ -56,9 +61,13 @@ export async function createHostedExecutionComposition(input: {
   };
   logger: LucidLogger;
   conversationLifecycle: HostedConversationTurnLifecycleStore;
-  heartbeatStore: Pick<
-    AgentWakeStore,
-    'readWorkspace' | 'listAgents' | 'listUsers'
+  agentWork: Pick<
+    AgentWorkService,
+    | 'claimWork'
+    | 'completeWork'
+    | 'failWork'
+    | 'interruptWork'
+    | 'executeTool'
   >;
   executionHost?: ExecutionHost;
 }): Promise<HostedExecutionComposition> {
@@ -97,9 +106,13 @@ export async function createHostedExecutionComposition(input: {
     tenantId: input.config.tenantId,
     productSessionId: input.config.productSessionId,
   }, input.discoveryWorkspace);
+  const agentWork = new CapabilityScopedAgentWorkToolExecutor({
+    tenantId: input.config.tenantId,
+    productSessionId: input.config.productSessionId,
+  }, input.agentWork);
   const mcp = new NodeStreamableHttpMcpService({
     capabilityVerifier,
-    toolset: createLucidProductToolset(workspaceReader),
+    toolset: createLucidProductToolset(workspaceReader, agentWork),
   });
   let ownedAgentCoreHost: AgentCoreExecutionHost | undefined;
   let executionHost = input.executionHost;
@@ -124,7 +137,7 @@ export async function createHostedExecutionComposition(input: {
     authority,
     executionHost,
     modelCredentials: input.config.modelCredentials,
-    mcp: { allowedTools: LUCID_PRODUCT_MCP_TOOLS },
+    mcp: { allowedTools: LUCID_CONVERSATION_MCP_TOOLS },
   });
   const turns = new DurableHostedConversationTurnService({
     turns: baseTurns,
@@ -155,25 +168,25 @@ export async function createHostedExecutionComposition(input: {
       input.logger.warn(failure, 'lucid.hosted_execution.request_failed');
     },
   });
-  const heartbeatDelegations = new NodeHostedHeartbeatDelegationHttpService({
-    delegations: new HostedHeartbeatDelegationService({
+  const heartbeatExecutions = new NodeHostedHeartbeatExecutionHttpService({
+    executions: new HostedHeartbeatExecutionService({
       authority,
-      authorizer: new LucidHeartbeatDelegationAuthorizer(
-        input.heartbeatStore,
+      lifecycle: new LucidHeartbeatExecutionLifecycle(
+        input.agentWork,
         {
           tenantId: input.config.tenantId,
           productSessionId: input.config.productSessionId,
-          allowedTools: LUCID_PRODUCT_MCP_TOOLS,
+          allowedTools: LUCID_HEARTBEAT_MCP_TOOLS,
         },
       ),
       runtimeSessionNamespace: 'lucid',
       maxExecutionMs: input.config.maxTurnMs,
     }),
-    apiToken: input.config.heartbeatDelegationToken,
+    apiToken: input.config.heartbeatExecutionToken,
     reportFailure: (failure) => {
       input.logger.error(
         failure,
-        'lucid.hosted_heartbeat.delegation_failed',
+        'lucid.hosted_heartbeat.execution_lifecycle_failed',
       );
     },
   });
@@ -181,7 +194,7 @@ export async function createHostedExecutionComposition(input: {
     adopterHttp,
     mcp,
     input.logger,
-    heartbeatDelegations,
+    heartbeatExecutions,
   );
 
   return {

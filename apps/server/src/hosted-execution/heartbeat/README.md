@@ -1,59 +1,48 @@
-# Hosted heartbeat delegation
+# Hosted heartbeat execution lifecycle
 
-This boundary connects Lucid product ownership to the separate Heddle
-Coordinator without making either service depend on the other's database.
+This boundary connects Lucid product work to the separate Heddle Coordinator
+without making either service depend on the other's database.
 
 At server startup, Lucid projects its current users, agents, and workspace into
-Heddle's desired-task vocabulary. The public Execution Host client then owns
-the authenticated coordinator call, pause/delete/upsert/resume ordering, stale
+Heddle's desired-task vocabulary. The public Execution Host client owns the
+authenticated Coordinator calls, pause/delete/upsert/resume ordering, stale
 task replacement, input validation, and failure behavior. Retired users are
 omitted, active users are enabled, disabled users remain represented but
-disabled, and the global Lucid background-work gate decides whether the
-coordinator resumes. A failed reconciliation leaves the coordinator paused and
-fails Lucid startup.
+disabled, and the Lucid background-work gate decides whether the Coordinator
+resumes. Failed reconciliation leaves the Coordinator paused and fails startup.
 
-Immediately before an autonomous run, the coordinator uses the separate
-delegation route to obtain one short-lived Lucid execution bundle.
+For each claimed Heddle execution, the Coordinator calls Lucid twice:
 
-Lucid owns task-to-agent/user resolution, the global background-work gate, and
-the allowed product MCP tools. Lucid returns only the current product scope and
-tool policy. Heddle owns stable Runtime session identity, deadlines,
-execution/MCP authority issuance, the delegation wire contract, bearer
-authentication, request bounds, safe errors, and shutdown. The coordinator
-sends only a persisted Heddle task ID and its claim-fenced execution ID. It
-does not receive a user session token, signing key, Lucid database credential,
-or authority to query product tables. Its model credential comes directly from
-the coordinator deployment's own secret store rather than crossing this HTTP
-boundary.
+1. `prepare` maps the task to a Lucid agent and asks `AgentWorkService` to claim
+   one fixed product work horizon. Empty work skips the model. Claimed work
+   returns only product scope and the exact heartbeat MCP tool allowlist.
+2. `settle` maps the narrow terminal execution result back to the same agent
+   and execution fence. Lucid validates and commits product effects, asks for a
+   retry, or accepts failure/interruption without consuming unread input.
 
-The Heddle-owned route is private, bearer-authenticated, non-cacheable, and
-deliberately limited to `heartbeat-task`. Credentials are returned once for the
-requested execution and must remain in memory only. The AgentCore Runtime still
-receives no Lucid or Heddle database credential.
+Heddle owns Runtime-session identity, deadlines, execution/MCP authority
+issuance, the lifecycle wire contract, bearer authentication, request bounds,
+safe errors, and shutdown. The Coordinator sends only a persisted Heddle task
+ID and its claim-fenced execution ID. It receives no user session, signing key,
+Lucid database credential, or authority to query product tables. Its model
+credential comes from the Coordinator deployment's secret store.
 
-The Lucid implementations in this folder are therefore:
+The implementations in this folder are:
 
-- `desired-task-catalog.ts`: product state to Heddle desired tasks;
-- `delegation-authorizer.ts`: current product identity and policy for one
-  claimed task; and
-- `agent-heartbeat-service.ts`: the Lucid product-control port backed by the
-  public coordinator task API. It contains product projection and preference
-  rules, not scheduling, claims, retries, or HTTP client mechanics.
+- `desired-task-catalog.ts`: product state to desired Heddle tasks;
+- `execution-lifecycle.ts`: task-to-agent mapping plus product-work preparation
+  and settlement; and
+- `agent-heartbeat-service.ts`: Lucid controls backed by the public
+  Coordinator task API. It contains product projection and preference rules,
+  not scheduling, claims, retries, or HTTP mechanics.
 
 The two directions use distinct secrets:
 
-- `LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN` authenticates Lucid's desired
-  task calls to the coordinator;
-- `LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN` authenticates the coordinator's
-  delegation calls back to Lucid.
+- `LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN` authenticates Lucid's task and
+  control calls to the Coordinator;
+- `LUCID_HOSTED_HEARTBEAT_EXECUTION_TOKEN` authenticates the Coordinator's work
+  preparation and settlement calls to Lucid.
 
-Lucid's product trigger, status, enable/disable, reset, and global gate flows
-always use the public coordinator API. A complete coordinator profile is a
-startup requirement; Lucid has no embedded scheduler or direct heartbeat-table
-authority.
-
-The currently exposed autonomous capability is the read-only workspace
-snapshot. State-changing communication and finding operations still require a
-scoped MCP contract that preserves the claimed task execution, mailbox
-horizon, action identity, and fenced completion. That product-capability gap
-does not create a second scheduling topology.
+Lucid has no embedded scheduler or direct Heddle heartbeat-table authority.
+Its durable `AgentWorkClaim` is application data for one Coordinator attempt,
+not another clock, queue, or due-task selector.

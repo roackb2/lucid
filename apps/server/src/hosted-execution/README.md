@@ -1,139 +1,106 @@
 # Hosted execution
 
-This application boundary lets Lucid use an external Heddle Execution Host and
-the narrow autonomous-work coordinator without importing either private
-service repository. Foreground conversations invoke the Runtime directly.
-The coordinator receives desired heartbeat tasks and calls back for one
-short-lived execution delegation only when it owns a durable Heddle claim.
+This boundary lets Lucid use the external Heddle Execution Host and the
+long-running Heddle Coordinator without importing either private deployable.
+Foreground conversations invoke the Runtime directly. The Coordinator is the
+sole autonomous-work scheduler and calls Lucid's product-work lifecycle around
+each execution it owns.
 
-## Services
+## Service boundary
 
-Lucid imports the generic adopter machinery from the released
+Lucid imports generic machinery from the released
 `@heddleagent/execution-host-client` package:
 
-- `authority` mints short-lived execution assertions and optional MCP
-  capabilities and projects public JWKS keys;
-- `mcp` independently verifies capabilities at the product edge;
-- `http-sse` defines the provider-neutral `ExecutionHost` port and strict
-  direct-development client;
-- `agentcore` implements that port through the AWS SDK and SigV4; and
-- `conversation` owns the durable hosted-turn lifecycle over an injected store.
+- `authority` mints short-lived execution assertions and MCP capabilities and
+  publishes public JWKS;
+- `conversation` owns hosted foreground-turn lifecycle;
+- `coordinator` owns task reconciliation plus the generic product-work
+  preparation/settlement protocol;
+- `mcp` independently verifies product capabilities;
+- `http-sse` provides the direct development transport; and
+- `agentcore` provides the AWS SDK/SigV4 transport.
 
-`@heddleagent/postgres/execution-host/conversations` supplies that store over
-Lucid's owned Drizzle handle.
+`@heddleagent/postgres/execution-host/conversations` supplies hosted
+conversation persistence over Lucid's Drizzle handle. The Coordinator owns its
+own Heddle heartbeat tables and credentials in the same application database;
+the database-free Runtime receives neither credential.
 
-This directory contains only Lucid-owned behavior:
+Lucid-owned behavior is:
 
 | Path | Responsibility |
 | --- | --- |
-| `config.ts` | Validate Lucid's all-or-nothing hosted profile and select product identity, URLs, audiences, and limits |
+| `config.ts` | Validate Lucid's complete hosted profile, secrets, identities, URLs, audiences, and limits |
 | `model-credentials.ts` | Select an explicit API key or ask Heddle for an access-token-only view of Lucid's stored Codex login |
-| `conversation/` | Admit an authenticated Lucid user, derive product-owned scope/identity/deadline, and query the newest 20 scoped lifecycle records |
-| `heartbeat/` | Publish Lucid-owned desired task state and issue one-run execution/MCP delegation without sharing product database credentials |
-| `http-router.ts` | Mount the package-owned HTTP and MCP services beside Lucid's tRPC routes |
-| `mcp/product-tools.ts` | Declare the exact Lucid tool names, schemas, descriptions, and product operations |
-| `mcp/workspace-projection-reader.ts` | Bind verified capability scope to Lucid's current workspace projection |
+| `conversation/` | Authenticate a user, derive foreground execution scope, and query scoped lifecycle records |
+| `heartbeat/` | Publish desired tasks and map one Coordinator execution to Lucid `AgentWorkService` preparation and settlement |
+| `mcp/product-tools.ts` | Declare exact product tool names, schemas, descriptions, and operations |
+| `mcp/workspace-projection-reader.ts` | Bind foreground capability scope to a user workspace projection |
+| `mcp/agent-work-tool-executor.ts` | Bind heartbeat capability scope and execution ID to one active product work claim |
+| `http-router.ts` | Mount package-owned JWKS, conversation, MCP, and heartbeat-lifecycle services beside tRPC |
 
-`@heddleagent/execution-host-client` owns the ES256 key loader, non-enumerable direct
-credentials, authority and capability verification, hosted-turn orchestration,
-direct and AgentCore transports, durable lifecycle transitions, bounded Node
-HTTP/JWKS/SSE service, declarative JSON-tool registry, and stateless Streamable
-HTTP MCP lifecycle. Those implementations must not be copied back into Lucid.
+Do not recreate public SDK wrappers in Lucid. Composition imports generic
+services directly and injects only product-owned ports.
 
 Heddle owns OAuth refresh and persistence in Lucid's process. Lucid selects the
 product credential source and passes the resulting request-scoped credential
 to the public Execution Host client. The Runtime contract rejects refresh
 tokens and ambient model credentials. The browser never receives either form.
 
-Do not recreate wrappers around the public SDK here. Composition should import
-its services and types directly, then inject Lucid-owned ports.
+## Workflow separation
 
-The first supported product capability is the read-only
-`read_workspace_snapshot` tool for conversation and heartbeat execution. A trusted,
-product-authorized application service supplies tenant, subject, session, and
-the fixed Lucid tool policy; untrusted or model-controlled input cannot choose
-that authority or an MCP destination. Stateful agent communication tools remain
-deferred until an autonomous-task wire contract can preserve task claims,
-mailbox horizons, action identities, and fenced settlement.
+`conversation-turn` grants only `read_workspace_snapshot`.
 
-## Current integration state
+`heartbeat-task` grants only the bounded Lucid work tools: claimed working
+context, mailbox and open-request reads, working-note update, shared and direct
+replies, Finding delivery, and explicit no-action settlement. Preparation
+claims a fixed Lucid event horizon before the model runs. Every tool call
+re-resolves that claim from verified capability scope, and every mutation
+checks the live execution fence in the insert transaction. Completion advances
+the Lucid cursor only after required durable effects exist.
 
-Ordinary server startup requires `LUCID_HOSTED_EXECUTION_ENABLED=true` and a
-complete Execution Host plus Coordinator profile. It
-loads the signing key, publishes `/.well-known/jwks.json`, mounts
-`/hosted-execution/mcp`, and exposes
-`/hosted-execution/conversation-turns` as an authenticated SSE endpoint. The
-admission service derives product-owned identity and timing before the turn
-service issues one exact read-only MCP capability and invokes the configured
-host through either of the released direct HTTP or AgentCore `ExecutionHost`
-implementations.
+The Coordinator decides when an attempt runs. `AgentWorkService` decides what
+product work that attempt owns and whether its product effects are complete.
+The Execution Host performs the bounded model/tool loop. None of these roles is
+a second scheduler or a generic product control plane.
 
-The coordinator URL and its distinct API/delegation tokens are required.
-Startup first opens Lucid's HTTP authority/MCP routes, then reconciles the
-coordinator task catalog while coordinator admission is paused. This makes the
-local coordinator vertical testable without turning the coordinator into a
-foreground proxy. Product trigger, status, enable/disable, reset, and global
-gate operations use the coordinator's public authenticated API. Lucid contains
-no embedded scheduler, so there is only one task authority.
+## Startup and evidence
 
-The remaining compatibility gap is behavioral rather than transport-related.
-The coordinator Runtime can currently inspect Lucid through the read-only
-`read_workspace_snapshot` capability. Claim-fenced communication operations
-that post network messages, revise working notes, and report findings still
-need a scoped state-changing MCP contract; coordinator execution is therefore
-an architecture proof rather than full autonomous-product parity.
+Ordinary startup requires `LUCID_HOSTED_EXECUTION_ENABLED=true` and a complete
+Execution Host plus Coordinator profile. Lucid opens its local authority and
+MCP routes, pauses Coordinator admission, reconciles the desired task catalog,
+and resumes only when the durable product-wide dispatch gate is enabled.
+Missing Coordinator configuration fails startup; Lucid never falls back to an
+embedded scheduler.
 
-Lucid also owns the product grounding supplied with each desired heartbeat
-task. Reconciliation carries the selected agent instructions plus an explicit
-requirement to inspect the read-only workspace snapshot before deciding whether
-anything is worth reporting. The coordinator and Runtime execute that context;
-they do not invent Lucid product policy or silently convert an ungrounded model
-turn into a useful finding.
+Deterministic integration coverage proves two distinct paths:
 
-The real local vertical passed on 2026-08-23. One authenticated conversation
-turn and one coordinator-claimed heartbeat both used the direct HTTP Runtime,
-called `product__read_workspace_snapshot` through Lucid's scoped MCP endpoint,
-and reached truthful terminal states. The heartbeat additionally persisted its
-run record and loaded checkpoint through the official PostgreSQL authority.
-This proves the local product boundary, not managed AgentCore deployment or
-coordinator restart recovery.
+- foreground user request -> Lucid admission -> authority -> fake host ->
+  conversation-only MCP -> terminal SSE; and
+- Coordinator prepare -> Lucid product claim -> heartbeat-only MCP calls ->
+  Lucid settlement under the same execution ID.
 
-Two deterministic integration boundaries remain deliberately distinct. The
-public adopter fixture proves the package turn service and Lucid MCP contract
-without private host code. The startup-composition test crosses both real HTTP
-boundaries and the official MCP SDK: user request -> Lucid admission ->
-authority -> fake host -> Lucid MCP -> workspace projection -> terminal SSE.
-It also proves that an accepted host stream ending without a terminal is not
-converted into success. The Heddle package's focused AgentCore tests prove
-SigV4 custom-header placement, strict stream reuse, and cancellation
-propagation against a local AWS-protocol fixture. None of these tests is
-evidence of a real Heddle model turn, managed header forwarding, container
-isolation, or AgentCore lifecycle; those remain deployment checks.
+`AgentWorkService` tests separately exercise real product claim, message read,
+message mutation, required-effect validation, completion, and cursor behavior.
+PostgreSQL integration tests verify cross-process fencing when supplied a
+disposable `LUCID_POSTGRES_TEST_URL`.
 
-The direct HTTP adapter is only for a loopback or reviewed HTTPS host. The
-package-owned AgentCore adapter implements the same `ExecutionHost` port with
-SigV4 and the managed Runtime invocation API. It uses the AWS SDK credential
-chain and has no database or product-store dependency. Neither adapter may
-receive a PostgreSQL URL.
+These are local contract proofs. They do not claim that the new path has run in
+the deployed ECS Coordinator, managed AgentCore Runtime, or against a real
+model. Those remain deployment verification steps after the package and Lucid
+changes are merged and deployed.
 
-## Dependency rules
+## Dependency and security rules
 
-- Lucid owns product authentication, authorization, identity mapping,
-  capability minting, canonical data, migration execution, and the bounded
-  user history query. Heddle owns generic lifecycle projection and writes.
-- The external host owns the Heddle loop, isolated workspace/processes, and
-  strict event stream. It receives only short-lived authority and model access.
-- MCP exposes domain capabilities rather than database CRUD. It re-verifies
-  every bearer independently instead of trusting the host's earlier decision.
-- No file in this boundary imports private execution-host code or AWS SDK
-  transport internals. Provider-specific transport stays behind the public SDK
-  port.
-- Compact JWTs, model credentials, database URLs, and private signing keys must
-  not enter prompts, result projections, logs, errors, files, or durable replay
-  records.
+- Lucid owns product authentication, identity, canonical data, work claims,
+  migration execution, tool effects, and product settlement.
+- Heddle owns task schedules, due selection, Heddle claims, checkpoints,
+  execution authority, model-loop execution, and Heddle run settlement.
+- MCP exposes domain operations rather than database CRUD and re-verifies every
+  bearer independently.
+- No private Execution Host source or AWS transport internals are imported.
+- Compact JWTs, model credentials, database URLs, and signing keys must not
+  enter prompts, durable replay records, logs, errors, or tool results.
 
-Read `mcp/README.md` before adding a product tool. Update
-`conversation/README.md` before changing the hosted turn's application
-responsibility. Update
-`docs/hosted-execution.md` whenever supported workflows, trust ownership, or
+Read `mcp/README.md` before adding a product tool, and update
+`docs/hosted-execution.md` whenever supported workflows, ownership, or live
 deployment evidence changes.

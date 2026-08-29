@@ -1,70 +1,72 @@
 # Hosted product MCP
 
-This service is Lucid's authenticated reverse boundary for the Heddle Execution
-Host. It exposes product capabilities, not database CRUD, and independently
-verifies the short-lived adopter-signed MCP bearer on every stateless request.
+This service is Lucid's authenticated product boundary for the Heddle
+Execution Host. It exposes domain capabilities, not database CRUD, and
+independently verifies the short-lived adopter-signed MCP bearer on every
+stateless request.
 
-## Current capability
+## Capability surfaces
 
-`read_workspace_snapshot` is the first honest conversation-turn capability. It
-returns a user-scoped projection derived from Lucid's product UI state
-and accepts no identity arguments. Its model-facing background-check fields are
-deliberately explicit: `userChecksEnabled` is the user's durable
-task preference, while `operatorDispatchEnabled` is the service-wide operator
-gate. The raw workspace persistence field is omitted so a healthy
-operator-paused state cannot appear contradictory. Tenant, subject, product
-session, Runtime session, and invocation scope come only from the verified
-capability.
+Foreground `conversation-turn` authority grants only
+`read_workspace_snapshot`. It returns the authenticated user's product
+projection and accepts no identity arguments.
 
-The existing agent communication tools are intentionally absent.
-They depend on a claimed wake, fixed event horizon, agent identity, action
-budget, provenance checks, and idempotent mutation state. Exposing them as
-ordinary stateless functions would weaken those invariants. They can move here
-only after Lucid has a durable invocation-scoped port for that wake authority.
+Autonomous `heartbeat-task` authority grants only:
+
+- `read_working_context`, which returns the private bounded context already
+  attached to the current product claim;
+- `read_available_messages`, bounded by the current fixed product work
+  horizon;
+- `read_open_requests`, reconstructed from durable request and reply threads;
+- `update_working_note`, which records guidance-derived durable context under
+  the retry-stable work ID;
+- `post_shared_message`, which applies Lucid's reply, provenance, visibility,
+  budget, and retry-idempotency rules;
+- `send_direct_message` and `report_finding`, which preserve their narrower
+  recipient and provenance policies; and
+- `finish_without_action`, which records an explicit durable disposition.
+
+Tenant, user, product session, Runtime session, execution ID, and workflow come
+only from verified capability claims. `CapabilityScopedAgentWorkToolExecutor`
+requires the deployment tenant/session and `heartbeat-task` workflow, then
+uses capability subject plus invocation ID to resolve the live
+`AgentWorkClaim`. Tool arguments cannot select another identity or claim.
+
+The product-work service rehydrates durable tool state for every call. This is
+necessary because Streamable HTTP requests can land on different backend
+processes and because a retry creates a fresh in-memory tool service. Every
+mutation locks and validates the active product execution claim in the same
+transaction as its event insert. The database fence, not the MCP connection,
+is authoritative.
 
 ## Code boundary
 
-The MCP endpoint has two deliberately separate layers. The Execution Host sees
-only the tools registered by the product layer; HTTP and MCP lifecycle methods
-are endpoint internals, not agent tools.
-
-| Layer | Owner | Responsibility | Visible to the model |
+| Layer | Owner | Responsibility | Model-visible |
 | --- | --- | --- | --- |
-| Generic MCP edge | `@heddleagent/execution-host-client/mcp/node` | Bearer extraction and redaction, capability verification, bounded JSON parsing, Streamable HTTP transport lifecycle, cancellation, safe protocol errors, and shutdown cleanup | No |
-| Generic JSON tool registry | `@heddleagent/execution-host-client/mcp/node` | Capability admission, per-call lifetime checks, cancellation composition, safe failures, and JSON result projection | No |
-| Lucid tool definitions | `product-tools.ts` | Exact tool names, descriptions, schemas, annotations, failure messages, and product operations | Yes |
-| Lucid tool contract | `types.ts` | Fixed supported-tool union and product-owned projection ports | Only the registered tool schema |
-| Lucid projection adapter | `workspace-projection-reader.ts` | Bind verified capability scope to that user's projection in the shared network | No |
+| Generic MCP edge | `@heddleagent/execution-host-client/mcp/node` | Bearer removal, capability verification, bounded parsing, Streamable HTTP lifecycle, cancellation, safe errors, shutdown | No |
+| Generic JSON tool registry | `@heddleagent/execution-host-client/mcp/node` | Capability admission, per-call expiry checks, cancellation composition, safe failures, JSON projection | No |
+| Lucid tool definitions | `product-tools.ts` | Exact names, descriptions, schemas, annotations, and product operations | Yes |
+| Lucid contracts | `types.ts` | Fixed workflow tool sets and product-owned ports | Only registered schemas |
+| Conversation adapter | `workspace-projection-reader.ts` | Bind verified user scope to the current workspace projection | No |
+| Heartbeat adapter | `agent-work-tool-executor.ts` | Bind verified workflow, user, and execution ID to one product work claim | No |
 
-`NodeStreamableHttpMcpService.handle()` and `.close()` are package-owned server
-entrypoints. `createLucidProductToolset()` is Lucid's plug-in boundary: each
-`defineNodeMcpJsonTool()` entry inside it is an actual capability made
-available to the Execution Host. Currently that is only
-`read_workspace_snapshot`. Helper methods inside the package service are MCP
-server internals and are never model-visible tools.
-
-`@heddleagent/execution-host-client/mcp` supplies the generic verifier for the dedicated
-`heddle-mcp-capability+jwt` signature, issuer, audience, age, deployment
-binding, and Lucid's fixed supported-tool set using JWKS.
+The tool registry contains all supported Lucid tools, but the signed
+capability filters discovery and calls to the exact workflow allowlist. A
+conversation cannot discover heartbeat mutations; a heartbeat cannot discover
+the foreground workspace snapshot.
 
 ## Security and maintenance rules
 
-- Route this service only at the configured MCP path and only over HTTPS outside
-  loopback development.
-- Never log or persist the bearer. Signing keys stay in Lucid's authority
-  service; the MCP edge receives only verification configuration and scrubs
-  the bearer from both normalized and raw request headers before verification.
-- Keep tool schemas free of tenant, user, session, invocation, agent, or wake
-  selectors. Authorization comes from signed claims.
-- Add a tool name to `LUCID_PRODUCT_MCP_TOOLS` only with an equally explicit
-  registration and handler in `product-tools.ts`, a least-privilege input
-  schema, and a product-owned port.
+- Route this service only at the configured MCP path and only over HTTPS
+  outside loopback development.
+- Never log or persist the bearer. Signing keys stay in Lucid; the MCP edge
+  receives verification configuration and scrubs normalized and raw headers.
+- Keep tool schemas free of tenant, user, session, invocation, agent, work, or
+  horizon selectors. Authorization comes from signed claims.
+- Add a tool name to `LUCID_PRODUCT_MCP_TOOLS` only with an explicit
+  registration, least-privilege schema, workflow allowlist, product-owned port,
+  and integration coverage.
 - Do not recreate package-owned HTTP parsing, bearer handling, capability
-  lifetime checks, JSON result projection, or SDK transport cleanup in Lucid.
-  Keep only product schemas, descriptions, and operations in
-  `product-tools.ts`.
-- `UserWorkspaceProjectionReader` derives the user solely from
-  the verified capability subject. Keep tenant and product-session binding in
-  deployment configuration; never accept any of those selectors as tool input.
-- The Execution Host's allowlist is defense in depth. This endpoint must always
-  verify and enforce the capability itself.
+  lifetime checks, JSON projection, or SDK transport cleanup in Lucid.
+- The Execution Host allowlist is defense in depth. This endpoint must always
+  verify and enforce the capability independently.

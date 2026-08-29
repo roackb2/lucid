@@ -348,6 +348,85 @@ implements AgentWakeStore {
     });
   }
 
+  async readClaimedAgentWake(
+    agentId: string,
+    claimToken: string,
+  ): Promise<AgentWakeClaim | undefined> {
+    const [agentRow] = await this.database.orm
+      .select()
+      .from(agents)
+      .where(and(
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.id, agentId),
+        eq(agents.status, 'running'),
+        eq(agents.activeWakeClaimToken, claimToken),
+      ))
+      .limit(1);
+    if (
+      !agentRow
+      || !agentRow.activeWakeId
+      || agentRow.activeWakeNumber === null
+      || agentRow.activeWakeHorizon === null
+    ) {
+      return undefined;
+    }
+
+    const [userRow, eventRows] = await Promise.all([
+      this.database.orm
+        .select()
+        .from(users)
+        .where(and(
+          eq(users.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.id, agentRow.userId),
+        ))
+        .limit(1)
+        .then(([row]) => row),
+      this.database.orm
+        .select()
+        .from(discoveryEvents)
+        .where(and(
+          eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
+          gt(
+            discoveryEvents.sequence,
+            Math.max(
+              agentRow.lastSeenSequence,
+              agentRow.mailboxFloorSequence,
+            ),
+          ),
+          lte(discoveryEvents.sequence, agentRow.activeWakeHorizon),
+          or(
+            and(
+              eq(discoveryEvents.kind, 'shared_message'),
+              ne(discoveryEvents.actorAgentId, agentRow.id),
+            ),
+            and(
+              eq(discoveryEvents.kind, 'direct_message'),
+              eq(discoveryEvents.targetAgentId, agentRow.id),
+            ),
+            and(
+              inArray(discoveryEvents.kind, AGENT_PRINCIPAL_EVENT_KINDS),
+              eq(discoveryEvents.targetAgentId, agentRow.id),
+            ),
+          ),
+        ))
+        .orderBy(asc(discoveryEvents.sequence))
+        .limit(40),
+    ]);
+    if (!userRow) {
+      throw new Error(`User not found: ${agentRow.userId}`);
+    }
+
+    return {
+      agent: toAgent(agentRow),
+      user: toUser(userRow),
+      wakeId: agentRow.activeWakeId,
+      claimToken,
+      wakeNumber: agentRow.activeWakeNumber,
+      visibleEvents: eventRows.map(toDiscoveryEvent),
+      horizonSequence: agentRow.activeWakeHorizon,
+    };
+  }
+
   async completeAgentWake(
     agentId: string,
     claimToken: string,

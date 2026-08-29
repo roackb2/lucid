@@ -19,6 +19,7 @@ import { UserNetworkService } from './lucid/network/service.js';
 import {
   CoordinatorAgentHeartbeatService,
 } from './hosted-execution/heartbeat/agent-heartbeat-service.js';
+import { AgentWorkService } from './lucid/agent/work-service.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
 import {
@@ -64,6 +65,14 @@ const heartbeats = new CoordinatorAgentHeartbeatService(
   },
   logger,
 );
+const agentWork = new AgentWorkService(
+  stores.agent,
+  stores.workspace,
+  stores.communication,
+  heartbeats,
+  logger,
+  { retryDelayMs: 10_000 },
+);
 const discoveryWorkspace = new DiscoveryWorkspaceService(
   stores.workspace,
   heartbeats,
@@ -94,7 +103,7 @@ const hostedExecution = await createHostedExecutionComposition({
   discoveryWorkspace,
   logger,
   conversationLifecycle: stores.conversationLifecycle,
-  heartbeatStore: stores.agent,
+  agentWork,
 });
 const staticSpaRequestHandler = config.webRoot
   ? await createStaticSpaRequestHandler(config.webRoot)

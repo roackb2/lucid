@@ -96,7 +96,7 @@ files run serially because they share fixed schema names.
 ## Data ownership
 
 - `discovery_workspaces` identifies one local network generation, its
-  monotonic wake number, and the internal global scheduler master state.
+  monotonic product-work number, and the product-wide background dispatch gate.
 - `users` stores the human or explicit synthetic subject represented,
   including a stable nullable registration key, lifecycle status,
   approved-context timestamp, and private background visible only to its own

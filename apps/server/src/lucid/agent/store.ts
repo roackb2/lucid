@@ -29,6 +29,10 @@ export interface AgentWakeStore {
     agentId: string,
     wakeId: string,
   ): Promise<AgentWakeClaim | undefined>;
+  readClaimedAgentWake(
+    agentId: string,
+    claimToken: string,
+  ): Promise<AgentWakeClaim | undefined>;
   completeAgentWake(
     agentId: string,
     claimToken: string,

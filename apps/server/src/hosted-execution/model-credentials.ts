@@ -25,10 +25,10 @@ implements HostedModelCredentialProvider {
 
   async resolveModelCredential(
     context: HostedConversationCredentialContext,
-  ) {
+  ): Promise<{ type: 'api-key'; apiKey: string }> {
     context.signal?.throwIfAborted();
     return {
-      type: 'api-key' as const,
+      type: 'api-key',
       apiKey: this.#modelApiKey,
     };
   }

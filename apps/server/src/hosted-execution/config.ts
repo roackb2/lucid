@@ -29,7 +29,7 @@ const CREDENTIAL_DIRECTORY_ENV =
 const SECRET_ENV_NAMES = [
   'LUCID_HOSTED_EXECUTION_LOCAL_TOKEN',
   'LUCID_HOSTED_EXECUTION_MODEL_API_KEY',
-  'LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN',
+  'LUCID_HOSTED_HEARTBEAT_EXECUTION_TOKEN',
   'LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN',
 ] as const;
 const LOCAL_BUNDLE_SECRET_FILES = [
@@ -39,7 +39,7 @@ const LOCAL_BUNDLE_SECRET_FILES = [
   ],
   [
     SECRET_ENV_NAMES[2],
-    LOCAL_CREDENTIAL_BUNDLE_FILES.coordinatorAdopterDelegationToken,
+    LOCAL_CREDENTIAL_BUNDLE_FILES.coordinatorProductExecutionToken,
   ],
   [
     SECRET_ENV_NAMES[3],
@@ -60,7 +60,7 @@ const HostedExecutionEnvironmentSchema = z.object({
     .optional(),
   LUCID_HOSTED_EXECUTION_MODEL_API_KEY: z.string().trim().min(8).max(4_096)
     .optional(),
-  LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN: z.string().trim().min(32)
+  LUCID_HOSTED_HEARTBEAT_EXECUTION_TOKEN: z.string().trim().min(32)
     .max(4_096),
   LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL: z.url(),
   LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN: z.string().trim().min(32)
@@ -120,13 +120,13 @@ const HostedExecutionEnvironmentSchema = z.object({
     });
   }
   if (
-    environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN
+    environment.LUCID_HOSTED_HEARTBEAT_EXECUTION_TOKEN
     === environment.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN
   ) {
     context.addIssue({
       code: 'custom',
       path: ['LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN'],
-      message: 'must differ from the heartbeat delegation token',
+      message: 'must differ from the heartbeat execution token',
     });
   }
 
@@ -216,7 +216,7 @@ export type HostedExecutionConfig = {
   maxTurnMs: number;
   transport: HostedExecutionTransportConfig;
   modelCredentials: HostedModelCredentialProvider;
-  heartbeatDelegationToken: string;
+  heartbeatExecutionToken: string;
   heartbeatCoordinator: {
     baseUrl: URL;
     apiToken: string;
@@ -299,8 +299,8 @@ export function resolveHostedExecutionConfig(
     maxTurnMs: parsed.LUCID_HOSTED_EXECUTION_MAX_TURN_MS,
     transport: Object.freeze(transport),
     modelCredentials,
-    heartbeatDelegationToken:
-      parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_TOKEN,
+    heartbeatExecutionToken:
+      parsed.LUCID_HOSTED_HEARTBEAT_EXECUTION_TOKEN,
     heartbeatCoordinator: Object.freeze({
       baseUrl: new URL(parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_URL),
       apiToken: parsed.LUCID_HOSTED_HEARTBEAT_COORDINATOR_API_TOKEN,

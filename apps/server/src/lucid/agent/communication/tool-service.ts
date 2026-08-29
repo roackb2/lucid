@@ -20,37 +20,61 @@ import type {
   NetworkMessageRole,
   User,
 } from '../../discovery-types.js';
-import type { AgentCommunicationStore } from './store.js';
+import type {
+  AgentCommunicationEventWriter,
+  AgentCommunicationStore,
+} from './store.js';
 import { AGENT_PRINCIPAL_EVENT_KINDS } from '../mailbox-policy.js';
 
-const readMessagesInputSchema = z.object({
+export const readAvailableMessagesInputSchema = z.object({
   after_sequence: z.number().int().min(0).optional(),
   limit: z.number().int().min(1).max(30).default(15),
-});
-const readOpenRequestsInputSchema = z.object({
+}).strict();
+export const readOpenRequestsInputSchema = z.object({
   limit: z.number().int().min(1).max(15).default(10),
-});
-const sharedMessageInputSchema = z.object({
+}).strict();
+export const postSharedMessageInputSchema = z.object({
   reply_to_event_id: z.number().int().positive(),
   content: z.string().trim().min(1).max(900),
   source_event_ids: z.array(z.number().int().positive()).max(8),
-});
-const directMessageInputSchema = z.object({
+}).strict();
+export const directMessageInputSchema = z.object({
   target_agent_id: z.string().trim().min(1),
   reply_to_event_id: z.number().int().positive(),
   content: z.string().trim().min(1).max(700),
   source_event_ids: z.array(z.number().int().positive()).max(8),
-});
-const findingInputSchema = z.object({
+}).strict();
+export const findingInputSchema = z.object({
   content: z.string().trim().min(1).max(1_200),
   source_event_ids: z.array(z.number().int().positive()).min(1).max(8),
-});
-const workingNoteInputSchema = z.object({
+}).strict();
+export const workingNoteInputSchema = z.object({
   content: z.string().trim().min(1).max(2_400),
-});
-const noActionInputSchema = z.object({
+}).strict();
+export const noActionInputSchema = z.object({
   reason: z.string().trim().min(1).max(500),
-});
+}).strict();
+
+export const READ_AVAILABLE_MESSAGES_TOOL = 'read_available_messages';
+export const READ_OPEN_REQUESTS_TOOL = 'read_open_requests';
+export const UPDATE_WORKING_NOTE_TOOL = 'update_working_note';
+export const POST_SHARED_MESSAGE_TOOL = 'post_shared_message';
+export const SEND_DIRECT_MESSAGE_TOOL = 'send_direct_message';
+export const REPORT_FINDING_TOOL = 'report_finding';
+export const FINISH_WITHOUT_ACTION_TOOL = 'finish_without_action';
+
+export const AGENT_WORK_COMMUNICATION_TOOLS = Object.freeze([
+  READ_AVAILABLE_MESSAGES_TOOL,
+  READ_OPEN_REQUESTS_TOOL,
+  UPDATE_WORKING_NOTE_TOOL,
+  POST_SHARED_MESSAGE_TOOL,
+  SEND_DIRECT_MESSAGE_TOOL,
+  REPORT_FINDING_TOOL,
+  FINISH_WITHOUT_ACTION_TOOL,
+] as const);
+
+export type AgentWorkCommunicationToolName =
+  typeof AGENT_WORK_COMMUNICATION_TOOLS[number];
 
 const READ_DISCOVERY_STATE_POLICY = {
   authority: {
@@ -85,13 +109,11 @@ export class AgentCommunicationToolService {
   private addressableAgentIds = new Set<string>();
   private pendingRequiredRequestSourceIds = new Set<number>();
   private pendingRequiredWorkingNoteSourceIds = new Set<number>();
-  private principalInputRequiresOpenRequestReview = false;
-  private openRequestsReviewed = false;
-  private reviewedOpenRequestSequences: number[] = [];
-  private openRequestAnswered = false;
+  private principalInputRequiresOutboundPriority = false;
 
   constructor(
     private readonly store: AgentCommunicationStore,
+    private readonly eventWriter: AgentCommunicationEventWriter,
     private readonly agent: Agent,
     private readonly user: User,
     private readonly wakeId: string,
@@ -100,6 +122,23 @@ export class AgentCommunicationToolService {
     private readonly requiredRequestSourceIds: number[] = [],
     private readonly requiredWorkingNoteSourceIds: number[] = [],
   ) {}
+
+  /** Executes one capability-selected operation against this durable claim. */
+  async execute(
+    toolName: AgentWorkCommunicationToolName,
+    input: unknown,
+    signal?: AbortSignal,
+  ): Promise<ToolResult> {
+    signal?.throwIfAborted();
+    const tool = (await this.definitions())
+      .find(({ name }) => name === toolName);
+    if (!tool) {
+      throw new Error(`Agent communication tool is unavailable: ${toolName}`);
+    }
+    const result = await tool.execute(input, { signal });
+    signal?.throwIfAborted();
+    return result;
+  }
 
   async definitions(): Promise<ToolDefinition[]> {
     // A agent discovers peers from delivered messages, never from a
@@ -157,7 +196,7 @@ export class AgentCommunicationToolService {
         .filter(({ satisfied }) => !satisfied)
         .map(({ sequence }) => sequence),
     );
-    this.principalInputRequiresOpenRequestReview = visibleEvents.some(
+    this.principalInputRequiresOutboundPriority = visibleEvents.some(
       (event) => (
         event.kind === 'user_input'
         && event.sequence > this.agent.lastSeenSequence
@@ -354,7 +393,7 @@ export class AgentCommunicationToolService {
   }
 
   private async readAvailableMessages(input: unknown): Promise<ToolResult> {
-    const parsed = readMessagesInputSchema.safeParse(input);
+    const parsed = readAvailableMessagesInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
@@ -386,40 +425,18 @@ export class AgentCommunicationToolService {
       return invalidInput(parsed.error);
     }
 
-    const [visibleEvents, agents] = await Promise.all([
-      this.store.listEventsVisibleToAgent(
-        this.agent.id,
-        0,
-        1_000,
-        this.horizonSequence,
-      ),
+    const [unanswered, agents] = await Promise.all([
+      this.findUnansweredOpenRequests(),
       this.store.listAgents(),
     ]);
-    const requests = visibleEvents.filter((event) => (
-      event.kind === 'shared_message'
-      && event.actorAgentId !== this.agent.id
-      && event.metadata.messageRole === 'request'
-    ));
-    const unanswered = (await Promise.all(requests.map(async (request) => ({
-      request,
-      answered: await this.store.hasAgentContributedToRequestThread(
-        this.agent.id,
-        request.sequence,
-      ),
-    }))))
-      .filter(({ answered }) => !answered)
-      .map(({ request }) => request)
-      .slice(-parsed.data.limit);
     const agentById = new Map(agents.map((agent) => [agent.id, agent]));
 
-    this.openRequestsReviewed = true;
-    this.reviewedOpenRequestSequences = unanswered.map(
-      ({ sequence }) => sequence,
-    );
     return {
       ok: true,
       output: {
-        requests: unanswered.map((event) => projectEvent(event, agentById)),
+        requests: unanswered
+          .slice(-parsed.data.limit)
+          .map((event) => projectEvent(event, agentById)),
       },
     };
   }
@@ -439,7 +456,7 @@ export class AgentCommunicationToolService {
     // This internal state update has its own retry-stable key and does not
     // consume the two-action communication budget. Its horizon metadata lets
     // later readers distinguish the derived note from raw source events.
-    const event = await this.store.appendCommunicationEvent({
+    const event = await this.eventWriter.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'agent_note_updated',
       actorAgentId: this.agent.id,
@@ -461,7 +478,7 @@ export class AgentCommunicationToolService {
   }
 
   private async postSharedMessage(input: unknown): Promise<ToolResult> {
-    const parsed = sharedMessageInputSchema.safeParse(input);
+    const parsed = postSharedMessageInputSchema.safeParse(input);
     if (!parsed.success) {
       return invalidInput(parsed.error);
     }
@@ -529,7 +546,7 @@ export class AgentCommunicationToolService {
       return idempotencyKey;
     }
 
-    const event = await this.store.appendCommunicationEvent({
+    const event = await this.eventWriter.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'shared_message',
       actorAgentId: this.agent.id,
@@ -544,10 +561,6 @@ export class AgentCommunicationToolService {
         messageRole,
       },
     });
-    if (messageRole === 'response') {
-      this.openRequestsReviewed = true;
-      this.openRequestAnswered = true;
-    }
     sourceEventIds.forEach((sequence) => {
       this.pendingRequiredRequestSourceIds.delete(sequence);
     });
@@ -623,7 +636,7 @@ export class AgentCommunicationToolService {
       return actionIndex;
     }
 
-    const event = await this.store.appendCommunicationEvent({
+    const event = await this.eventWriter.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'direct_message',
       actorAgentId: this.agent.id,
@@ -639,8 +652,6 @@ export class AgentCommunicationToolService {
         messageRole: 'response',
       },
     });
-    this.openRequestsReviewed = true;
-    this.openRequestAnswered = true;
     return eventResult(event);
   }
 
@@ -657,11 +668,8 @@ export class AgentCommunicationToolService {
     if (prerequisiteFailure) {
       return prerequisiteFailure;
     }
-    const openRequestReviewFailure = this.requireOpenRequestReview();
-    if (openRequestReviewFailure) {
-      return openRequestReviewFailure;
-    }
-    const outboundPriorityFailure = this.requireOutboundResponseBeforeFinding();
+    const outboundPriorityFailure = await this
+      .requireOutboundResponseBeforeFinding();
     if (outboundPriorityFailure) {
       return outboundPriorityFailure;
     }
@@ -711,7 +719,7 @@ export class AgentCommunicationToolService {
       return actionIndex;
     }
 
-    return eventResult(await this.store.appendCommunicationEvent({
+    return eventResult(await this.eventWriter.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'finding_reported',
       actorAgentId: this.agent.id,
@@ -740,16 +748,12 @@ export class AgentCommunicationToolService {
     if (prerequisiteFailure) {
       return prerequisiteFailure;
     }
-    const openRequestReviewFailure = this.requireOpenRequestReview();
-    if (openRequestReviewFailure) {
-      return openRequestReviewFailure;
-    }
     const actionIndex = this.reserveMutation();
     if (typeof actionIndex !== 'number') {
       return actionIndex;
     }
 
-    return eventResult(await this.store.appendCommunicationEvent({
+    return eventResult(await this.eventWriter.appendCommunicationEvent({
       wakeNumber: this.wakeNumber,
       kind: 'agent_wake_no_action',
       actorAgentId: this.agent.id,
@@ -843,27 +847,46 @@ export class AgentCommunicationToolService {
     };
   }
 
-  private requireOpenRequestReview(): ToolResult | undefined {
-    return this.principalInputRequiresOpenRequestReview
-      && !this.openRequestsReviewed
-      ? {
-          ok: false,
-          error:
-            'First use read_open_requests to compare the new private principal input with unanswered network requests. Reply when there is a concrete match; otherwise do not fabricate a response.',
-        }
-      : undefined;
+  private async requireOutboundResponseBeforeFinding(): Promise<
+    ToolResult | undefined
+  > {
+    if (
+      !this.principalInputRequiresOutboundPriority
+      || !(await this.findUnansweredOpenRequests()).length
+    ) {
+      return undefined;
+    }
+    return {
+      ok: false,
+      error:
+        'Before reporting an incoming finding, answer a matching request from the new private principal input. If none matches, use finish_without_action rather than consuming peer mail in this principal-input wake.',
+    };
   }
 
-  private requireOutboundResponseBeforeFinding(): ToolResult | undefined {
-    return this.principalInputRequiresOpenRequestReview
-      && this.reviewedOpenRequestSequences.length > 0
-      && !this.openRequestAnswered
-      ? {
-          ok: false,
-          error:
-            'Before reporting an incoming finding, answer a matching request from the new private principal input. If none matches, use finish_without_action rather than consuming peer mail in this principal-input wake.',
-        }
-      : undefined;
+  private async findUnansweredOpenRequests(): Promise<DiscoveryEvent[]> {
+    // Hosted MCP creates a fresh service instance for every call. Reconstruct
+    // this priority rule from durable request threads instead of remembering
+    // whether a prior call happened in this process.
+    const visibleEvents = await this.store.listEventsVisibleToAgent(
+      this.agent.id,
+      0,
+      1_000,
+      this.horizonSequence,
+    );
+    const requests = visibleEvents.filter((event) => (
+      event.kind === 'shared_message'
+      && event.actorAgentId !== this.agent.id
+      && event.metadata.messageRole === 'request'
+    ));
+    return (await Promise.all(requests.map(async (request) => ({
+      request,
+      answered: await this.store.hasAgentContributedToRequestThread(
+        this.agent.id,
+        request.sequence,
+      ),
+    }))))
+      .filter(({ answered }) => !answered)
+      .map(({ request }) => request);
   }
 
   private requiredNetworkRequestError(): ToolResult {

@@ -18,6 +18,9 @@ import {
   type PostgresTestStores,
 } from '../lucid/persistence/postgres/test-context.js';
 import { PostgresAgentWakeStore } from '../lucid/agent/postgres-store.js';
+import {
+  AgentCommunicationClaimError,
+} from '../lucid/agent/communication/store.js';
 
 async function createStore(options?: { reset?: boolean }) {
   return await createPostgresTestStores({
@@ -84,6 +87,55 @@ describe('PostgreSQL persistence integration', () => {
         .toContain('already running');
       expect((await requireAgent(primary.agent, LOCAL_AGENT_ID)).status)
         .toBe('running');
+    });
+
+    it('fences communication writes with the current execution claim', async () => {
+      await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'Keep stale execution attempts from writing into a retry.',
+      );
+      const first = await primary.agent.beginAgentWake(
+        LOCAL_AGENT_ID,
+        'execution-first',
+      );
+      expect(first).toBeDefined();
+      await primary.agent.interruptAgentWake(
+        LOCAL_AGENT_ID,
+        first!.claimToken,
+      );
+      const retry = await secondary.agent.beginAgentWake(
+        LOCAL_AGENT_ID,
+        'execution-retry',
+      );
+      expect(retry).toBeDefined();
+
+      const event = {
+        wakeNumber: first!.wakeNumber,
+        kind: 'agent_wake_no_action' as const,
+        actorAgentId: LOCAL_AGENT_ID,
+        idempotencyKey: `${first!.wakeId}:action:1`,
+        title: 'No action',
+        content: 'No relevant match was available.',
+      };
+      await expect(primary.communication.appendClaimedCommunicationEvent({
+        agentId: LOCAL_AGENT_ID,
+        workId: first!.wakeId,
+        executionId: first!.claimToken,
+        workNumber: first!.wakeNumber,
+      }, event)).rejects.toBeInstanceOf(AgentCommunicationClaimError);
+
+      await expect(secondary.communication.appendClaimedCommunicationEvent({
+        agentId: LOCAL_AGENT_ID,
+        workId: retry!.wakeId,
+        executionId: retry!.claimToken,
+        workNumber: retry!.wakeNumber,
+      }, event)).resolves.toMatchObject({
+        idempotencyKey: event.idempotencyKey,
+        content: event.content,
+      });
+      expect((await primary.network.readNetworkDiagnostics()).events.filter(
+        ({ idempotencyKey }) => idempotencyKey === event.idempotencyKey,
+      )).toHaveLength(1);
     });
 
     it('deduplicates simultaneous idempotent event writes across processes', async () => {

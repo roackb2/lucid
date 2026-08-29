@@ -264,19 +264,27 @@ hosted migration sequence, see [Deploying the Lucid pilot](deploying.md).
 ### Required local heartbeat coordinator
 
 The Heddle command above uses the same direct Runtime for foreground turns and
-Coordinator heartbeats. Lucid opens its JWKS, MCP, and delegation routes;
-pauses Coordinator admission; reconciles the desired task catalog; and resumes
-only when the product-wide background-work gate is enabled.
+Coordinator heartbeats. Configure the distinct product-execution token,
+Coordinator URL, and Coordinator API token shown in `.env.example`. Start the
+Runtime and Coordinator before Lucid; Lucid opens its JWKS, MCP, and heartbeat
+execution-lifecycle routes, pauses Coordinator admission, reconciles the
+desired task catalog, and resumes only when the product-wide background-work
+gate is enabled.
 
 The Coordinator owns Lucid's Heddle heartbeat tables, claims, checkpoints,
 recovery, and settlement through its authenticated API. It does not manage
 other applications or relay foreground Chat. The Runtime never receives a
 database credential. The first local proof may reuse Lucid's broader database
 credential in memory; production must use the Heddle-only Coordinator
-credential. Missing Runtime or Coordinator configuration fails startup. The
-currently integrated agent capability is read-only workspace access;
-state-changing network, working-note, and finding operations remain a scoped,
-claim-fenced MCP follow-up.
+credential. Missing Runtime or Coordinator configuration fails startup.
+Lucid's product trigger, status, and preference controls always use the
+Coordinator API. The heartbeat path claims a fixed product horizon and exposes
+only `read_available_messages`, `update_working_note`, and
+`post_shared_message`. Broader direct-message and finding operations remain
+separate scoped product slices.
+The exact container networking command is intentionally not prescribed until
+the real Runtime can reach Lucid's loopback MCP/JWKS endpoints without
+weakening the Runtime's non-loopback TLS rule.
 
 ## Checks
 

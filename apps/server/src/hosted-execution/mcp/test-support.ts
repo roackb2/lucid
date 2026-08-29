@@ -24,6 +24,7 @@ export type CapabilityClaimOverrides = {
   runtimeSessionId?: string;
   invocationId?: string;
   allowedTools?: readonly string[];
+  workflow?: 'conversation-turn' | 'heartbeat-task';
 };
 
 /**
@@ -72,7 +73,7 @@ export class McpCapabilitySignerFixture {
       runtimeSessionId: overrides.runtimeSessionId
         ?? `runtime-session:${'a'.repeat(40)}`,
       invocationId: overrides.invocationId ?? 'invocation-001',
-      workflow: 'conversation-turn',
+      workflow: overrides.workflow ?? 'conversation-turn',
       mcp: {
         allowedTools: overrides.allowedTools
           ?? [READ_WORKSPACE_SNAPSHOT_TOOL],

@@ -19,7 +19,30 @@ export type AppendCommunicationEventInput = {
   > & { kind: Kind };
 }[CommunicationEventKind];
 
-export interface AgentCommunicationStore {
+/** Retry-stable work identity plus the attempt token that currently owns it. */
+export type AgentCommunicationClaim = {
+  agentId: string;
+  workId: string;
+  executionId: string;
+  workNumber: number;
+};
+
+export class AgentCommunicationClaimError extends Error {
+  readonly name = 'AgentCommunicationClaimError';
+
+  constructor() {
+    super('The active Lucid work claim no longer owns this write.');
+  }
+}
+
+export interface AgentCommunicationEventWriter {
+  appendCommunicationEvent(
+    input: AppendCommunicationEventInput,
+  ): Promise<DiscoveryEvent>;
+}
+
+export interface AgentCommunicationStore
+extends AgentCommunicationEventWriter {
   listAgents(): Promise<Agent[]>;
   listActiveAgents(): Promise<Agent[]>;
   listEventsVisibleToAgent(
@@ -53,7 +76,8 @@ export interface AgentCommunicationStore {
     replyToSequence: number,
     excludedWakeId?: string,
   ): Promise<boolean>;
-  appendCommunicationEvent(
+  appendClaimedCommunicationEvent(
+    claim: AgentCommunicationClaim,
     input: AppendCommunicationEventInput,
   ): Promise<DiscoveryEvent>;
 }

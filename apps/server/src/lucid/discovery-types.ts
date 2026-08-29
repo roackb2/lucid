@@ -269,6 +269,21 @@ export type AgentWakeContext = AgentWakeClaim & {
   workingContext: AgentWorkingContext;
 };
 
+/**
+ * Product work bound to one Coordinator-owned execution attempt.
+ * `workId` is retry-stable while `executionId` is the current fencing token.
+ */
+export type AgentWorkClaim = {
+  agent: Agent;
+  user: User;
+  workId: string;
+  executionId: string;
+  workNumber: number;
+  visibleEvents: DiscoveryEvent[];
+  horizonSequence: number;
+  workingContext: AgentWorkingContext;
+};
+
 export type AgentTaskStatus =
   | 'idle'
   | 'running'
