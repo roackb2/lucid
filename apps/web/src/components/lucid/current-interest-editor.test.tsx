@@ -1,4 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { DiscoverySnapshot } from '@/lib/trpc';
 import { CurrentInterestEditor } from './current-interest-editor';
@@ -19,7 +21,7 @@ const CURRENT_INTEREST = {
 
 describe('current Interest editor', () => {
   it('offers one clear action when no Interest exists', () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderEditor(
       <CurrentInterestEditor
         isSaving={false}
         onSave={vi.fn()}
@@ -33,7 +35,7 @@ describe('current Interest editor', () => {
   });
 
   it('renders the saved Interest before editing', () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderEditor(
       <CurrentInterestEditor
         interest={CURRENT_INTEREST}
         isSaving={false}
@@ -45,6 +47,14 @@ describe('current Interest editor', () => {
     expect(markup).toContain(CURRENT_INTEREST.content);
     expect(markup).toContain('Edit current interest');
     expect(markup).toContain('One current Interest');
+    expect(markup).toContain('Continue to Agent');
+    expect(markup).toContain('href="/agent"');
     expect(markup).not.toContain('<textarea');
   });
 });
+
+function renderEditor(editor: ReactNode): string {
+  return renderToStaticMarkup(
+    <MemoryRouter>{editor}</MemoryRouter>,
+  );
+}

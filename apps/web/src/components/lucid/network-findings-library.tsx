@@ -234,7 +234,7 @@ function FindingEvidenceDetail({ finding }: { finding: FindingView }) {
               </ol>
             ) : (
               <p className="network-finding-evidence__missing">
-                This experimental record does not expose an original
+                This Finding does not expose an original
                 peer-authored contribution. Lucid will not substitute a relay
                 or delivery event and call it independent evidence.
               </p>

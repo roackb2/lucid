@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
-import { RefreshCw } from 'lucide-react';
+import { History, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
 import {
   Message,
   MessageContent,
@@ -7,6 +8,8 @@ import {
 import { HostedConversationAnswer } from './hosted-conversation-answer';
 import { Button } from '@/components/ui/button';
 import type { HostedConversationTurn } from '@/lib/trpc';
+
+const RECENT_TURN_LIMIT = 4;
 
 export function HostedConversationHistory({
   activeInvocationId,
@@ -21,10 +24,14 @@ export function HostedConversationHistory({
   onRetry: () => unknown;
   turns: HostedConversationTurn[];
 }) {
+  const [showEarlier, setShowEarlier] = useState(false);
   const visibleTurns = turns.filter(
     ({ invocationId }) => invocationId !== activeInvocationId,
   );
-  const chronologicalTurns = orderHostedConversationTurns(visibleTurns);
+  const conversation = selectHostedConversationTurns(
+    visibleTurns,
+    showEarlier,
+  );
   const hasCachedTurns = turns.length > 0;
 
   return (
@@ -48,9 +55,26 @@ export function HostedConversationHistory({
         </div>
       ) : null}
 
-      {chronologicalTurns.length > 0 ? (
+      {conversation.hiddenCount > 0 || showEarlier ? (
+        <div className="chat-thread__earlier-turns">
+          <Button
+            aria-expanded={showEarlier}
+            onClick={() => setShowEarlier((current) => !current)}
+            size="small"
+            type="button"
+            variant="ghost"
+          >
+            <History aria-hidden="true" />
+            {showEarlier
+              ? 'Hide earlier conversation'
+              : `Show ${conversation.hiddenCount} earlier ${conversation.hiddenCount === 1 ? 'turn' : 'turns'}`}
+          </Button>
+        </div>
+      ) : null}
+
+      {conversation.visibleTurns.length > 0 ? (
         <ol className="chat-thread__turns" aria-label="Saved conversation">
-          {chronologicalTurns.map((turn) => (
+          {conversation.visibleTurns.map((turn) => (
             <li className="chat-thread__turn" key={turn.invocationId}>
               <HostedConversationUserMessage
                 prompt={turn.prompt}
@@ -130,6 +154,24 @@ export function orderHostedConversationTurns(
   return [...turns].sort((left, right) => (
     Date.parse(left.requestedAt) - Date.parse(right.requestedAt)
   ));
+}
+
+export function selectHostedConversationTurns(
+  turns: HostedConversationTurn[],
+  showEarlier: boolean,
+  limit = RECENT_TURN_LIMIT,
+): {
+  hiddenCount: number;
+  visibleTurns: HostedConversationTurn[];
+} {
+  const chronologicalTurns = orderHostedConversationTurns(turns);
+  const hiddenCount = Math.max(0, chronologicalTurns.length - limit);
+  return {
+    hiddenCount,
+    visibleTurns: showEarlier
+      ? chronologicalTurns
+      : chronologicalTurns.slice(hiddenCount),
+  };
 }
 
 export function describeHostedConversationStatus(

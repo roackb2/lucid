@@ -44,12 +44,12 @@ type NavigationItem = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
 };
 
-export const FOUNDATION_HOME_PATH = '/findings';
+export const FOUNDATION_HOME_PATH = '/agent';
 
 export const foundationNavigationItems: NavigationItem[] = [
+  { label: 'Agent', path: '/agent', icon: Bot },
   { label: 'Findings', path: '/findings', icon: Search },
   { label: 'Interests', path: '/interests', icon: Lightbulb },
-  { label: 'Agent', path: '/agent', icon: Bot },
 ];
 
 const routeLabels = new Map([
@@ -72,7 +72,7 @@ export function LucidAppShell({
   snapshot,
 }: LucidAppShellProps) {
   const location = useLocation();
-  const pageLabel = routeLabels.get(location.pathname) ?? 'Findings';
+  const pageLabel = routeLabels.get(location.pathname) ?? 'Agent';
   const agentState = resolveAgentState(snapshot);
 
   return (
@@ -190,7 +190,7 @@ export function LucidAppShell({
       <div className="lucid-shell__workspace">
         <header className="lucid-shell__topbar">
           <div>
-            <span className="lucid-shell__eyebrow">IA foundation</span>
+            <span className="lucid-shell__eyebrow">Lucid workspace</span>
             <strong>{pageLabel}</strong>
           </div>
           <ChatDrawer

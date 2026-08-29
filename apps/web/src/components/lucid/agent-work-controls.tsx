@@ -222,7 +222,7 @@ function resolveWorkStatus({
     return {
       badge: 'Paused',
       description:
-        'Your Interest and prior results remain saved until you resume background work.',
+        'Your Interest and prior results remain saved. Resuming starts a check now and restores the schedule.',
       icon: <Pause />,
       title: 'Background work is paused',
       tone: 'paused',
@@ -286,7 +286,7 @@ function resolvePrimaryAction({
         type="button"
       >
         <Play aria-hidden="true" />
-        {isUpdatingBackground ? 'Resuming…' : 'Resume background work'}
+        {isUpdatingBackground ? 'Resuming…' : 'Resume and check now'}
       </Button>
     );
   }

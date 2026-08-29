@@ -1,6 +1,8 @@
 import {
   Activity,
   Bot,
+  CircleCheck,
+  Construction,
   FileText,
   Search,
   Settings,
@@ -21,8 +23,8 @@ export function FindingsFoundationPage({ snapshot }: FoundationPageProps) {
     <PageFrame
       eyebrow="Evidence library"
       title="Findings"
-      description="Individual discoveries and their evidence, available across reports without pretending every network event is important."
-      badge="Learning slice · real data"
+      description="Individual discoveries and the original messages behind them. Quiet checks stay in Agent Activity instead of becoming empty Findings."
+      readiness="working"
     >
       <NetworkFindingsLibrary
         findings={snapshot.findings}
@@ -45,7 +47,7 @@ export function InterestsFoundationPage({
       eyebrow="What the agent should care about"
       title="Interests"
       description="Lucid keeps one current Interest in focus for this experiment. Refine it whenever you want your agent’s future background work to change."
-      badge="Current scope · real data"
+      readiness="working"
     >
       <CurrentInterestEditor
         interest={snapshot.interest}
@@ -85,14 +87,14 @@ export function AgentFoundationPage({
       eyebrow="Your delegated worker"
       title="Agent"
       description="A product-readable view of what the agent is doing, what it currently understands, and where it needs your attention."
-      badge="Check now · real data"
+      readiness="working"
     >
       <section className="agent-overview">
         <span className="agent-overview__avatar" aria-hidden="true">
           <Bot />
         </span>
         <div className="agent-overview__identity">
-          <span>Current experimental agent</span>
+          <span>Your personal Agent</span>
           <h2>{snapshot.agent.name}</h2>
           <p>{snapshot.agent.purpose}</p>
         </div>
@@ -128,10 +130,10 @@ export function AgentFoundationPage({
         <FoundationPanel
           title="Agent understanding"
           description={snapshot.workingNote?.content
-            ?? 'There is no saved working note in the current snapshot.'}
+            ?? 'Lucid has not saved a working understanding yet.'}
           icon={<Bot />}
           muted
-          status={snapshot.workingNote ? 'Experimental record' : 'Not yet populated'}
+          status={snapshot.workingNote ? 'Saved understanding' : 'No saved understanding'}
         />
       </div>
     </PageFrame>
@@ -143,8 +145,10 @@ export function SettingsFoundationPage({ snapshot }: FoundationPageProps) {
     <PageFrame
       eyebrow="Product-owned controls only"
       title="Settings"
-      description="This stays intentionally small until a real product decision requires a durable preference or control."
+      description="This area stays intentionally small until a real product decision requires a durable preference or control."
+      readiness="planned"
     >
+      <PlannedPageNotice />
       <section className="settings-runtime">
         <div>
           <span className="settings-runtime__icon" aria-hidden="true">
@@ -188,18 +192,29 @@ export function SettingsFoundationPage({ snapshot }: FoundationPageProps) {
 }
 
 function PageFrame({
-  badge = 'Foundation preview',
   children,
   description,
   eyebrow,
+  readiness,
   title,
 }: {
-  badge?: string;
   children: ReactNode;
   description: string;
   eyebrow: string;
+  readiness: 'working' | 'planned';
   title: string;
 }) {
+  const readinessPresentation = {
+    planned: {
+      icon: <Construction aria-hidden="true" />,
+      label: 'Not yet built',
+    },
+    working: {
+      icon: <CircleCheck aria-hidden="true" />,
+      label: 'Working · live data',
+    },
+  }[readiness];
+
   return (
     <div className="foundation-page">
       <header className="foundation-page__heading">
@@ -207,7 +222,10 @@ function PageFrame({
           <p>{eyebrow}</p>
           <h1>{title}</h1>
         </div>
-        <span className="foundation-badge">{badge}</span>
+        <span className="foundation-badge" data-state={readiness}>
+          {readinessPresentation.icon}
+          {readinessPresentation.label}
+        </span>
         <p>{description}</p>
       </header>
       {children}
@@ -215,11 +233,26 @@ function PageFrame({
   );
 }
 
+function PlannedPageNotice() {
+  return (
+    <section className="page-readiness-notice" aria-labelledby="settings-plan-title">
+      <span aria-hidden="true"><Construction /></span>
+      <div>
+        <h2 id="settings-plan-title">Settings are not yet built</h2>
+        <p>
+          The runtime summary below is real and read-only. The remaining cards
+          reserve possible product areas; they do not change Lucid yet.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function FoundationPanel({
   description,
   icon,
   muted = false,
-  status = 'Not yet populated',
+  status = 'Planned',
   title,
 }: {
   description: string;

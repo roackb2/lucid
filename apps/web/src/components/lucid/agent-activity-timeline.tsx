@@ -60,29 +60,46 @@ export function AgentActivityTimeline({
       </header>
 
       <ol className="agent-activity__timeline">
-        {activity.map((item) => (
-          <AgentActivityRow item={item} key={item.id} />
+        {activity.map((item, index) => (
+          <AgentActivityRow
+            item={item}
+            key={item.id}
+            prominence={index === 0 ? 'latest' : 'history'}
+          />
         ))}
       </ol>
     </section>
   );
 }
 
-function AgentActivityRow({ item }: { item: AgentActivityItem }) {
+function AgentActivityRow({
+  item,
+  prominence,
+}: {
+  item: AgentActivityItem;
+  prominence: 'latest' | 'history';
+}) {
   const Icon = ACTIVITY_ICONS[item.kind];
   const hasCounts = item.inputCount > 0 || item.findingCount > 0;
+  const isLatest = prominence === 'latest';
 
   return (
     <li className={cn(
       'agent-activity__item',
       `agent-activity__item--${item.kind}`,
+      isLatest && 'agent-activity__item--latest',
     )}>
       <span className="agent-activity__marker" aria-hidden="true">
         <Icon />
       </span>
       <article>
         <header>
-          <h3>{item.title}</h3>
+          <div>
+            {isLatest ? (
+              <span className="agent-activity__latest-label">Latest outcome</span>
+            ) : null}
+            <h3>{item.title}</h3>
+          </div>
           <time className="tabular-nums" dateTime={item.createdAt}>
             {dayjs(item.createdAt).format('MMM D, HH:mm')}
           </time>
@@ -99,6 +116,16 @@ function AgentActivityRow({ item }: { item: AgentActivityItem }) {
               <span className="tabular-nums">
                 {describeCount(item.findingCount, 'Finding')}
               </span>
+            ) : null}
+            {isLatest && item.findingCount > 0 ? (
+              <Button
+                asChild
+                className="agent-activity__findings-link"
+                size="small"
+                variant="secondary"
+              >
+                <Link to="/findings">View Findings</Link>
+              </Button>
             ) : null}
           </footer>
         ) : null}

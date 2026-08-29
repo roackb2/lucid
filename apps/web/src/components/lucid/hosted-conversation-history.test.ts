@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   describeHostedConversationStatus,
   orderHostedConversationTurns,
+  selectHostedConversationTurns,
 } from './hosted-conversation-history';
 import { presentHostedConversationResult } from './hosted-conversation';
 import {
@@ -71,6 +72,27 @@ describe('hosted conversation history presentation', () => {
       older,
       newer,
     ]);
+  });
+
+  it('shows the latest turns first without discarding durable history', () => {
+    const turns = Array.from({ length: 6 }, (_, index) => ({
+      invocationId: `turn-${index + 1}`,
+      prompt: `Question ${index + 1}`,
+      status: 'completed' as const,
+      summary: `Answer ${index + 1}`,
+      failureCode: null,
+      requestedAt: `2026-08-28T12:0${index}:00.000Z`,
+      settledAt: `2026-08-28T12:0${index}:30.000Z`,
+    }));
+
+    expect(selectHostedConversationTurns(turns, false)).toEqual({
+      hiddenCount: 2,
+      visibleTurns: turns.slice(2),
+    });
+    expect(selectHostedConversationTurns(turns, true)).toEqual({
+      hiddenCount: 2,
+      visibleTurns: turns,
+    });
   });
 
   it('presents disabled hosted execution instead of a false sign-in error', () => {

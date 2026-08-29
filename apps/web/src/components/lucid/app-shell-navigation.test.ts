@@ -5,15 +5,15 @@ import {
 } from './app-shell';
 
 describe('Lucid foundation navigation', () => {
-  it('returns to Findings and keeps Chat out of primary navigation', () => {
-    expect(FOUNDATION_HOME_PATH).toBe('/findings');
+  it('returns to Agent and keeps Chat out of primary navigation', () => {
+    expect(FOUNDATION_HOME_PATH).toBe('/agent');
     expect(foundationNavigationItems.map(({ label, path }) => ({
       label,
       path,
     }))).toEqual([
+      { label: 'Agent', path: '/agent' },
       { label: 'Findings', path: '/findings' },
       { label: 'Interests', path: '/interests' },
-      { label: 'Agent', path: '/agent' },
     ]);
   });
 });
