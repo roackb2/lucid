@@ -7,9 +7,16 @@ import type {
   User,
 } from '../discovery-types.js';
 import { createLucidLogger } from '../../logger.js';
-import type { AgentCommunicationStore } from './communication/store.js';
+import {
+  AgentCommunicationClaimError,
+  type AgentCommunicationStore,
+  type AppendCommunicationEventInput,
+} from './communication/store.js';
 import type { AgentWakeStore } from './store.js';
-import { AgentWorkService } from './work-service.js';
+import {
+  AgentWorkService,
+  READ_AGENT_WORKING_CONTEXT_TOOL,
+} from './work-service.js';
 
 describe('AgentWorkService', () => {
   it('claims, mutates, validates, and commits one product work horizon', async () => {
@@ -50,6 +57,19 @@ describe('AgentWorkService', () => {
       arguments: {},
       signal,
     })).resolves.toMatchObject({ ok: true });
+    await expect(service.executeTool({
+      userId: fixture.user.id,
+      executionId: 'execution-1',
+      toolName: READ_AGENT_WORKING_CONTEXT_TOOL,
+      arguments: {},
+      signal,
+    })).resolves.toEqual({
+      ok: true,
+      output: {
+        principalInputs: [fixture.trigger],
+        findings: [],
+      },
+    });
     await expect(service.executeTool({
       userId: fixture.user.id,
       executionId: 'execution-1',
@@ -134,8 +154,60 @@ describe('AgentWorkService', () => {
     expect(fixture.completeAgentWake).not.toHaveBeenCalled();
   });
 
-  it('settles guidance only after a claim-fenced working-note update', async () => {
-    const fixture = createFixture('guidance_saved');
+  it.each(['guidance_saved', 'feedback_saved'] as const)(
+    'settles %s only after a claim-fenced working-note update',
+    async (kind) => {
+      const fixture = createFixture(kind);
+      const service = new AgentWorkService(
+        fixture.workStore,
+        {
+          readAgentWorkingContext: async () => ({
+            principalInputs: [],
+            findings: [],
+          }),
+        },
+        fixture.communicationStore,
+        { triggerAgent: async () => undefined },
+        createLucidLogger('silent'),
+        { retryDelayMs: 10_000 },
+      );
+      const signal = new AbortController().signal;
+      await service.claimWork({
+        agentId: fixture.agent.id,
+        executionId: 'execution-1',
+        signal,
+      });
+
+      await expect(service.executeTool({
+        userId: fixture.user.id,
+        executionId: 'execution-1',
+        toolName: 'update_working_note',
+        arguments: {
+          content: 'Prioritize examples that satisfy the latest guidance.',
+        },
+        signal,
+      })).resolves.toMatchObject({ ok: true });
+      await expect(service.completeWork({
+        agentId: fixture.agent.id,
+        executionId: 'execution-1',
+        result: {
+          decision: 'complete',
+          summary: 'Updated the durable working context.',
+          runId: 'run-1',
+          outcome: 'done',
+        },
+        signal,
+      })).resolves.toEqual({ kind: 'accepted' });
+      expect(fixture.completeAgentWake).toHaveBeenCalledWith(
+        fixture.agent.id,
+        'execution-1',
+        fixture.trigger.sequence,
+      );
+    },
+  );
+
+  it('retains user input until the agent records a disposition', async () => {
+    const fixture = createFixture('user_input');
     const service = new AgentWorkService(
       fixture.workStore,
       { readAgentWorkingContext: async () => ({ principalInputs: [], findings: [] }) },
@@ -151,31 +223,67 @@ describe('AgentWorkService', () => {
       signal,
     });
 
-    await expect(service.executeTool({
-      userId: fixture.user.id,
-      executionId: 'execution-1',
-      toolName: 'update_working_note',
-      arguments: {
-        content: 'Prioritize examples that satisfy the latest guidance.',
-      },
-      signal,
-    })).resolves.toMatchObject({ ok: true });
     await expect(service.completeWork({
       agentId: fixture.agent.id,
       executionId: 'execution-1',
       result: {
         decision: 'complete',
-        summary: 'Updated the durable working context.',
+        summary: 'Returned without handling the input.',
+        runId: 'run-1',
+        outcome: 'done',
+      },
+      signal,
+    })).resolves.toEqual({
+      kind: 'retry',
+      summary:
+        'The agent finished without recording an action or an explicit no-action decision for the claimed messages.',
+      delayMs: 10_000,
+    });
+    expect(fixture.completeAgentWake).not.toHaveBeenCalled();
+  });
+
+  it('settles user input after an explicit no-action decision', async () => {
+    const fixture = createFixture('user_input');
+    const service = new AgentWorkService(
+      fixture.workStore,
+      { readAgentWorkingContext: async () => ({ principalInputs: [], findings: [] }) },
+      fixture.communicationStore,
+      { triggerAgent: async () => undefined },
+      createLucidLogger('silent'),
+      { retryDelayMs: 10_000 },
+    );
+    const signal = new AbortController().signal;
+    await service.claimWork({
+      agentId: fixture.agent.id,
+      executionId: 'execution-1',
+      signal,
+    });
+    await expect(service.executeTool({
+      userId: fixture.user.id,
+      executionId: 'execution-1',
+      toolName: 'read_open_requests',
+      arguments: {},
+      signal,
+    })).resolves.toMatchObject({ ok: true });
+    await expect(service.executeTool({
+      userId: fixture.user.id,
+      executionId: 'execution-1',
+      toolName: 'finish_without_action',
+      arguments: { reason: 'No current peer request matches this input.' },
+      signal,
+    })).resolves.toMatchObject({ ok: true });
+
+    await expect(service.completeWork({
+      agentId: fixture.agent.id,
+      executionId: 'execution-1',
+      result: {
+        decision: 'complete',
+        summary: 'No matching request was available.',
         runId: 'run-1',
         outcome: 'done',
       },
       signal,
     })).resolves.toEqual({ kind: 'accepted' });
-    expect(fixture.completeAgentWake).toHaveBeenCalledWith(
-      fixture.agent.id,
-      'execution-1',
-      fixture.trigger.sequence,
-    );
   });
 });
 
@@ -242,6 +350,7 @@ function createFixture(
   let activeClaim = false;
   let sharedMessage: DiscoveryEvent | undefined;
   let workingNoteUpdated = false;
+  const communicationActions: DiscoveryEvent[] = [];
   const completeAgentWake = vi.fn(async () => {
     activeClaim = false;
   });
@@ -283,6 +392,38 @@ function createFixture(
     recordWakeCompletion,
   } satisfies AgentWakeStore;
 
+  const appendCommunication = (
+    input: AppendCommunicationEventInput,
+  ): DiscoveryEvent => {
+    const appended = event({
+      sequence: 2,
+      kind: input.kind,
+      actorAgentId: input.actorAgentId,
+      targetAgentId: input.targetAgentId,
+      targetUserId: input.targetUserId,
+      replyToSequence: input.replyToSequence,
+      idempotencyKey: input.idempotencyKey,
+      title: input.title,
+      content: input.content,
+      metadata: input.metadata,
+    });
+    if (input.kind === 'shared_message') {
+      sharedMessage = appended;
+    }
+    if (input.kind === 'agent_note_updated') {
+      workingNoteUpdated = true;
+    }
+    if (
+      input.kind === 'shared_message'
+      || input.kind === 'direct_message'
+      || input.kind === 'finding_reported'
+      || input.kind === 'agent_wake_no_action'
+    ) {
+      communicationActions.push(appended);
+    }
+    return appended;
+  };
+
   const communicationStore = {
     listAgents: async () => [agent],
     listActiveAgents: async () => [agent],
@@ -291,33 +432,23 @@ function createFixture(
       _agentId: string,
       sequences: number[],
     ) => sequences.includes(trigger.sequence) ? [trigger] : [],
-    countAgentWakeCommunicationActions: async () => (
-      sharedMessage ? 1 : 0
-    ),
+    countAgentWakeCommunicationActions: async () => communicationActions.length,
     findAgentPublishedRequestForTrigger: async () => sharedMessage,
     hasAgentUpdatedWorkingNoteThrough: async () => workingNoteUpdated,
     hasUserFindingUsingAnyOrigin: async () => false,
     hasAgentContributedToRequestThread: async () => false,
-    appendCommunicationEvent: async (input) => {
-      const appended = event({
-        sequence: 2,
-        kind: input.kind,
-        actorAgentId: input.actorAgentId,
-        targetAgentId: input.targetAgentId,
-        targetUserId: input.targetUserId,
-        replyToSequence: input.replyToSequence,
-        idempotencyKey: input.idempotencyKey,
-        title: input.title,
-        content: input.content,
-        metadata: input.metadata,
-      });
-      if (input.kind === 'shared_message') {
-        sharedMessage = appended;
+    appendCommunicationEvent: async (input) => appendCommunication(input),
+    appendClaimedCommunicationEvent: async (ownedClaim, input) => {
+      if (
+        !activeClaim
+        || ownedClaim.agentId !== agent.id
+        || ownedClaim.workId !== claim.wakeId
+        || ownedClaim.executionId !== claim.claimToken
+        || ownedClaim.workNumber !== claim.wakeNumber
+      ) {
+        throw new AgentCommunicationClaimError();
       }
-      if (input.kind === 'agent_note_updated') {
-        workingNoteUpdated = true;
-      }
-      return appended;
+      return appendCommunication(input);
     },
   } satisfies AgentCommunicationStore;
 

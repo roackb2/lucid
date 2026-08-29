@@ -39,9 +39,11 @@ import {
 } from '@heddleagent/execution-host-client/adopter';
 import { workspaceSnapshot } from '../hosted-execution/mcp/test-support.js';
 import {
+  LUCID_HEARTBEAT_MCP_TOOLS,
   POST_SHARED_MESSAGE_TOOL,
   READ_AVAILABLE_MESSAGES_TOOL,
   READ_WORKSPACE_SNAPSHOT_TOOL,
+  READ_WORKING_CONTEXT_TOOL,
   UPDATE_WORKING_NOTE_TOOL,
 } from '../hosted-execution/mcp/types.js';
 import { createLucidLogger } from '../logger.js';
@@ -366,11 +368,7 @@ describe('hosted execution composition', () => {
             invocationId: executionId,
             workflow: 'heartbeat-task',
             mcp: {
-              allowedTools: [
-                READ_AVAILABLE_MESSAGES_TOOL,
-                UPDATE_WORKING_NOTE_TOOL,
-                POST_SHARED_MESSAGE_TOOL,
-              ],
+              allowedTools: LUCID_HEARTBEAT_MCP_TOOLS,
             },
           },
         },
@@ -401,11 +399,11 @@ describe('hosted execution composition', () => {
     ));
     try {
       expect((await mcpClient.listTools()).tools.map(({ name }) => name))
-        .toEqual([
-          READ_AVAILABLE_MESSAGES_TOOL,
-          UPDATE_WORKING_NOTE_TOOL,
-          POST_SHARED_MESSAGE_TOOL,
-        ]);
+        .toEqual(LUCID_HEARTBEAT_MCP_TOOLS);
+      await mcpClient.callTool({
+        name: READ_WORKING_CONTEXT_TOOL,
+        arguments: {},
+      });
       await mcpClient.callTool({
         name: READ_AVAILABLE_MESSAGES_TOOL,
         arguments: {},
@@ -434,14 +432,19 @@ describe('hosted execution composition', () => {
     expect(executeTool).toHaveBeenNthCalledWith(1, expect.objectContaining({
       userId: 'user-1',
       executionId,
-      toolName: READ_AVAILABLE_MESSAGES_TOOL,
+      toolName: READ_WORKING_CONTEXT_TOOL,
     }));
     expect(executeTool).toHaveBeenNthCalledWith(2, expect.objectContaining({
       userId: 'user-1',
       executionId,
-      toolName: UPDATE_WORKING_NOTE_TOOL,
+      toolName: READ_AVAILABLE_MESSAGES_TOOL,
     }));
     expect(executeTool).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      userId: 'user-1',
+      executionId,
+      toolName: UPDATE_WORKING_NOTE_TOOL,
+    }));
+    expect(executeTool).toHaveBeenNthCalledWith(4, expect.objectContaining({
       userId: 'user-1',
       executionId,
       toolName: POST_SHARED_MESSAGE_TOOL,

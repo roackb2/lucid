@@ -13,12 +13,18 @@ projection and accepts no identity arguments.
 
 Autonomous `heartbeat-task` authority grants only:
 
+- `read_working_context`, which returns the private bounded context already
+  attached to the current product claim;
 - `read_available_messages`, bounded by the current fixed product work
   horizon;
+- `read_open_requests`, reconstructed from durable request and reply threads;
 - `update_working_note`, which records guidance-derived durable context under
-  the retry-stable work ID; and
+  the retry-stable work ID;
 - `post_shared_message`, which applies Lucid's reply, provenance, visibility,
-  budget, and retry-idempotency rules.
+  budget, and retry-idempotency rules;
+- `send_direct_message` and `report_finding`, which preserve their narrower
+  recipient and provenance policies; and
+- `finish_without_action`, which records an explicit durable disposition.
 
 Tenant, user, product session, Runtime session, execution ID, and workflow come
 only from verified capability claims. `CapabilityScopedAgentWorkToolExecutor`
@@ -28,8 +34,10 @@ uses capability subject plus invocation ID to resolve the live
 
 The product-work service rehydrates durable tool state for every call. This is
 necessary because Streamable HTTP requests can land on different backend
-processes and because a retry creates a fresh in-memory tool service. The
-database fence, not the MCP connection, is authoritative.
+processes and because a retry creates a fresh in-memory tool service. Every
+mutation locks and validates the active product execution claim in the same
+transaction as its event insert. The database fence, not the MCP connection,
+is authoritative.
 
 ## Code boundary
 

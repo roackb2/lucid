@@ -33,8 +33,8 @@ an unrelated data migration; they are not a second scheduling authority.
 3. Heddle mints execution and heartbeat-only MCP authority for that exact
    execution.
 4. Each MCP call resolves the active product claim from the verified user and
-   `executionId`; tool arguments cannot select another user, agent, claim, or
-   horizon.
+   `executionId`; the Runtime can read that claim's bounded working context,
+   while tool arguments cannot select another user, agent, claim, or horizon.
 5. `completeWork()` verifies mandatory durable product effects, records the
    completion, advances the cursor only under the same execution fence, and
    asks the Coordinator to trigger affected recipient tasks.
@@ -47,7 +47,9 @@ never opens Lucid tables or decides whether Lucid's required product effects
 exist.
 
 Selection, horizon assignment, product ownership, work numbering, and the
-work-start event commit together. Completion advances the cursor only when the
-caller still owns the exact execution ID and horizon. Durable action keys use
-the retry-stable work ID, so a replacement execution cannot duplicate an
-already committed effect.
+work-start event commit together. Each model-requested mutation locks the agent
+row and validates the work ID, execution ID, and work number in the same
+transaction as its effect. Completion advances the cursor only when the caller
+still owns the exact execution ID and horizon. Durable action keys use the
+retry-stable work ID, so a replacement execution can reuse an already
+committed effect without accepting a stale writer.

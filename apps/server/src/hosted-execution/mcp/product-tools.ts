@@ -4,14 +4,23 @@ import {
 } from '@heddleagent/execution-host-client/mcp/node';
 import { z } from 'zod';
 import {
+  directMessageInputSchema,
+  findingInputSchema,
+  noActionInputSchema,
   postSharedMessageInputSchema,
   readAvailableMessagesInputSchema,
+  readOpenRequestsInputSchema,
   workingNoteInputSchema,
 } from '../../lucid/agent/communication/tool-service.js';
 import {
+  FINISH_WITHOUT_ACTION_TOOL,
   POST_SHARED_MESSAGE_TOOL,
   READ_AVAILABLE_MESSAGES_TOOL,
+  READ_OPEN_REQUESTS_TOOL,
   READ_WORKSPACE_SNAPSHOT_TOOL,
+  READ_WORKING_CONTEXT_TOOL,
+  REPORT_FINDING_TOOL,
+  SEND_DIRECT_MESSAGE_TOOL,
   UPDATE_WORKING_NOTE_TOOL,
   type HostedWorkspaceProjection,
   type LucidProductMcpToolName,
@@ -58,6 +67,27 @@ export function createLucidProductToolset(
         ),
       }),
       defineNodeMcpJsonTool({
+        name: READ_WORKING_CONTEXT_TOOL,
+        description:
+          'Read the private, bounded working context attached to the current Lucid work claim, including principal inputs, prior findings and the latest working note.',
+        inputSchema: z.object({}).strict(),
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        failureMessage: 'Lucid working context is unavailable.',
+        execute: async (_arguments, { capability, signal }) => (
+          await agentWork.executeAgentWorkTool({
+            scope: capability.scope,
+            toolName: READ_WORKING_CONTEXT_TOOL,
+            arguments: {},
+            signal,
+          })
+        ),
+      }),
+      defineNodeMcpJsonTool({
         name: READ_AVAILABLE_MESSAGES_TOOL,
         description:
           'Read only the messages inside the current durable Lucid work horizon.',
@@ -73,6 +103,27 @@ export function createLucidProductToolset(
           await agentWork.executeAgentWorkTool({
             scope: capability.scope,
             toolName: READ_AVAILABLE_MESSAGES_TOOL,
+            arguments: arguments_,
+            signal,
+          })
+        ),
+      }),
+      defineNodeMcpJsonTool({
+        name: READ_OPEN_REQUESTS_TOOL,
+        description:
+          'Read unanswered peer-authored requests visible inside the current Lucid work claim.',
+        inputSchema: readOpenRequestsInputSchema,
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        failureMessage: 'Lucid open requests are unavailable.',
+        execute: async (arguments_, { capability, signal }) => (
+          await agentWork.executeAgentWorkTool({
+            scope: capability.scope,
+            toolName: READ_OPEN_REQUESTS_TOOL,
             arguments: arguments_,
             signal,
           })
@@ -115,6 +166,69 @@ export function createLucidProductToolset(
           await agentWork.executeAgentWorkTool({
             scope: capability.scope,
             toolName: POST_SHARED_MESSAGE_TOOL,
+            arguments: arguments_,
+            signal,
+          })
+        ),
+      }),
+      defineNodeMcpJsonTool({
+        name: SEND_DIRECT_MESSAGE_TOOL,
+        description:
+          'Send one private reply to an encountered peer when the current user context provides a specific answer.',
+        inputSchema: directMessageInputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        failureMessage: 'Lucid could not send the direct message.',
+        execute: async (arguments_, { capability, signal }) => (
+          await agentWork.executeAgentWorkTool({
+            scope: capability.scope,
+            toolName: SEND_DIRECT_MESSAGE_TOOL,
+            arguments: arguments_,
+            signal,
+          })
+        ),
+      }),
+      defineNodeMcpJsonTool({
+        name: REPORT_FINDING_TOOL,
+        description:
+          'Deliver one specific, peer-sourced connection privately to the current Lucid user with durable provenance.',
+        inputSchema: findingInputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        failureMessage: 'Lucid could not report the finding.',
+        execute: async (arguments_, { capability, signal }) => (
+          await agentWork.executeAgentWorkTool({
+            scope: capability.scope,
+            toolName: REPORT_FINDING_TOOL,
+            arguments: arguments_,
+            signal,
+          })
+        ),
+      }),
+      defineNodeMcpJsonTool({
+        name: FINISH_WITHOUT_ACTION_TOOL,
+        description:
+          'Record an explicit no-action result when the claimed Lucid messages contain no specific match or useful contribution.',
+        inputSchema: noActionInputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        failureMessage: 'Lucid could not record the no-action result.',
+        execute: async (arguments_, { capability, signal }) => (
+          await agentWork.executeAgentWorkTool({
+            scope: capability.scope,
+            toolName: FINISH_WITHOUT_ACTION_TOOL,
             arguments: arguments_,
             signal,
           })

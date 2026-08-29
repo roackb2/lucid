@@ -20,8 +20,11 @@ import {
   workspaceSnapshot,
 } from './test-support.js';
 import {
+  LUCID_HEARTBEAT_MCP_TOOLS,
+  READ_WORKING_CONTEXT_TOOL,
   READ_WORKSPACE_SNAPSHOT_TOOL,
   type LucidProductMcpToolName,
+  type ScopedAgentWorkToolExecutor,
   type ScopedWorkspaceProjectionReader,
 } from './types.js';
 import {
@@ -139,6 +142,51 @@ describe('Lucid product tools over the generic MCP HTTP edge', () => {
     const body = await response.text();
     expect(body).not.toContain(assertion);
     expect(body).not.toContain('delete_workspace');
+  });
+
+  it('exposes the complete claim-scoped heartbeat tool surface', async () => {
+    const agentWork = {
+      executeAgentWorkTool: vi.fn(async () => ({
+        ok: true,
+        output: {
+          principalInputs: [],
+          findings: [],
+          workingNote: { content: 'Keep one durable current direction.' },
+        },
+      })),
+    } satisfies ScopedAgentWorkToolExecutor;
+    const assertion = await signer.sign({
+      workflow: 'heartbeat-task',
+      allowedTools: LUCID_HEARTBEAT_MCP_TOOLS,
+    });
+    const endpoint = await startService(createProductMcpService(
+      signer.verifier(),
+      { readWorkspaceProjection: vi.fn(async () => workspaceSnapshot()) },
+      { agentWork, now: () => MCP_TEST_NOW },
+    ));
+    client = await connectClient(endpoint, assertion);
+
+    expect((await client.listTools()).tools.map(({ name }) => name))
+      .toEqual(LUCID_HEARTBEAT_MCP_TOOLS);
+    const result = await client.callTool({
+      name: READ_WORKING_CONTEXT_TOOL,
+      arguments: {},
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(JSON.stringify(result)).toContain(
+      'Keep one durable current direction.',
+    );
+    expect(agentWork.executeAgentWorkTool).toHaveBeenCalledWith({
+      scope: expect.objectContaining({
+        subjectId: 'subject-a',
+        invocationId: 'invocation-001',
+        workflow: 'heartbeat-task',
+      }),
+      toolName: READ_WORKING_CONTEXT_TOOL,
+      arguments: {},
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('denies a cross-scope projection without leaking product data', async () => {
@@ -320,6 +368,7 @@ function createProductMcpService(
   capabilityVerifier: McpCapabilityVerifier<LucidProductMcpToolName>,
   workspaceReader: ScopedWorkspaceProjectionReader,
   options: {
+    agentWork?: ScopedAgentWorkToolExecutor;
     maxBodyBytes?: number;
     now?: () => Date;
   } = {},
@@ -328,12 +377,12 @@ function createProductMcpService(
     capabilityVerifier,
     toolset: createLucidProductToolset(
       workspaceReader,
-      {
+      options.agentWork ?? {
         executeAgentWorkTool: async () => {
           throw new Error('Agent work is unavailable in this fixture.');
         },
       },
-      options,
+      { now: options.now },
     ),
     ...(options.maxBodyBytes
       ? { maxBodyBytes: options.maxBodyBytes }

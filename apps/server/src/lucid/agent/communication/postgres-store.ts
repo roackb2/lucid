@@ -37,8 +37,10 @@ import { LUCID_WORKSPACE_ID } from '../../workspace/workspace-identity.js';
 import { AGENT_PRINCIPAL_EVENT_KINDS } from '../mailbox-policy.js';
 import type {
   AgentCommunicationStore,
+  AgentCommunicationClaim,
   AppendCommunicationEventInput,
 } from './store.js';
+import { AgentCommunicationClaimError } from './store.js';
 
 export class PostgresAgentCommunicationStore
 implements AgentCommunicationStore {
@@ -314,10 +316,40 @@ implements AgentCommunicationStore {
     return await this.appendEvent(input);
   }
 
+  async appendClaimedCommunicationEvent(
+    claim: AgentCommunicationClaim,
+    input: AppendCommunicationEventInput,
+  ): Promise<DiscoveryEvent> {
+    return await this.appendEvent(input, claim);
+  }
+
   private async appendEvent(
     input: AppendDiscoveryEventInput,
+    claim?: AgentCommunicationClaim,
   ): Promise<DiscoveryEvent> {
     return await this.database.orm.transaction(async (transaction) => {
+      if (claim) {
+        const [activeClaim] = await transaction
+          .select({ id: agents.id })
+          .from(agents)
+          .where(and(
+            eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+            eq(agents.id, claim.agentId),
+            eq(agents.status, 'running'),
+            eq(agents.activeWakeId, claim.workId),
+            eq(agents.activeWakeClaimToken, claim.executionId),
+            eq(agents.activeWakeNumber, claim.workNumber),
+          ))
+          .for('update')
+          .limit(1);
+        if (
+          !activeClaim
+          || input.actorAgentId !== claim.agentId
+          || input.wakeNumber !== claim.workNumber
+        ) {
+          throw new AgentCommunicationClaimError();
+        }
+      }
       // The unique key is the final concurrency authority. `onConflictDoNothing`
       // allows simultaneous retries from different workers without surfacing a
       // transient constraint error or duplicating the side effect.

@@ -18,8 +18,17 @@ import {
   AgentCommunicationToolService,
   type AgentWorkCommunicationToolName,
 } from './communication/tool-service.js';
-import type { AgentCommunicationStore } from './communication/store.js';
+import {
+  AgentCommunicationClaimError,
+  type AgentCommunicationStore,
+} from './communication/store.js';
 import type { AgentWakeStore } from './store.js';
+
+export const READ_AGENT_WORKING_CONTEXT_TOOL = 'read_working_context';
+
+export type AgentWorkToolName =
+  | typeof READ_AGENT_WORKING_CONTEXT_TOOL
+  | AgentWorkCommunicationToolName;
 
 export type AgentWorkResult = {
   decision: 'continue' | 'pause' | 'complete' | 'escalate';
@@ -97,7 +106,7 @@ export class AgentWorkService {
   async executeTool(input: {
     userId: string;
     executionId: string;
-    toolName: AgentWorkCommunicationToolName;
+    toolName: AgentWorkToolName;
     arguments: unknown;
     signal: AbortSignal;
   }): Promise<ToolResult> {
@@ -109,24 +118,46 @@ export class AgentWorkService {
     if (!work) {
       throw new AgentWorkClaimError();
     }
+    if (input.toolName === READ_AGENT_WORKING_CONTEXT_TOOL) {
+      return { ok: true, output: work.workingContext };
+    }
     const requiredRequestSourceIds = work.visibleEvents
       .filter(({ kind }) => (
         kind === 'interest_saved' || kind === 'check_requested'
       ))
       .map(({ sequence }) => sequence);
     const requiredWorkingNoteSourceIds = work.visibleEvents
-      .filter(({ kind }) => kind === 'guidance_saved')
+      .filter(({ kind }) => (
+        kind === 'guidance_saved' || kind === 'feedback_saved'
+      ))
       .map(({ sequence }) => sequence);
-    return await new AgentCommunicationToolService(
-      this.communication,
-      work.agent,
-      work.user,
-      work.workId,
-      work.workNumber,
-      work.horizonSequence,
-      requiredRequestSourceIds,
-      requiredWorkingNoteSourceIds,
-    ).execute(input.toolName, input.arguments, input.signal);
+    try {
+      return await new AgentCommunicationToolService(
+        this.communication,
+        {
+          appendCommunicationEvent: async (event) => (
+            await this.communication.appendClaimedCommunicationEvent({
+              agentId: work.agent.id,
+              workId: work.workId,
+              executionId: input.executionId,
+              workNumber: work.workNumber,
+            }, event)
+          ),
+        },
+        work.agent,
+        work.user,
+        work.workId,
+        work.workNumber,
+        work.horizonSequence,
+        requiredRequestSourceIds,
+        requiredWorkingNoteSourceIds,
+      ).execute(input.toolName, input.arguments, input.signal);
+    } catch (error) {
+      if (error instanceof AgentCommunicationClaimError) {
+        throw new AgentWorkClaimError();
+      }
+      throw error;
+    }
   }
 
   async completeWork(input: {
@@ -272,16 +303,34 @@ export class AgentWorkService {
     }
 
     const requiredWorkingNotes = work.visibleEvents
-      .filter(({ kind }) => kind === 'guidance_saved');
+      .filter(({ kind }) => (
+        kind === 'guidance_saved' || kind === 'feedback_saved'
+      ));
     const notesComplete = (await Promise.all(requiredWorkingNotes.map(
       ({ sequence }) => this.store.hasAgentUpdatedWorkingNoteThrough(
         work.agent.id,
         sequence,
       ),
     ))).every(Boolean);
-    return notesComplete
-      ? undefined
-      : 'The agent finished without revising its working note for the latest guidance.';
+    if (!notesComplete) {
+      return 'The agent finished without revising its working note for the latest guidance or feedback.';
+    }
+
+    const requiresDisposition = work.visibleEvents.some(({ kind }) => (
+      kind === 'shared_message'
+      || kind === 'direct_message'
+      || kind === 'user_input'
+    ));
+    if (
+      requiresDisposition
+      && await this.communication.countAgentWakeCommunicationActions(
+        work.agent.id,
+        work.workNumber,
+      ) === 0
+    ) {
+      return 'The agent finished without recording an action or an explicit no-action decision for the claimed messages.';
+    }
+    return undefined;
   }
 
   async #triggerRecipients(

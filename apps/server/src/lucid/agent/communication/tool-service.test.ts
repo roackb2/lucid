@@ -183,6 +183,7 @@ You represent an explicitly simulated test user, not a real person or external s
     );
     const tools = toolsByName(await new AgentCommunicationToolService(
       stores.communication,
+      stores.communication,
       peer.agent,
       peer.user,
       'wake_longitudinal_return',
@@ -195,7 +196,7 @@ You represent an explicitly simulated test user, not a real person or external s
       source_event_ids: [request.sequence],
     })).toMatchObject({
       ok: false,
-      error: expect.stringContaining('read_open_requests'),
+      error: expect.stringContaining('answer a matching request'),
     });
     expect(await tools.get('read_open_requests')!.execute({ limit: 5 }))
       .toMatchObject({
@@ -227,6 +228,7 @@ You represent an explicitly simulated test user, not a real person or external s
     })).ok).toBe(true);
 
     const laterTools = toolsByName(await new AgentCommunicationToolService(
+      stores.communication,
       stores.communication,
       peer.agent,
       peer.user,
@@ -679,6 +681,7 @@ You represent an explicitly simulated test user, not a real person or external s
     });
     const tools = toolsByName(await new AgentCommunicationToolService(
       stores.communication,
+      stores.communication,
       source.agent,
       source.user,
       'wake_source_finding',
@@ -919,6 +922,7 @@ async function createUserTools(
   requiredWorkingNoteSourceIds: number[] = [],
 ) {
   return await new AgentCommunicationToolService(
+    stores.communication,
     stores.communication,
     await stores.workspace.requireAgentForUser(LOCAL_USER_ID),
     await requireLocalUser(stores),

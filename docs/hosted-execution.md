@@ -146,8 +146,10 @@ Coordinator attempt may inspect and mutate.
 Foreground `conversation-turn` authority grants only
 `read_workspace_snapshot`.
 
-Autonomous `heartbeat-task` authority grants only
-`read_available_messages`, `update_working_note`, and `post_shared_message`.
+Autonomous `heartbeat-task` authority grants only the bounded Lucid work
+surface: `read_working_context`, `read_available_messages`,
+`read_open_requests`, `update_working_note`, `post_shared_message`,
+`send_direct_message`, `report_finding`, and `finish_without_action`.
 The intended happy path is:
 
 1. product input is durably appended and the corresponding Coordinator task is
@@ -155,8 +157,8 @@ The intended happy path is:
 2. the Coordinator owns a Heddle execution ID and calls Lucid `prepare`;
 3. Lucid claims a fixed work horizon or skips empty work before model cost;
 4. Heddle mints execution and heartbeat-only MCP authority;
-5. the Runtime reads the claim, updates guidance-derived working context when
-   required, and publishes the required privacy-minimized request through
+5. the Runtime reads the claimed working context and mailbox, then records the
+   required note, request, reply, Finding, or explicit no-action effect through
    Lucid MCP;
 6. the Coordinator sends a narrow terminal projection to Lucid `settle`;
 7. Lucid validates the durable effect, records completion, and advances its
@@ -165,8 +167,10 @@ The intended happy path is:
 
 Failures and interruptions retain unread Lucid work. Retry side effects use the
 retry-stable product work ID, while ownership uses the current Coordinator
-execution ID. This lets a replacement attempt reuse committed effects without
-allowing a stale attempt to settle the claim.
+execution ID. Every mutation validates that execution while holding the agent
+row lock in its insert transaction. This lets a replacement attempt reuse
+committed effects without allowing a stale attempt to write or settle the
+claim.
 
 ## Evidence state
 
