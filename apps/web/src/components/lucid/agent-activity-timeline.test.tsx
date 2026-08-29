@@ -35,11 +35,20 @@ describe('Agent Activity timeline', () => {
     const markup = renderTimeline(ACTIVITY);
 
     expect(markup).toContain('Recent background outcomes');
+    expect(markup).toContain('Latest outcome');
     expect(markup).toContain('No new Finding');
     expect(markup).toContain('Returned 1 new Finding');
     expect(markup).toContain('2 new items');
     expect(markup).toContain('1 Finding');
     expect(markup).not.toMatch(/wake|trace|taskId|event-/i);
+  });
+
+  it('links a latest Finding outcome to its durable evidence library', () => {
+    const markup = renderTimeline([...ACTIVITY].reverse());
+
+    expect(markup).toContain('Latest outcome');
+    expect(markup).toContain('View Findings');
+    expect(markup).toContain('href="/findings"');
   });
 
   it('offers one honest next action when no activity exists', () => {

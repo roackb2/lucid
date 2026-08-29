@@ -122,7 +122,7 @@ describe('Agent work controls', () => {
     });
 
     expect(markup).toContain('Background work is paused');
-    expect(markup).toContain('Resume background work');
+    expect(markup).toContain('Resume and check now');
     expect(markup).not.toContain('>Check now<');
   });
 

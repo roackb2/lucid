@@ -47,6 +47,11 @@ import {
 
 const MAX_PROMPT_CHARACTERS = 20_000;
 const hostedConversations = new HostedConversationClient();
+const CHAT_STARTER_PROMPTS = [
+  'What is my current Interest?',
+  'Summarize my latest Agent activity.',
+  'What are my current Findings?',
+] as const;
 
 type LiveConversationTurn = {
   answer: string;
@@ -273,10 +278,33 @@ export function HostedConversation({
           {!hasSavedTurns && !liveTurn && !history.isPending && !history.error ? (
             <ConversationEmptyState
               className="chat-thread__empty"
-              description="Ask about your current Interest, Agent activity, or Findings. Ordinary Chat cannot change them."
-              icon={<MessageCircle aria-hidden="true" />}
-              title="Start a conversation"
-            />
+            >
+              <div className="chat-thread__empty-mark" aria-hidden="true">
+                <MessageCircle />
+              </div>
+              <div>
+                <h3>Start a conversation</h3>
+                <p>
+                  Ask about your current Interest, Agent activity, or Findings.
+                  Ordinary Chat cannot change them.
+                </p>
+              </div>
+              {availability.canStartTurn ? (
+                <div className="chat-thread__starters" aria-label="Suggested questions">
+                  {CHAT_STARTER_PROMPTS.map((prompt) => (
+                    <Button
+                      key={prompt}
+                      onClick={() => setDraft(prompt)}
+                      size="small"
+                      type="button"
+                      variant="secondary"
+                    >
+                      {prompt}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+            </ConversationEmptyState>
           ) : null}
           {liveTurn ? (
             <ol className="chat-thread__turns chat-thread__turns--live">

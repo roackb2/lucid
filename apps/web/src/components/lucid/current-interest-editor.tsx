@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
-import { Lightbulb, PencilLine, Save } from 'lucide-react';
+import { ArrowRight, Lightbulb, PencilLine, Save } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import type { DiscoverySnapshot } from '@/lib/trpc';
 
@@ -151,6 +152,21 @@ export function CurrentInterestEditor({
             </span>
             <span>One current Interest</span>
           </footer>
+          <div className="current-interest__next-step">
+            <div>
+              <strong>Next: ask Lucid to check</strong>
+              <p>
+                Continue to your Agent to start a check or see what happened
+                during earlier background work.
+              </p>
+            </div>
+            <Button asChild size="small">
+              <Link to="/agent">
+                Continue to Agent
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
         </div>
       )}
     </section>
