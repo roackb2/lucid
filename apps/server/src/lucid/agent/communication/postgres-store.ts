@@ -328,6 +328,19 @@ implements AgentCommunicationStore {
     claim?: AgentCommunicationClaim,
   ): Promise<DiscoveryEvent> {
     return await this.database.orm.transaction(async (transaction) => {
+      // This workspace row is the commit-order boundary for the append-only
+      // event stream and every Agent wake horizon derived from that stream.
+      const [workspace] = await transaction
+        .select({ currentWake: discoveryWorkspaces.currentWake })
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+        .for('update')
+        .limit(1);
+      if (!workspace) {
+        throw new Error(
+          'Discovery workspace is missing. Run the database migration and restart the service.',
+        );
+      }
       if (claim) {
         const [activeClaim] = await transaction
           .select({ id: agents.id })
@@ -353,16 +366,6 @@ implements AgentCommunicationStore {
       // The unique key is the final concurrency authority. `onConflictDoNothing`
       // allows simultaneous retries from different workers without surfacing a
       // transient constraint error or duplicating the side effect.
-      const [workspace] = await transaction
-        .select({ currentWake: discoveryWorkspaces.currentWake })
-        .from(discoveryWorkspaces)
-        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
-        .limit(1);
-      if (!workspace) {
-        throw new Error(
-          'Discovery workspace is missing. Run the database migration and restart the service.',
-        );
-      }
       const [inserted] = await transaction
         .insert(discoveryEvents)
         .values({

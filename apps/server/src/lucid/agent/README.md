@@ -57,6 +57,12 @@ still owns the exact execution ID and horizon. Durable action keys use the
 retry-stable work ID, so a replacement execution can reuse an already
 committed effect without accepting a stale writer.
 
+The single discovery-workspace row is also the event-stream commit-order lock.
+Every event-writing transaction locks it before allocating a PostgreSQL event
+sequence, and a new work claim takes the same lock before selecting its event
+horizon. This prevents a later sequence from becoming the horizon while an
+earlier, still-uncommitted principal input remains invisible.
+
 This split deliberately models a schedule as a durable opportunity to inspect
 the current product world, not as a frozen Lucid command payload. Heddle decides
 when the opportunity is due and makes its execution reliable. Lucid decides at

@@ -170,6 +170,8 @@ implements AgentWakeStore {
 
     // Selection, horizon assignment, agent ownership, and the audit event must
     // commit together; otherwise two schedulers could consume different views.
+    // Every discovery-event appender takes this workspace row lock before it
+    // allocates a sequence, so the event tail below is a commit-safe horizon.
     return await this.database.orm.transaction(async (transaction) => {
       const [workspaceRow] = await transaction
         .select()
@@ -509,6 +511,17 @@ implements AgentWakeStore {
   ): Promise<boolean> {
     const now = dayjs().toISOString();
     return await this.database.orm.transaction(async (transaction) => {
+      const [workspace] = await transaction
+        .select({ id: discoveryWorkspaces.id })
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+        .for('update')
+        .limit(1);
+      if (!workspace) {
+        throw new Error(
+          'Discovery workspace is missing. Run the database migration and restart the service.',
+        );
+      }
       const [agentRow] = await transaction
         .select()
         .from(agents)
@@ -616,6 +629,7 @@ implements AgentWakeStore {
         .select({ currentWake: discoveryWorkspaces.currentWake })
         .from(discoveryWorkspaces)
         .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+        .for('update')
         .limit(1);
       if (!workspace) {
         throw new Error(

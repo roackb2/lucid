@@ -11,6 +11,7 @@ import {
   LOCAL_USER_ID,
   LOCAL_AGENT_ID,
 } from '../lucid/local-user.js';
+import { LUCID_WORKSPACE_ID } from '../lucid/workspace/workspace-identity.js';
 import { defineLucidStoreContract } from './postgres-persistence.test-support.js';
 import type { PostgresDatabase } from '../infrastructure/postgres/database.js';
 import {
@@ -22,9 +23,16 @@ import {
   AgentCommunicationClaimError,
 } from '../lucid/agent/communication/store.js';
 
-async function createStore(options?: { reset?: boolean }) {
+const PRIMARY_TEST_APPLICATION = 'lucid-postgres-integration-primary';
+const SECONDARY_TEST_APPLICATION = 'lucid-postgres-integration-secondary';
+
+async function createStore(options?: {
+  reset?: boolean;
+  applicationName?: string;
+}) {
   return await createPostgresTestStores({
-    applicationName: 'lucid-postgres-integration-test',
+    applicationName:
+      options?.applicationName ?? 'lucid-postgres-integration-test',
     reset: options?.reset,
   });
 }
@@ -49,9 +57,12 @@ describe('PostgreSQL persistence integration', () => {
 
     beforeEach(async () => {
       ({ database: primaryDatabase, stores: primary } =
-        await createStore());
+        await createStore({ applicationName: PRIMARY_TEST_APPLICATION }));
       ({ database: secondaryDatabase, stores: secondary } =
-        await createStore({ reset: false }));
+        await createStore({
+          reset: false,
+          applicationName: SECONDARY_TEST_APPLICATION,
+        }));
     });
 
     afterEach(async () => {
@@ -159,6 +170,60 @@ describe('PostgreSQL persistence integration', () => {
       expect((await primary.network.readNetworkDiagnostics()).events.filter(
         (event) => event.idempotencyKey === idempotencyKey,
       )).toHaveLength(1);
+    });
+
+    it('serializes event appends with wake-horizon selection', async () => {
+      let releaseWorkspaceLock = () => undefined;
+      let reportWorkspaceLocked = () => undefined;
+      const workspaceLockReleased = new Promise<void>((resolve) => {
+        releaseWorkspaceLock = resolve;
+      });
+      const workspaceLocked = new Promise<void>((resolve) => {
+        reportWorkspaceLocked = resolve;
+      });
+      const horizonTransaction = primaryDatabase!.orm.transaction(
+        async (transaction) => {
+          await transaction.execute(sql`
+            select id
+            from lucid.discovery_workspaces
+            where id = ${LUCID_WORKSPACE_ID}
+            for update
+          `);
+          reportWorkspaceLocked();
+          await workspaceLockReleased;
+        },
+      );
+      await workspaceLocked;
+
+      const append = secondary.network.saveUserInput(
+        LOCAL_USER_ID,
+        'Do not let this committed input fall behind a later wake horizon.',
+        'integration:commit-safe-horizon',
+      );
+      try {
+        await expect.poll(async () => {
+          const [row] = await primaryDatabase!.client<{
+            waiting: number;
+          }[]>`
+            select count(*)::int as waiting
+            from pg_stat_activity
+            where application_name = ${SECONDARY_TEST_APPLICATION}
+              and wait_event_type = 'Lock'
+          `;
+          return row?.waiting ?? 0;
+        }).toBeGreaterThan(0);
+      } finally {
+        releaseWorkspaceLock();
+        await horizonTransaction;
+      }
+
+      const event = await append;
+      const wake = await primary.agent.beginAgentWake(
+        LOCAL_AGENT_ID,
+        'wake_after_serialized_append',
+      );
+      expect(wake?.visibleEvents).toContainEqual(event);
+      expect(wake?.horizonSequence).toBeGreaterThanOrEqual(event.sequence);
     });
 
     it('does not steal an active claim when another API process initializes', async () => {
