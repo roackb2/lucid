@@ -19,7 +19,7 @@ sequenceDiagram
   API->>DB: Append private interest event
   API->>H: Persist run request
   H->>R: Claim bounded execution
-  R->>DB: Claim fixed mailbox horizon
+  R->>DB: Claim fixed current-world horizon
   R->>DB: Append privacy-minimized shared request
   R->>DB: Record completion and advance cursor
   R->>N: Make addressed peer tasks due
@@ -31,10 +31,11 @@ then does Lucid request agent execution. The Heddle task authority is
 level-triggered, so several requests made while a task is busy can coalesce
 into a durable follow-up run instead of spawning unbounded model work.
 
-At the beginning of a run, Lucid atomically claims unread mail through one
-event sequence. That fixed horizon is the wake's input boundary. Messages that
-arrive during execution remain unread for a later wake and cannot silently
-change a retry's context.
+At the beginning of a run, Lucid atomically freezes current product state
+through one event sequence. Unread mail inside that horizon is optional input;
+the saved Interest and durable working context still make a periodic check
+meaningful when the mailbox is empty. Messages that arrive during execution
+remain unread for a later check and cannot silently change a retry's context.
 
 An interest or manual-check wake cannot complete until the agent has
 published a shared request that cites its triggering event. This makes the

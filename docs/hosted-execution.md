@@ -68,8 +68,8 @@ reasoning, and it does not yet provide replay or continuation.
 The separate Coordinator owns PostgreSQL-backed Heddle task claims,
 checkpoints, recovery, and fenced settlement. Lucid supplies current desired
 task state and a just-in-time `prepare` / `settle` product-work lifecycle.
-`AgentWorkService` binds a fixed mailbox horizon to the Coordinator execution
-ID, exposes only scoped communication tools, validates required durable
+`AgentWorkService` binds a fixed current-world horizon to the Coordinator
+execution ID, exposes only scoped communication tools, validates required durable
 effects, and advances the product cursor only under the same execution fence.
 
 The conversation port remains separate from autonomous agent execution.
@@ -138,8 +138,8 @@ The Execution Host owns:
 - no scheduling or product persistence.
 
 Lucid's work claim is not a scheduler. It does not poll time, calculate due
-tasks, or acquire Heddle leases. It fixes which product input an already-owned
-Coordinator attempt may inspect and mutate.
+tasks, or acquire Heddle leases. It fixes which current product state an
+already-owned Coordinator attempt may inspect and mutate.
 
 ## Supported workflows
 
@@ -152,14 +152,15 @@ surface: `read_working_context`, `read_available_messages`,
 `send_direct_message`, `report_finding`, and `finish_without_action`.
 The intended happy path is:
 
-1. product input is durably appended and the corresponding Coordinator task is
-   triggered;
+1. product input may durably trigger the task immediately, while the desired
+   cadence also makes the task due without new input;
 2. the Coordinator owns a Heddle execution ID and calls Lucid `prepare`;
-3. Lucid claims a fixed work horizon or skips empty work before model cost;
+3. Lucid claims a fixed current-world horizon for unread product input or a
+   saved Interest, and skips before model cost only when neither exists;
 4. Heddle mints execution and heartbeat-only MCP authority;
-5. the Runtime reads the claimed working context and mailbox, then records the
-   required note, request, reply, Finding, or explicit no-action effect through
-   Lucid MCP;
+5. the Runtime reads the claimed working context and optional mailbox, then
+   records the required note, request, reply, Finding, or explicit no-finding
+   effect through Lucid MCP;
 6. the Coordinator sends a narrow terminal projection to Lucid `settle`;
 7. Lucid validates the durable effect, records completion, and advances its
    cursor under the same execution fence; and

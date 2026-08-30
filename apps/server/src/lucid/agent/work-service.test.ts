@@ -285,10 +285,104 @@ describe('AgentWorkService', () => {
       signal,
     })).resolves.toEqual({ kind: 'accepted' });
   });
+
+  it('runs a scheduled Interest check without new mailbox input', async () => {
+    const fixture = createFixture(null);
+    const service = new AgentWorkService(
+      fixture.workStore,
+      {
+        readAgentWorkingContext: async () => ({
+          principalInputs: [fixture.trigger],
+          findings: [],
+        }),
+      },
+      fixture.communicationStore,
+      { triggerAgent: async () => undefined },
+      createLucidLogger('silent'),
+      { retryDelayMs: 10_000 },
+    );
+    const signal = new AbortController().signal;
+
+    await expect(service.claimWork({
+      agentId: fixture.agent.id,
+      executionId: 'execution-1',
+      signal,
+    })).resolves.toMatchObject({
+      kind: 'claimed',
+      work: {
+        visibleEvents: [],
+        workingContext: {
+          principalInputs: [fixture.trigger],
+        },
+      },
+    });
+    await expect(service.executeTool({
+      userId: fixture.user.id,
+      executionId: 'execution-1',
+      toolName: 'finish_without_action',
+      arguments: {
+        reason: 'The current world adds no concrete Finding to the saved Interest.',
+      },
+      signal,
+    })).resolves.toMatchObject({ ok: true });
+
+    await expect(service.completeWork({
+      agentId: fixture.agent.id,
+      executionId: 'execution-1',
+      result: {
+        decision: 'complete',
+        summary: 'Checked the current Interest and found nothing new.',
+        runId: 'run-1',
+        outcome: 'done',
+      },
+      signal,
+    })).resolves.toEqual({ kind: 'accepted' });
+    expect(fixture.completeAgentWake).toHaveBeenCalledWith(
+      fixture.agent.id,
+      'execution-1',
+      fixture.trigger.sequence,
+    );
+  });
+
+  it('retains an empty-mailbox Interest check until it has a disposition', async () => {
+    const fixture = createFixture(null);
+    const service = new AgentWorkService(
+      fixture.workStore,
+      { readAgentWorkingContext: async () => ({ principalInputs: [], findings: [] }) },
+      fixture.communicationStore,
+      { triggerAgent: async () => undefined },
+      createLucidLogger('silent'),
+      { retryDelayMs: 10_000 },
+    );
+    const signal = new AbortController().signal;
+    await service.claimWork({
+      agentId: fixture.agent.id,
+      executionId: 'execution-1',
+      signal,
+    });
+
+    await expect(service.completeWork({
+      agentId: fixture.agent.id,
+      executionId: 'execution-1',
+      result: {
+        decision: 'complete',
+        summary: 'Returned without a product disposition.',
+        runId: 'run-1',
+        outcome: 'done',
+      },
+      signal,
+    })).resolves.toEqual({
+      kind: 'retry',
+      summary:
+        'The scheduled Interest check finished without recording a Finding, communication, or an explicit no-finding decision.',
+      delayMs: 10_000,
+    });
+    expect(fixture.completeAgentWake).not.toHaveBeenCalled();
+  });
 });
 
 function createFixture(
-  triggerKind: DiscoveryEvent['kind'] = 'check_requested',
+  triggerKind: DiscoveryEvent['kind'] | null = 'check_requested',
 ) {
   const timestamp = '2026-08-28T00:00:00.000Z';
   const workspace: DiscoveryWorkspace = {
@@ -332,7 +426,7 @@ function createFixture(
   };
   const trigger = event({
     sequence: 1,
-    kind: triggerKind,
+    kind: triggerKind ?? 'interest_saved',
     targetAgentId: agent.id,
     targetUserId: user.id,
     title: 'Check now',
@@ -344,7 +438,7 @@ function createFixture(
     wakeId: 'work-1',
     claimToken: 'execution-1',
     wakeNumber: 1,
-    visibleEvents: [trigger],
+    visibleEvents: triggerKind ? [trigger] : [],
     horizonSequence: trigger.sequence,
   };
   let activeClaim = false;
@@ -427,11 +521,11 @@ function createFixture(
   const communicationStore = {
     listAgents: async () => [agent],
     listActiveAgents: async () => [agent],
-    listEventsVisibleToAgent: async () => [trigger],
+    listEventsVisibleToAgent: async () => triggerKind ? [trigger] : [],
     readVisibleEventsBySequence: async (
       _agentId: string,
       sequences: number[],
-    ) => sequences.includes(trigger.sequence) ? [trigger] : [],
+    ) => triggerKind && sequences.includes(trigger.sequence) ? [trigger] : [],
     countAgentWakeCommunicationActions: async () => communicationActions.length,
     findAgentPublishedRequestForTrigger: async () => sharedMessage,
     hasAgentUpdatedWorkingNoteThrough: async () => workingNoteUpdated,

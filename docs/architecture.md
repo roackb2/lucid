@@ -62,7 +62,7 @@ The server is organized around behavior rather than tables:
 - the user-network service owns trusted ingress, user lifecycle,
   development diagnostics, and coordination with agent tasks;
 - the agent heartbeat service reconciles users to Heddle
-  tasks, claims fixed mailbox wakes, enforces completion prerequisites, routes
+  tasks, claims fixed current-world Interest checks, enforces completion prerequisites, routes
   new messages, and coordinates pause/recovery; and
 - the communication tool service grants one agent a bounded set of
   visible reads and validated writes for one wake.
@@ -91,7 +91,7 @@ one domain transaction.
 | --- | --- |
 | `apps/server/src/lucid/workspace/` | User workspace service, primary store port, secondary working-context port, PostgreSQL adapter, and workspace policy |
 | `apps/server/src/lucid/network/` | User ingress/lifecycle service, store port, PostgreSQL adapter, and user-visibility policy |
-| `apps/server/src/lucid/agent/` | Agent wake/task coordination, store port, PostgreSQL adapter, runner, and mailbox policy |
+| `apps/server/src/lucid/agent/` | Agent Interest-check/task coordination, store port, PostgreSQL adapter, runner, and optional mailbox policy |
 | `apps/server/src/lucid/agent/communication/` | Bounded communication tools, store port, and PostgreSQL adapter |
 | `apps/server/src/lucid/persistence/postgres/` | Shared Lucid schema, policy-free record codecs, and disposable PostgreSQL test fixture only |
 | `apps/server/src/infrastructure/postgres/` | Neutral PostgreSQL pool and migration mechanics without Lucid product policy |
