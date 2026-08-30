@@ -14,8 +14,10 @@ resumes. Failed reconciliation leaves the Coordinator paused and fails startup.
 For each claimed Heddle execution, the Coordinator calls Lucid twice:
 
 1. `prepare` maps the task to a Lucid agent and asks `AgentWorkService` to claim
-   one fixed product work horizon. Empty work skips the model. Claimed work
-   returns only product scope and the exact heartbeat MCP tool allowlist.
+   one fixed product work horizon. An empty mailbox plus no saved Interest skips
+   the model; mailbox input remains independently actionable, and a saved
+   Interest makes an empty mailbox a current-world check. Claimed work returns
+   only product scope and the exact heartbeat MCP tool allowlist.
 2. `settle` maps the narrow terminal execution result back to the same agent
    and execution fence. Lucid validates and commits product effects, asks for a
    retry, or accepts failure/interruption without consuming unread input.
@@ -46,3 +48,9 @@ The two directions use distinct secrets:
 Lucid has no embedded scheduler or direct Heddle heartbeat-table authority.
 Its durable `AgentWorkClaim` is application data for one Coordinator attempt,
 not another clock, queue, or due-task selector.
+
+The desired task is therefore not a serialized snapshot of work to replay at
+each interval. It expresses an ongoing assignment and cadence. Each due Heddle
+execution asks Lucid to prepare against current product state, after which
+Lucid either skips before model work because there is no Interest or claims one
+bounded Interest check with optional mailbox input.

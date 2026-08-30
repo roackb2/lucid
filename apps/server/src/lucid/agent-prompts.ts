@@ -93,9 +93,10 @@ export function buildAgentWakePrompt(
     .map((sequence) => `#${sequence}`);
   const requiredRequestInstruction = latestRequiredRequest
     ? `Your first communication action must be post_shared_message with reply_to_event_id #${latestRequiredRequest} and source_event_ids containing every required event: ${requiredRequestReferences.join(', ')}.`
-    : 'No assignment or manual-check event requires a new shared request in this wake.';
+    : 'No new assignment or manual-check event requires a shared request in this check. Re-evaluate the current Interest from the ongoing assignment context and current network state without repeating an earlier request.';
 
-  const responsibility = `Review the ongoing assignment context before acting. A different source is not automatically a new finding: report only a concrete addition relative to prior findings and feedback.
+  const responsibility = `This execution is one bounded check of the current Interest. Unread mailbox events are optional new input; the saved Interest, working note, prior findings, and currently available network state remain the source of truth for what matters now.
+Review the ongoing assignment context before acting. A different source is not automatically a new finding: report only a concrete addition relative to prior findings and feedback.
 ${requiredRequestInstruction}
 When an unread interest_saved event appears, you must post a minimal shared request that represents it, reply to and cite that interest event, and revise the working note for the changed assignment.
 When an unread check_requested event appears, it starts a new request thread even if the saved interest text is unchanged. Its content puts the current working direction and latest guidance before the original assignment. Treat those recent constraints as the current search target. The content of post_shared_message must preserve the concrete constraints that distinguish the requested next result; a paraphrase of only the original broad assignment does not satisfy the check.
@@ -113,7 +114,7 @@ When feedback, direct guidance, or new principal input changes your understandin
 Respond to another agent only when its message has a specific connection to this user's context or private input.
 Do not report the same source message twice or generate generic advice merely to appear active. Feedback is private guidance for later behavior.`;
 
-  return `Agent wake ${wakeNumber}.
+  return `Interest check ${wakeNumber}.
 
 Agent: ${agent.name}
 Responsibility: ${agent.purpose}
@@ -127,7 +128,7 @@ Unread events visible to this agent:
 ${visibleEventList}
 
 Take zero to two deliberate communication actions.
-Updating the private working note does not count as communication. Use read_available_messages for older network context. Use finish_without_action when there is no specific contribution.`;
+Updating the private working note does not count as communication. Use read_available_messages for the fixed current-world horizon. Every check must conclude with a durable disposition: report or communicate one concrete addition, or use finish_without_action when the current world adds nothing specific.`;
 }
 
 function formatWorkingContext(

@@ -286,6 +286,61 @@ The exact container networking command is intentionally not prescribed until
 the real Runtime can reach Lucid's loopback MCP/JWKS endpoints without
 weakening the Runtime's non-loopback TLS rule.
 
+### Prove periodic Interest checks
+
+A heartbeat schedule is a recurring opportunity to inspect Lucid's current
+world, not a queue of frozen commands. When a task becomes due, Heddle calls
+Lucid's `prepare` boundary. Lucid freezes the current product horizon and runs
+one Interest check even when no new mailbox event exists. If no Interest is
+saved, Lucid skips before model execution. A completed check must durably record
+a Finding, communication, or explicit no-finding outcome.
+
+Use a short cadence only for a supervised local proof. In Lucid's ignored
+`.env`, set:
+
+```dotenv
+LUCID_MODEL=gpt-5.6-luna
+LUCID_HEARTBEAT_INTERVAL_MS=60000
+```
+
+Set the same Luna fallback in the local deployment profile, then start the
+Runtime and Coordinator from `lucid-deployment` and start Lucid normally. Keep
+dispatch paused while confirming that exactly the intended human Agent task is
+enabled:
+
+```bash
+yarn operator:status
+yarn operator:pause-peers
+yarn operator:status
+```
+
+The second status must show every synthetic peer paused and only the intended
+human Agent enabled before dispatch is resumed.
+
+Save one Interest in the browser, then enable the product-owned dispatch gate:
+
+```bash
+yarn operator:resume-dispatch
+```
+
+Do not press **Check now**; that appends an explicit request and would no longer
+be a schedule-only proof. The browser may be closed. Wait for two intervals and
+confirm that Agent Activity receives two completed checks with distinct times,
+including truthful **No new Finding** outcomes when appropriate. The second
+check should have zero new mailbox inputs while still invoking the Runtime
+against the current Interest.
+
+End the proof before changing anything else:
+
+```bash
+yarn operator:pause-dispatch
+yarn operator:status
+```
+
+The final status must show global dispatch paused and no running task. Restore a
+longer cadence before leaving the stack unattended; the 60-second value is a
+test setting and can spend continuously while dispatch remains enabled.
+
 ## Checks
 
 Use a separate disposable PostgreSQL database for tests. The suite resets

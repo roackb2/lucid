@@ -393,6 +393,7 @@ implements DiscoveryWorkspaceStore {
         .select({ currentWake: discoveryWorkspaces.currentWake })
         .from(discoveryWorkspaces)
         .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+        .for('update')
         .limit(1);
       if (!workspace) {
         throw new Error(

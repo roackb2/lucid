@@ -10,6 +10,7 @@ import dayjs from 'dayjs';
 import {
   and,
   asc,
+  desc,
   eq,
   gt,
   inArray,
@@ -169,6 +170,8 @@ implements AgentWakeStore {
 
     // Selection, horizon assignment, agent ownership, and the audit event must
     // commit together; otherwise two schedulers could consume different views.
+    // Every discovery-event appender takes this workspace row lock before it
+    // allocates a sequence, so the event tail below is a commit-safe horizon.
     return await this.database.orm.transaction(async (transaction) => {
       const [workspaceRow] = await transaction
         .select()
@@ -214,12 +217,35 @@ implements AgentWakeStore {
         return undefined;
       }
 
+      const [savedInterest] = await transaction
+        .select({ sequence: discoveryEvents.sequence })
+        .from(discoveryEvents)
+        .where(and(
+          eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
+          eq(discoveryEvents.kind, 'interest_saved'),
+          eq(discoveryEvents.targetAgentId, selectedAgent.id),
+          eq(discoveryEvents.targetUserId, selectedAgent.userId),
+        ))
+        .orderBy(desc(discoveryEvents.sequence))
+        .limit(1);
+
       const resumingWake = Boolean(
         selectedAgent.activeWakeId
         && selectedAgent.activeWakeNumber !== undefined
         && selectedAgent.activeWakeHorizon !== undefined
         && selectedAgent.activeWakeHorizon > selectedAgent.lastSeenSequence,
       );
+      // Freeze the product-event tail before reading the mailbox. Events
+      // appended after this query must remain above this wake's horizon so a
+      // concurrent Interest edit or message cannot be consumed accidentally.
+      const [latestEvent] = resumingWake
+        ? []
+        : await transaction
+          .select({ sequence: discoveryEvents.sequence })
+          .from(discoveryEvents)
+          .where(eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID))
+          .orderBy(desc(discoveryEvents.sequence))
+          .limit(1);
       const visibleEventConditions = [
         eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
         gt(
@@ -234,7 +260,9 @@ implements AgentWakeStore {
               discoveryEvents.sequence,
               selectedAgent.activeWakeHorizon!,
             )]
-          : []),
+          : latestEvent
+            ? [lte(discoveryEvents.sequence, latestEvent.sequence)]
+            : []),
         or(
           and(
             eq(discoveryEvents.kind, 'shared_message'),
@@ -257,7 +285,11 @@ implements AgentWakeStore {
         .orderBy(asc(discoveryEvents.sequence))
         .limit(40))
         .map(toDiscoveryEvent);
-      if (!visibleEvents.length) {
+
+      // New mailbox input remains independently actionable. A saved Interest
+      // is required only when the schedule is asking Lucid to reassess the
+      // current world without any new event to process.
+      if (!visibleEvents.length && !resumingWake && !savedInterest) {
         if (selectedAgent.activeWakeId) {
           await transaction
             .update(agents)
@@ -279,7 +311,9 @@ implements AgentWakeStore {
       const claimToken = wakeId;
       const horizonSequence = resumingWake
         ? selectedAgent.activeWakeHorizon!
-        : visibleEvents.at(-1)!.sequence;
+        : visibleEvents.at(-1)?.sequence
+          ?? latestEvent?.sequence
+          ?? savedInterest!.sequence;
       const wakeNumber = resumingWake
         ? selectedAgent.activeWakeNumber!
         : workspaceRow.currentWake + 1;
@@ -311,10 +345,12 @@ implements AgentWakeStore {
           kind: 'agent_wake_started',
           actorAgentId: selectedAgent.id,
           idempotencyKey: `${activeWakeId}:started`,
-          title: `${selectedAgent.name} wakes for new messages`,
-          content: `${visibleEvents.length} unread ${
-            visibleEvents.length === 1 ? 'event is' : 'events are'
-          } available during this wake.`,
+          title: `${selectedAgent.name} starts an Interest check`,
+          content: visibleEvents.length
+            ? `${visibleEvents.length} unread ${
+                visibleEvents.length === 1 ? 'event is' : 'events are'
+              } available during this check.`
+            : 'The agent is checking the current Interest without new mailbox input.',
           metadata: {
             visibility: 'operator',
             visibleEventSequences: visibleEvents.map(
@@ -475,6 +511,17 @@ implements AgentWakeStore {
   ): Promise<boolean> {
     const now = dayjs().toISOString();
     return await this.database.orm.transaction(async (transaction) => {
+      const [workspace] = await transaction
+        .select({ id: discoveryWorkspaces.id })
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+        .for('update')
+        .limit(1);
+      if (!workspace) {
+        throw new Error(
+          'Discovery workspace is missing. Run the database migration and restart the service.',
+        );
+      }
       const [agentRow] = await transaction
         .select()
         .from(agents)
@@ -582,6 +629,7 @@ implements AgentWakeStore {
         .select({ currentWake: discoveryWorkspaces.currentWake })
         .from(discoveryWorkspaces)
         .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+        .for('update')
         .limit(1);
       if (!workspace) {
         throw new Error(

@@ -122,6 +122,81 @@ export const defineLucidStoreContract = (
     expect(JSON.stringify(activity)).not.toContain('wake_activity_quiet');
   });
 
+  it('claims later scheduled Interest checks without new mailbox input', async () => {
+    await expect(stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'scheduled_without_interest',
+    )).resolves.toBeUndefined();
+
+    const interest = await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Find one concrete improvement to durable agent collaboration.',
+    );
+    const first = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'scheduled_first',
+    );
+    expect(first?.visibleEvents.map(({ sequence }) => sequence))
+      .toEqual([interest.sequence]);
+    await stores.communication.appendCommunicationEvent({
+      wakeNumber: first!.wakeNumber,
+      kind: 'agent_wake_no_action',
+      actorAgentId: LOCAL_AGENT_ID,
+      title: 'No new Finding',
+      content: 'The first Interest check found nothing concrete.',
+      metadata: { wakeId: first!.wakeId },
+    });
+    await stores.agent.recordWakeCompletion({
+      wakeNumber: first!.wakeNumber,
+      actorAgentId: LOCAL_AGENT_ID,
+      title: 'Interest check completed',
+      content: 'The first Interest check completed.',
+      metadata: { wakeId: first!.wakeId },
+    });
+    await stores.agent.completeAgentWake(
+      LOCAL_AGENT_ID,
+      first!.claimToken,
+      first!.horizonSequence,
+    );
+
+    const second = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'scheduled_second',
+    );
+    expect(second).toMatchObject({
+      wakeNumber: first!.wakeNumber + 1,
+      visibleEvents: [],
+    });
+    expect(second!.horizonSequence).toBeGreaterThan(first!.horizonSequence);
+    await stores.communication.appendCommunicationEvent({
+      wakeNumber: second!.wakeNumber,
+      kind: 'agent_wake_no_action',
+      actorAgentId: LOCAL_AGENT_ID,
+      title: 'No new Finding',
+      content: 'The current world still adds nothing concrete.',
+      metadata: { wakeId: second!.wakeId },
+    });
+    await stores.agent.recordWakeCompletion({
+      wakeNumber: second!.wakeNumber,
+      actorAgentId: LOCAL_AGENT_ID,
+      title: 'Interest check completed',
+      content: 'The scheduled Interest check completed.',
+      metadata: { wakeId: second!.wakeId },
+    });
+    await stores.agent.completeAgentWake(
+      LOCAL_AGENT_ID,
+      second!.claimToken,
+      second!.horizonSequence,
+    );
+
+    expect((await stores.workspace.readSnapshot(
+      LOCAL_USER_ID,
+    )).agentActivity.slice(0, 2)).toMatchObject([
+      { kind: 'no-new-finding', inputCount: 0 },
+      { kind: 'no-new-finding', inputCount: 1 },
+    ]);
+  });
+
   it('registers independent users idempotently without exposing private context', async () => {
     const input = {
       registrationKey: 'sim:test:builder',
@@ -170,6 +245,12 @@ export const defineLucidStoreContract = (
       'A retry must return the original event.',
       'sim-input:source:1',
     )).toEqual(event);
+    await expect(stores.agent.beginAgentWake(
+      source.agent.id,
+      'mailbox_without_interest',
+    )).resolves.toMatchObject({
+      visibleEvents: [{ sequence: event.sequence, kind: 'user_input' }],
+    });
   });
 
   it('enforces consent and mailbox floors across a human user lifecycle', async () => {

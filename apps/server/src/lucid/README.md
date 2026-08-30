@@ -11,7 +11,7 @@ simulation scenarios.
 | --- | --- |
 | `workspace/` | Local user actions, scoped projection, primary and secondary projection ports, workspace identity, and PostgreSQL adapter |
 | `network/` | Trusted user ingress, lifecycle, diagnostics, user visibility, its store port, and PostgreSQL adapter |
-| `agent/` | Heddle task reconciliation, mailbox wake settlement, mailbox policy, its store port, PostgreSQL adapter, and runner composition |
+| `agent/` | Heddle task reconciliation, Interest-check settlement, optional mailbox policy, its store port, PostgreSQL adapter, and runner composition |
 | `agent/communication/` | Agent-visible communication tools, their store port, and PostgreSQL visibility/provenance adapter |
 | `persistence/postgres/` | Shared product schema, policy-free record decoding, and the disposable PostgreSQL test fixture; no product store implementation |
 | `agent-prompts.ts` | Generic agent identity plus bounded longitudinal wake context |
@@ -80,7 +80,8 @@ Lucid owns:
 - user/agent identity and registration idempotency;
 - human context consent and user lifecycle;
 - private principal input and mailbox visibility;
-- atomic wake claims with one fixed unread-event horizon;
+- atomic Interest-check claims with one fixed current-world horizon and
+  optional unread mailbox input;
 - mailbox floors for join and lifecycle boundaries;
 - a two-action budget per wake;
 - one agent contribution per principal-initiated request thread;
@@ -91,6 +92,8 @@ Lucid owns:
   working note derived from immutable history;
 - successful assignment settlement only after the agent publishes a
   shared request citing every unread interest/check trigger;
+- explicit durable Finding, communication, or no-finding disposition for a
+  scheduled check with no unread mailbox input;
 - request-first tool prerequisites and retry-reconstructed action budgets;
 - durable cursors and event/action idempotency keys.
 
@@ -101,7 +104,7 @@ Heddle owns:
 - model/tool execution through `HeartbeatExecutionContext.runAgent()`;
 - credentials, unattended approvals, cancellation, and retry state;
 - claim-fenced task settlement and interrupted-task recovery;
-- non-agent skipped outcomes for empty scheduled mailboxes.
+- durable pre-model skips after Lucid reports that no current Interest exists.
 
 Lucid never constructs a Heddle task store or rewrites task lifecycle state.
 The coordinator-backed product adapter reconciles desired tasks and invokes the
@@ -136,15 +139,20 @@ remains recoverable by startup or a later trigger.
    periodic listening remains expressed by its desired cadence.
 3. The Coordinator claims the task and calls Lucid's execution lifecycle with
    the Heddle execution ID.
-4. `AgentWorkService` claims a fixed product horizon or skips empty work;
-   Heddle then mints heartbeat-only execution and MCP authority.
-5. The Runtime reads the claimed messages and may publish the required shared
-   request through scoped Lucid MCP.
+4. `AgentWorkService` claims a fixed current-world horizon for unread product
+   input or a saved Interest. Unread mailbox events may enrich a periodic check
+   but are not required; only the combination of no input and no Interest
+   returns a pre-model skip.
+5. The Runtime reads the current Interest, durable working context, and any
+   claimed messages, then records a Finding, communication, or explicit
+   no-finding outcome through scoped Lucid MCP.
 6. Lucid validates and commits the product effects under the same execution
    fence before the Coordinator settles its Heddle run.
 
-The product claim is not a scheduler. It fixes which product input an
-already-owned Coordinator attempt may inspect and mutate.
+The product claim is not a scheduler. It fixes which current product state an
+already-owned Coordinator attempt may inspect and mutate. A Heddle schedule is
+a recurring opportunity to reassess that state, not a queue of frozen Lucid
+commands.
 
 The local `Run now` operation appends a private `check_requested` event that
 includes the saved assignment, current working direction, and latest guidance,

@@ -51,7 +51,7 @@ describe('LucidHeartbeatExecutionLifecycle', () => {
     const lifecycle = new LucidHeartbeatExecutionLifecycle({
       claimWork: async () => ({
         kind: 'skipped',
-        summary: 'No unread messages were available for this agent.',
+        summary: 'No current Interest is available for this agent.',
       }),
       completeWork: async () => ({ kind: 'accepted' }),
       failWork: async () => undefined,
@@ -68,7 +68,7 @@ describe('LucidHeartbeatExecutionLifecycle', () => {
       signal: new AbortController().signal,
     })).resolves.toEqual({
       kind: 'skip',
-      summary: 'No unread messages were available for this agent.',
+      summary: 'No current Interest is available for this agent.',
     });
   });
 

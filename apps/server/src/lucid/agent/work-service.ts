@@ -1,9 +1,9 @@
 /**
  * Product-owned durable work lifecycle for one Coordinator execution.
  *
- * The Coordinator owns when an attempt runs. Lucid atomically fixes the
- * mailbox horizon, exposes only that claim to scoped tools, and advances the
- * product cursor only after all required product effects exist.
+ * The Coordinator owns when an attempt runs. Lucid atomically fixes one
+ * Interest-check horizon, exposes its optional mailbox input to scoped tools,
+ * and advances the product cursor only after required effects exist.
  */
 import { Mutex } from 'async-mutex';
 import type { ToolResult } from '@heddleagent/runtime';
@@ -99,7 +99,7 @@ export class AgentWorkService {
       ? { kind: 'claimed', work: await this.#toWorkClaim(claim) }
       : {
           kind: 'skipped',
-          summary: 'No unread messages were available for this agent.',
+          summary: 'No current Interest is available for this agent.',
         };
   }
 
@@ -197,8 +197,8 @@ export class AgentWorkService {
         wakeNumber: work.workNumber,
         actorAgentId: input.agentId,
         idempotencyKey: `${work.workId}:completed`,
-        title: `${work.agent.name} completes a background check`,
-        content: 'The agent finished processing its claimed mailbox messages.',
+        title: `${work.agent.name} completes an Interest check`,
+        content: 'The agent finished one bounded check of the current Interest.',
         metadata: {
           visibility: 'operator',
           workId: work.workId,
@@ -316,11 +316,12 @@ export class AgentWorkService {
       return 'The agent finished without revising its working note for the latest guidance or feedback.';
     }
 
-    const requiresDisposition = work.visibleEvents.some(({ kind }) => (
-      kind === 'shared_message'
-      || kind === 'direct_message'
-      || kind === 'user_input'
-    ));
+    const requiresDisposition = work.visibleEvents.length === 0
+      || work.visibleEvents.some(({ kind }) => (
+        kind === 'shared_message'
+        || kind === 'direct_message'
+        || kind === 'user_input'
+      ));
     if (
       requiresDisposition
       && await this.communication.countAgentWakeCommunicationActions(
@@ -328,7 +329,9 @@ export class AgentWorkService {
         work.workNumber,
       ) === 0
     ) {
-      return 'The agent finished without recording an action or an explicit no-action decision for the claimed messages.';
+      return work.visibleEvents.length
+        ? 'The agent finished without recording an action or an explicit no-action decision for the claimed messages.'
+        : 'The scheduled Interest check finished without recording a Finding, communication, or an explicit no-finding decision.';
     }
     return undefined;
   }
