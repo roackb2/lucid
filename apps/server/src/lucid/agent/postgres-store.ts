@@ -383,16 +383,28 @@ implements AgentWakeStore {
       let selectedAgent = toAgent(agentRow);
       const replayingCurrentClaim = selectedAgent.status === 'running'
         && selectedAgent.activeWakeClaimToken === wakeId;
-      if (!replayingCurrentClaim && !workspaceRow.backgroundChecksEnabled) {
+      const transferringInterruptedClaim = !replayingCurrentClaim
+        && interruptedExecutionId !== undefined
+        && selectedAgent.status === 'running'
+        && selectedAgent.activeWakeClaimToken === interruptedExecutionId;
+      if (
+        interruptedExecutionId
+        && !replayingCurrentClaim
+        && !transferringInterruptedClaim
+      ) {
         return undefined;
       }
-      if (interruptedExecutionId && !replayingCurrentClaim) {
-        if (
-          selectedAgent.status !== 'running'
-          || selectedAgent.activeWakeClaimToken !== interruptedExecutionId
-        ) {
-          return undefined;
-        }
+      // Provider recovery transfers an already-owned wake rather than
+      // admitting new work. It must remain possible after product pause so
+      // the replacement attempt can settle and release the running claim.
+      if (
+        !replayingCurrentClaim
+        && !transferringInterruptedClaim
+        && !workspaceRow.backgroundChecksEnabled
+      ) {
+        return undefined;
+      }
+      if (transferringInterruptedClaim) {
         const recovered = await transaction
           .update(agents)
           .set({ status: 'idle', updatedAt: now })

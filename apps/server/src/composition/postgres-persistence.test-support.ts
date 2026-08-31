@@ -220,7 +220,7 @@ export const defineLucidStoreContract = (
       });
   });
 
-  it('blocks recovery after pause while preserving the current execution replay', async () => {
+  it('transfers exact recovery after pause while preserving replay and stale fencing', async () => {
     await stores.workspace.saveInterest(
       LOCAL_USER_ID,
       'Keep the already-owned execution stable across an operator pause.',
@@ -244,8 +244,8 @@ export const defineLucidStoreContract = (
     });
     expect(await stores.agent.beginAgentWake(
       LOCAL_AGENT_ID,
-      'execution_recovery_after_pause',
-      active!.claimToken,
+      'execution_stale_recovery_after_pause',
+      'different_interrupted_execution',
     )).toBeUndefined();
     expect(await stores.workspace.requireAgentForUser(LOCAL_USER_ID))
       .toMatchObject({
@@ -253,6 +253,17 @@ export const defineLucidStoreContract = (
         activeWakeClaimToken: active!.claimToken,
         runCount: 1,
       });
+    expect(await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'execution_recovery_after_pause',
+      active!.claimToken,
+    )).toMatchObject({
+      wakeId: active!.wakeId,
+      claimToken: 'execution_recovery_after_pause',
+      wakeNumber: active!.wakeNumber,
+      horizonSequence: active!.horizonSequence,
+      agent: { runCount: 2 },
+    });
   });
 
   it('settles unfinished wakes for independent Agents', async () => {

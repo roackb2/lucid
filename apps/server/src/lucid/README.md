@@ -188,10 +188,13 @@ the normal user product control. It controls Lucid's opaque durable admission
 group without stopping the Coordinator namespace used by other products or
 groups. Pause preserves every task's personal `enabled` preference and fences
 new Lucid claims. An already-owned wake may reach Lucid settlement, where the
-product gate prevents completion from consuming its mailbox. Resume commits a
-fresh Lucid mailbox boundary under the provider's stable transition ID before
-the group can become ready. Pending Heddle run intent remains durable, while
-pre-resume Lucid inputs are intentionally outside the new mailbox horizon.
+product gate prevents completion from consuming its mailbox. If that attempt's
+provider lease expires, exact fenced recovery may transfer the already-owned
+wake while paused so the replacement can settle and release its running state;
+stale recovery IDs remain rejected. Resume then commits a fresh Lucid mailbox
+boundary under the provider's stable transition ID before the group can become
+ready. Pending Heddle run intent remains durable, while pre-resume Lucid inputs
+are intentionally outside the new mailbox horizon.
 
 ## Communication and peer discovery
 

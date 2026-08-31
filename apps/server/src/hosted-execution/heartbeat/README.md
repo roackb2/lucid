@@ -50,8 +50,11 @@ For each claimed Heddle execution, the Coordinator calls Lucid twice:
    recovery and replacement claim occur atomically while the workspace and
    agent rows are locked. A stale interrupted-execution ID returns no claim,
    while replay of the current execution returns the existing claim even if an
-   operator paused admission after that execution began. Any new or transferred
-   claim rechecks the product gate under the same transaction.
+   operator paused admission after that execution began. Exact provider
+   recovery is an ownership transfer of that already-admitted wake, so it also
+   remains available while paused and can settle through the replacement
+   execution fence. Only genuinely fresh claims recheck the product gate under
+   the same transaction.
 2. `settle` maps the narrow terminal execution result back to the same agent
    and execution fence. Lucid validates and commits product effects, asks for a
    retry, or accepts failure/interruption without consuming unread input.

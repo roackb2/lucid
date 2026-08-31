@@ -32,10 +32,14 @@ import {
 import {
   AgentCommunicationClaimError,
 } from '../lucid/agent/communication/store.js';
+import { AgentWorkService } from '../lucid/agent/work-service.js';
 import { createLucidLogger } from '../logger.js';
 import {
   CoordinatorAgentHeartbeatService,
 } from '../hosted-execution/heartbeat/agent-heartbeat-service.js';
+import {
+  LucidBackgroundChecksAdmissionLifecycle,
+} from '../hosted-execution/heartbeat/admission-lifecycle.js';
 import {
   PostgresBackgroundChecksMutationLock,
 } from '../hosted-execution/heartbeat/mutation-lock.js';
@@ -343,6 +347,97 @@ describe('PostgreSQL persistence integration', () => {
         event.metadata.resolution === 'not-retried-after-resume'
         && event.metadata.transitionId === 'resume-racing-atomic-recovery'
       ))).toBe(false);
+    });
+
+    it('lets an exact paused recovery settle before fresh resume becomes ready', async () => {
+      const work = new AgentWorkService(
+        primary.agent,
+        primary.workspace,
+        primary.communication,
+        { triggerAgent: async () => undefined },
+        createLucidLogger('silent'),
+        { retryDelayMs: 10_000 },
+      );
+      const lifecycle = new LucidBackgroundChecksAdmissionLifecycle(
+        primary.agent,
+      );
+      await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'Recover this already-owned Interest check without admitting fresh work.',
+      );
+      const first = await work.claimWork({
+        agentId: LOCAL_AGENT_ID,
+        executionId: 'execution_before_paused_crash',
+        signal: AbortSignal.timeout(5_000),
+      });
+      expect(first).toMatchObject({ kind: 'claimed' });
+      if (first.kind !== 'claimed') {
+        throw new Error(
+          'Expected the initial provider execution to claim work.',
+        );
+      }
+
+      await primary.agent.setBackgroundChecksEnabled(false);
+      await expect(work.claimWork({
+        agentId: LOCAL_AGENT_ID,
+        executionId: 'execution_stale_paused_recovery',
+        interruptedExecutionId: 'different_interrupted_execution',
+        signal: AbortSignal.timeout(5_000),
+      })).resolves.toEqual({
+        kind: 'skipped',
+        summary: 'Background checks are paused.',
+      });
+      const recovered = await work.claimWork({
+        agentId: LOCAL_AGENT_ID,
+        executionId: 'execution_after_paused_crash',
+        interruptedExecutionId: 'execution_before_paused_crash',
+        signal: AbortSignal.timeout(5_000),
+      });
+      expect(recovered).toMatchObject({
+        kind: 'claimed',
+        work: {
+          executionId: 'execution_after_paused_crash',
+          workId: first.work.workId,
+        },
+      });
+      await expect(work.completeWork({
+        agentId: LOCAL_AGENT_ID,
+        executionId: 'execution_after_paused_crash',
+        result: {
+          decision: 'complete',
+          summary: 'The replacement attempt finished after product pause.',
+          runId: 'run-after-paused-crash',
+          outcome: 'done',
+        },
+        signal: AbortSignal.timeout(5_000),
+      })).resolves.toEqual({
+        kind: 'retry',
+        summary: 'Background checks paused before Lucid commit.',
+        delayMs: 10_000,
+      });
+      expect(await requireAgent(primary.agent, LOCAL_AGENT_ID)).toMatchObject({
+        status: 'idle',
+        activeWakeClaimToken: 'execution_after_paused_crash',
+      });
+
+      await primary.agent.setBackgroundChecksEnabled(true);
+      await expect(lifecycle.prepareResume({
+        schemaVersion: 1,
+        target: {
+          kind: 'group',
+          groupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+        },
+        transitionId: 'resume-after-paused-recovery-settled',
+        signal: AbortSignal.timeout(5_000),
+      })).resolves.toEqual({
+        status: 'ready',
+        summary: 'Lucid prepared a fresh background-work boundary.',
+      });
+      expect(await requireAgent(primary.agent, LOCAL_AGENT_ID)).toMatchObject({
+        status: 'idle',
+        activeWakeId: undefined,
+        activeWakeClaimToken: undefined,
+      });
     });
 
     it('serializes full heartbeat mutations across two Lucid service instances', async () => {

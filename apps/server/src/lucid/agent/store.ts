@@ -51,7 +51,8 @@ export interface AgentWakeStore {
   /**
    * `wakeId` is the provider execution ID and must be globally unique.
    * Recovery and the replacement claim commit atomically when
-   * `interruptedExecutionId` is present. A stale recovery returns no claim.
+   * `interruptedExecutionId` is present. Exact recovery transfers already
+   * owned work even while paused; a stale recovery returns no claim.
    */
   beginAgentWake(
     agentId: string,
