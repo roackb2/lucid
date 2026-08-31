@@ -147,7 +147,8 @@ recovers the task and reports the exact interrupted execution ID to Lucid.
 Lucid releases only the product wake whose claim token matches that ID. A late
 recovery or stale worker therefore cannot release or settle a newer claim.
 
-During graceful shutdown, Lucid pauses Coordinator admission before closing its
-product database pool. After an abrupt Coordinator loss, the durable lease and
-fenced recovery path restore eligibility without pretending the interrupted
-work succeeded.
+Graceful Lucid process shutdown does not rewrite durable Coordinator namespace
+or product-group admission. The explicit product operator control pauses the
+Lucid group when that is the intended policy. After an abrupt Coordinator loss,
+the durable lease and fenced recovery path restore eligibility without
+pretending the interrupted work succeeded.

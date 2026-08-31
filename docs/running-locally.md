@@ -267,9 +267,11 @@ The Heddle command above uses the same direct Runtime for foreground turns and
 Coordinator heartbeats. Configure the distinct product-execution token,
 Coordinator URL, and Coordinator API token shown in `.env.example`. Start the
 Runtime and Coordinator before Lucid; Lucid opens its JWKS, MCP, and heartbeat
-execution-lifecycle routes, pauses Coordinator admission, reconciles the
-desired task catalog, and resumes only when the product-wide background-work
-gate is enabled.
+execution-lifecycle routes, briefly fences the Coordinator namespace while it
+reconciles the desired task catalog, and then restores namespace admission.
+Lucid's product-wide background-work gate controls only its opaque admission
+group. Resuming that group first commits Lucid's fresh mailbox boundary; the
+Coordinator cannot claim a grouped task until that preparation is durable.
 
 The Coordinator owns Lucid's Heddle heartbeat tables, claims, checkpoints,
 recovery, and settlement through its authenticated API. It does not manage
@@ -369,10 +371,11 @@ to a specific database only by setting that database's
 
 ## Shutdown
 
-Stop `yarn dev` with `Ctrl-C`. The server stops HTTP admission and pauses
-Coordinator dispatch before closing PostgreSQL. Pausing an agent in the
-web app is different from stopping the process: pause is durable and mail can
-accumulate until that agent resumes.
+Stop `yarn dev` with `Ctrl-C`. The server stops its HTTP routes and closes its
+owned resources before closing PostgreSQL; process shutdown does not rewrite
+durable Coordinator namespace or Lucid admission-group state. Use the product
+operator control when you intend to pause background work. That pause is
+durable, and mail can accumulate until the group resumes.
 
 If startup fails, first verify that PostgreSQL is reachable, the database URL
 is correct, and migrations were applied. If the web app loads but API calls
