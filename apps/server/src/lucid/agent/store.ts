@@ -13,10 +13,33 @@ export type RecordWakeCompletionInput = Omit<
   'kind'
 >;
 
+export type PrepareBackgroundChecksResumeInput = {
+  admissionGroupId: string;
+  transitionId: string;
+};
+
+export type BackgroundChecksResumePreparation =
+  | {
+      status: 'prepared';
+      admissionGroupId: string;
+      transitionId: string;
+      mailboxFloorSequence: number;
+      agentCount: number;
+      preparedAt: string;
+    }
+  | {
+      status: 'waiting';
+      reason: 'background-checks-disabled' | 'agent-wake-running';
+      runningAgentIds: string[];
+    };
+
 export interface AgentWakeStore {
   reset(options: { backgroundChecksEnabled: boolean }): Promise<void>;
   readWorkspace(): Promise<DiscoveryWorkspace>;
   setBackgroundChecksEnabled(enabled: boolean): Promise<DiscoveryWorkspace>;
+  prepareBackgroundChecksResume(
+    input: PrepareBackgroundChecksResumeInput,
+  ): Promise<BackgroundChecksResumePreparation>;
   listUsers(): Promise<User[]>;
   listAgents(): Promise<Agent[]>;
   listActiveAgents(): Promise<Agent[]>;

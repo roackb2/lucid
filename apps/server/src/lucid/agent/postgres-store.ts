@@ -47,7 +47,12 @@ import {
 } from '../persistence/postgres/schema.js';
 import { LUCID_WORKSPACE_ID } from '../workspace/workspace-identity.js';
 import { AGENT_PRINCIPAL_EVENT_KINDS } from './mailbox-policy.js';
+import {
+  LUCID_BACKGROUND_WORK_GROUP_ID,
+} from './heartbeat-task-identity.js';
 import type {
+  BackgroundChecksResumePreparation,
+  PrepareBackgroundChecksResumeInput,
   RecordWakeCompletionInput,
   AgentWakeStore,
 } from './store.js';
@@ -106,6 +111,149 @@ implements AgentWakeStore {
       })
       .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID));
     return await this.requireWorkspace();
+  }
+
+  /**
+   * Establishes Lucid's fresh mailbox boundary before provider admission opens.
+   *
+   * Every discovery-event append and wake claim takes the workspace row lock,
+   * so the persisted marker is a commit-safe boundary rather than a PostgreSQL
+   * sequence allocation guess. Retrying one provider transition returns that
+   * same marker and cannot advance the boundary twice.
+   */
+  async prepareBackgroundChecksResume(
+    input: PrepareBackgroundChecksResumeInput,
+  ): Promise<BackgroundChecksResumePreparation> {
+    const admissionGroupId = normalizeBackgroundResumeIdentifier(
+      input.admissionGroupId,
+      'Admission group ID',
+    );
+    const transitionId = normalizeBackgroundResumeIdentifier(
+      input.transitionId,
+      'Resume transition ID',
+    );
+    if (admissionGroupId !== LUCID_BACKGROUND_WORK_GROUP_ID) {
+      throw new Error(
+        `Lucid does not own background admission group: ${admissionGroupId}`,
+      );
+    }
+
+    const idempotencyKey = [
+      'background-resume',
+      admissionGroupId,
+      transitionId,
+    ].join(':');
+    return await this.database.orm.transaction(async (transaction) => {
+      const [workspace] = await transaction
+        .select()
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+        .for('update')
+        .limit(1);
+      if (!workspace) {
+        throw new Error(
+          'Discovery workspace is missing. Run the database migration and restart the service.',
+        );
+      }
+
+      const [existingBoundary] = await transaction
+        .select()
+        .from(discoveryEvents)
+        .where(and(
+          eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
+          eq(discoveryEvents.idempotencyKey, idempotencyKey),
+        ))
+        .limit(1);
+      if (existingBoundary) {
+        return readBackgroundResumePreparation(
+          toDiscoveryEvent(existingBoundary),
+          { admissionGroupId, transitionId },
+        );
+      }
+
+      if (!workspace.backgroundChecksEnabled) {
+        return {
+          status: 'waiting',
+          reason: 'background-checks-disabled',
+          runningAgentIds: [],
+        };
+      }
+
+      const activeAgentRows = await transaction
+        .select({
+          id: agents.id,
+          status: agents.status,
+        })
+        .from(agents)
+        .innerJoin(users, eq(users.id, agents.userId))
+        .where(and(
+          eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.status, 'active'),
+        ))
+        .orderBy(asc(agents.sortOrder));
+      const runningAgentIds = activeAgentRows
+        .filter(({ status }) => status === 'running')
+        .map(({ id }) => id);
+      if (runningAgentIds.length > 0) {
+        return {
+          status: 'waiting',
+          reason: 'agent-wake-running',
+          runningAgentIds,
+        };
+      }
+
+      const preparedAt = dayjs().toISOString();
+      const [boundaryRow] = await transaction
+        .insert(discoveryEvents)
+        .values({
+          id: `event_${randomUUID()}`,
+          workspaceId: LUCID_WORKSPACE_ID,
+          wakeNumber: workspace.currentWake,
+          kind: 'background_resume_prepared',
+          idempotencyKey,
+          title: 'Background work resume prepared',
+          content:
+            'Lucid will consider only product events committed after this resume boundary.',
+          metadata: {
+            visibility: 'operator',
+            admissionGroupId,
+            transitionId,
+            agentCount: activeAgentRows.length,
+          },
+          createdAt: preparedAt,
+        })
+        .returning();
+      if (!boundaryRow) {
+        throw new Error('Background resume boundary did not persist.');
+      }
+
+      const activeAgentIds = activeAgentRows.map(({ id }) => id);
+      if (activeAgentIds.length > 0) {
+        await transaction
+          .update(agents)
+          .set({
+            status: 'idle',
+            mailboxFloorSequence: boundaryRow.sequence,
+            lastSeenSequence: boundaryRow.sequence,
+            activeWakeId: null,
+            activeWakeClaimToken: null,
+            activeWakeNumber: null,
+            activeWakeHorizon: null,
+            updatedAt: preparedAt,
+          })
+          .where(inArray(agents.id, activeAgentIds));
+      }
+
+      return {
+        status: 'prepared',
+        admissionGroupId,
+        transitionId,
+        mailboxFloorSequence: boundaryRow.sequence,
+        agentCount: activeAgentRows.length,
+        preparedAt,
+      };
+    });
   }
 
   async listUsers(): Promise<User[]> {
@@ -755,6 +903,49 @@ implements AgentWakeStore {
     await transaction.insert(agents).values(rows.agent);
     await transaction.insert(discoveryEvents).values(rows.event);
   }
+}
+
+function normalizeBackgroundResumeIdentifier(
+  value: string,
+  label: string,
+): string {
+  const normalized = value.trim();
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,159}$/.test(normalized)) {
+    throw new Error(
+      `${label} must contain 1 to 160 letters, numbers, dots, colons, underscores, or hyphens.`,
+    );
+  }
+  return normalized;
+}
+
+function readBackgroundResumePreparation(
+  event: DiscoveryEvent,
+  expected: Pick<
+    PrepareBackgroundChecksResumeInput,
+    'admissionGroupId' | 'transitionId'
+  >,
+): BackgroundChecksResumePreparation {
+  const admissionGroupId = event.metadata.admissionGroupId;
+  const transitionId = event.metadata.transitionId;
+  const agentCount = event.metadata.agentCount;
+  if (
+    event.kind !== 'background_resume_prepared'
+    || admissionGroupId !== expected.admissionGroupId
+    || transitionId !== expected.transitionId
+    || typeof agentCount !== 'number'
+  ) {
+    throw new Error(
+      `Stored background resume transition is invalid: ${expected.transitionId}`,
+    );
+  }
+  return {
+    status: 'prepared',
+    admissionGroupId,
+    transitionId,
+    mailboxFloorSequence: event.sequence,
+    agentCount,
+    preparedAt: event.createdAt,
+  };
 }
 
 function createInitialWorkspaceRows(input: {

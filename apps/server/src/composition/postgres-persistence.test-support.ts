@@ -9,6 +9,9 @@ import {
   LOCAL_USER_ID,
   LOCAL_AGENT_ID,
 } from '../lucid/local-user.js';
+import {
+  LUCID_BACKGROUND_WORK_GROUP_ID,
+} from '../lucid/agent/heartbeat-task-identity.js';
 import type { UserNetworkStore } from '../lucid/network/store.js';
 import type {
   AgentCommunicationStore,
@@ -76,6 +79,94 @@ export const defineLucidStoreContract = (
     expect(JSON.stringify(product)).not.toContain('privateContext');
     expect(JSON.stringify(product)).not.toContain('registrationKey');
     expect(product.agentActivity).toEqual([]);
+  });
+
+  it('prepares one retry-stable fresh mailbox boundary before background resume', async () => {
+    await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Only inspect information that arrives after background work resumes.',
+    );
+    await stores.agent.setBackgroundChecksEnabled(false);
+    const staleInput = await stores.network.saveUserInput(
+      LOCAL_USER_ID,
+      'This arrived while background work was paused.',
+      'resume-boundary:stale-input',
+    );
+
+    expect(await stores.agent.prepareBackgroundChecksResume({
+      admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+      transitionId: 'resume-disabled',
+    })).toEqual({
+      status: 'waiting',
+      reason: 'background-checks-disabled',
+      runningAgentIds: [],
+    });
+
+    await stores.agent.setBackgroundChecksEnabled(true);
+    const prepared = await stores.agent.prepareBackgroundChecksResume({
+      admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+      transitionId: 'resume-fresh-start',
+    });
+    expect(prepared).toMatchObject({
+      status: 'prepared',
+      admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+      transitionId: 'resume-fresh-start',
+      agentCount: 1,
+    });
+    if (prepared.status !== 'prepared') {
+      throw new Error('Expected the resume boundary to be prepared.');
+    }
+
+    const freshInput = await stores.network.saveUserInput(
+      LOCAL_USER_ID,
+      'This arrived after background work resumed.',
+      'resume-boundary:fresh-input',
+    );
+    expect(await stores.agent.prepareBackgroundChecksResume({
+      admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+      transitionId: 'resume-fresh-start',
+    })).toEqual(prepared);
+
+    const wake = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'wake_after_background_resume',
+    );
+    expect(wake?.visibleEvents.map(({ sequence }) => sequence)).not
+      .toContain(staleInput.sequence);
+    expect(wake?.visibleEvents.map(({ sequence }) => sequence))
+      .toContain(freshInput.sequence);
+  });
+
+  it('keeps resume preparation waiting while an Agent wake is running', async () => {
+    await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Do not move my mailbox boundary under an active Agent wake.',
+    );
+    const wake = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'wake_running_during_resume',
+    );
+
+    expect(await stores.agent.prepareBackgroundChecksResume({
+      admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+      transitionId: 'resume-after-running-wake',
+    })).toEqual({
+      status: 'waiting',
+      reason: 'agent-wake-running',
+      runningAgentIds: [LOCAL_AGENT_ID],
+    });
+
+    await stores.agent.interruptAgentWake(
+      LOCAL_AGENT_ID,
+      wake!.claimToken,
+    );
+    expect(await stores.agent.prepareBackgroundChecksResume({
+      admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+      transitionId: 'resume-after-running-wake',
+    })).toMatchObject({
+      status: 'prepared',
+      transitionId: 'resume-after-running-wake',
+    });
   });
 
   it('projects one product-readable Activity item per completed Agent wake', async () => {

@@ -20,6 +20,9 @@ import {
 } from '../lucid/persistence/postgres/test-context.js';
 import { PostgresAgentWakeStore } from '../lucid/agent/postgres-store.js';
 import {
+  LUCID_BACKGROUND_WORK_GROUP_ID,
+} from '../lucid/agent/heartbeat-task-identity.js';
+import {
   AgentCommunicationClaimError,
 } from '../lucid/agent/communication/store.js';
 
@@ -169,6 +172,23 @@ describe('PostgreSQL persistence integration', () => {
       expect(second).toEqual(first);
       expect((await primary.network.readNetworkDiagnostics()).events.filter(
         (event) => event.idempotencyKey === idempotencyKey,
+      )).toHaveLength(1);
+    });
+
+    it('deduplicates one background resume boundary across API processes', async () => {
+      const input = {
+        admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+        transitionId: 'integration:shared-resume-transition',
+      };
+      const [first, second] = await Promise.all([
+        primary.agent.prepareBackgroundChecksResume(input),
+        secondary.agent.prepareBackgroundChecksResume(input),
+      ]);
+
+      expect(second).toEqual(first);
+      expect((await primary.network.readNetworkDiagnostics()).events.filter(
+        (event) => event.kind === 'background_resume_prepared'
+          && event.metadata.transitionId === input.transitionId,
       )).toHaveLength(1);
     });
 

@@ -461,6 +461,17 @@ function createFixture(
     reset: async () => undefined,
     readWorkspace: async () => workspace,
     setBackgroundChecksEnabled: async () => workspace,
+    prepareBackgroundChecksResume: async ({
+      admissionGroupId,
+      transitionId,
+    }) => ({
+      status: 'prepared' as const,
+      admissionGroupId,
+      transitionId,
+      mailboxFloorSequence: 0,
+      agentCount: 1,
+      preparedAt: '2026-01-01T00:00:00.000Z',
+    }),
     listUsers: async () => [user],
     listAgents: async () => [agent],
     listActiveAgents: async () => [agent],
