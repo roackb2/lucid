@@ -187,6 +187,14 @@ export const defineLucidStoreContract = (
 
   it('settles unfinished wakes for independent Agents', async () => {
     const synthetic = await registerSynthetic(stores, 'resume-two-agents');
+    await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Continue only from the next fresh resume boundary.',
+    );
+    await stores.workspace.saveInterest(
+      synthetic.user.id,
+      'Continue only from the next fresh resume boundary.',
+    );
     const localWake = await stores.agent.beginAgentWake(
       LOCAL_AGENT_ID,
       'local-unfinished-wake',

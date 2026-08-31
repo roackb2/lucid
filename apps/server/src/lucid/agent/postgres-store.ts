@@ -978,7 +978,7 @@ function readBackgroundResumePreparation(
     transitionId,
     mailboxFloorSequence: event.sequence,
     agentCount,
-    preparedAt: event.createdAt,
+    preparedAt: dayjs(event.createdAt).toISOString(),
   };
 }
 
