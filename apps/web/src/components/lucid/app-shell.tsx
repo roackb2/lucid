@@ -1,5 +1,6 @@
 import {
   Bot,
+  Globe2,
   Lightbulb,
   LogOut,
   MessageCircle,
@@ -21,12 +22,19 @@ import { ChatDrawer } from '@/components/lucid/chat-drawer';
 import {
   AgentFoundationPage,
   FindingsFoundationPage,
-  InterestsFoundationPage,
+  InterestFoundationPage,
   SettingsFoundationPage,
 } from '@/components/lucid/workspace-foundation-pages';
+import {
+  InformationNetworkLabPreviewPage,
+  InformationNetworkPostPreviewPage,
+  InformationNetworkPreviewPage,
+  PublisherProfilePreviewPage,
+} from '@/components/lucid/information-network-preview-pages';
 
 type LucidAppShellProps = {
   snapshot: DiscoverySnapshot;
+  informationNetworkPreviewEnabled: boolean;
   isRetryingCurrentWake: boolean;
   isRunningNow: boolean;
   isSavingInterest: boolean;
@@ -45,21 +53,47 @@ type NavigationItem = {
 };
 
 export const FOUNDATION_HOME_PATH = '/agent';
+export const INFORMATION_NETWORK_PREVIEW_HOME_PATH = '/network';
 
 export const foundationNavigationItems: NavigationItem[] = [
   { label: 'Agent', path: '/agent', icon: Bot },
   { label: 'Findings', path: '/findings', icon: Search },
-  { label: 'Interests', path: '/interests', icon: Lightbulb },
+  { label: 'Interest', path: '/interests', icon: Lightbulb },
 ];
 
-const routeLabels = new Map([
-  ['/findings', 'Findings'],
-  ['/interests', 'Interests'],
-  ['/agent', 'Agent'],
-  ['/settings', 'Settings'],
-]);
+export const informationNetworkPreviewNavigationItems: NavigationItem[] = [
+  { label: 'Network', path: '/network', icon: Globe2 },
+  { label: 'Findings', path: '/findings', icon: Search },
+  { label: 'Interest', path: '/interests', icon: Lightbulb },
+  { label: 'Agent', path: '/agent', icon: Bot },
+];
+
+const workspacePageLabelResolvers = [
+  { label: 'Network', matches: (path: string) => path === '/network' },
+  { label: 'Post', matches: (path: string) => path.startsWith('/network/posts/') },
+  { label: 'Network Lab', matches: (path: string) => path === '/network-lab' },
+  { label: 'Profile', matches: (path: string) => path.startsWith('/profiles/') },
+  { label: 'Findings', matches: (path: string) => path === '/findings' },
+  { label: 'Interest', matches: (path: string) => path === '/interests' },
+  { label: 'Agent', matches: (path: string) => path === '/agent' },
+  { label: 'Settings', matches: (path: string) => path === '/settings' },
+];
+
+export const resolveWorkspacePageLabel = (path: string): string => (
+  workspacePageLabelResolvers.find(({ matches }) => matches(path))?.label
+    ?? 'Agent'
+);
+
+export const resolveWorkspaceHomePath = (
+  informationNetworkPreviewEnabled: boolean,
+): string => (
+  informationNetworkPreviewEnabled
+    ? INFORMATION_NETWORK_PREVIEW_HOME_PATH
+    : FOUNDATION_HOME_PATH
+);
 
 export function LucidAppShell({
+  informationNetworkPreviewEnabled,
   isRetryingCurrentWake,
   isRunningNow,
   isSavingInterest,
@@ -72,8 +106,14 @@ export function LucidAppShell({
   snapshot,
 }: LucidAppShellProps) {
   const location = useLocation();
-  const pageLabel = routeLabels.get(location.pathname) ?? 'Agent';
+  const pageLabel = resolveWorkspacePageLabel(location.pathname);
   const agentState = resolveAgentState(snapshot);
+  const primaryNavigationItems = informationNetworkPreviewEnabled
+    ? informationNetworkPreviewNavigationItems
+    : foundationNavigationItems;
+  const workspaceHomePath = resolveWorkspaceHomePath(
+    informationNetworkPreviewEnabled,
+  );
 
   return (
     <div className="lucid-shell">
@@ -91,7 +131,7 @@ export function LucidAppShell({
 
         <nav className="lucid-shell__nav" aria-label="Lucid workspace">
           <p className="lucid-shell__nav-label">Workspace</p>
-          {foundationNavigationItems.map(({ icon: Icon, label, path }) => (
+          {primaryNavigationItems.map(({ icon: Icon, label, path }) => (
             <NavLink
               aria-label={label}
               className={({ isActive }) => cn(
@@ -205,6 +245,26 @@ export function LucidAppShell({
 
         <main className="lucid-shell__content" id="main-content">
           <Routes>
+            {informationNetworkPreviewEnabled ? (
+              <>
+                <Route
+                  path="/network"
+                  element={<InformationNetworkPreviewPage />}
+                />
+                <Route
+                  path="/network/posts/:postId"
+                  element={<InformationNetworkPostPreviewPage />}
+                />
+                <Route
+                  path="/profiles/:profileId"
+                  element={<PublisherProfilePreviewPage />}
+                />
+                <Route
+                  path="/network-lab"
+                  element={<InformationNetworkLabPreviewPage />}
+                />
+              </>
+            ) : null}
             <Route
               path="/findings"
               element={<FindingsFoundationPage snapshot={snapshot} />}
@@ -212,7 +272,7 @@ export function LucidAppShell({
             <Route
               path="/interests"
               element={(
-                <InterestsFoundationPage
+                <InterestFoundationPage
                   isSaving={isSavingInterest}
                   onSaveInterest={onSaveInterest}
                   snapshot={snapshot}
@@ -241,11 +301,11 @@ export function LucidAppShell({
             />
             <Route
               path="/"
-              element={<Navigate replace to={FOUNDATION_HOME_PATH} />}
+              element={<Navigate replace to={workspaceHomePath} />}
             />
             <Route
               path="*"
-              element={<Navigate replace to={FOUNDATION_HOME_PATH} />}
+              element={<Navigate replace to={workspaceHomePath} />}
             />
           </Routes>
         </main>
