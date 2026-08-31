@@ -491,7 +491,6 @@ function createFixture(
     completeAgentWake,
     failAgentWake,
     interruptAgentWake: async () => undefined,
-    recoverInterruptedAgentWake: async () => false,
     findAgentPublishedRequestForTrigger: async () => sharedMessage,
     hasAgentUpdatedWorkingNoteThrough: async () => workingNoteUpdated,
     recordWakeCompletion,

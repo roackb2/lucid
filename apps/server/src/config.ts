@@ -31,6 +31,18 @@ const environmentSchema = z.object({
     .int()
     .min(10_000)
     .default(15 * 60_000),
+  LUCID_HEARTBEAT_CONTROL_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(5_000)
+    .max(2 * 60_000)
+    .default(30_000),
+  LUCID_HEARTBEAT_MUTATION_LOCK_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(60_000)
+    .default(10_000),
 }).superRefine((environment, context) => {
   if (
     environment.LUCID_AUTH_MODE === 'development'
@@ -101,6 +113,8 @@ export type LucidConfig = {
   model: string;
   maxSteps: number;
   heartbeatIntervalMs: number;
+  heartbeatControlTimeoutMs: number;
+  heartbeatMutationLockTimeoutMs: number;
 };
 
 export function resolveLucidConfig(): LucidConfig {
@@ -120,6 +134,10 @@ export function resolveLucidConfig(): LucidConfig {
     model: environment.LUCID_MODEL,
     maxSteps: environment.LUCID_MAX_STEPS,
     heartbeatIntervalMs: environment.LUCID_HEARTBEAT_INTERVAL_MS,
+    heartbeatControlTimeoutMs:
+      environment.LUCID_HEARTBEAT_CONTROL_TIMEOUT_MS,
+    heartbeatMutationLockTimeoutMs:
+      environment.LUCID_HEARTBEAT_MUTATION_LOCK_TIMEOUT_MS,
   };
 }
 

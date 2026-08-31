@@ -23,13 +23,35 @@ A running wake returns `retry`, leaving the group in provider-owned
 Snapshots report dispatch enabled only when the product gate is enabled, the
 provider namespace is running, and the durable group phase is `ready`.
 
+Every Lucid catalog, namespace, group-admission, and operator mutation runs
+under one transaction-scoped PostgreSQL advisory lock. The lock spans the full
+Coordinator control sequence so two API replicas cannot interleave catalog or
+admission transitions during a rolling deployment. Both advisory-lock
+acquisition and the remote Coordinator sequence have explicit timeouts; every
+Coordinator call in one sequence receives the same bounded abort signal. A
+process or database-session failure releases the advisory lock automatically.
+
+Lock ordering is intentionally one-way. The advisory-lock transaction never
+locks Lucid workspace rows. `prepareResume()` never acquires the advisory lock;
+it may lock the workspace row through another pool connection while the
+Coordinator is preparing the group. No Lucid path may acquire the workspace
+row first and then request the advisory lock. This separation prevents an
+inverse lock order while allowing the provider callback to durably prepare the
+product boundary. The production pool must retain at least two connections so
+the advisory-lock holder and resume callback can make progress independently.
+
 For each claimed Heddle execution, the Coordinator calls Lucid twice:
 
 1. `prepare` maps the task to a Lucid agent and asks `AgentWorkService` to claim
    one fixed product work horizon. An empty mailbox plus no saved Interest skips
    the model; mailbox input remains independently actionable, and a saved
    Interest makes an empty mailbox a current-world check. Claimed work returns
-   only product scope and the exact heartbeat MCP tool allowlist.
+   only product scope and the exact heartbeat MCP tool allowlist. Provider
+   recovery and replacement claim occur atomically while the workspace and
+   agent rows are locked. A stale interrupted-execution ID returns no claim,
+   while replay of the current execution returns the existing claim even if an
+   operator paused admission after that execution began. Any new or transferred
+   claim rechecks the product gate under the same transaction.
 2. `settle` maps the narrow terminal execution result back to the same agent
    and execution fence. Lucid validates and commits product effects, asks for a
    retry, or accepts failure/interruption without consuming unread input.

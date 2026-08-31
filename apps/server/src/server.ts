@@ -49,7 +49,7 @@ if (!hostedExecutionConfig?.heartbeatCoordinator) {
 }
 const logger = createLucidLogger(config.logLevel);
 const persistence = await createPostgresPersistence(config);
-const { stores } = persistence;
+const { stores, backgroundChecksMutationLock } = persistence;
 const authenticator = createLucidAuthenticator(
   config.authentication,
   stores.network,
@@ -61,10 +61,12 @@ const coordinator = new HostedHeartbeatCoordinatorClient({
 const heartbeats = new CoordinatorAgentHeartbeatService(
   stores.agent,
   coordinator,
+  backgroundChecksMutationLock,
   {
     intervalMs: config.heartbeatIntervalMs,
     model: config.model,
     maxSteps: config.maxSteps,
+    controlTimeoutMs: config.heartbeatControlTimeoutMs,
   },
   logger,
 );

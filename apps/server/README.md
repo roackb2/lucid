@@ -90,6 +90,15 @@ scoped-MCP slices. See
 [`../../docs/hosted-execution.md`](../../docs/hosted-execution.md) before
 composing the external execution boundary or changing autonomous work.
 
+Catalog and admission mutations are serialized across Lucid replicas by a
+transaction-scoped PostgreSQL advisory lock. The lock spans the bounded remote
+Coordinator sequence and is crash-released; its transaction never locks Lucid
+workspace rows. Configure the bounds with
+`LUCID_HEARTBEAT_MUTATION_LOCK_TIMEOUT_MS` and
+`LUCID_HEARTBEAT_CONTROL_TIMEOUT_MS`. The provider `prepareResume` callback
+uses a separate pool connection and never acquires the advisory lock. See the
+heartbeat service README for the required lock order.
+
 Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
 

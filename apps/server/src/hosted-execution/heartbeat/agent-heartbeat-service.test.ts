@@ -25,6 +25,7 @@ describe('coordinator agent heartbeat service', () => {
     const service = new CoordinatorAgentHeartbeatService(
       productStore(),
       coordinator,
+      immediateMutationLock,
       policy(),
       createLucidLogger('silent'),
     );
@@ -38,12 +39,22 @@ describe('coordinator agent heartbeat service', () => {
         admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
         enabled: false,
       }),
-      undefined,
+      expect.any(AbortSignal),
     );
     expect(coordinator.resume).toHaveBeenCalledOnce();
     expect(coordinator.resumeAdmission).toHaveBeenCalledWith(
       BACKGROUND_ADMISSION_TARGET,
+      expect.any(AbortSignal),
     );
+    const controlSignals = [
+      coordinator.listTasks.mock.calls[0]?.[0],
+      coordinator.pause.mock.calls[0]?.[0],
+      coordinator.upsertTask.mock.calls[0]?.[2],
+      coordinator.resume.mock.calls[0]?.[0],
+      coordinator.resumeAdmission.mock.calls[0]?.[1],
+    ];
+    expect(controlSignals[0]).toBeInstanceOf(AbortSignal);
+    expect(new Set(controlSignals)).toHaveLength(1);
   });
 
   it('reports the coordinator gate and task state without a local scheduler', async () => {
@@ -64,6 +75,7 @@ describe('coordinator agent heartbeat service', () => {
     const service = new CoordinatorAgentHeartbeatService(
       productStore(),
       coordinator,
+      immediateMutationLock,
       policy(),
       createLucidLogger('silent'),
     );
@@ -91,6 +103,7 @@ describe('coordinator agent heartbeat service', () => {
     const service = new CoordinatorAgentHeartbeatService(
       productStore(),
       coordinator,
+      immediateMutationLock,
       policy(),
       createLucidLogger('silent'),
     );
@@ -106,6 +119,7 @@ describe('coordinator agent heartbeat service', () => {
     const service = new CoordinatorAgentHeartbeatService(
       productStore(false),
       coordinator,
+      immediateMutationLock,
       policy(),
       createLucidLogger('silent'),
     );
@@ -114,6 +128,7 @@ describe('coordinator agent heartbeat service', () => {
 
     expect(coordinator.pauseAdmission).toHaveBeenCalledWith(
       BACKGROUND_ADMISSION_TARGET,
+      expect.any(AbortSignal),
     );
     expect(coordinator.pauseAdmission.mock.invocationCallOrder[0])
       .toBeLessThan(coordinator.pause.mock.invocationCallOrder[0]!);
@@ -128,6 +143,7 @@ describe('coordinator agent heartbeat service', () => {
     const service = new CoordinatorAgentHeartbeatService(
       store,
       coordinator,
+      immediateMutationLock,
       policy(),
       createLucidLogger('silent'),
     );
@@ -138,6 +154,7 @@ describe('coordinator agent heartbeat service', () => {
     expect((await store.readWorkspace()).backgroundChecksEnabled).toBe(false);
     expect(coordinator.pauseAdmission).toHaveBeenCalledWith(
       BACKGROUND_ADMISSION_TARGET,
+      expect.any(AbortSignal),
     );
   });
 });
@@ -151,16 +168,17 @@ function coordinatorApi(
   resume: ReturnType<typeof vi.fn>;
   pauseAdmission: ReturnType<typeof vi.fn>;
   resumeAdmission: ReturnType<typeof vi.fn>;
+  listTasks: ReturnType<typeof vi.fn>;
   upsertTask: ReturnType<typeof vi.fn>;
 } {
   const tasks = new Map(initialTasks.map((entry) => [entry.id, entry]));
-  let state = initialState;
-  let admission = admissionView(initialAdmissionPhase);
+  let namespaceState = initialState;
+  let groupAdmission = admissionView(initialAdmissionPhase);
   const pause = vi.fn(async () => {
-    state = 'paused';
+    namespaceState = 'paused';
   });
   const resume = vi.fn(async () => {
-    state = 'running';
+    namespaceState = 'running';
   });
   const upsertTask = vi.fn(async (taskId, input) => {
     tasks.set(taskId, task({
@@ -171,17 +189,20 @@ function coordinatorApi(
       task: input.task,
     }));
   });
-  const pauseAdmission = vi.fn(async () => {
-    admission = admissionView('closed', admission.revision + 1);
-    return admission;
+  const pauseAdmission = vi.fn(async (target) => {
+    expect(target).toEqual(BACKGROUND_ADMISSION_TARGET);
+    groupAdmission = admissionView('closed', groupAdmission.revision + 1);
+    return groupAdmission;
   });
-  const resumeAdmission = vi.fn(async () => {
-    admission = admissionView('ready', admission.revision + 1);
-    return admission;
+  const resumeAdmission = vi.fn(async (target) => {
+    expect(target).toEqual(BACKGROUND_ADMISSION_TARGET);
+    groupAdmission = admissionView('ready', groupAdmission.revision + 1);
+    return groupAdmission;
   });
+  const listTasks = vi.fn(async () => [...tasks.values()]);
   return {
-    readState: async () => state,
-    listTasks: async () => [...tasks.values()],
+    readState: async () => namespaceState,
+    listTasks,
     readTask: async (taskId) => ({ task: tasks.get(taskId)!, runs: [] }),
     readTaskActivity: async (taskId) => ({
       schemaVersion: 1,
@@ -193,13 +214,16 @@ function coordinatorApi(
     deleteTask: async (taskId) => {
       tasks.delete(taskId);
     },
-    readAdmission: async () => admission,
+    readAdmission: async (target) => {
+      expect(target).toEqual(BACKGROUND_ADMISSION_TARGET);
+      return groupAdmission;
+    },
     pauseAdmission,
     resumeAdmission,
     pause,
     resume,
     drain: async () => {
-      state = 'drained';
+      namespaceState = 'drained';
     },
   };
 }
@@ -292,5 +316,12 @@ function policy() {
     intervalMs: 60_000,
     model: 'test-model',
     maxSteps: 4,
+    controlTimeoutMs: 5_000,
   };
 }
+
+const immediateMutationLock = {
+  runExclusive: async <Result>(operation: () => Promise<Result>) => (
+    await operation()
+  ),
+};

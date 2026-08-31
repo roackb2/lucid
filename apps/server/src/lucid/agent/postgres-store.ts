@@ -347,6 +347,7 @@ implements AgentWakeStore {
   async beginAgentWake(
     agentId: string,
     wakeId: string,
+    interruptedExecutionId?: string,
   ): Promise<AgentWakeClaim | undefined> {
     const now = dayjs().toISOString();
 
@@ -379,8 +380,55 @@ implements AgentWakeStore {
       if (!agentRow) {
         throw new Error(`Agent not found: ${agentId}`);
       }
-      const selectedAgent = toAgent(agentRow);
-      if (selectedAgent.status === 'running') {
+      let selectedAgent = toAgent(agentRow);
+      const replayingCurrentClaim = selectedAgent.status === 'running'
+        && selectedAgent.activeWakeClaimToken === wakeId;
+      if (!replayingCurrentClaim && !workspaceRow.backgroundChecksEnabled) {
+        return undefined;
+      }
+      if (interruptedExecutionId && !replayingCurrentClaim) {
+        if (
+          selectedAgent.status !== 'running'
+          || selectedAgent.activeWakeClaimToken !== interruptedExecutionId
+        ) {
+          return undefined;
+        }
+        const recovered = await transaction
+          .update(agents)
+          .set({ status: 'idle', updatedAt: now })
+          .where(and(
+            eq(agents.id, agentId),
+            eq(agents.status, 'running'),
+            eq(agents.activeWakeClaimToken, interruptedExecutionId),
+          ))
+          .returning({ id: agents.id });
+        if (!recovered.length) {
+          return undefined;
+        }
+        await transaction.insert(discoveryEvents).values({
+          id: `event_${randomUUID()}`,
+          workspaceId: LUCID_WORKSPACE_ID,
+          wakeNumber: agentRow.activeWakeNumber ?? 0,
+          kind: 'error',
+          actorAgentId: agentId,
+          idempotencyKey:
+            `${agentRow.activeWakeId ?? agentId}:recovered:${interruptedExecutionId}`,
+          title: 'Interrupted agent wake recovered',
+          content:
+            'The prior execution lease expired. Its unread mailbox horizon remains available for a fenced retry.',
+          metadata: {
+            visibility: 'operator',
+            wakeId: agentRow.activeWakeId,
+            interruptedExecutionId,
+          },
+          createdAt: now,
+        });
+        selectedAgent = {
+          ...selectedAgent,
+          status: 'idle',
+          updatedAt: now,
+        };
+      } else if (selectedAgent.status === 'running' && !replayingCurrentClaim) {
         throw new Error(`Agent is already running: ${agentId}`);
       }
 
@@ -394,6 +442,21 @@ implements AgentWakeStore {
         .limit(1);
       if (!userRow) {
         throw new Error(`User not found: ${selectedAgent.userId}`);
+      }
+      if (replayingCurrentClaim) {
+        const visibleEvents = await this.readVisibleEventsForClaim(
+          transaction,
+          selectedAgent,
+        );
+        return {
+          agent: selectedAgent,
+          user: toUser(userRow),
+          wakeId: selectedAgent.activeWakeId!,
+          claimToken: wakeId,
+          wakeNumber: selectedAgent.activeWakeNumber!,
+          visibleEvents,
+          horizonSequence: selectedAgent.activeWakeHorizon!,
+        };
       }
       if (toUser(userRow).status !== 'active') {
         return undefined;
@@ -687,66 +750,6 @@ implements AgentWakeStore {
     await this.setClaimStatus(agentId, claimToken, 'idle');
   }
 
-  async recoverInterruptedAgentWake(
-    agentId: string,
-    interruptedExecutionId: string,
-  ): Promise<boolean> {
-    const now = dayjs().toISOString();
-    return await this.database.orm.transaction(async (transaction) => {
-      const [workspace] = await transaction
-        .select({ id: discoveryWorkspaces.id })
-        .from(discoveryWorkspaces)
-        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
-        .for('update')
-        .limit(1);
-      if (!workspace) {
-        throw new Error(
-          'Discovery workspace is missing. Run the database migration and restart the service.',
-        );
-      }
-      const [agentRow] = await transaction
-        .select()
-        .from(agents)
-        .where(and(
-          eq(agents.workspaceId, LUCID_WORKSPACE_ID),
-          eq(agents.id, agentId),
-        ))
-        .for('update')
-        .limit(1);
-      if (
-        !agentRow
-        || agentRow.status !== 'running'
-        || agentRow.activeWakeClaimToken !== interruptedExecutionId
-      ) {
-        return false;
-      }
-
-      await transaction
-        .update(agents)
-        .set({ status: 'idle', updatedAt: now })
-        .where(eq(agents.id, agentId));
-      await transaction.insert(discoveryEvents).values({
-        id: `event_${randomUUID()}`,
-        workspaceId: LUCID_WORKSPACE_ID,
-        wakeNumber: agentRow.activeWakeNumber ?? 0,
-        kind: 'error',
-        actorAgentId: agentId,
-        idempotencyKey:
-          `${agentRow.activeWakeId ?? agentId}:recovered:${interruptedExecutionId}`,
-        title: 'Interrupted agent wake recovered',
-        content:
-          'The prior execution lease expired. Its unread mailbox horizon remains available for a fenced retry.',
-        metadata: {
-          visibility: 'operator',
-          wakeId: agentRow.activeWakeId,
-          interruptedExecutionId,
-        },
-        createdAt: now,
-      });
-      return true;
-    });
-  }
-
   async findAgentPublishedRequestForTrigger(
     agentId: string,
     triggerSequence: number,
@@ -892,6 +895,50 @@ implements AgentWakeStore {
         inArray(discoveryEvents.sequence, sequences),
       ))
       .orderBy(asc(discoveryEvents.sequence)))
+      .map(toDiscoveryEvent);
+  }
+
+  private async readVisibleEventsForClaim(
+    transaction: LucidPostgresTransaction,
+    agent: Agent,
+  ): Promise<DiscoveryEvent[]> {
+    if (
+      !agent.activeWakeId
+      || agent.activeWakeNumber === undefined
+      || agent.activeWakeHorizon === undefined
+    ) {
+      throw new Error(`Running wake state is incomplete for agent: ${agent.id}`);
+    }
+    return (await transaction
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
+        gt(
+          discoveryEvents.sequence,
+          Math.max(
+            agent.lastSeenSequence,
+            agent.mailboxFloorSequence,
+          ),
+        ),
+        lte(discoveryEvents.sequence, agent.activeWakeHorizon),
+        or(
+          and(
+            eq(discoveryEvents.kind, 'shared_message'),
+            ne(discoveryEvents.actorAgentId, agent.id),
+          ),
+          and(
+            eq(discoveryEvents.kind, 'direct_message'),
+            eq(discoveryEvents.targetAgentId, agent.id),
+          ),
+          and(
+            inArray(discoveryEvents.kind, AGENT_PRINCIPAL_EVENT_KINDS),
+            eq(discoveryEvents.targetAgentId, agent.id),
+          ),
+        ),
+      ))
+      .orderBy(asc(discoveryEvents.sequence))
+      .limit(40))
       .map(toDiscoveryEvent);
   }
 

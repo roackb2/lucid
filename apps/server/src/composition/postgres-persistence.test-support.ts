@@ -51,6 +51,9 @@ export const defineLucidStoreContract = (
 
   beforeEach(async () => {
     ({ stores, close } = await options.create());
+    // Most adapter cases exercise admitted agent work. Tests for the durable
+    // pause/resume boundary explicitly close the gate again.
+    await stores.agent.setBackgroundChecksEnabled(true);
   });
 
   afterEach(async () => {
@@ -183,6 +186,73 @@ export const defineLucidStoreContract = (
         kind: 'completed',
         title: 'Older background check was not retried',
       }));
+  });
+
+  it('does not reclaim a wake already abandoned by fresh resume', async () => {
+    await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Do not revive this stale execution after the resume boundary advances.',
+    );
+    const interrupted = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'execution_abandoned_by_resume',
+    );
+    await stores.agent.interruptAgentWake(
+      LOCAL_AGENT_ID,
+      interrupted!.claimToken,
+    );
+    expect(await stores.agent.prepareBackgroundChecksResume({
+      admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+      transitionId: 'resume-abandons-stale-execution',
+    })).toMatchObject({ status: 'prepared' });
+
+    expect(await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'execution_after_abandonment',
+      interrupted!.claimToken,
+    )).toBeUndefined();
+    expect(await stores.workspace.requireAgentForUser(LOCAL_USER_ID))
+      .toMatchObject({
+        status: 'idle',
+        runCount: 1,
+        activeWakeId: undefined,
+        activeWakeClaimToken: undefined,
+      });
+  });
+
+  it('blocks recovery after pause while preserving the current execution replay', async () => {
+    await stores.workspace.saveInterest(
+      LOCAL_USER_ID,
+      'Keep the already-owned execution stable across an operator pause.',
+    );
+    const active = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'execution_active_at_pause',
+    );
+    await stores.agent.setBackgroundChecksEnabled(false);
+
+    expect(await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      active!.claimToken,
+      active!.claimToken,
+    )).toMatchObject({
+      wakeId: active!.wakeId,
+      claimToken: active!.claimToken,
+      wakeNumber: active!.wakeNumber,
+      horizonSequence: active!.horizonSequence,
+      agent: { runCount: 1 },
+    });
+    expect(await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'execution_recovery_after_pause',
+      active!.claimToken,
+    )).toBeUndefined();
+    expect(await stores.workspace.requireAgentForUser(LOCAL_USER_ID))
+      .toMatchObject({
+        status: 'running',
+        activeWakeClaimToken: active!.claimToken,
+        runCount: 1,
+      });
   });
 
   it('settles unfinished wakes for independent Agents', async () => {
@@ -1365,7 +1435,7 @@ export const defineLucidStoreContract = (
     )).toHaveLength(1);
   });
 
-  it('recovers only the matching interrupted wake without consuming unread input', async () => {
+  it('atomically reclaims only the matching interrupted wake', async () => {
     const interest = await stores.workspace.saveInterest(
       LOCAL_USER_ID,
       'Keep this input unread until the wake succeeds.',
@@ -1377,39 +1447,51 @@ export const defineLucidStoreContract = (
     expect(claimed?.visibleEvents.map(({ sequence }) => sequence))
       .toContain(interest.sequence);
 
-    expect(await stores.agent.recoverInterruptedAgentWake(
+    expect(await stores.agent.beginAgentWake(
       LOCAL_AGENT_ID,
+      'execution_after_restart',
       'different_execution',
-    )).toBe(false);
+    )).toBeUndefined();
     expect((await stores.workspace.requireAgentForUser(
       LOCAL_USER_ID,
     )).status).toBe('running');
-    expect(await stores.agent.recoverInterruptedAgentWake(
-      LOCAL_AGENT_ID,
-      claimed!.claimToken,
-    )).toBe(true);
-    expect(await stores.agent.recoverInterruptedAgentWake(
-      LOCAL_AGENT_ID,
-      claimed!.claimToken,
-    )).toBe(false);
-
     const resumed = await stores.agent.beginAgentWake(
       LOCAL_AGENT_ID,
       'execution_after_restart',
+      claimed!.claimToken,
     );
     expect(resumed).toMatchObject({
       wakeId: claimed!.wakeId,
       wakeNumber: claimed!.wakeNumber,
       horizonSequence: claimed!.horizonSequence,
+      claimToken: 'execution_after_restart',
     });
+    expect(await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'execution_after_restart',
+      claimed!.claimToken,
+    )).toMatchObject({
+      wakeId: resumed!.wakeId,
+      claimToken: resumed!.claimToken,
+      wakeNumber: resumed!.wakeNumber,
+      horizonSequence: resumed!.horizonSequence,
+      agent: { runCount: resumed!.agent.runCount },
+    });
+    expect(await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'another_recovery_attempt',
+      claimed!.claimToken,
+    )).toBeUndefined();
     expect(resumed?.visibleEvents.map(({ sequence }) => sequence))
       .toContain(interest.sequence);
-    expect((await stores.network.readNetworkDiagnostics()).events).toContainEqual(
+    expect((await stores.network.readNetworkDiagnostics()).events.filter(
+      (event) => event.title === 'Interrupted agent wake recovered',
+    )).toEqual([
       expect.objectContaining({
         kind: 'error',
         title: 'Interrupted agent wake recovered',
       }),
-    );
+    ]);
   });
 });
 

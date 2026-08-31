@@ -118,9 +118,10 @@ mail. Resume enables and triggers the same task, so accumulated mail is handled
 without creating a replacement agent.
 
 The operator-level global background gate is different. It stops new dispatch
-and cancels work owned by the Coordinator without overwriting each task's
-personal enabled preference. Durable run intent can continue to accumulate and
-is dispatched after global resume.
+without overwriting each task's personal enabled preference. It does not cancel
+an in-flight Coordinator execution; already-owned work may continue and settle
+through its existing execution fence. Durable run intent can continue to
+accumulate and is dispatched after global resume.
 
 Development user lifecycle has stronger boundaries:
 

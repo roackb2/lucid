@@ -48,10 +48,15 @@ export interface AgentWakeStore {
     agentId: string,
     wakeNumber: number,
   ): Promise<DiscoveryEvent[]>;
-  /** `wakeId` is the provider execution ID and must be globally unique. */
+  /**
+   * `wakeId` is the provider execution ID and must be globally unique.
+   * Recovery and the replacement claim commit atomically when
+   * `interruptedExecutionId` is present. A stale recovery returns no claim.
+   */
   beginAgentWake(
     agentId: string,
     wakeId: string,
+    interruptedExecutionId?: string,
   ): Promise<AgentWakeClaim | undefined>;
   readClaimedAgentWake(
     agentId: string,
@@ -64,10 +69,6 @@ export interface AgentWakeStore {
   ): Promise<void>;
   failAgentWake(agentId: string, claimToken: string): Promise<void>;
   interruptAgentWake(agentId: string, claimToken: string): Promise<void>;
-  recoverInterruptedAgentWake(
-    agentId: string,
-    interruptedExecutionId: string,
-  ): Promise<boolean>;
   findAgentPublishedRequestForTrigger(
     agentId: string,
     triggerSequence: number,
