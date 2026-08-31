@@ -183,6 +183,8 @@ implements AgentWakeStore {
         .select({
           id: agents.id,
           status: agents.status,
+          activeWakeId: agents.activeWakeId,
+          activeWakeNumber: agents.activeWakeNumber,
         })
         .from(agents)
         .innerJoin(users, eq(users.id, agents.userId))
@@ -204,6 +206,38 @@ implements AgentWakeStore {
       }
 
       const preparedAt = dayjs().toISOString();
+      const unfinishedWakeRows = activeAgentRows.filter((agent) => (
+        agent.activeWakeId !== null && agent.activeWakeNumber !== null
+      ));
+      if (unfinishedWakeRows.length > 0) {
+        await transaction.insert(discoveryEvents).values(
+          unfinishedWakeRows.map((agent) => ({
+            id: `event_${randomUUID()}`,
+            workspaceId: LUCID_WORKSPACE_ID,
+            wakeNumber: agent.activeWakeNumber!,
+            kind: 'error' as const,
+            actorAgentId: agent.id,
+            idempotencyKey: [
+              agent.id,
+              agent.activeWakeId,
+              'not-retried-after-resume',
+              transitionId,
+            ].join(':'),
+            title: 'Agent wake not retried after fresh resume',
+            content:
+              'Lucid started from the new resume boundary instead of retrying this unfinished wake.',
+            metadata: {
+              visibility: 'operator',
+              resolution: 'not-retried-after-resume',
+              wakeId: agent.activeWakeId,
+              previousStatus: agent.status,
+              admissionGroupId,
+              transitionId,
+            },
+            createdAt: preparedAt,
+          })),
+        );
+      }
       const [boundaryRow] = await transaction
         .insert(discoveryEvents)
         .values({

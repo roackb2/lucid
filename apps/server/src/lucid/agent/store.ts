@@ -48,6 +48,7 @@ export interface AgentWakeStore {
     agentId: string,
     wakeNumber: number,
   ): Promise<DiscoveryEvent[]>;
+  /** `wakeId` is the provider execution ID and must be globally unique. */
   beginAgentWake(
     agentId: string,
     wakeId: string,

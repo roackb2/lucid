@@ -82,9 +82,13 @@ floor to that marker in the same transaction. Retrying the same transition
 returns the same marker, so a lost cross-service response cannot skip a second
 batch of events.
 
-Failed or recovered wakes have no active writer and are abandoned by this
-explicit fresh-start transition; their stale claim fields are cleared under
-the same transaction. A genuinely running wake returns a waiting result and
-keeps provider admission closed. Heddle and Execution Host receive only the
-opaque group and transition IDs, never Lucid event sequences or mailbox
-policy.
+Failed or interrupted wakes have no active writer and are intentionally left
+behind by this explicit fresh-start transition. Before their stale claim fields
+are cleared, Lucid records an `error` event with the durable resolution
+`not-retried-after-resume` for each unfinished wake in the same transaction.
+Activity therefore preserves any action already saved while also settling the
+old check instead of leaving it marked as working. Reusing the existing event
+kind keeps older strict readers rollback-compatible. A genuinely running wake
+returns a waiting result and keeps provider admission closed. Heddle and
+Execution Host receive only the opaque group and transition IDs, never Lucid
+event sequences or mailbox policy.

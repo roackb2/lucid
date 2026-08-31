@@ -118,6 +118,9 @@ function projectWake(
   const started = events.find(({ kind }) => kind === 'agent_wake_started');
   const completed = newestFirst.find(({ kind }) => kind === 'agent_wake_completed');
   const error = newestFirst.find(({ kind }) => kind === 'error');
+  const notRetriedAfterResume = newestFirst.find((event) => (
+    isNotRetriedAfterResumeEvent(event)
+  ));
   const noAction = newestFirst.find(({ kind }) => kind === 'agent_wake_no_action');
   const findings = events.filter(({ kind }) => kind === 'finding_reported');
   const messages = events.filter(({ kind }) => (
@@ -140,15 +143,17 @@ function projectWake(
     inputCount,
     noAction: Boolean(noAction),
     request: Boolean(request),
+    notRetriedAfterResume: Boolean(notRetriedAfterResume),
     workingNote: Boolean(workingNote),
   });
+  const settledAt = completed?.createdAt ?? notRetriedAfterResume?.createdAt;
 
   return {
     id: latest.id,
     ...presentation,
-    createdAt: completed?.createdAt ?? latest.createdAt,
+    createdAt: settledAt ?? latest.createdAt,
     startedAt: started?.createdAt,
-    completedAt: completed?.createdAt,
+    completedAt: settledAt,
     inputCount,
     findingCount: findings.length,
   };
@@ -162,16 +167,18 @@ function resolvePresentation(input: {
   inputCount: number;
   noAction: boolean;
   request: boolean;
+  notRetriedAfterResume: boolean;
   workingNote: boolean;
 }): Pick<AgentActivityItemView, 'kind' | 'title' | 'summary'> {
-  if (input.error && !input.completed) {
+  const settled = input.completed || input.notRetriedAfterResume;
+  if (input.error && !settled) {
     return presentation(
       'needs-attention',
       'Background work needs attention',
       'The check stopped before completion. Its unread work is preserved for a retry.',
     );
   }
-  if (!input.completed) {
+  if (!settled) {
     return presentation(
       'working',
       'Checking for something new',
@@ -180,7 +187,7 @@ function resolvePresentation(input: {
         : 'Working through the current Interest in the background.',
     );
   }
-  if (input.error) {
+  if (input.error && input.completed) {
     return presentation(
       'recovered',
       'Recovered and finished a check',
@@ -191,39 +198,61 @@ function resolvePresentation(input: {
     return presentation(
       'finding-returned',
       `Returned ${counted(input.findingCount, 'new Finding')}`,
-      input.inputCount
-        ? `Reviewed ${counted(input.inputCount, 'new item')} and saved a concrete result with its evidence.`
-        : 'Saved a concrete result with its evidence.',
+      resumeDisposition(
+        input.inputCount
+          ? `Reviewed ${counted(input.inputCount, 'new item')} and saved a concrete result with its evidence.`
+          : 'Saved a concrete result with its evidence.',
+        input.notRetriedAfterResume,
+      ),
     );
   }
   if (input.noAction) {
     return presentation(
       'no-new-finding',
       'No new Finding',
-      input.inputCount
-        ? `Reviewed ${counted(input.inputCount, 'new item')}, but nothing added a concrete result beyond the existing Findings.`
-        : 'Completed the check without adding a new Finding.',
+      resumeDisposition(
+        input.inputCount
+          ? `Reviewed ${counted(input.inputCount, 'new item')}, but nothing added a concrete result beyond the existing Findings.`
+          : 'Completed the check without adding a new Finding.',
+        input.notRetriedAfterResume,
+      ),
     );
   }
   if (input.request) {
     return presentation(
       'network-request',
       'Asked the network',
-      'Shared a privacy-minimized request and will review replies in later background work.',
+      resumeDisposition(
+        'Shared a privacy-minimized request and will review replies in later background work.',
+        input.notRetriedAfterResume,
+      ),
     );
   }
   if (input.contribution) {
     return presentation(
       'network-contribution',
       'Helped another Agent',
-      'Shared a privacy-minimized response with the agent network.',
+      resumeDisposition(
+        'Shared a privacy-minimized response with the agent network.',
+        input.notRetriedAfterResume,
+      ),
     );
   }
   if (input.workingNote) {
     return presentation(
       'understanding-updated',
       'Updated its working understanding',
-      'Refined how it will pursue the current Interest in future background work.',
+      resumeDisposition(
+        'Refined how it will pursue the current Interest in future background work.',
+        input.notRetriedAfterResume,
+      ),
+    );
+  }
+  if (input.notRetriedAfterResume) {
+    return presentation(
+      'completed',
+      'Older background check was not retried',
+      'Lucid kept any actions already saved, then started from current information when background work resumed.',
     );
   }
   return presentation(
@@ -233,6 +262,17 @@ function resolvePresentation(input: {
       ? `Reviewed ${counted(input.inputCount, 'new item')} without a separate user-facing return.`
       : 'Finished the scheduled work without a separate user-facing return.',
   );
+}
+
+function isNotRetriedAfterResumeEvent(event: DiscoveryEvent): boolean {
+  return event.kind === 'error'
+    && event.metadata.resolution === 'not-retried-after-resume';
+}
+
+function resumeDisposition(summary: string, notRetried: boolean): string {
+  return notRetried
+    ? `${summary} The unfinished check was not retried after background work resumed.`
+    : summary;
 }
 
 function presentation(

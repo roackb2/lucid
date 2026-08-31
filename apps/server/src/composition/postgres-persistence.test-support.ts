@@ -167,6 +167,61 @@ export const defineLucidStoreContract = (
       status: 'prepared',
       transitionId: 'resume-after-running-wake',
     });
+    const diagnostics = await stores.network.readNetworkDiagnostics();
+    expect(diagnostics.events).toContainEqual(expect.objectContaining({
+      kind: 'error',
+      actorAgentId: LOCAL_AGENT_ID,
+      wakeNumber: wake!.wakeNumber,
+      metadata: expect.objectContaining({
+        resolution: 'not-retried-after-resume',
+        wakeId: wake!.wakeId,
+        transitionId: 'resume-after-running-wake',
+      }),
+    }));
+    expect((await stores.workspace.readSnapshot(LOCAL_USER_ID)).agentActivity)
+      .toContainEqual(expect.objectContaining({
+        kind: 'completed',
+        title: 'Older background check was not retried',
+      }));
+  });
+
+  it('settles unfinished wakes for independent Agents', async () => {
+    const synthetic = await registerSynthetic(stores, 'resume-two-agents');
+    const localWake = await stores.agent.beginAgentWake(
+      LOCAL_AGENT_ID,
+      'local-unfinished-wake',
+    );
+    const syntheticWake = await stores.agent.beginAgentWake(
+      synthetic.agent.id,
+      'synthetic-unfinished-wake',
+    );
+    await stores.agent.interruptAgentWake(
+      LOCAL_AGENT_ID,
+      localWake!.claimToken,
+    );
+    await stores.agent.interruptAgentWake(
+      synthetic.agent.id,
+      syntheticWake!.claimToken,
+    );
+
+    expect(await stores.agent.prepareBackgroundChecksResume({
+      admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+      transitionId: 'resume-two-unfinished-agents',
+    })).toMatchObject({
+      status: 'prepared',
+      agentCount: 2,
+    });
+
+    const resolutionEvents = (
+      await stores.network.readNetworkDiagnostics()
+    ).events.filter((event) => (
+      event.kind === 'error'
+      && event.metadata.resolution === 'not-retried-after-resume'
+      && event.metadata.transitionId === 'resume-two-unfinished-agents'
+    ));
+    expect(resolutionEvents).toHaveLength(2);
+    expect(new Set(resolutionEvents.map(({ actorAgentId }) => actorAgentId)))
+      .toEqual(new Set([LOCAL_AGENT_ID, synthetic.agent.id]));
   });
 
   it('projects one product-readable Activity item per completed Agent wake', async () => {
