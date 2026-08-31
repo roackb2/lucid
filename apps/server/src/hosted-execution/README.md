@@ -67,8 +67,10 @@ a second scheduler or a generic product control plane.
 
 Ordinary startup requires `LUCID_HOSTED_EXECUTION_ENABLED=true` and a complete
 Execution Host plus Coordinator profile. Lucid opens its local authority and
-MCP routes, pauses Coordinator admission, reconciles the desired task catalog,
-and resumes only when the durable product-wide dispatch gate is enabled.
+MCP routes, reconciles the desired task catalog behind the Coordinator's
+short-lived namespace maintenance fence, and controls Lucid's product-wide
+dispatch through one durable opaque admission group. The namespace returns to
+ready after reconciliation even while the Lucid group remains closed.
 Missing Coordinator configuration fails startup; Lucid never falls back to an
 embedded scheduler.
 

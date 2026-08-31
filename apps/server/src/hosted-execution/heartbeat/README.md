@@ -4,12 +4,24 @@ This boundary connects Lucid product work to the separate Heddle Coordinator
 without making either service depend on the other's database.
 
 At server startup, Lucid projects its current users, agents, and workspace into
-Heddle's desired-task vocabulary. The public Execution Host client owns the
-authenticated Coordinator calls, pause/delete/upsert/resume ordering, stale
-task replacement, input validation, and failure behavior. Retired users are
-omitted, active users are enabled, disabled users remain represented but
-disabled, and the Lucid background-work gate decides whether the Coordinator
-resumes. Failed reconciliation leaves the Coordinator paused and fails startup.
+Heddle's desired-task vocabulary. Every task is assigned to Lucid's one opaque
+background admission group. The public Execution Host client owns the
+authenticated Coordinator calls, namespace pause/delete/upsert/resume ordering,
+stale task replacement, input validation, and failure behavior. Retired users
+are omitted, active users are enabled, and disabled users remain represented
+but disabled. Catalog reconciliation always reopens the provider namespace;
+Lucid's durable product gate independently closes or prepares its group.
+Failed catalog reconciliation leaves the provider namespace paused and fails
+startup.
+
+Group resume is a durable cross-service transition. The Coordinator calls
+`LucidBackgroundChecksAdmissionLifecycle.prepareResume()` with its stable
+transition ID. Lucid commits its fresh mailbox boundary through
+`prepareBackgroundChecksResume()` and returns `ready` only after that commit.
+A running wake returns `retry`, leaving the group in provider-owned
+`preparing`; a disabled product gate or foreign group returns `blocked`.
+Snapshots report dispatch enabled only when the product gate is enabled, the
+provider namespace is running, and the durable group phase is `ready`.
 
 For each claimed Heddle execution, the Coordinator calls Lucid twice:
 
@@ -32,6 +44,8 @@ credential comes from the Coordinator deployment's secret store.
 The implementations in this folder are:
 
 - `desired-task-catalog.ts`: product state to desired Heddle tasks;
+- `admission-lifecycle.ts`: provider resume transition to Lucid's idempotent
+  fresh-mailbox preparation;
 - `execution-lifecycle.ts`: task-to-agent mapping plus product-work preparation
   and settlement; and
 - `agent-heartbeat-service.ts`: Lucid controls backed by the public

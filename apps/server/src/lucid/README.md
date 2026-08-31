@@ -184,11 +184,14 @@ the durable enabled state. This is experiment administration, not a normal
 user-facing Agent control.
 
 The workspace-level background flag is a durable operator dispatch gate, not
-the normal user product control. Global pause preserves every task's
-personal `enabled` preference, continues to persist/coalesce run intent,
-cancels and awaits only locally owned active work, and dispatches pending
-enabled tasks after resume. Every admitted wake rereads this durable gate
-before mailbox or model work and again before Lucid commits completion.
+the normal user product control. It controls Lucid's opaque durable admission
+group without stopping the Coordinator namespace used by other products or
+groups. Pause preserves every task's personal `enabled` preference and fences
+new Lucid claims. An already-owned wake may reach Lucid settlement, where the
+product gate prevents completion from consuming its mailbox. Resume commits a
+fresh Lucid mailbox boundary under the provider's stable transition ID before
+the group can become ready. Pending Heddle run intent remains durable, while
+pre-resume Lucid inputs are intentionally outside the new mailbox horizon.
 
 ## Communication and peer discovery
 

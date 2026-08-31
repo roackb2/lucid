@@ -11,6 +11,7 @@ import {
 } from '@heddleagent/execution-host-client/conversation';
 import {
   HostedHeartbeatExecutionService,
+  type HostedHeartbeatAdmissionLifecycle,
 } from '@heddleagent/execution-host-client/coordinator';
 import {
   NodeHostedHeartbeatExecutionHttpService,
@@ -61,6 +62,7 @@ export async function createHostedExecutionComposition(input: {
   };
   logger: LucidLogger;
   conversationLifecycle: HostedConversationTurnLifecycleStore;
+  heartbeatAdmission: HostedHeartbeatAdmissionLifecycle;
   agentWork: Pick<
     AgentWorkService,
     | 'claimWork'
@@ -182,6 +184,7 @@ export async function createHostedExecutionComposition(input: {
       runtimeSessionNamespace: 'lucid',
       maxExecutionMs: input.config.maxTurnMs,
     }),
+    admission: input.heartbeatAdmission,
     apiToken: input.config.heartbeatExecutionToken,
     reportFailure: (failure) => {
       input.logger.error(

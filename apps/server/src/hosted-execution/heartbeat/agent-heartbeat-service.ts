@@ -8,6 +8,8 @@ import { Mutex } from 'async-mutex';
 import dayjs from 'dayjs';
 import {
   HostedHeartbeatTaskReconciler,
+  type HostedHeartbeatAdmissionTarget,
+  type HostedHeartbeatAdmissionView,
   type HostedHeartbeatCoordinatorState,
   type HostedHeartbeatCoordinatorTaskApi,
   type HostedHeartbeatCoordinatorTaskView,
@@ -22,10 +24,11 @@ import type {
 import type { AgentWakeStore } from '../../lucid/agent/store.js';
 import {
   AGENT_TASK_ID_PREFIX,
+  LUCID_BACKGROUND_WORK_GROUP_ID,
   agentIdFromTask,
   taskIdForAgent,
 } from '../../lucid/agent/heartbeat-task-identity.js';
-import { readLucidHeartbeatTaskReconciliationInput } from './desired-task-catalog.js';
+import { readLucidHeartbeatTaskCatalog } from './desired-task-catalog.js';
 
 type HeartbeatProductStore = Pick<
   AgentWakeStore,
@@ -41,6 +44,11 @@ type HeartbeatTaskPolicy = {
   model: string;
   maxSteps: number;
 };
+
+const BACKGROUND_ADMISSION_TARGET = {
+  kind: 'group',
+  groupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+} as const satisfies HostedHeartbeatAdmissionTarget;
 
 /** Keeps Lucid product state and Heddle's desired task catalog aligned. */
 export class CoordinatorAgentHeartbeatService {
@@ -60,18 +68,22 @@ export class CoordinatorAgentHeartbeatService {
     await this.#reconcileTasks();
   }
 
-  async stop(): Promise<void> {
-    await this.coordinator.pause();
-  }
-
   async snapshot(): Promise<BackgroundChecksView> {
-    const [workspace, users, agents, taskViews, coordinatorState] =
+    const [
+      workspace,
+      users,
+      agents,
+      taskViews,
+      coordinatorState,
+      backgroundAdmission,
+    ] =
       await Promise.all([
         this.store.readWorkspace(),
         this.store.listUsers(),
         this.store.listAgents(),
         this.coordinator.listTasks(),
         this.coordinator.readState(),
+        this.coordinator.readAdmission(BACKGROUND_ADMISSION_TARGET),
       ]);
     return toBackgroundChecksView(
       workspace.backgroundChecksEnabled,
@@ -79,6 +91,7 @@ export class CoordinatorAgentHeartbeatService {
       agents,
       taskViews,
       coordinatorState,
+      backgroundAdmission,
       this.policy.intervalMs,
     );
   }
@@ -116,7 +129,7 @@ export class CoordinatorAgentHeartbeatService {
   async setGlobalBackgroundChecksEnabled(enabled: boolean): Promise<void> {
     await this.#mutation.runExclusive(async () => {
       if (!enabled) {
-        await this.coordinator.pause();
+        await this.coordinator.pauseAdmission(BACKGROUND_ADMISSION_TARGET);
         await this.store.setBackgroundChecksEnabled(false);
         return;
       }
@@ -126,7 +139,7 @@ export class CoordinatorAgentHeartbeatService {
         await this.#reconcileTasks();
       } catch (error) {
         await this.store.setBackgroundChecksEnabled(false);
-        await this.coordinator.pause();
+        await this.coordinator.pauseAdmission(BACKGROUND_ADMISSION_TARGET);
         throw error;
       }
     });
@@ -136,7 +149,7 @@ export class CoordinatorAgentHeartbeatService {
     await this.#mutation.runExclusive(async () => {
       const enabled = (await this.store.readWorkspace())
         .backgroundChecksEnabled;
-      await this.coordinator.pause();
+      await this.coordinator.pauseAdmission(BACKGROUND_ADMISSION_TARGET);
       await this.store.reset({ backgroundChecksEnabled: enabled });
       await this.#reconcileTasks(new Map(), false);
     });
@@ -180,13 +193,36 @@ export class CoordinatorAgentHeartbeatService {
     overrides.forEach((enabled, taskId) => {
       enabledByTaskId.set(taskId, enabled);
     });
-    const desired = await readLucidHeartbeatTaskReconciliationInput(
+    const catalog = await readLucidHeartbeatTaskCatalog(
       this.store,
       this.policy,
       { enabledByTaskId },
     );
-    const result = await this.#reconciler.reconcile(desired);
-    this.logger.info(result, 'lucid.hosted_heartbeat.tasks_reconciled');
+    const closedAdmission = catalog.backgroundAdmissionReady
+      ? undefined
+      : await this.coordinator.pauseAdmission(BACKGROUND_ADMISSION_TARGET);
+    const reconciliation = await this.#reconciler.reconcile({
+      desiredTasks: catalog.desiredTasks,
+      // Catalog mutation uses the provider namespace only as a short-lived
+      // maintenance fence. Lucid's durable product gate is the opaque group.
+      resume: true,
+    });
+    const admission = closedAdmission
+      ?? await this.coordinator.resumeAdmission(BACKGROUND_ADMISSION_TARGET);
+    if (
+      catalog.backgroundAdmissionReady
+      && admission.phase !== 'ready'
+      && admission.phase !== 'preparing'
+    ) {
+      throw new Error(
+        `Lucid background admission could not resume: ${admission.phase}.`,
+      );
+    }
+    this.logger.info({
+      ...reconciliation,
+      admissionPhase: admission.phase,
+      admissionRevision: admission.revision,
+    }, 'lucid.hosted_heartbeat.tasks_reconciled');
   }
 
   async #requireTask(
@@ -208,6 +244,7 @@ function toBackgroundChecksView(
   agents: Agent[],
   taskViews: HostedHeartbeatCoordinatorTaskView[],
   coordinatorState: HostedHeartbeatCoordinatorState,
+  backgroundAdmission: HostedHeartbeatAdmissionView,
   intervalMs: number,
 ): BackgroundChecksView {
   const usersById = new Map(users.map((user) => [user.id, user]));
@@ -230,7 +267,9 @@ function toBackgroundChecksView(
 
   return {
     enabled: enabledTasks.length > 0,
-    dispatchEnabled: productGate && coordinatorState === 'running',
+    dispatchEnabled: productGate
+      && coordinatorState === 'running'
+      && backgroundAdmission.phase === 'ready',
     running: activeTasks.some(({ status }) => status === 'running'),
     intervalMs,
     nextRunAt: earliest(enabledTasks.flatMap(({ nextRunAt }) => (

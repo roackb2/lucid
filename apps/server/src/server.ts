@@ -19,6 +19,9 @@ import { UserNetworkService } from './lucid/network/service.js';
 import {
   CoordinatorAgentHeartbeatService,
 } from './hosted-execution/heartbeat/agent-heartbeat-service.js';
+import {
+  LucidBackgroundChecksAdmissionLifecycle,
+} from './hosted-execution/heartbeat/admission-lifecycle.js';
 import { AgentWorkService } from './lucid/agent/work-service.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
@@ -103,6 +106,9 @@ const hostedExecution = await createHostedExecutionComposition({
   discoveryWorkspace,
   logger,
   conversationLifecycle: stores.conversationLifecycle,
+  heartbeatAdmission: new LucidBackgroundChecksAdmissionLifecycle(
+    stores.agent,
+  ),
   agentWork,
 });
 const staticSpaRequestHandler = config.webRoot
@@ -229,7 +235,6 @@ async function shutdown(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   const serverClosed = new Promise<Error | undefined>((resolve) => {
     server.close((error) => resolve(error));
   });
-  await heartbeats.stop();
   await hostedExecution.close();
 
   const closeError = await serverClosed;

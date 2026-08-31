@@ -1,13 +1,23 @@
 import {
+  type HostedHeartbeatAdmissionPhase,
+  type HostedHeartbeatAdmissionTarget,
+  type HostedHeartbeatAdmissionView,
   type HostedHeartbeatCoordinatorState,
   type HostedHeartbeatCoordinatorTaskApi,
   type HostedHeartbeatCoordinatorTaskView,
 } from '@heddleagent/execution-host-client/coordinator';
 import { describe, expect, it, vi } from 'vitest';
 import { createLucidLogger } from '../../logger.js';
+import {
+  LUCID_BACKGROUND_WORK_GROUP_ID,
+} from '../../lucid/agent/heartbeat-task-identity.js';
 import { CoordinatorAgentHeartbeatService } from './agent-heartbeat-service.js';
 
 const TASK_ID = 'lucid-representative-agent-a';
+const BACKGROUND_ADMISSION_TARGET = {
+  kind: 'group',
+  groupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+} as const satisfies HostedHeartbeatAdmissionTarget;
 
 describe('coordinator agent heartbeat service', () => {
   it('preserves a user task preference while reconciling product state', async () => {
@@ -24,10 +34,16 @@ describe('coordinator agent heartbeat service', () => {
     expect(coordinator.pause).toHaveBeenCalledOnce();
     expect(coordinator.upsertTask).toHaveBeenCalledWith(
       TASK_ID,
-      expect.objectContaining({ enabled: false }),
+      expect.objectContaining({
+        admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+        enabled: false,
+      }),
       undefined,
     );
     expect(coordinator.resume).toHaveBeenCalledOnce();
+    expect(coordinator.resumeAdmission).toHaveBeenCalledWith(
+      BACKGROUND_ADMISSION_TARGET,
+    );
   });
 
   it('reports the coordinator gate and task state without a local scheduler', async () => {
@@ -65,18 +81,81 @@ describe('coordinator agent heartbeat service', () => {
       }],
     });
   });
+
+  it('reports dispatch paused while the Lucid group is still preparing', async () => {
+    const coordinator = coordinatorApi(
+      [task()],
+      'running',
+      'preparing',
+    );
+    const service = new CoordinatorAgentHeartbeatService(
+      productStore(),
+      coordinator,
+      policy(),
+      createLucidLogger('silent'),
+    );
+
+    await expect(service.snapshot()).resolves.toMatchObject({
+      enabled: true,
+      dispatchEnabled: false,
+    });
+  });
+
+  it('keeps the provider namespace ready when Lucid background work is paused', async () => {
+    const coordinator = coordinatorApi([task()]);
+    const service = new CoordinatorAgentHeartbeatService(
+      productStore(false),
+      coordinator,
+      policy(),
+      createLucidLogger('silent'),
+    );
+
+    await service.initialize();
+
+    expect(coordinator.pauseAdmission).toHaveBeenCalledWith(
+      BACKGROUND_ADMISSION_TARGET,
+    );
+    expect(coordinator.pauseAdmission.mock.invocationCallOrder[0])
+      .toBeLessThan(coordinator.pause.mock.invocationCallOrder[0]!);
+    expect(coordinator.resume).toHaveBeenCalledOnce();
+    expect(coordinator.resumeAdmission).not.toHaveBeenCalled();
+  });
+
+  it('compensates the Lucid product gate when group preparation blocks', async () => {
+    const store = productStore(false);
+    const coordinator = coordinatorApi([task()], 'running', 'closed');
+    coordinator.resumeAdmission.mockResolvedValueOnce(admissionView('blocked'));
+    const service = new CoordinatorAgentHeartbeatService(
+      store,
+      coordinator,
+      policy(),
+      createLucidLogger('silent'),
+    );
+
+    await expect(service.setGlobalBackgroundChecksEnabled(true))
+      .rejects.toThrow('Lucid background admission could not resume: blocked.');
+
+    expect((await store.readWorkspace()).backgroundChecksEnabled).toBe(false);
+    expect(coordinator.pauseAdmission).toHaveBeenCalledWith(
+      BACKGROUND_ADMISSION_TARGET,
+    );
+  });
 });
 
 function coordinatorApi(
   initialTasks: HostedHeartbeatCoordinatorTaskView[],
   initialState: HostedHeartbeatCoordinatorState = 'running',
+  initialAdmissionPhase: HostedHeartbeatAdmissionPhase = 'ready',
 ): HostedHeartbeatCoordinatorTaskApi & {
   pause: ReturnType<typeof vi.fn>;
   resume: ReturnType<typeof vi.fn>;
+  pauseAdmission: ReturnType<typeof vi.fn>;
+  resumeAdmission: ReturnType<typeof vi.fn>;
   upsertTask: ReturnType<typeof vi.fn>;
 } {
   const tasks = new Map(initialTasks.map((entry) => [entry.id, entry]));
   let state = initialState;
+  let admission = admissionView(initialAdmissionPhase);
   const pause = vi.fn(async () => {
     state = 'paused';
   });
@@ -85,21 +164,38 @@ function coordinatorApi(
   });
   const upsertTask = vi.fn(async (taskId, input) => {
     tasks.set(taskId, task({
+      admissionGroupId: input.admissionGroupId ?? undefined,
       enabled: input.enabled ?? true,
       workspaceId: input.workspaceId,
       name: input.name,
       task: input.task,
     }));
   });
+  const pauseAdmission = vi.fn(async () => {
+    admission = admissionView('closed', admission.revision + 1);
+    return admission;
+  });
+  const resumeAdmission = vi.fn(async () => {
+    admission = admissionView('ready', admission.revision + 1);
+    return admission;
+  });
   return {
     readState: async () => state,
     listTasks: async () => [...tasks.values()],
     readTask: async (taskId) => ({ task: tasks.get(taskId)!, runs: [] }),
+    readTaskActivity: async (taskId) => ({
+      schemaVersion: 1,
+      taskId,
+      execution: null,
+    }),
     upsertTask,
     triggerTask: async (taskId) => tasks.get(taskId)!,
     deleteTask: async (taskId) => {
       tasks.delete(taskId);
     },
+    readAdmission: async () => admission,
+    pauseAdmission,
+    resumeAdmission,
     pause,
     resume,
     drain: async () => {
@@ -115,6 +211,7 @@ function task(
     id: TASK_ID,
     taskId: TASK_ID,
     workspaceId: 'workspace-v1',
+    admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
     name: 'Agent A background checks',
     task: 'Find relevant connections.',
     enabled: true,
@@ -125,12 +222,12 @@ function task(
   };
 }
 
-function productStore() {
+function productStore(backgroundChecksEnabled = true) {
   let workspace = {
     id: 'workspace',
     versionId: 'workspace-v1',
     currentWake: 1,
-    backgroundChecksEnabled: true,
+    backgroundChecksEnabled,
     createdAt: '2026-08-25T00:00:00.000Z',
     updatedAt: '2026-08-25T00:00:00.000Z',
   };
@@ -170,6 +267,23 @@ function productStore() {
       createdAt: '2026-08-25T00:00:00.000Z',
       updatedAt: '2026-08-25T00:00:00.000Z',
     }],
+  };
+}
+
+function admissionView(
+  phase: HostedHeartbeatAdmissionPhase,
+  revision = 1,
+): HostedHeartbeatAdmissionView {
+  const timestamp = '2026-08-25T00:00:00.000Z';
+  return {
+    schemaVersion: 1,
+    target: BACKGROUND_ADMISSION_TARGET,
+    desiredState: phase === 'closed' ? 'closed' : 'ready',
+    phase,
+    ...(phase === 'preparing' ? { transitionId: 'transition-1' } : {}),
+    revision,
+    createdAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
