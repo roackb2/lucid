@@ -78,6 +78,40 @@ describe('Agent Activity projection', () => {
       completedAt: '2026-08-28T09:03:00.000Z',
     });
   });
+
+  it('shows a wake left behind by fresh resume as settled', () => {
+    const activity = projectPersistedAgentActivity([
+      event(1, 1, 'agent_wake_started'),
+      event(2, 1, 'error'),
+      event(3, 1, 'error', {
+        resolution: 'not-retried-after-resume',
+      }),
+    ]);
+
+    expect(activity[0]).toMatchObject({
+      kind: 'completed',
+      title: 'Older background check was not retried',
+      completedAt: '2026-08-28T09:03:00.000Z',
+    });
+  });
+
+  it('preserves a durable Finding when its unfinished wake is not retried', () => {
+    const activity = projectPersistedAgentActivity([
+      event(1, 1, 'agent_wake_started'),
+      event(2, 1, 'finding_reported'),
+      event(3, 1, 'error'),
+      event(4, 1, 'error', {
+        resolution: 'not-retried-after-resume',
+      }),
+    ]);
+
+    expect(activity[0]).toMatchObject({
+      kind: 'finding-returned',
+      title: 'Returned 1 new Finding',
+      completedAt: '2026-08-28T09:04:00.000Z',
+    });
+    expect(activity[0]?.summary).toContain('was not retried');
+  });
 });
 
 const AGENT: AgentView = {

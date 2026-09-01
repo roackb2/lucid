@@ -28,6 +28,7 @@ export const discoveryEventKindSchema = z.enum([
   'user_disabled',
   'user_enabled',
   'user_retired',
+  'background_resume_prepared',
   'agent_wake_no_action',
   'agent_wake_completed',
   'error',

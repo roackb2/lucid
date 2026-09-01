@@ -81,26 +81,22 @@ export class AgentWorkService {
     signal: AbortSignal;
   }): Promise<AgentWorkPreparation> {
     input.signal.throwIfAborted();
-    if (!(await this.store.readWorkspace()).backgroundChecksEnabled) {
-      return { kind: 'skipped', summary: 'Background checks are paused.' };
-    }
-    if (input.interruptedExecutionId) {
-      await this.store.recoverInterruptedAgentWake(
-        input.agentId,
-        input.interruptedExecutionId,
-      );
-    }
     const claim = await this.store.beginAgentWake(
       input.agentId,
       input.executionId,
+      input.interruptedExecutionId,
     );
     input.signal.throwIfAborted();
-    return claim
-      ? { kind: 'claimed', work: await this.#toWorkClaim(claim) }
-      : {
-          kind: 'skipped',
-          summary: 'No current Interest is available for this agent.',
-        };
+    if (claim) {
+      return { kind: 'claimed', work: await this.#toWorkClaim(claim) };
+    }
+    const workspace = await this.store.readWorkspace();
+    return {
+      kind: 'skipped',
+      summary: workspace.backgroundChecksEnabled
+        ? 'No current Interest is available for this agent.'
+        : 'Background checks are paused.',
+    };
   }
 
   async executeTool(input: {

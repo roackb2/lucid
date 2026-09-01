@@ -72,10 +72,13 @@ Startup order is:
 1. validate the PostgreSQL and authentication configuration;
 2. construct product stores and the coordinator-backed heartbeat control;
 3. open HTTP so JWKS, MCP, and heartbeat execution-lifecycle routes are reachable;
-4. reconcile the desired task catalog and resume coordinator admission.
+4. reconcile the desired task catalog while the Coordinator namespace is
+   briefly fenced, then restore namespace readiness and reconcile Lucid's
+   opaque background-work admission group from durable product state.
 
-Shutdown first stops new HTTP work, pauses coordinator admission, closes the
-hosted boundary, and closes PostgreSQL last.
+Shutdown first stops new HTTP work, closes the hosted boundary, and closes
+PostgreSQL last. Process shutdown does not rewrite durable namespace or Lucid
+group admission; product pause/resume remains an explicit operator lifecycle.
 
 Product trigger, status, enable/disable, reset, and global-gate operations use
 Heddle's public coordinator client. Missing coordinator configuration fails
@@ -87,6 +90,15 @@ scoped-MCP slices. See
 [`../../docs/hosted-execution.md`](../../docs/hosted-execution.md) before
 composing the external execution boundary or changing autonomous work.
 
+Catalog and admission mutations are serialized across Lucid replicas by a
+transaction-scoped PostgreSQL advisory lock. The lock spans the bounded remote
+Coordinator sequence and is crash-released; its transaction never locks Lucid
+workspace rows. Configure the bounds with
+`LUCID_HEARTBEAT_MUTATION_LOCK_TIMEOUT_MS` and
+`LUCID_HEARTBEAT_CONTROL_TIMEOUT_MS`. The provider `prepareResume` callback
+uses a separate pool connection and never acquires the advisory lock. See the
+heartbeat service README for the required lock order.
+
 Ordinary server startup never runs migrations. Apply `yarn server:db:migrate`
 against the deployment database before starting a new version.
 
@@ -96,13 +108,15 @@ image, run `node apps/server/dist/migrate.js` as a separate release step. See
 configuration and deployment sequence.
 
 The conversation and Coordinator boundary uses
-`@heddleagent/execution-host-client@8.0.0` for signing-key and
+`@heddleagent/execution-host-client@8.2.1` for signing-key and
 credential handling, signed authority, Node HTTP/JWKS/SSE, product-edge MCP,
 generic durable conversation lifecycle, browser turn transport, authenticated
-coordinator control, the versioned `ExecutionHost` contract, and its AgentCore
-transport. Its lifecycle store is supplied by
-`@heddleagent/postgres@6.1.3`; Lucid retains authenticated scope selection,
-migration execution, and its history query.
+coordinator control, durable scoped heartbeat admission, the versioned
+`ExecutionHost` contract, and its AgentCore transport. Its lifecycle store and
+Coordinator persistence adapters are supplied by `@heddleagent/postgres@7.0.0`;
+Lucid retains authenticated scope selection, product-owned resume preparation,
+migration execution, and its history query. Runtime-facing types are pinned to
+`@heddleagent/runtime@7.0.0`.
 
 `src/lucid` owns users, mailbox events, findings, feedback, wake claims, and
 the service-owned store ports. Heddle owns provider credentials, unattended

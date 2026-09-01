@@ -34,6 +34,10 @@ import {
 import type {
   HostedConversationHistoryStore,
 } from '../hosted-execution/conversation/store.js';
+import {
+  PostgresBackgroundChecksMutationLock,
+  type BackgroundChecksMutationLock,
+} from '../hosted-execution/heartbeat/mutation-lock.js';
 
 export type PostgresPersistence = {
   stores: {
@@ -44,6 +48,7 @@ export type PostgresPersistence = {
     conversationHistory: HostedConversationHistoryStore;
     conversationLifecycle: HostedConversationTurnLifecycleStore;
   };
+  backgroundChecksMutationLock: BackgroundChecksMutationLock;
   close: () => Promise<void>;
 };
 
@@ -72,6 +77,11 @@ export async function createPostgresPersistence(
             database: database.orm,
           }),
       },
+      backgroundChecksMutationLock:
+        new PostgresBackgroundChecksMutationLock(
+          database,
+          config.heartbeatMutationLockTimeoutMs,
+        ),
       close: async () => database.close(),
     };
   } catch (error) {

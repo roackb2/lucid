@@ -1,8 +1,10 @@
 import type {
   HostedHeartbeatDesiredTask,
-  HostedHeartbeatTaskReconciliationInput,
 } from '@heddleagent/execution-host-client/coordinator';
-import { taskIdForAgent } from '../../lucid/agent/heartbeat-task-identity.js';
+import {
+  LUCID_BACKGROUND_WORK_GROUP_ID,
+  taskIdForAgent,
+} from '../../lucid/agent/heartbeat-task-identity.js';
 import type { AgentWakeStore } from '../../lucid/agent/store.js';
 
 type HeartbeatTaskPolicy = {
@@ -20,12 +22,17 @@ type HeartbeatTaskCatalogOptions = {
   enabledByTaskId?: ReadonlyMap<string, boolean>;
 };
 
+export type LucidHeartbeatTaskCatalog = {
+  desiredTasks: HostedHeartbeatDesiredTask[];
+  backgroundAdmissionReady: boolean;
+};
+
 /** Projects current Lucid ownership into Heddle's desired-task vocabulary. */
-export async function readLucidHeartbeatTaskReconciliationInput(
+export async function readLucidHeartbeatTaskCatalog(
   store: HeartbeatTaskCatalogStore,
   policy: Readonly<HeartbeatTaskPolicy>,
   options: HeartbeatTaskCatalogOptions = {},
-): Promise<Omit<HostedHeartbeatTaskReconciliationInput, 'signal'>> {
+): Promise<LucidHeartbeatTaskCatalog> {
   const [workspace, agents, users] = await Promise.all([
     store.readWorkspace(),
     store.listAgents(),
@@ -40,6 +47,7 @@ export async function readLucidHeartbeatTaskReconciliationInput(
           taskId: taskIdForAgent(agent.id),
           input: {
             workspaceId: workspace.versionId,
+            admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
             name: `${agent.name} background checks`,
             task: agent.purpose,
             enabled: user.status === 'active'
@@ -60,6 +68,6 @@ export async function readLucidHeartbeatTaskReconciliationInput(
 
   return {
     desiredTasks,
-    resume: workspace.backgroundChecksEnabled,
+    backgroundAdmissionReady: workspace.backgroundChecksEnabled,
   };
 }

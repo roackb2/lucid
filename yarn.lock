@@ -618,10 +618,10 @@
   resolved "https://registry.yarnpkg.com/@esbuild/win32-x64/-/win32-x64-0.27.7.tgz#8fe30b3088b89b4873c3a6cc87597ae3920c0a8b"
   integrity sha512-56hiAJPhwQ1R4i+21FVF7V8kSD5zZTdHcVuRFMW0hn753vVfQN8xlx4uOPT4xoGH0Z/oVATuR82AiqSTDIpaHg==
 
-"@heddleagent/execution-host-client@8.0.1":
-  version "8.0.1"
-  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-8.0.1.tgz#aea2fa69af12c21111d7f899443b95d6e775a970"
-  integrity sha512-1fmBCySIr5hrj7QaHBRHCNEoqgnXOK5ToqtZP0691FBHA6naKojkH/CbSGxxLnW7PWUI5xBTBFe87T2rRYBwgA==
+"@heddleagent/execution-host-client@8.2.1":
+  version "8.2.1"
+  resolved "https://registry.npmjs.org/@heddleagent/execution-host-client/-/execution-host-client-8.2.1.tgz#1eb0c28431dfa61703ef58b9350c298d6247fa36"
+  integrity sha512-aK2aEy+CzUhWS7IVu4pfR9r9tDdUo5edN8LB0xyNgciwoq+XxoDOZt76QuTXSxc7cAZCVbpINjZmCTl3eGn7Qw==
   dependencies:
     "@aws-sdk/client-bedrock-agentcore" "^3.1107.0"
     "@modelcontextprotocol/sdk" "^1.29.0"
@@ -632,17 +632,17 @@
     jose "^6.2.8"
     zod "^4.3.6"
 
-"@heddleagent/postgres@6.1.3":
-  version "6.1.3"
-  resolved "https://registry.npmjs.org/@heddleagent/postgres/-/postgres-6.1.3.tgz#c2df7d187abb832ae438d794bb77a002b196aeb9"
-  integrity sha512-v3f7BvZRyNR4ZdbwxDgbHr3K/Vzu4EEqPtB+LNsUYdx9eEwtkeX/2DO0lYyc7qL1JCcH8O/x3maIHwOpVO8qdQ==
+"@heddleagent/postgres@7.0.0":
+  version "7.0.0"
+  resolved "https://registry.npmjs.org/@heddleagent/postgres/-/postgres-7.0.0.tgz#85b6745a2c1d0408c2aad878a259a56e1a200045"
+  integrity sha512-BQ1q+dVo5ZKCsvTgBFuhfvrCD0cwSUk75hyxiiIy36QLpHuu5hasUhuOUA9GgY8MDrQUc4NGNrjKDqYMbRLgrw==
   dependencies:
     dayjs "^1.11.20"
 
-"@heddleagent/runtime@6.7.0":
-  version "6.7.0"
-  resolved "https://registry.npmjs.org/@heddleagent/runtime/-/runtime-6.7.0.tgz#0419738c7493b7936efba425cfe7a21cdc9dd150"
-  integrity sha512-vKv/lAmGn4QJc1BK2LzQtEZEAafJ83eKadWFCPkcfG2PRCtWkkYpWeBE8J0zIRhFMWcavk6SJNlBsbG5xushLw==
+"@heddleagent/runtime@7.0.0":
+  version "7.0.0"
+  resolved "https://registry.npmjs.org/@heddleagent/runtime/-/runtime-7.0.0.tgz#9d0118b7ddd2f519265fde9e050b7bb3577ecb27"
+  integrity sha512-1RAOtNfJdyfU+jp92zM3t+6G1ZXVB/sWmNXPp3ETgmAOGQUO2cUBIi3vcwMjicohtFPvDVoVBkIV9Sp9FJtJvQ==
   dependencies:
     "@anthropic-ai/sdk" "^0.54.0"
     "@modelcontextprotocol/sdk" "^1.29.0"

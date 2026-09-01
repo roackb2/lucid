@@ -24,6 +24,7 @@ import type {
   HostedConversationTurnLifecycleStore,
 } from '@heddleagent/execution-host-client/conversation';
 import {
+  HOSTED_HEARTBEAT_ADMISSION_PATHS,
   HOSTED_HEARTBEAT_EXECUTION_PATHS,
   type HostedHeartbeatExecutionPreparation,
   type HostedHeartbeatExecutionSettlement,
@@ -47,6 +48,9 @@ import {
   UPDATE_WORKING_NOTE_TOOL,
 } from '../hosted-execution/mcp/types.js';
 import { createLucidLogger } from '../logger.js';
+import {
+  LUCID_BACKGROUND_WORK_GROUP_ID,
+} from '../lucid/agent/heartbeat-task-identity.js';
 import { createHostedExecutionComposition } from './hosted-execution.js';
 
 const LOCAL_TOKEN = 'local-execution-host-token-value';
@@ -126,6 +130,7 @@ describe('hosted execution composition', () => {
       discoveryWorkspace: {
         snapshot: async () => workspaceSnapshot(),
       },
+      heartbeatAdmission: readyHeartbeatAdmission(),
       agentWork: unusedAgentWork(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
@@ -135,6 +140,28 @@ describe('hosted execution composition', () => {
         response.writeHead(404).end();
       }
     };
+
+    const admissionResponse = await postHeartbeatExecution(
+      lucidOrigin,
+      HOSTED_HEARTBEAT_ADMISSION_PATHS.prepareResume,
+      {
+        schemaVersion: 1,
+        target: {
+          kind: 'group',
+          groupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+        },
+        transitionId: 'resume-transition-1',
+      },
+    );
+    await expect(admissionResponse.json()).resolves.toEqual({
+      schemaVersion: 1,
+      target: {
+        kind: 'group',
+        groupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+      },
+      transitionId: 'resume-transition-1',
+      decision: { status: 'ready' },
+    });
 
     const jwksResponse = await fetch(new URL(
       DEFAULT_ADOPTER_JWKS_PATH,
@@ -231,6 +258,7 @@ describe('hosted execution composition', () => {
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
+      heartbeatAdmission: readyHeartbeatAdmission(),
       agentWork: unusedAgentWork(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
@@ -328,6 +356,7 @@ describe('hosted execution composition', () => {
       },
       authenticator: createLucidAuthenticator({ mode: 'development' }),
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
+      heartbeatAdmission: readyHeartbeatAdmission(),
       agentWork,
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
@@ -510,6 +539,12 @@ function memoryConversationLifecycle(): HostedConversationTurnLifecycleStore {
     recordAccepted: async () => undefined,
     settleTurn: async () => undefined,
     interruptExpiredTurns: async () => undefined,
+  };
+}
+
+function readyHeartbeatAdmission() {
+  return {
+    prepareResume: async () => ({ status: 'ready' as const }),
   };
 }
 

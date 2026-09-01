@@ -47,7 +47,12 @@ import {
 } from '../persistence/postgres/schema.js';
 import { LUCID_WORKSPACE_ID } from '../workspace/workspace-identity.js';
 import { AGENT_PRINCIPAL_EVENT_KINDS } from './mailbox-policy.js';
+import {
+  LUCID_BACKGROUND_WORK_GROUP_ID,
+} from './heartbeat-task-identity.js';
 import type {
+  BackgroundChecksResumePreparation,
+  PrepareBackgroundChecksResumeInput,
   RecordWakeCompletionInput,
   AgentWakeStore,
 } from './store.js';
@@ -108,6 +113,183 @@ implements AgentWakeStore {
     return await this.requireWorkspace();
   }
 
+  /**
+   * Establishes Lucid's fresh mailbox boundary before provider admission opens.
+   *
+   * Every discovery-event append and wake claim takes the workspace row lock,
+   * so the persisted marker is a commit-safe boundary rather than a PostgreSQL
+   * sequence allocation guess. Retrying one provider transition returns that
+   * same marker and cannot advance the boundary twice.
+   */
+  async prepareBackgroundChecksResume(
+    input: PrepareBackgroundChecksResumeInput,
+  ): Promise<BackgroundChecksResumePreparation> {
+    const admissionGroupId = normalizeBackgroundResumeIdentifier(
+      input.admissionGroupId,
+      'Admission group ID',
+    );
+    const transitionId = normalizeBackgroundResumeIdentifier(
+      input.transitionId,
+      'Resume transition ID',
+    );
+    if (admissionGroupId !== LUCID_BACKGROUND_WORK_GROUP_ID) {
+      throw new Error(
+        `Lucid does not own background admission group: ${admissionGroupId}`,
+      );
+    }
+
+    const idempotencyKey = [
+      'background-resume',
+      admissionGroupId,
+      transitionId,
+    ].join(':');
+    return await this.database.orm.transaction(async (transaction) => {
+      const [workspace] = await transaction
+        .select()
+        .from(discoveryWorkspaces)
+        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
+        .for('update')
+        .limit(1);
+      if (!workspace) {
+        throw new Error(
+          'Discovery workspace is missing. Run the database migration and restart the service.',
+        );
+      }
+
+      const [existingBoundary] = await transaction
+        .select()
+        .from(discoveryEvents)
+        .where(and(
+          eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
+          eq(discoveryEvents.idempotencyKey, idempotencyKey),
+        ))
+        .limit(1);
+      if (existingBoundary) {
+        return readBackgroundResumePreparation(
+          toDiscoveryEvent(existingBoundary),
+          { admissionGroupId, transitionId },
+        );
+      }
+
+      if (!workspace.backgroundChecksEnabled) {
+        return {
+          status: 'waiting',
+          reason: 'background-checks-disabled',
+          runningAgentIds: [],
+        };
+      }
+
+      const activeAgentRows = await transaction
+        .select({
+          id: agents.id,
+          status: agents.status,
+          activeWakeId: agents.activeWakeId,
+          activeWakeNumber: agents.activeWakeNumber,
+        })
+        .from(agents)
+        .innerJoin(users, eq(users.id, agents.userId))
+        .where(and(
+          eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.status, 'active'),
+        ))
+        .orderBy(asc(agents.sortOrder));
+      const runningAgentIds = activeAgentRows
+        .filter(({ status }) => status === 'running')
+        .map(({ id }) => id);
+      if (runningAgentIds.length > 0) {
+        return {
+          status: 'waiting',
+          reason: 'agent-wake-running',
+          runningAgentIds,
+        };
+      }
+
+      const preparedAt = dayjs().toISOString();
+      const unfinishedWakeRows = activeAgentRows.filter((agent) => (
+        agent.activeWakeId !== null && agent.activeWakeNumber !== null
+      ));
+      if (unfinishedWakeRows.length > 0) {
+        await transaction.insert(discoveryEvents).values(
+          unfinishedWakeRows.map((agent) => ({
+            id: `event_${randomUUID()}`,
+            workspaceId: LUCID_WORKSPACE_ID,
+            wakeNumber: agent.activeWakeNumber!,
+            kind: 'error' as const,
+            actorAgentId: agent.id,
+            idempotencyKey: [
+              agent.id,
+              agent.activeWakeId,
+              'not-retried-after-resume',
+              transitionId,
+            ].join(':'),
+            title: 'Agent wake not retried after fresh resume',
+            content:
+              'Lucid started from the new resume boundary instead of retrying this unfinished wake.',
+            metadata: {
+              visibility: 'operator',
+              resolution: 'not-retried-after-resume',
+              wakeId: agent.activeWakeId,
+              previousStatus: agent.status,
+              admissionGroupId,
+              transitionId,
+            },
+            createdAt: preparedAt,
+          })),
+        );
+      }
+      const [boundaryRow] = await transaction
+        .insert(discoveryEvents)
+        .values({
+          id: `event_${randomUUID()}`,
+          workspaceId: LUCID_WORKSPACE_ID,
+          wakeNumber: workspace.currentWake,
+          kind: 'background_resume_prepared',
+          idempotencyKey,
+          title: 'Background work resume prepared',
+          content:
+            'Lucid will consider only product events committed after this resume boundary.',
+          metadata: {
+            visibility: 'operator',
+            admissionGroupId,
+            transitionId,
+            agentCount: activeAgentRows.length,
+          },
+          createdAt: preparedAt,
+        })
+        .returning();
+      if (!boundaryRow) {
+        throw new Error('Background resume boundary did not persist.');
+      }
+
+      const activeAgentIds = activeAgentRows.map(({ id }) => id);
+      if (activeAgentIds.length > 0) {
+        await transaction
+          .update(agents)
+          .set({
+            status: 'idle',
+            mailboxFloorSequence: boundaryRow.sequence,
+            lastSeenSequence: boundaryRow.sequence,
+            activeWakeId: null,
+            activeWakeClaimToken: null,
+            activeWakeNumber: null,
+            activeWakeHorizon: null,
+            updatedAt: preparedAt,
+          })
+          .where(inArray(agents.id, activeAgentIds));
+      }
+
+      return {
+        status: 'prepared',
+        admissionGroupId,
+        transitionId,
+        mailboxFloorSequence: boundaryRow.sequence,
+        agentCount: activeAgentRows.length,
+        preparedAt,
+      };
+    });
+  }
+
   async listUsers(): Promise<User[]> {
     return (await this.database.orm
       .select()
@@ -165,6 +347,7 @@ implements AgentWakeStore {
   async beginAgentWake(
     agentId: string,
     wakeId: string,
+    interruptedExecutionId?: string,
   ): Promise<AgentWakeClaim | undefined> {
     const now = dayjs().toISOString();
 
@@ -197,8 +380,67 @@ implements AgentWakeStore {
       if (!agentRow) {
         throw new Error(`Agent not found: ${agentId}`);
       }
-      const selectedAgent = toAgent(agentRow);
-      if (selectedAgent.status === 'running') {
+      let selectedAgent = toAgent(agentRow);
+      const replayingCurrentClaim = selectedAgent.status === 'running'
+        && selectedAgent.activeWakeClaimToken === wakeId;
+      const transferringInterruptedClaim = !replayingCurrentClaim
+        && interruptedExecutionId !== undefined
+        && selectedAgent.status === 'running'
+        && selectedAgent.activeWakeClaimToken === interruptedExecutionId;
+      if (
+        interruptedExecutionId
+        && !replayingCurrentClaim
+        && !transferringInterruptedClaim
+      ) {
+        return undefined;
+      }
+      // Provider recovery transfers an already-owned wake rather than
+      // admitting new work. It must remain possible after product pause so
+      // the replacement attempt can settle and release the running claim.
+      if (
+        !replayingCurrentClaim
+        && !transferringInterruptedClaim
+        && !workspaceRow.backgroundChecksEnabled
+      ) {
+        return undefined;
+      }
+      if (transferringInterruptedClaim) {
+        const recovered = await transaction
+          .update(agents)
+          .set({ status: 'idle', updatedAt: now })
+          .where(and(
+            eq(agents.id, agentId),
+            eq(agents.status, 'running'),
+            eq(agents.activeWakeClaimToken, interruptedExecutionId),
+          ))
+          .returning({ id: agents.id });
+        if (!recovered.length) {
+          return undefined;
+        }
+        await transaction.insert(discoveryEvents).values({
+          id: `event_${randomUUID()}`,
+          workspaceId: LUCID_WORKSPACE_ID,
+          wakeNumber: agentRow.activeWakeNumber ?? 0,
+          kind: 'error',
+          actorAgentId: agentId,
+          idempotencyKey:
+            `${agentRow.activeWakeId ?? agentId}:recovered:${interruptedExecutionId}`,
+          title: 'Interrupted agent wake recovered',
+          content:
+            'The prior execution lease expired. Its unread mailbox horizon remains available for a fenced retry.',
+          metadata: {
+            visibility: 'operator',
+            wakeId: agentRow.activeWakeId,
+            interruptedExecutionId,
+          },
+          createdAt: now,
+        });
+        selectedAgent = {
+          ...selectedAgent,
+          status: 'idle',
+          updatedAt: now,
+        };
+      } else if (selectedAgent.status === 'running' && !replayingCurrentClaim) {
         throw new Error(`Agent is already running: ${agentId}`);
       }
 
@@ -212,6 +454,21 @@ implements AgentWakeStore {
         .limit(1);
       if (!userRow) {
         throw new Error(`User not found: ${selectedAgent.userId}`);
+      }
+      if (replayingCurrentClaim) {
+        const visibleEvents = await this.readVisibleEventsForClaim(
+          transaction,
+          selectedAgent,
+        );
+        return {
+          agent: selectedAgent,
+          user: toUser(userRow),
+          wakeId: selectedAgent.activeWakeId!,
+          claimToken: wakeId,
+          wakeNumber: selectedAgent.activeWakeNumber!,
+          visibleEvents,
+          horizonSequence: selectedAgent.activeWakeHorizon!,
+        };
       }
       if (toUser(userRow).status !== 'active') {
         return undefined;
@@ -505,66 +762,6 @@ implements AgentWakeStore {
     await this.setClaimStatus(agentId, claimToken, 'idle');
   }
 
-  async recoverInterruptedAgentWake(
-    agentId: string,
-    interruptedExecutionId: string,
-  ): Promise<boolean> {
-    const now = dayjs().toISOString();
-    return await this.database.orm.transaction(async (transaction) => {
-      const [workspace] = await transaction
-        .select({ id: discoveryWorkspaces.id })
-        .from(discoveryWorkspaces)
-        .where(eq(discoveryWorkspaces.id, LUCID_WORKSPACE_ID))
-        .for('update')
-        .limit(1);
-      if (!workspace) {
-        throw new Error(
-          'Discovery workspace is missing. Run the database migration and restart the service.',
-        );
-      }
-      const [agentRow] = await transaction
-        .select()
-        .from(agents)
-        .where(and(
-          eq(agents.workspaceId, LUCID_WORKSPACE_ID),
-          eq(agents.id, agentId),
-        ))
-        .for('update')
-        .limit(1);
-      if (
-        !agentRow
-        || agentRow.status !== 'running'
-        || agentRow.activeWakeClaimToken !== interruptedExecutionId
-      ) {
-        return false;
-      }
-
-      await transaction
-        .update(agents)
-        .set({ status: 'idle', updatedAt: now })
-        .where(eq(agents.id, agentId));
-      await transaction.insert(discoveryEvents).values({
-        id: `event_${randomUUID()}`,
-        workspaceId: LUCID_WORKSPACE_ID,
-        wakeNumber: agentRow.activeWakeNumber ?? 0,
-        kind: 'error',
-        actorAgentId: agentId,
-        idempotencyKey:
-          `${agentRow.activeWakeId ?? agentId}:recovered:${interruptedExecutionId}`,
-        title: 'Interrupted agent wake recovered',
-        content:
-          'The prior execution lease expired. Its unread mailbox horizon remains available for a fenced retry.',
-        metadata: {
-          visibility: 'operator',
-          wakeId: agentRow.activeWakeId,
-          interruptedExecutionId,
-        },
-        createdAt: now,
-      });
-      return true;
-    });
-  }
-
   async findAgentPublishedRequestForTrigger(
     agentId: string,
     triggerSequence: number,
@@ -713,6 +910,50 @@ implements AgentWakeStore {
       .map(toDiscoveryEvent);
   }
 
+  private async readVisibleEventsForClaim(
+    transaction: LucidPostgresTransaction,
+    agent: Agent,
+  ): Promise<DiscoveryEvent[]> {
+    if (
+      !agent.activeWakeId
+      || agent.activeWakeNumber === undefined
+      || agent.activeWakeHorizon === undefined
+    ) {
+      throw new Error(`Running wake state is incomplete for agent: ${agent.id}`);
+    }
+    return (await transaction
+      .select()
+      .from(discoveryEvents)
+      .where(and(
+        eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
+        gt(
+          discoveryEvents.sequence,
+          Math.max(
+            agent.lastSeenSequence,
+            agent.mailboxFloorSequence,
+          ),
+        ),
+        lte(discoveryEvents.sequence, agent.activeWakeHorizon),
+        or(
+          and(
+            eq(discoveryEvents.kind, 'shared_message'),
+            ne(discoveryEvents.actorAgentId, agent.id),
+          ),
+          and(
+            eq(discoveryEvents.kind, 'direct_message'),
+            eq(discoveryEvents.targetAgentId, agent.id),
+          ),
+          and(
+            inArray(discoveryEvents.kind, AGENT_PRINCIPAL_EVENT_KINDS),
+            eq(discoveryEvents.targetAgentId, agent.id),
+          ),
+        ),
+      ))
+      .orderBy(asc(discoveryEvents.sequence))
+      .limit(40))
+      .map(toDiscoveryEvent);
+  }
+
   private async requireAgent(id: string): Promise<Agent> {
     const [row] = await this.database.orm
       .select()
@@ -755,6 +996,49 @@ implements AgentWakeStore {
     await transaction.insert(agents).values(rows.agent);
     await transaction.insert(discoveryEvents).values(rows.event);
   }
+}
+
+function normalizeBackgroundResumeIdentifier(
+  value: string,
+  label: string,
+): string {
+  const normalized = value.trim();
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,159}$/.test(normalized)) {
+    throw new Error(
+      `${label} must contain 1 to 160 letters, numbers, dots, colons, underscores, or hyphens.`,
+    );
+  }
+  return normalized;
+}
+
+function readBackgroundResumePreparation(
+  event: DiscoveryEvent,
+  expected: Pick<
+    PrepareBackgroundChecksResumeInput,
+    'admissionGroupId' | 'transitionId'
+  >,
+): BackgroundChecksResumePreparation {
+  const admissionGroupId = event.metadata.admissionGroupId;
+  const transitionId = event.metadata.transitionId;
+  const agentCount = event.metadata.agentCount;
+  if (
+    event.kind !== 'background_resume_prepared'
+    || admissionGroupId !== expected.admissionGroupId
+    || transitionId !== expected.transitionId
+    || typeof agentCount !== 'number'
+  ) {
+    throw new Error(
+      `Stored background resume transition is invalid: ${expected.transitionId}`,
+    );
+  }
+  return {
+    status: 'prepared',
+    admissionGroupId,
+    transitionId,
+    mailboxFloorSequence: event.sequence,
+    agentCount,
+    preparedAt: dayjs(event.createdAt).toISOString(),
+  };
 }
 
 function createInitialWorkspaceRows(input: {

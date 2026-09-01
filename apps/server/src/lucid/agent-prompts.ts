@@ -29,6 +29,7 @@ const EVENT_LABELS: Record<DiscoveryEventKind, string> = {
   user_disabled: 'internal user lifecycle',
   user_enabled: 'internal user lifecycle',
   user_retired: 'internal user lifecycle',
+  background_resume_prepared: 'internal background resume boundary',
   agent_wake_no_action: 'internal no-action result',
   agent_wake_completed: 'internal agent result',
   error: 'internal error',

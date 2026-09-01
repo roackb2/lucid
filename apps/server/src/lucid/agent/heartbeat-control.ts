@@ -4,7 +4,6 @@ import type {
 
 /** Product operations supported by either heartbeat execution topology. */
 export interface AgentHeartbeatControl {
-  stop(): Promise<void>;
   snapshot(): Promise<BackgroundChecksView>;
   snapshotForAgent(agentId: string): Promise<BackgroundChecksView>;
   triggerAgent(agentId: string): Promise<void>;

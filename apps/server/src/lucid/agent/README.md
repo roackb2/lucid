@@ -13,6 +13,8 @@ run settlement.
 - `heartbeat-control.ts` defines product controls implemented by the
   Coordinator-backed adapter.
 - `heartbeat-task-identity.ts` maps Lucid agents to stable Coordinator task IDs.
+  It also names the current workspace's one product-owned, provider-opaque
+  background admission group.
 - `store.ts` defines the agent-work persistence port.
 - `postgres-store.ts` implements product claims, cursors, recovery, effect
   validation, and settlement transactions through Drizzle.
@@ -68,3 +70,25 @@ the current product world, not as a frozen Lucid command payload. Heddle decides
 when the opportunity is due and makes its execution reliable. Lucid decides at
 prepare time whether a current Interest exists, freezes the product horizon,
 and owns the resulting Finding or no-finding Activity.
+
+## Background resume boundary
+
+Lucid uses a fresh-start policy when its background admission group resumes.
+Before Execution Host opens the group, it supplies a stable transition ID to
+`prepareBackgroundChecksResume()`. The store locks the workspace event stream,
+refuses to move the boundary under a running Agent wake, writes one idempotent
+`background_resume_prepared` marker, and advances every active Agent's mailbox
+floor to that marker in the same transaction. Retrying the same transition
+returns the same marker, so a lost cross-service response cannot skip a second
+batch of events.
+
+Failed or interrupted wakes have no active writer and are intentionally left
+behind by this explicit fresh-start transition. Before their stale claim fields
+are cleared, Lucid records an `error` event with the durable resolution
+`not-retried-after-resume` for each unfinished wake in the same transaction.
+Activity therefore preserves any action already saved while also settling the
+old check instead of leaving it marked as working. Reusing the existing event
+kind keeps older strict readers rollback-compatible. A genuinely running wake
+returns a waiting result and keeps provider admission closed. Heddle and
+Execution Host receive only the opaque group and transition IDs, never Lucid
+event sequences or mailbox policy.

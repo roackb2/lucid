@@ -13,10 +13,33 @@ export type RecordWakeCompletionInput = Omit<
   'kind'
 >;
 
+export type PrepareBackgroundChecksResumeInput = {
+  admissionGroupId: string;
+  transitionId: string;
+};
+
+export type BackgroundChecksResumePreparation =
+  | {
+      status: 'prepared';
+      admissionGroupId: string;
+      transitionId: string;
+      mailboxFloorSequence: number;
+      agentCount: number;
+      preparedAt: string;
+    }
+  | {
+      status: 'waiting';
+      reason: 'background-checks-disabled' | 'agent-wake-running';
+      runningAgentIds: string[];
+    };
+
 export interface AgentWakeStore {
   reset(options: { backgroundChecksEnabled: boolean }): Promise<void>;
   readWorkspace(): Promise<DiscoveryWorkspace>;
   setBackgroundChecksEnabled(enabled: boolean): Promise<DiscoveryWorkspace>;
+  prepareBackgroundChecksResume(
+    input: PrepareBackgroundChecksResumeInput,
+  ): Promise<BackgroundChecksResumePreparation>;
   listUsers(): Promise<User[]>;
   listAgents(): Promise<Agent[]>;
   listActiveAgents(): Promise<Agent[]>;
@@ -25,9 +48,16 @@ export interface AgentWakeStore {
     agentId: string,
     wakeNumber: number,
   ): Promise<DiscoveryEvent[]>;
+  /**
+   * `wakeId` is the provider execution ID and must be globally unique.
+   * Recovery and the replacement claim commit atomically when
+   * `interruptedExecutionId` is present. Exact recovery transfers already
+   * owned work even while paused; a stale recovery returns no claim.
+   */
   beginAgentWake(
     agentId: string,
     wakeId: string,
+    interruptedExecutionId?: string,
   ): Promise<AgentWakeClaim | undefined>;
   readClaimedAgentWake(
     agentId: string,
@@ -40,10 +70,6 @@ export interface AgentWakeStore {
   ): Promise<void>;
   failAgentWake(agentId: string, claimToken: string): Promise<void>;
   interruptAgentWake(agentId: string, claimToken: string): Promise<void>;
-  recoverInterruptedAgentWake(
-    agentId: string,
-    interruptedExecutionId: string,
-  ): Promise<boolean>;
   findAgentPublishedRequestForTrigger(
     agentId: string,
     triggerSequence: number,

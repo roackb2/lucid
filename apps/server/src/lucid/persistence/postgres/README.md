@@ -166,6 +166,17 @@ boundary. Renewed user consent replaces `private_context` and
 user scrubs `private_context` but keeps its row and agent
 identity for append-only historical attribution.
 
+Workspace event locking also makes background resume commit-safe. One
+`background_resume_prepared` event is the durable idempotency record for a
+provider transition, and its event sequence becomes the active Agents'
+mailbox floor in that same transaction. This adds no schema table: the existing
+event idempotency constraint prevents duplicate preparation, while the
+workspace row lock orders the boundary against every concurrent event append
+and wake claim. Any unfinished non-running wake receives an existing `error`
+event with resolution `not-retried-after-resume` before that marker, making the
+fresh-start decision durable, keeping the Activity projection truthful, and
+remaining readable by the previous strict event decoder during rollback.
+
 No Lucid product store encrypts `private_context` at the application layer. The
 field is private because ordinary product/diagnostic projections and agent
 visibility exclude it from every non-owner, not because the underlying storage
