@@ -7,13 +7,21 @@
  */
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type {
+import {
+  HostedHeartbeatDelegatedExecution,
+  HostedHeartbeatExecutionService,
   HostedHeartbeatAdmissionView,
   HostedHeartbeatCoordinatorState,
   HostedHeartbeatCoordinatorTaskApi,
   HostedHeartbeatCoordinatorTaskInput,
   HostedHeartbeatCoordinatorTaskView,
+  type HostedHeartbeatExecutionApi,
+  type HostedHeartbeatExecutionPreparationRequest,
 } from '@heddleagent/execution-host-client/coordinator';
+import type {
+  ExecutionAuthorityIssuer,
+  IssuedExecutionAuthorityMetadata,
+} from '@heddleagent/execution-host-client/authority';
 import {
   LOCAL_USER_ID,
   LOCAL_AGENT_ID,
@@ -28,6 +36,7 @@ import {
 import { PostgresAgentWakeStore } from '../lucid/agent/postgres-store.js';
 import {
   LUCID_BACKGROUND_WORK_GROUP_ID,
+  taskIdForAgent,
 } from '../lucid/agent/heartbeat-task-identity.js';
 import {
   AgentCommunicationClaimError,
@@ -40,6 +49,9 @@ import {
 import {
   LucidBackgroundChecksAdmissionLifecycle,
 } from '../hosted-execution/heartbeat/admission-lifecycle.js';
+import {
+  LucidHeartbeatExecutionLifecycle,
+} from '../hosted-execution/heartbeat/execution-lifecycle.js';
 import {
   PostgresBackgroundChecksMutationLock,
 } from '../hosted-execution/heartbeat/mutation-lock.js';
@@ -440,6 +452,157 @@ describe('PostgreSQL persistence integration', () => {
       });
     });
 
+    it('does not replay retained recovery diagnostics into later ordinary work', async () => {
+      const work = new AgentWorkService(
+        primary.agent,
+        primary.workspace,
+        primary.communication,
+        { triggerAgent: async () => undefined },
+        createLucidLogger('silent'),
+        { retryDelayMs: 10_000 },
+      );
+      const productLifecycle = new LucidHeartbeatExecutionLifecycle(work, {
+        tenantId: 'lucid-integration',
+        productSessionId: 'lucid-integration-session',
+        allowedTools: ['post_shared_message'],
+      });
+      const executionService = new HostedHeartbeatExecutionService({
+        authority: integrationExecutionAuthority(),
+        lifecycle: productLifecycle,
+        runtimeSessionNamespace: 'lucid-integration-runtime',
+        maxExecutionMs: 60_000,
+        now: () => new Date('2026-09-01T00:00:00.000Z'),
+      });
+      const preparationRequests: HostedHeartbeatExecutionPreparationRequest[] = [];
+      const executions: HostedHeartbeatExecutionApi = {
+        prepare: async (input, signal) => {
+          preparationRequests.push(input);
+          return await executionService.prepare(input, signal);
+        },
+        settle: async (input, signal) => (
+          await executionService.settle(input, signal)
+        ),
+      };
+      const providerExecution = new HostedHeartbeatDelegatedExecution({
+        executions,
+        executionHost: {
+          streamHeartbeatTask: async function* () {
+            throw new Error('Runtime transport is not used by this handler test.');
+          },
+        },
+        modelCredentials: {
+          resolveModelCredential: async () => ({
+            type: 'api-key',
+            apiKey: 'integration-model-key',
+          }),
+        },
+      });
+      const taskId = taskIdForAgent(LOCAL_AGENT_ID);
+      const retainedRecovery = {
+        interruptedExecutionId: 'execution-before-provider-recovery',
+        replacementStatus: 'claimed' as const,
+        replacementExecutionId: 'execution-exact-provider-recovery',
+      };
+      const sourceSequenceByExecution = new Map<string, number>();
+      const runProviderExecution = async (executionId: string) => {
+        const signal = AbortSignal.timeout(5_000);
+        return await providerExecution.handle({
+          task: {
+            id: taskId,
+            state: { recovery: retainedRecovery },
+          },
+          executionId,
+          signal,
+          runAgent: async () => {
+            const sourceSequence = sourceSequenceByExecution.get(executionId);
+            if (sourceSequence === undefined) {
+              throw new Error(`Missing product source for ${executionId}.`);
+            }
+            await work.executeTool({
+              userId: LOCAL_USER_ID,
+              executionId,
+              toolName: 'post_shared_message',
+              arguments: {
+                reply_to_event_id: sourceSequence,
+                content: 'Who has one concrete example for this Interest?',
+                source_event_ids: [sourceSequence],
+              },
+              signal,
+            });
+            return {
+              decision: 'complete' as const,
+              summary: 'Completed one bounded Interest check.',
+              state: {
+                runId: `run-${executionId}`,
+                outcome: 'done' as const,
+              },
+            };
+          },
+          skip: ({ summary }) => ({ kind: 'skipped' as const, summary }),
+          retry: ({ summary, delayMs }) => ({
+            kind: 'retry' as const,
+            summary,
+            delayMs,
+          }),
+          block: ({ summary }) => ({ kind: 'blocked' as const, summary }),
+        });
+      };
+
+      const recoveredInterest = await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'Complete this Interest through one exact provider recovery.',
+      );
+      sourceSequenceByExecution.set(
+        retainedRecovery.replacementExecutionId,
+        recoveredInterest.sequence,
+      );
+      await expect(work.claimWork({
+        agentId: LOCAL_AGENT_ID,
+        executionId: retainedRecovery.interruptedExecutionId,
+        signal: AbortSignal.timeout(5_000),
+      })).resolves.toMatchObject({ kind: 'claimed' });
+      await expect(runProviderExecution(
+        retainedRecovery.replacementExecutionId,
+      )).resolves.toMatchObject({
+        decision: 'complete',
+        state: { outcome: 'done' },
+      });
+
+      const ordinaryInterest = await primary.workspace.saveInterest(
+        LOCAL_USER_ID,
+        'This later Interest must become ordinary fresh work.',
+      );
+      sourceSequenceByExecution.set(
+        'execution-after-retained-recovery-diagnostics',
+        ordinaryInterest.sequence,
+      );
+      await expect(runProviderExecution(
+        'execution-after-retained-recovery-diagnostics',
+      )).resolves.toMatchObject({
+        decision: 'complete',
+        state: { outcome: 'done' },
+      });
+      expect(preparationRequests).toEqual([
+        {
+          schemaVersion: 1,
+          taskId,
+          executionId: retainedRecovery.replacementExecutionId,
+          interruptedExecutionId: retainedRecovery.interruptedExecutionId,
+        },
+        {
+          schemaVersion: 1,
+          taskId,
+          executionId: 'execution-after-retained-recovery-diagnostics',
+        },
+      ]);
+      expect(await requireAgent(primary.agent, LOCAL_AGENT_ID)).toMatchObject({
+        status: 'idle',
+        runCount: 3,
+        activeWakeId: undefined,
+        activeWakeClaimToken: undefined,
+      });
+    });
+
     it('serializes full heartbeat mutations across two Lucid service instances', async () => {
       const coordinator = createOrderedCoordinatorCluster();
       const policy = {
@@ -824,5 +987,37 @@ function coordinatorAdmissionView(
     revision,
     createdAt: timestamp,
     updatedAt: timestamp,
+  };
+}
+
+function integrationExecutionAuthority(): ExecutionAuthorityIssuer {
+  return {
+    issue: async (input) => {
+      const issuedAt = '2026-09-01T00:00:00.000Z';
+      const expiresAt = '2026-09-01T00:01:00.000Z';
+      const metadata: IssuedExecutionAuthorityMetadata = {
+        scope: {
+          adopterId: 'lucid-integration',
+          ...input.scope,
+        },
+        runtimeSessionId: input.runtimeSessionId,
+        invocationId: input.invocationId,
+        workflow: input.workflow,
+        issuedAt,
+        executionExpiresAt: expiresAt,
+        mcp: {
+          capabilityId: `capability-${input.invocationId}`,
+          serverId: 'lucid-integration-mcp',
+          allowedTools: [...(input.mcp?.allowedTools ?? [])],
+          expiresAt,
+        },
+      };
+      return {
+        metadata,
+        executionAssertion: () => `assertion-${input.invocationId}`,
+        mcpCapability: () => `capability-token-${input.invocationId}`,
+        toJSON: () => metadata,
+      };
+    },
   };
 }

@@ -54,7 +54,10 @@ For each claimed Heddle execution, the Coordinator calls Lucid twice:
    recovery is an ownership transfer of that already-admitted wake, so it also
    remains available while paused and can settle through the replacement
    execution fence. Only genuinely fresh claims recheck the product gate under
-   the same transaction.
+   the same transaction. Provider recovery fields remain diagnostic history on
+   the task, but the Execution Host forwards `interruptedExecutionId` only to
+   the execution that actually claimed that replacement; later ordinary wakes
+   therefore reach Lucid as fresh attempts.
 2. `settle` maps the narrow terminal execution result back to the same agent
    and execution fence. Lucid validates and commits product effects, asks for a
    retry, or accepts failure/interruption without consuming unread input.

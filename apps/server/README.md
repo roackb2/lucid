@@ -108,7 +108,7 @@ image, run `node apps/server/dist/migrate.js` as a separate release step. See
 configuration and deployment sequence.
 
 The conversation and Coordinator boundary uses
-`@heddleagent/execution-host-client@8.2.0` for signing-key and
+`@heddleagent/execution-host-client@8.2.1` for signing-key and
 credential handling, signed authority, Node HTTP/JWKS/SSE, product-edge MCP,
 generic durable conversation lifecycle, browser turn transport, authenticated
 coordinator control, durable scoped heartbeat admission, the versioned
