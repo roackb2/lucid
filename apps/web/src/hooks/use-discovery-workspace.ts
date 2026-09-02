@@ -13,14 +13,23 @@ import {
 
 const SNAPSHOT_KEY = ['discovery', 'workspace'] as const;
 
+export const resolveWorkspaceRefreshInterval = (
+  workspace: { backgroundChecks: { running: boolean } } | undefined,
+): number | false => {
+  if (!workspace) {
+    return false;
+  }
+  return workspace.backgroundChecks.running ? 700 : 4_000;
+};
+
 export function useDiscoveryWorkspace() {
   const queryClient = useQueryClient();
   const snapshot = useQuery({
     queryKey: SNAPSHOT_KEY,
     queryFn: () => lucidClient.discovery.snapshot.query(),
     // Poll quickly only while this user's agent is running.
-    refetchInterval: (query) => (
-      query.state.data?.backgroundChecks.running ? 700 : 4_000
+    refetchInterval: (query) => resolveWorkspaceRefreshInterval(
+      query.state.data,
     ),
     retry: (failureCount, error) => (
       !isAuthenticationRequired(error) && failureCount < 2

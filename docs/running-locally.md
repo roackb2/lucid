@@ -61,6 +61,17 @@ yarn dev
 Open [http://127.0.0.1:3080](http://127.0.0.1:3080). The server defaults to
 `http://127.0.0.1:8081`, with tRPC mounted at `/api/trpc/`.
 
+When a trusted local reverse proxy uses another hostname, allow that exact
+hostname in the ignored root `.env` and restart the web process:
+
+```dotenv
+LUCID_WEB_ALLOWED_HOSTS=your-device.your-tailnet.ts.net
+```
+
+Use a comma-separated list for multiple trusted hostnames. Do not use a broad
+wildcard; Vite's host check protects the local development server from DNS
+rebinding.
+
 Migrations never run automatically during server startup. Run the migration
 command explicitly after pulling a change that adds a migration and before
 starting a newly built server.

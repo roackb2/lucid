@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import {
   CheckCircle2,
+  FileText,
   Network,
   Route,
 } from 'lucide-react';
@@ -165,6 +166,7 @@ function EmptyFindingsState({
 function FindingEvidenceDetail({ finding }: { finding: FindingView }) {
   const sequence = finding.finding.sequence;
   const contributorCount = countContributors(finding.originatingSources);
+  const networkPosts = finding.networkPosts ?? [];
 
   return (
     <article
@@ -209,7 +211,41 @@ function FindingEvidenceDetail({ finding }: { finding: FindingView }) {
           {finding.sources.length} cited
           {' '}{finding.sources.length === 1 ? 'message' : 'messages'}
         </span>
+        {networkPosts.length > 0 ? (
+          <span>
+            <FileText aria-hidden="true" />
+            {networkPosts.length} source
+            {' '}{networkPosts.length === 1 ? 'Post' : 'Posts'}
+          </span>
+        ) : null}
       </div>
+
+      {networkPosts.length > 0 ? (
+        <section
+          aria-labelledby={`network-finding-posts-title-${sequence}`}
+          className="network-finding-posts"
+        >
+          <h4 id={`network-finding-posts-title-${sequence}`}>
+            Lucid Posts cited by this Finding
+          </h4>
+          <ol>
+            {networkPosts.map((post) => (
+              <li key={post.id}>
+                <Link to={`/network/posts/${post.id}`}>
+                  <span>
+                    <strong>{post.title}</strong>
+                    <small>
+                      {post.author.displayName} ·{' '}
+                      {dayjs(post.publishedAt).format('MMM D, HH:mm')}
+                    </small>
+                  </span>
+                  <FileText aria-hidden="true" />
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
 
       <section
         className="finding-explanation network-finding-evidence"
