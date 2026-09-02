@@ -17,6 +17,9 @@ import { DiscoveryWorkspaceService } from './service.js';
 import type {
   AgentHeartbeatControl,
 } from '../agent/heartbeat-control.js';
+import {
+  PostgresInformationNetworkFixtureSeeder,
+} from '../information-network/fixtures.js';
 
 describe('discovery workspace service', () => {
   let database: PostgresDatabase;
@@ -56,6 +59,7 @@ describe('discovery workspace service', () => {
     } as unknown as AgentHeartbeatControl;
     const workspace = new DiscoveryWorkspaceService(
       stores.workspace,
+      stores.informationNetwork,
       heartbeats,
       { model: 'test-model', heddleVersion: 'test' },
     );
@@ -143,4 +147,43 @@ describe('discovery workspace service', () => {
     expect(triggerAgent).toHaveBeenNthCalledWith(1, LOCAL_AGENT_ID);
     expect(triggerAgent).toHaveBeenNthCalledWith(2, LOCAL_AGENT_ID);
   });
+
+  it('projects navigable Network Posts onto only the owning user Finding', async () => {
+    await new PostgresInformationNetworkFixtureSeeder(database).seed();
+    const workspace = new DiscoveryWorkspaceService(
+      stores.workspace,
+      stores.informationNetwork,
+      heartbeatStub(),
+      { model: 'test-model', heddleVersion: 'test' },
+    );
+
+    const snapshot = await workspace.snapshot(LOCAL_USER_ID);
+    const fixtureFinding = snapshot.findings.find(
+      ({ finding }) => finding.id === 'fixture-finding-network-post',
+    );
+
+    expect(fixtureFinding?.networkPosts).toEqual([{
+      id: 'repairability-as-design-language',
+      title: 'Taipei labels are making repairability part of the silhouette',
+      publishedAt: expect.any(String),
+      publicationMethod: 'seeded-pilot',
+      author: { id: 'mina-chen', displayName: 'Mina Chen' },
+    }]);
+    expect(JSON.stringify(snapshot)).not.toContain('privateContext');
+    expect(JSON.stringify(snapshot)).not.toContain(
+      'No model execution is authorized',
+    );
+  });
 });
+
+function heartbeatStub(): AgentHeartbeatControl {
+  return {
+    snapshotForAgent: async () => ({
+      enabled: true,
+      dispatchEnabled: true,
+      running: false,
+      intervalMs: 60_000,
+      tasks: [],
+    }),
+  } as unknown as AgentHeartbeatControl;
+}

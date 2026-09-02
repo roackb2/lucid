@@ -17,6 +17,9 @@ import { handleHealthRequest } from './health.js';
 import { DiscoveryWorkspaceService } from './lucid/workspace/service.js';
 import { UserNetworkService } from './lucid/network/service.js';
 import {
+  InformationNetworkService,
+} from './lucid/information-network/service.js';
+import {
   CoordinatorAgentHeartbeatService,
 } from './hosted-execution/heartbeat/agent-heartbeat-service.js';
 import {
@@ -80,11 +83,15 @@ const agentWork = new AgentWorkService(
 );
 const discoveryWorkspace = new DiscoveryWorkspaceService(
   stores.workspace,
+  stores.informationNetwork,
   heartbeats,
   {
     model: config.model,
     heddleVersion: heddlePackage.version,
   },
+);
+const informationNetwork = new InformationNetworkService(
+  stores.informationNetwork,
 );
 const userNetwork = new UserNetworkService(
   stores.network,
@@ -121,6 +128,7 @@ const server = createHTTPServer({
   router: createAppRouter(
     discoveryWorkspace,
     userNetwork,
+    informationNetwork,
     conversationHistory,
     {
       allowSelfEnrollment: config.authentication.mode === 'supabase'

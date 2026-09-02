@@ -8,6 +8,12 @@ import type { LucidConfig } from '../config.js';
 import { PostgresUserNetworkStore } from '../lucid/network/postgres-store.js';
 import type { UserNetworkStore } from '../lucid/network/store.js';
 import {
+  PostgresInformationNetworkStore,
+} from '../lucid/information-network/postgres-store.js';
+import type {
+  InformationNetworkStore,
+} from '../lucid/information-network/store.js';
+import {
   PostgresAgentCommunicationStore,
 } from '../lucid/agent/communication/postgres-store.js';
 import type {
@@ -43,6 +49,7 @@ export type PostgresPersistence = {
   stores: {
     workspace: DiscoveryWorkspaceStore;
     network: UserNetworkStore;
+    informationNetwork: InformationNetworkStore;
     agent: AgentWakeStore;
     communication: AgentCommunicationStore;
     conversationHistory: HostedConversationHistoryStore;
@@ -67,6 +74,7 @@ export async function createPostgresPersistence(
       stores: {
         workspace,
         network: new PostgresUserNetworkStore(database),
+        informationNetwork: new PostgresInformationNetworkStore(database),
         agent,
         communication: new PostgresAgentCommunicationStore(database),
         conversationHistory: new PostgresHostedConversationHistoryStore(

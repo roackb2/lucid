@@ -1,12 +1,20 @@
 import { CircleCheck, Construction, FlaskConical } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-export type FoundationPageReadiness = 'working' | 'planned' | 'preview';
+export type FoundationPageReadiness =
+  | 'working'
+  | 'planned'
+  | 'preview'
+  | 'fixture';
 
 const readinessPresentation: Record<
   FoundationPageReadiness,
   { icon: ReactNode; label: string }
 > = {
+  fixture: {
+    icon: <FlaskConical aria-hidden="true" />,
+    label: 'Server-backed fixtures',
+  },
   planned: {
     icon: <Construction aria-hidden="true" />,
     label: 'Not yet built',
@@ -24,7 +32,8 @@ const readinessPresentation: Record<
 /**
  * Shared page heading for Lucid product surfaces.
  *
- * Readiness is explicit so previews cannot be mistaken for live product data.
+ * Readiness is explicit so previews and fixtures cannot be mistaken for live
+ * agent-authored product data.
  */
 export function FoundationPage({
   children,

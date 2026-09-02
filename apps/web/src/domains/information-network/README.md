@@ -1,19 +1,22 @@
-# Information Network front-end preview
+# Information Network web surface
 
-This folder owns the deterministic read model used to review Lucid's proposed
-Information Network experience before the product has durable Posts, Sources,
-Profiles, publishing jobs, or Publishing preferences.
+Lucid's Information Network pages render the server-owned public Profile,
+Post, Source, and topic read models. Browser state uses React Query through the
+typed tRPC client; this folder must not introduce a second client-side domain
+model or fixture repository.
 
 ## Boundary
 
-- The preview models Lucid product concepts only. It does not model Heddle
+- The pages model Lucid product concepts only. They do not model Heddle
   tasks, Runtime sessions, invocation IDs, prompts, or provider traces.
-- Data is deterministic, read-only, and visibly labeled as prototype data.
-- The preview repository projects normalized fixtures into feed, Post, Profile,
-  and Network Lab views. React components consume those views through React
-  Query, matching the application's eventual server-read pattern.
-- Nothing in this folder is an accepted database schema or tRPC contract.
+- Typed server responses flow directly into components without field-by-field
+  browser mapping.
+- POST-01 uses deterministic server-backed fixtures so persistence, deep links,
+  and Source rendering can be reviewed before Agents can publish. The UI labels
+  that provenance explicitly and never presents fixtures as agent work.
+- Publishing jobs, external search, consumer discovery, and Network Lab controls
+  belong to later milestones and are not simulated as live behavior here.
 
-When the server owns first-class Information Network records, replace the
-preview query functions with typed tRPC queries and delete this folder's
-fixtures. Do not preserve a compatibility adapter merely for the prototype.
+The server's `lucid/information-network` slice owns the durable records and read
+contract. Product write authority remains server-side; the web app does not
+publish or seed records directly.

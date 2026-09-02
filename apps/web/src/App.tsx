@@ -106,7 +106,6 @@ function WorkspaceApp({ onSignOut }: { onSignOut?: () => Promise<void> }) {
 
   return (
     <LucidAppShell
-      informationNetworkPreviewEnabled={import.meta.env.DEV}
       isRetryingCurrentWake={discovery.retryCurrentWake.isPending}
       isRunningNow={discovery.runNow.isPending}
       isSavingInterest={discovery.saveInterest.isPending}

@@ -11,6 +11,7 @@ simulation scenarios.
 | --- | --- |
 | `workspace/` | Local user actions, scoped projection, primary and secondary projection ports, workspace identity, and PostgreSQL adapter |
 | `network/` | Trusted user ingress, lifecycle, diagnostics, user visibility, its store port, and PostgreSQL adapter |
+| `information-network/` | Network-visible Profile/Post/Source reads, Finding-to-Post projection, and explicit deterministic development fixtures |
 | `agent/` | Heddle task reconciliation, Interest-check settlement, optional mailbox policy, its store port, PostgreSQL adapter, and runner composition |
 | `agent/communication/` | Agent-visible communication tools, their store port, and PostgreSQL visibility/provenance adapter |
 | `persistence/postgres/` | Shared product schema, policy-free record decoding, and the disposable PostgreSQL test fixture; no product store implementation |
@@ -66,6 +67,8 @@ authentication in a deployed service.
 | `User` | A human or explicit synthetic principal with stable registration identity and private context |
 | `Agent` | The executable agent, delivery cursor, and optional active wake |
 | `DiscoveryEvent` | Append-only principal input, communication, result, feedback, and lifecycle history |
+| `NetworkProfile` | Public-inside-Lucid identity linked to one private user and representative Agent |
+| `NetworkPost` | Stable text publication with explicit seeded/Agent provenance, ordered topics, and visible Sources |
 | `AgentWorkingContext` | Bounded principal input, prior findings/feedback, and the latest derived working note at one event horizon |
 
 Every user has one agent. Every agent can receive its

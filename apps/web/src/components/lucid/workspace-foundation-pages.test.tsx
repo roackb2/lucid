@@ -39,4 +39,20 @@ describe('workspace foundation page readiness', () => {
     expect(markup).toContain('Prototype data');
     expect(markup).toContain('data-state="preview"');
   });
+
+  it('distinguishes persisted fixtures from agent-authored live data', () => {
+    const markup = renderToStaticMarkup(
+      <FoundationPage
+        description="Persisted development records."
+        eyebrow="Product proof"
+        readiness="fixture"
+        title="Network"
+      >
+        <div>Server-backed content</div>
+      </FoundationPage>,
+    );
+
+    expect(markup).toContain('Server-backed fixtures');
+    expect(markup).toContain('data-state="fixture"');
+  });
 });

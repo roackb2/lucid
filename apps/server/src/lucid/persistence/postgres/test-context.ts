@@ -5,6 +5,9 @@ import {
 import type { PostgresDatabase } from '../../../infrastructure/postgres/database.js';
 import { PostgresUserNetworkStore } from '../../network/postgres-store.js';
 import {
+  PostgresInformationNetworkStore,
+} from '../../information-network/postgres-store.js';
+import {
   PostgresAgentCommunicationStore,
 } from '../../agent/communication/postgres-store.js';
 import { PostgresAgentWakeStore } from '../../agent/postgres-store.js';
@@ -25,6 +28,7 @@ export type PostgresTestStores = {
   stores: {
     workspace: PostgresDiscoveryWorkspaceStore;
     network: PostgresUserNetworkStore;
+    informationNetwork: PostgresInformationNetworkStore;
     agent: PostgresAgentWakeStore;
     communication: PostgresAgentCommunicationStore;
     conversationHistory: PostgresHostedConversationHistoryStore;
@@ -56,6 +60,7 @@ export async function createPostgresTestStores(options: {
     const stores = {
       workspace,
       network: new PostgresUserNetworkStore(database),
+      informationNetwork: new PostgresInformationNetworkStore(database),
       agent,
       communication: new PostgresAgentCommunicationStore(database),
       conversationHistory: new PostgresHostedConversationHistoryStore(
