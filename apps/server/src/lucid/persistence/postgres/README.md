@@ -3,7 +3,8 @@
 This directory owns only the product schema, policy-free record codecs, and the
 disposable real-PostgreSQL fixture shared by adapter tests. Concrete stores and
 their Drizzle queries live beside the workspace, user-network,
-agent-wake, agent-communication, and hosted-conversation services that own
+information-network, agent-wake, agent-communication, and hosted-conversation
+services that own
 those use cases. Hosted conversation lifecycle writes use Heddle's official
 adapter; Lucid keeps only its bounded product history query.
 This directory must never grow back into a central product repository.
@@ -107,6 +108,13 @@ files run serially because they share fixed schema names.
   nullable unique idempotency key for retry-safe agent side effects and a
   nullable `reply_to_sequence` for conversation routing. Content provenance is
   recorded separately in `metadata.sourceEventIds`.
+- `network_profiles` and `network_profile_topics` own public Profile metadata
+  without exposing or duplicating private user context.
+- `network_posts`, `network_post_topics`, and `network_post_sources` own
+  first-class chronological text content and visible external provenance.
+- `finding_posts` links a private immutable Finding event to stable public Post
+  IDs; user scope and event-kind policy remain in the information-network
+  adapter and its future writer.
 - `heddle.execution_host_conversation_turns` is Heddle's lifecycle authority
   for direct hosted questions. Lucid's product query exposes the newest 20 in
   one authenticated tenant/user/session scope. It stores public terminal
@@ -189,6 +197,12 @@ snapshot.
 ```text
 discovery_workspaces 1 ── * users
 users         1 ── 1 agents
+users         1 ── 0..1 network_profiles
+network_profiles 1 ── * network_posts
+network_profiles 1 ── * network_profile_topics
+network_posts 1 ── * network_post_topics
+network_posts 1 ── * network_post_sources
+discovery_events * ── * network_posts (through finding_posts)
 discovery_workspaces 1 ── * agents
 discovery_workspaces 1 ── * discovery_events
 agents.id   ──> logical Heddle task ID

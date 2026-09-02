@@ -14,6 +14,7 @@ It owns:
 - optional same-origin serving of the pre-built user SPA;
 - PostgreSQL pool lifecycle and checked-in Drizzle migrations;
 - construction of the service-owned product stores;
+- authenticated, bounded Information Network feed/Post/Profile reads;
 - coordinator-backed heartbeat product control and desired-task projection;
 - graceful shutdown ordering.
 
@@ -32,7 +33,7 @@ bounded execution, and recovery predictable.
   Lucid's historical heartbeat tables before the coordinator creates them.
 - `src/infrastructure/postgres/database.ts` owns the shared PostgreSQL pool and
   migration mechanism without importing product schemas.
-- `src/lucid/{workspace,network,agent}/postgres-store.ts` and
+- `src/lucid/{workspace,network,information-network,agent}/postgres-store.ts` and
   `src/lucid/agent/communication/postgres-store.ts` implement Lucid-owned
   product stores. `src/hosted-execution/conversation/postgres-history-store.ts`
   owns only the bounded product history query.
@@ -57,6 +58,9 @@ bounded execution, and recovery predictable.
   - `discovery.setBackgroundChecksEnabled`
   - `discovery.submitFeedback`
   - `discovery.resetWorkspace`
+  - `informationNetwork.feed`
+  - `informationNetwork.post`
+  - `informationNetwork.profile`
   - `hostedConversation.recent`
 - `src/config.ts` validates environment variables and resolves state paths.
 

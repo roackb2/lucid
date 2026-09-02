@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import type {
+  FindingNetworkPostView,
+} from './information-network/types.js';
 
 export const userKindSchema = z.enum(['human', 'synthetic']);
 export const userStatusSchema = z.enum([
@@ -152,6 +155,8 @@ export type DiscoveryEvent = {
 
 export type FindingView = {
   finding: DiscoveryEvent;
+  /** First-class Network Posts that support this private Finding. */
+  networkPosts?: FindingNetworkPostView[];
   /** Messages the agent cited when it reported the finding. */
   sources: FindingSourceView[];
   /**

@@ -14,6 +14,9 @@ import {
 } from '../lucid/agent/heartbeat-task-identity.js';
 import type { UserNetworkStore } from '../lucid/network/store.js';
 import type {
+  InformationNetworkStore,
+} from '../lucid/information-network/store.js';
+import type {
   AgentCommunicationStore,
 } from '../lucid/agent/communication/store.js';
 import type {
@@ -24,6 +27,7 @@ import type { DiscoveryWorkspaceStore } from '../lucid/workspace/store.js';
 export type LucidStoreSet = {
   workspace: DiscoveryWorkspaceStore;
   network: UserNetworkStore;
+  informationNetwork: InformationNetworkStore;
   agent: AgentWakeStore;
   communication: AgentCommunicationStore;
 };

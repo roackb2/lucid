@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DiscoveryWorkspaceService } from './lucid/workspace/service.js';
 import type { UserNetworkService } from './lucid/network/service.js';
+import type {
+  InformationNetworkService,
+} from './lucid/information-network/service.js';
 import { createAppRouter } from './router.js';
 import type { LucidRequestContext } from './trpc.js';
 
@@ -78,6 +81,50 @@ describe('Lucid router authorization', () => {
     await expect(user.caller.hostedConversation.recent())
       .resolves.toEqual([]);
     expect(user.recentConversations).toHaveBeenCalledWith('local-user');
+  });
+
+  it('exposes Network reads only to a bound user principal', async () => {
+    const anonymous = createCaller({
+      requestId: 'anonymous-network',
+      remoteAddress: '127.0.0.1',
+    });
+    await expect(anonymous.caller.informationNetwork.feed())
+      .rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    const unbound = createCaller({
+      requestId: 'unbound-network',
+      remoteAddress: '127.0.0.1',
+      principal: {
+        subject: 'provider-subject-without-product-user',
+        roles: ['user'],
+      },
+    });
+    await expect(unbound.caller.informationNetwork.post({ postId: 'post-1' }))
+      .rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    const user = createCaller({
+      requestId: 'user-network',
+      remoteAddress: '203.0.113.10',
+      principal: {
+        subject: 'verified-subject',
+        userId: 'local-user',
+        roles: ['user'],
+      },
+    });
+    await expect(user.caller.informationNetwork.feed()).resolves.toEqual({
+      entries: [],
+      postCount: 0,
+      profileCount: 0,
+    });
+    await expect(user.caller.informationNetwork.post({ postId: 'post-1' }))
+      .resolves.toBeNull();
+    await expect(user.caller.informationNetwork.profile({
+      profileId: 'profile-1',
+    })).resolves.toBeNull();
+    expect(user.readInformationNetworkFeed).toHaveBeenCalledOnce();
+    expect(user.readInformationNetworkPost).toHaveBeenCalledWith('post-1');
+    expect(user.readInformationNetworkProfile)
+      .toHaveBeenCalledWith('profile-1');
   });
 
   it('reports authenticated Chat readiness without exposing credentials', async () => {
@@ -228,7 +275,7 @@ describe('Lucid router authorization', () => {
 
 function createCaller(
   context: LucidRequestContext,
-  options: Parameters<typeof createAppRouter>[3] = {},
+  options: Parameters<typeof createAppRouter>[4] = {},
 ) {
   const snapshot = vi.fn(async () => ({ ok: true }));
   const diagnostics = vi.fn(async () => ({ ok: true }));
@@ -241,6 +288,13 @@ function createCaller(
     userId: 'user_avery',
   }));
   const recentConversations = vi.fn(async () => []);
+  const readInformationNetworkFeed = vi.fn(async () => ({
+    entries: [],
+    postCount: 0,
+    profileCount: 0,
+  }));
+  const readInformationNetworkPost = vi.fn(async () => null);
+  const readInformationNetworkProfile = vi.fn(async () => null);
   const discoveryWorkspace = {
     snapshot,
   } as unknown as DiscoveryWorkspaceService;
@@ -251,9 +305,15 @@ function createCaller(
     setSyntheticPeerAgentTasksEnabled,
     enrollAuthenticatedUser,
   } as unknown as UserNetworkService;
+  const informationNetwork = {
+    feed: readInformationNetworkFeed,
+    post: readInformationNetworkPost,
+    profile: readInformationNetworkProfile,
+  } as unknown as InformationNetworkService;
   const caller = createAppRouter(
     discoveryWorkspace,
     userNetwork,
+    informationNetwork,
     { recentForUser: recentConversations },
     options,
   ).createCaller(context);
@@ -266,5 +326,8 @@ function createCaller(
     setSyntheticPeerAgentTasksEnabled,
     enrollAuthenticatedUser,
     recentConversations,
+    readInformationNetworkFeed,
+    readInformationNetworkPost,
+    readInformationNetworkProfile,
   };
 }
