@@ -31,6 +31,8 @@ bounded execution, and recovery predictable.
 - `src/migrate.ts` applies checked-in Lucid PostgreSQL migrations as an
   explicit deployment step. The final ownership-transfer migration removes
   Lucid's historical heartbeat tables before the coordinator creates them.
+- `src/lucid/information-network/seed.ts` installs deterministic pilot records
+  only when development auth and the explicit fixture guard are both set.
 - `src/infrastructure/postgres/database.ts` owns the shared PostgreSQL pool and
   migration mechanism without importing product schemas.
 - `src/lucid/{workspace,network,information-network,agent}/postgres-store.ts` and
