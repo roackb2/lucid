@@ -17,6 +17,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
     "db:migrate:production": "node dist/migrate.js",
+    "network:seed": "tsx src/lucid/information-network/seed.ts",
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {

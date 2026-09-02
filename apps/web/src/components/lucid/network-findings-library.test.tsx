@@ -39,6 +39,16 @@ const NETWORK_FINDING: FindingView = {
     },
   }],
   outboundMessages: [],
+  networkPosts: [{
+    id: 'post-001',
+    title: 'Durable context belongs outside disposable execution',
+    publishedAt: '2026-08-27T09:30:00.000Z',
+    publicationMethod: 'seeded-pilot',
+    author: {
+      id: 'profile-kai',
+      displayName: 'Kai',
+    },
+  }],
   noMatch: false,
   origin: 'ambient-network',
 };
@@ -62,6 +72,9 @@ describe('network findings learning slice', () => {
     expect(markup).toContain('We retained product memory');
     expect(markup).toContain('Kai');
     expect(markup).toContain('Human user');
+    expect(markup).toContain('Lucid Posts cited by this Finding');
+    expect(markup).toContain('Durable context belongs outside disposable execution');
+    expect(markup).toContain('/network/posts/post-001');
     expect(markup).toContain('1 quiet check omitted');
     expect(markup).not.toContain('No relevant message surfaced in this check.');
   });

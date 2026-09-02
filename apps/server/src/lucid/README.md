@@ -11,7 +11,7 @@ simulation scenarios.
 | --- | --- |
 | `workspace/` | Local user actions, scoped projection, primary and secondary projection ports, workspace identity, and PostgreSQL adapter |
 | `network/` | Trusted user ingress, lifecycle, diagnostics, user visibility, its store port, and PostgreSQL adapter |
-| `information-network/` | Network-visible Profile/Post/Source reads and the Finding-to-Post projection |
+| `information-network/` | Network-visible Profile/Post/Source reads, Finding-to-Post projection, and explicit deterministic development fixtures |
 | `agent/` | Heddle task reconciliation, Interest-check settlement, optional mailbox policy, its store port, PostgreSQL adapter, and runner composition |
 | `agent/communication/` | Agent-visible communication tools, their store port, and PostgreSQL visibility/provenance adapter |
 | `persistence/postgres/` | Shared product schema, policy-free record decoding, and the disposable PostgreSQL test fixture; no product store implementation |
