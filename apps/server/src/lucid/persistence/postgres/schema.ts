@@ -12,6 +12,7 @@ import {
   boolean,
   check,
   index,
+  integer,
   jsonb,
   pgSchema,
   primaryKey,
@@ -239,10 +240,230 @@ export const postgresDiscoveryEvents = lucidPostgresSchema.table(
   ],
 );
 
+/** Network-visible identity projected from one private Lucid user. */
+export const postgresNetworkProfiles = lucidPostgresSchema.table(
+  'network_profiles',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => postgresDiscoveryWorkspaces.id, {
+        onDelete: 'cascade',
+      }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => postgresUsers.id, { onDelete: 'cascade' }),
+    publicDescription: text('public_description').notNull(),
+    publishingFocus: text('publishing_focus').notNull(),
+    createdAt: timestampColumn('created_at').notNull(),
+    updatedAt: timestampColumn('updated_at').notNull(),
+  },
+  (table) => [
+    index('network_profiles_workspace_idx').on(table.workspaceId),
+    uniqueIndex('network_profiles_user_idx').on(table.userId),
+    check(
+      'network_profiles_description_valid',
+      sql`char_length(${table.publicDescription}) between 1 and 2000 and ${table.publicDescription} = btrim(${table.publicDescription})`,
+    ),
+    check(
+      'network_profiles_focus_valid',
+      sql`char_length(${table.publishingFocus}) between 1 and 120 and ${table.publishingFocus} = btrim(${table.publishingFocus})`,
+    ),
+  ],
+);
+
+export const postgresNetworkProfileTopics = lucidPostgresSchema.table(
+  'network_profile_topics',
+  {
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => postgresNetworkProfiles.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    topic: text('topic').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'network_profile_topics_pk',
+      columns: [table.profileId, table.topic],
+    }),
+    uniqueIndex('network_profile_topics_position_idx')
+      .on(table.profileId, table.position),
+    index('network_profile_topics_topic_idx').on(table.topic, table.profileId),
+    check(
+      'network_profile_topics_position_nonnegative',
+      sql`${table.position} >= 0`,
+    ),
+    check(
+      'network_profile_topics_topic_valid',
+      sql`char_length(${table.topic}) between 1 and 120 and ${table.topic} = btrim(${table.topic})`,
+    ),
+  ],
+);
+
+export const postgresNetworkPosts = lucidPostgresSchema.table(
+  'network_posts',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => postgresDiscoveryWorkspaces.id, {
+        onDelete: 'cascade',
+      }),
+    authorProfileId: text('author_profile_id')
+      .notNull()
+      .references(() => postgresNetworkProfiles.id, { onDelete: 'cascade' }),
+    authorAgentId: text('author_agent_id')
+      .references(() => postgresAgents.id, { onDelete: 'restrict' }),
+    publicationMethod: text('publication_method').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    publishedAt: timestampColumn('published_at').notNull(),
+    createdAt: timestampColumn('created_at').notNull(),
+    createdByExecutionId: text('created_by_execution_id'),
+    idempotencyKey: text('idempotency_key'),
+  },
+  (table) => [
+    index('network_posts_feed_idx').on(
+      table.workspaceId,
+      table.publishedAt,
+      table.id,
+    ),
+    index('network_posts_profile_idx').on(
+      table.authorProfileId,
+      table.publishedAt,
+      table.id,
+    ),
+    uniqueIndex('network_posts_idempotency_idx').on(table.idempotencyKey),
+    check(
+      'network_posts_publication_method_valid',
+      sql`${table.publicationMethod} in ('seeded-pilot', 'agent')`,
+    ),
+    check(
+      'network_posts_publication_provenance_valid',
+      sql`(
+        ${table.publicationMethod} = 'agent'
+        and ${table.authorAgentId} is not null
+        and ${table.createdByExecutionId} is not null
+      ) or (
+        ${table.publicationMethod} = 'seeded-pilot'
+        and ${table.authorAgentId} is null
+        and ${table.createdByExecutionId} is null
+      )`,
+    ),
+    check(
+      'network_posts_title_valid',
+      sql`char_length(${table.title}) between 1 and 240 and ${table.title} = btrim(${table.title})`,
+    ),
+    check(
+      'network_posts_body_valid',
+      sql`char_length(${table.body}) between 1 and 20000 and ${table.body} = btrim(${table.body})`,
+    ),
+  ],
+);
+
+export const postgresNetworkPostTopics = lucidPostgresSchema.table(
+  'network_post_topics',
+  {
+    postId: text('post_id')
+      .notNull()
+      .references(() => postgresNetworkPosts.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    topic: text('topic').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'network_post_topics_pk',
+      columns: [table.postId, table.topic],
+    }),
+    uniqueIndex('network_post_topics_position_idx')
+      .on(table.postId, table.position),
+    index('network_post_topics_topic_idx').on(table.topic, table.postId),
+    check(
+      'network_post_topics_position_nonnegative',
+      sql`${table.position} >= 0`,
+    ),
+    check(
+      'network_post_topics_topic_valid',
+      sql`char_length(${table.topic}) between 1 and 120 and ${table.topic} = btrim(${table.topic})`,
+    ),
+  ],
+);
+
+export const postgresNetworkPostSources = lucidPostgresSchema.table(
+  'network_post_sources',
+  {
+    id: text('id').primaryKey(),
+    postId: text('post_id')
+      .notNull()
+      .references(() => postgresNetworkPosts.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    title: text('title').notNull(),
+    sourceName: text('source_name').notNull(),
+    url: text('url').notNull(),
+    retrievedAt: timestampColumn('retrieved_at'),
+  },
+  (table) => [
+    uniqueIndex('network_post_sources_position_idx')
+      .on(table.postId, table.position),
+    uniqueIndex('network_post_sources_url_idx').on(table.postId, table.url),
+    check(
+      'network_post_sources_position_nonnegative',
+      sql`${table.position} >= 0`,
+    ),
+    check(
+      'network_post_sources_title_valid',
+      sql`char_length(${table.title}) between 1 and 500 and ${table.title} = btrim(${table.title})`,
+    ),
+    check(
+      'network_post_sources_name_valid',
+      sql`char_length(${table.sourceName}) between 1 and 200 and ${table.sourceName} = btrim(${table.sourceName})`,
+    ),
+    check(
+      'network_post_sources_url_valid',
+      sql`char_length(${table.url}) between 1 and 2048 and ${table.url} = btrim(${table.url})`,
+    ),
+  ],
+);
+
+/** Normalized private Finding-to-public-Post provenance. */
+export const postgresFindingPosts = lucidPostgresSchema.table(
+  'finding_posts',
+  {
+    findingSequence: bigint('finding_sequence', { mode: 'number' })
+      .notNull()
+      .references(() => postgresDiscoveryEvents.sequence, {
+        onDelete: 'cascade',
+      }),
+    postId: text('post_id')
+      .notNull()
+      .references(() => postgresNetworkPosts.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'finding_posts_pk',
+      columns: [table.findingSequence, table.postId],
+    }),
+    uniqueIndex('finding_posts_position_idx')
+      .on(table.findingSequence, table.position),
+    index('finding_posts_post_idx').on(table.postId, table.findingSequence),
+    check(
+      'finding_posts_position_nonnegative',
+      sql`${table.position} >= 0`,
+    ),
+  ],
+);
+
 export const lucidPostgresTables = {
   discoveryWorkspaces: postgresDiscoveryWorkspaces,
   users: postgresUsers,
   userIdentityBindings: postgresUserIdentityBindings,
   agents: postgresAgents,
   discoveryEvents: postgresDiscoveryEvents,
+  networkProfiles: postgresNetworkProfiles,
+  networkProfileTopics: postgresNetworkProfileTopics,
+  networkPosts: postgresNetworkPosts,
+  networkPostTopics: postgresNetworkPostTopics,
+  networkPostSources: postgresNetworkPostSources,
+  findingPosts: postgresFindingPosts,
 };

@@ -10,6 +10,7 @@ import type {
   AgentHeartbeatControl,
 } from '../agent/heartbeat-control.js';
 import type { DiscoveryWorkspaceStore } from './store.js';
+import type { FindingPostReader } from '../information-network/store.js';
 import { includeCurrentAgentTaskActivity } from './agent-activity.js';
 
 export class DiscoveryInputError extends Error {}
@@ -18,17 +19,45 @@ export class DiscoveryInputError extends Error {}
 export class DiscoveryWorkspaceService {
   constructor(
     private readonly store: DiscoveryWorkspaceStore,
+    private readonly findingPosts: FindingPostReader,
     private readonly heartbeats: AgentHeartbeatControl,
     private readonly runtime: { model: string; heddleVersion: string },
   ) {}
 
   async snapshot(userId: string): Promise<DiscoveryWorkspaceSnapshot> {
     const workspace = await this.store.readSnapshot(userId);
-    const backgroundChecks = await this.heartbeats.snapshotForAgent(
-      workspace.agent.id,
-    );
+    const findingSequences = [
+      ...workspace.findings.map(({ finding }) => finding.sequence),
+      ...(workspace.guidanceFollowThrough?.resultingFinding
+        ? [workspace.guidanceFollowThrough.resultingFinding.finding.sequence]
+        : []),
+    ];
+    const [backgroundChecks, networkPostsByFinding] = await Promise.all([
+      this.heartbeats.snapshotForAgent(workspace.agent.id),
+      this.findingPosts.readFindingPosts(userId, findingSequences),
+    ]);
+    const findings = workspace.findings.map((finding) => ({
+      ...finding,
+      networkPosts: networkPostsByFinding.get(finding.finding.sequence) ?? [],
+    }));
+    const guidanceFollowThrough = workspace.guidanceFollowThrough
+      ? {
+          ...workspace.guidanceFollowThrough,
+          resultingFinding: workspace.guidanceFollowThrough.resultingFinding
+            ? {
+                ...workspace.guidanceFollowThrough.resultingFinding,
+                networkPosts: networkPostsByFinding.get(
+                  workspace.guidanceFollowThrough.resultingFinding
+                    .finding.sequence,
+                ) ?? [],
+              }
+            : undefined,
+        }
+      : undefined;
     return {
       ...workspace,
+      findings,
+      guidanceFollowThrough,
       agentActivity: includeCurrentAgentTaskActivity(
         workspace.agentActivity,
         backgroundChecks,

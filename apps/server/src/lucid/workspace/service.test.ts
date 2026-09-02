@@ -17,6 +17,7 @@ import { DiscoveryWorkspaceService } from './service.js';
 import type {
   AgentHeartbeatControl,
 } from '../agent/heartbeat-control.js';
+import type { FindingPostReader } from '../information-network/store.js';
 
 describe('discovery workspace service', () => {
   let database: PostgresDatabase;
@@ -56,6 +57,7 @@ describe('discovery workspace service', () => {
     } as unknown as AgentHeartbeatControl;
     const workspace = new DiscoveryWorkspaceService(
       stores.workspace,
+      stores.informationNetwork,
       heartbeats,
       { model: 'test-model', heddleVersion: 'test' },
     );
@@ -143,4 +145,63 @@ describe('discovery workspace service', () => {
     expect(triggerAgent).toHaveBeenNthCalledWith(1, LOCAL_AGENT_ID);
     expect(triggerAgent).toHaveBeenNthCalledWith(2, LOCAL_AGENT_ID);
   });
+
+  it('projects navigable Network Posts onto only the owning user Finding', async () => {
+    const finding = await stores.communication.appendCommunicationEvent({
+      kind: 'finding_reported',
+      actorAgentId: LOCAL_AGENT_ID,
+      targetUserId: LOCAL_USER_ID,
+      title: 'A linked Post',
+      content: 'This Finding points back to a public Post.',
+      metadata: { sourceEventIds: [] },
+    });
+    const findingPostReader = {
+      readFindingPosts: vi.fn(async () => new Map([[
+        finding.sequence,
+        [{
+          id: 'test-network-post',
+          title: 'A durable read-model boundary',
+          publishedAt: '2026-08-30T11:44:00.000Z',
+          publicationMethod: 'seeded-pilot' as const,
+          author: { id: 'test-network-profile', displayName: 'Test Author' },
+        }],
+      ]])),
+    } satisfies FindingPostReader;
+    const workspace = new DiscoveryWorkspaceService(
+      stores.workspace,
+      findingPostReader,
+      heartbeatStub(),
+      { model: 'test-model', heddleVersion: 'test' },
+    );
+
+    const snapshot = await workspace.snapshot(LOCAL_USER_ID);
+    const linkedFinding = snapshot.findings.find(
+      ({ finding: candidate }) => candidate.id === finding.id,
+    );
+
+    expect(linkedFinding?.networkPosts).toEqual([{
+      id: 'test-network-post',
+      title: 'A durable read-model boundary',
+      publishedAt: '2026-08-30T11:44:00.000Z',
+      publicationMethod: 'seeded-pilot',
+      author: { id: 'test-network-profile', displayName: 'Test Author' },
+    }]);
+    expect(findingPostReader.readFindingPosts).toHaveBeenCalledWith(
+      LOCAL_USER_ID,
+      expect.arrayContaining([finding.sequence]),
+    );
+    expect(JSON.stringify(snapshot)).not.toContain('privateContext');
+  });
 });
+
+function heartbeatStub(): AgentHeartbeatControl {
+  return {
+    snapshotForAgent: async () => ({
+      enabled: true,
+      dispatchEnabled: true,
+      running: false,
+      intervalMs: 60_000,
+      tasks: [],
+    }),
+  } as unknown as AgentHeartbeatControl;
+}

@@ -17,6 +17,10 @@ import {
   UserNetworkInputError,
   UserNetworkService,
 } from './lucid/network/service.js';
+import {
+  InformationNetworkInputError,
+  InformationNetworkService,
+} from './lucid/information-network/service.js';
 import type {
   HostedConversationHistoryReader,
 } from './hosted-execution/conversation/history-service.js';
@@ -79,6 +83,14 @@ const userEnrollmentSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
   privateContext: z.string().trim().min(1).max(4_000),
   contextApproved: z.literal(true),
+});
+
+const networkPostIdSchema = z.object({
+  postId: z.string().trim().min(1).max(160),
+});
+
+const networkProfileIdSchema = z.object({
+  profileId: z.string().trim().min(1).max(160),
 });
 
 const authenticatedProcedure = trpc.procedure.use(({ ctx, next }) => {
@@ -147,6 +159,7 @@ const developmentOperatorProcedure = operatorProcedure.use(({ ctx, next }) => {
 export function createAppRouter(
   discoveryWorkspace: DiscoveryWorkspaceService,
   userNetwork: UserNetworkService,
+  informationNetwork: InformationNetworkService,
   conversationHistory: HostedConversationHistoryReader,
   options: {
     allowSelfEnrollment?: boolean;
@@ -242,6 +255,19 @@ export function createAppRouter(
           ),
         )),
     }),
+    informationNetwork: trpc.router({
+      feed: userProcedure.query(() => informationNetwork.feed()),
+      post: userProcedure
+        .input(networkPostIdSchema)
+        .query(({ input }) => resolveInformationNetworkError(
+          () => informationNetwork.post(input.postId),
+        )),
+      profile: userProcedure
+        .input(networkProfileIdSchema)
+        .query(({ input }) => resolveInformationNetworkError(
+          () => informationNetwork.profile(input.profileId),
+        )),
+    }),
     hostedConversation: trpc.router({
       status: userProcedure.query(() => hostedConversationStatus),
       recent: userProcedure.query(({ ctx }) => (
@@ -325,6 +351,22 @@ async function resolveUserNetworkError<T>(
     return await operation();
   } catch (error) {
     if (error instanceof UserNetworkInputError) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: error.message,
+      });
+    }
+    throw error;
+  }
+}
+
+async function resolveInformationNetworkError<T>(
+  operation: () => T | Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof InformationNetworkInputError) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: error.message,
