@@ -33,6 +33,14 @@ export type HostedConversationTurn =
   RouterOutputs['hostedConversation']['recent'][number];
 export type HostedConversationStatus =
   RouterOutputs['hostedConversation']['status'];
+export type InformationNetworkFeed =
+  RouterOutputs['informationNetwork']['feed'];
+export type InformationNetworkPostDetail = NonNullable<
+  RouterOutputs['informationNetwork']['post']
+>;
+export type InformationNetworkProfileDetail = NonNullable<
+  RouterOutputs['informationNetwork']['profile']
+>;
 
 export function isAuthenticationRequired(error: unknown): boolean {
   return isTRPCClientError<AppRouter>(error)

@@ -1,5 +1,6 @@
 import {
   Bot,
+  Globe2,
   Lightbulb,
   LogOut,
   MessageCircle,
@@ -21,9 +22,18 @@ import { ChatDrawer } from '@/components/lucid/chat-drawer';
 import {
   AgentFoundationPage,
   FindingsFoundationPage,
-  InterestsFoundationPage,
+  InterestFoundationPage,
   SettingsFoundationPage,
 } from '@/components/lucid/workspace-foundation-pages';
+import {
+  InformationNetworkPage,
+} from '@/components/lucid/information-network-page';
+import {
+  InformationNetworkPostPage,
+} from '@/components/lucid/information-network-post-page';
+import {
+  InformationNetworkProfilePage,
+} from '@/components/lucid/information-network-profile-page';
 
 type LucidAppShellProps = {
   snapshot: DiscoverySnapshot;
@@ -44,20 +54,29 @@ type NavigationItem = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
 };
 
-export const FOUNDATION_HOME_PATH = '/agent';
+export const WORKSPACE_HOME_PATH = '/network';
 
-export const foundationNavigationItems: NavigationItem[] = [
-  { label: 'Agent', path: '/agent', icon: Bot },
+export const workspaceNavigationItems: NavigationItem[] = [
+  { label: 'Network', path: '/network', icon: Globe2 },
   { label: 'Findings', path: '/findings', icon: Search },
-  { label: 'Interests', path: '/interests', icon: Lightbulb },
+  { label: 'Interest', path: '/interests', icon: Lightbulb },
+  { label: 'Agent', path: '/agent', icon: Bot },
 ];
 
-const routeLabels = new Map([
-  ['/findings', 'Findings'],
-  ['/interests', 'Interests'],
-  ['/agent', 'Agent'],
-  ['/settings', 'Settings'],
-]);
+const workspacePageLabelResolvers = [
+  { label: 'Network', matches: (path: string) => path === '/network' },
+  { label: 'Post', matches: (path: string) => path.startsWith('/network/posts/') },
+  { label: 'Profile', matches: (path: string) => path.startsWith('/profiles/') },
+  { label: 'Findings', matches: (path: string) => path === '/findings' },
+  { label: 'Interest', matches: (path: string) => path === '/interests' },
+  { label: 'Agent', matches: (path: string) => path === '/agent' },
+  { label: 'Settings', matches: (path: string) => path === '/settings' },
+];
+
+export const resolveWorkspacePageLabel = (path: string): string => (
+  workspacePageLabelResolvers.find(({ matches }) => matches(path))?.label
+    ?? 'Network'
+);
 
 export function LucidAppShell({
   isRetryingCurrentWake,
@@ -72,7 +91,7 @@ export function LucidAppShell({
   snapshot,
 }: LucidAppShellProps) {
   const location = useLocation();
-  const pageLabel = routeLabels.get(location.pathname) ?? 'Agent';
+  const pageLabel = resolveWorkspacePageLabel(location.pathname);
   const agentState = resolveAgentState(snapshot);
 
   return (
@@ -91,7 +110,7 @@ export function LucidAppShell({
 
         <nav className="lucid-shell__nav" aria-label="Lucid workspace">
           <p className="lucid-shell__nav-label">Workspace</p>
-          {foundationNavigationItems.map(({ icon: Icon, label, path }) => (
+          {workspaceNavigationItems.map(({ icon: Icon, label, path }) => (
             <NavLink
               aria-label={label}
               className={({ isActive }) => cn(
@@ -205,6 +224,15 @@ export function LucidAppShell({
 
         <main className="lucid-shell__content" id="main-content">
           <Routes>
+            <Route path="/network" element={<InformationNetworkPage />} />
+            <Route
+              path="/network/posts/:postId"
+              element={<InformationNetworkPostPage />}
+            />
+            <Route
+              path="/profiles/:profileId"
+              element={<InformationNetworkProfilePage />}
+            />
             <Route
               path="/findings"
               element={<FindingsFoundationPage snapshot={snapshot} />}
@@ -212,7 +240,7 @@ export function LucidAppShell({
             <Route
               path="/interests"
               element={(
-                <InterestsFoundationPage
+                <InterestFoundationPage
                   isSaving={isSavingInterest}
                   onSaveInterest={onSaveInterest}
                   snapshot={snapshot}
@@ -241,11 +269,11 @@ export function LucidAppShell({
             />
             <Route
               path="/"
-              element={<Navigate replace to={FOUNDATION_HOME_PATH} />}
+              element={<Navigate replace to={WORKSPACE_HOME_PATH} />}
             />
             <Route
               path="*"
-              element={<Navigate replace to={FOUNDATION_HOME_PATH} />}
+              element={<Navigate replace to={WORKSPACE_HOME_PATH} />}
             />
           </Routes>
         </main>

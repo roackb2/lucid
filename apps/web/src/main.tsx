@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import { LucidAuthProvider } from './auth/supabase-auth';
 import App from './App';
 import './index.css';
+import './information-network.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -1,19 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FOUNDATION_HOME_PATH,
-  foundationNavigationItems,
+  WORKSPACE_HOME_PATH,
+  workspaceNavigationItems,
+  resolveWorkspacePageLabel,
 } from './app-shell';
 
-describe('Lucid foundation navigation', () => {
-  it('returns to Agent and keeps Chat out of primary navigation', () => {
-    expect(FOUNDATION_HOME_PATH).toBe('/agent');
-    expect(foundationNavigationItems.map(({ label, path }) => ({
+describe('Lucid workspace navigation', () => {
+  it('uses Network as home and keeps Chat out of primary navigation', () => {
+    expect(WORKSPACE_HOME_PATH).toBe('/network');
+    expect(workspaceNavigationItems.map(({ label, path }) => ({
       label,
       path,
     }))).toEqual([
-      { label: 'Agent', path: '/agent' },
+      { label: 'Network', path: '/network' },
       { label: 'Findings', path: '/findings' },
-      { label: 'Interests', path: '/interests' },
+      { label: 'Interest', path: '/interests' },
+      { label: 'Agent', path: '/agent' },
     ]);
+  });
+
+  it('uses product labels for dynamic Network routes', () => {
+    expect(resolveWorkspacePageLabel('/network')).toBe('Network');
+    expect(resolveWorkspacePageLabel('/network/posts/post-1')).toBe('Post');
+    expect(resolveWorkspacePageLabel('/profiles/profile-1')).toBe('Profile');
+    expect(resolveWorkspacePageLabel('/unknown')).toBe('Network');
   });
 });

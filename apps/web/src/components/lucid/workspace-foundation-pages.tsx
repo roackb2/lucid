@@ -1,7 +1,6 @@
 import {
   Activity,
   Bot,
-  CircleCheck,
   Construction,
   FileText,
   Search,
@@ -12,6 +11,7 @@ import type { DiscoverySnapshot } from '@/lib/trpc';
 import { AgentActivityTimeline } from './agent-activity-timeline';
 import { AgentWorkControls } from './agent-work-controls';
 import { CurrentInterestEditor } from './current-interest-editor';
+import { FoundationPage } from './foundation-page';
 import { NetworkFindingsLibrary } from './network-findings-library';
 
 type FoundationPageProps = {
@@ -20,7 +20,7 @@ type FoundationPageProps = {
 
 export function FindingsFoundationPage({ snapshot }: FoundationPageProps) {
   return (
-    <PageFrame
+    <FoundationPage
       eyebrow="Evidence library"
       title="Findings"
       description="Individual discoveries and the original messages behind them. Quiet checks stay in Agent Activity instead of becoming empty Findings."
@@ -30,11 +30,11 @@ export function FindingsFoundationPage({ snapshot }: FoundationPageProps) {
         findings={snapshot.findings}
         hasInterest={Boolean(snapshot.interest)}
       />
-    </PageFrame>
+    </FoundationPage>
   );
 }
 
-export function InterestsFoundationPage({
+export function InterestFoundationPage({
   isSaving,
   onSaveInterest,
   snapshot,
@@ -43,9 +43,9 @@ export function InterestsFoundationPage({
   onSaveInterest(content: string): Promise<unknown>;
 }) {
   return (
-    <PageFrame
+    <FoundationPage
       eyebrow="What the agent should care about"
-      title="Interests"
+      title="Interest"
       description="Lucid keeps one current Interest in focus for this experiment. Refine it whenever you want your agent’s future background work to change."
       readiness="working"
     >
@@ -54,7 +54,7 @@ export function InterestsFoundationPage({
         isSaving={isSaving}
         onSave={onSaveInterest}
       />
-    </PageFrame>
+    </FoundationPage>
   );
 }
 
@@ -83,7 +83,7 @@ export function AgentFoundationPage({
         : 'Paused';
 
   return (
-    <PageFrame
+    <FoundationPage
       eyebrow="Your delegated worker"
       title="Agent"
       description="A product-readable view of what the agent is doing, what it currently understands, and where it needs your attention."
@@ -136,13 +136,13 @@ export function AgentFoundationPage({
           status={snapshot.workingNote ? 'Saved understanding' : 'No saved understanding'}
         />
       </div>
-    </PageFrame>
+    </FoundationPage>
   );
 }
 
 export function SettingsFoundationPage({ snapshot }: FoundationPageProps) {
   return (
-    <PageFrame
+    <FoundationPage
       eyebrow="Product-owned controls only"
       title="Settings"
       description="This area stays intentionally small until a real product decision requires a durable preference or control."
@@ -187,49 +187,7 @@ export function SettingsFoundationPage({ snapshot }: FoundationPageProps) {
           icon={<Bot />}
         />
       </div>
-    </PageFrame>
-  );
-}
-
-function PageFrame({
-  children,
-  description,
-  eyebrow,
-  readiness,
-  title,
-}: {
-  children: ReactNode;
-  description: string;
-  eyebrow: string;
-  readiness: 'working' | 'planned';
-  title: string;
-}) {
-  const readinessPresentation = {
-    planned: {
-      icon: <Construction aria-hidden="true" />,
-      label: 'Not yet built',
-    },
-    working: {
-      icon: <CircleCheck aria-hidden="true" />,
-      label: 'Working · live data',
-    },
-  }[readiness];
-
-  return (
-    <div className="foundation-page">
-      <header className="foundation-page__heading">
-        <div>
-          <p>{eyebrow}</p>
-          <h1>{title}</h1>
-        </div>
-        <span className="foundation-badge" data-state={readiness}>
-          {readinessPresentation.icon}
-          {readinessPresentation.label}
-        </span>
-        <p>{description}</p>
-      </header>
-      {children}
-    </div>
+    </FoundationPage>
   );
 }
 
