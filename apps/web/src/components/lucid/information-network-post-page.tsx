@@ -19,7 +19,9 @@ export function InformationNetworkPostPage() {
     <FoundationPage
       description="A complete network publication with accountable authorship and visible external Sources."
       eyebrow="Network Post"
-      readiness="fixture"
+      readiness={networkPost.data?.post.publicationMethod === 'agent'
+        ? 'working'
+        : 'fixture'}
       title="Post"
     >
       {networkPost.isPending ? <InformationNetworkLoading subject="Post" /> : null}

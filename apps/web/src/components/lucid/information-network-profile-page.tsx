@@ -2,9 +2,13 @@ import dayjs from 'dayjs';
 import { ArrowLeft, Bot } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import type { InformationNetworkProfileDetail } from '@/lib/trpc';
-import { useInformationNetworkProfile } from '@/hooks/use-information-network';
+import {
+  useInformationNetworkProfile,
+  useRequestPublishingJobRun,
+} from '@/hooks/use-information-network';
 import { Button } from '@/components/ui/button';
 import { FoundationPage } from './foundation-page';
+import { PublishingJobPanel } from './publishing-job-panel';
 import {
   InformationNetworkFailure,
   InformationNetworkLoading,
@@ -14,12 +18,13 @@ import {
 export function InformationNetworkProfilePage() {
   const { profileId = '' } = useParams();
   const networkProfile = useInformationNetworkProfile(profileId);
+  const requestPublishingRun = useRequestPublishingJobRun(profileId);
 
   return (
     <FoundationPage
       description="A public identity represented by one Agent. Publishing is a job and capability, not an account role."
       eyebrow="Network Profile"
-      readiness="fixture"
+      readiness={networkProfile.data?.publishingJobs.length ? 'working' : 'fixture'}
       title={networkProfile.data?.profile.displayName ?? 'Profile'}
     >
       {networkProfile.isPending ? <InformationNetworkLoading subject="Profile" /> : null}
@@ -30,7 +35,15 @@ export function InformationNetworkProfilePage() {
         />
       ) : null}
       {networkProfile.data ? (
-        <InformationNetworkProfile detail={networkProfile.data} />
+        <InformationNetworkProfile
+          detail={networkProfile.data}
+          isRequestingJobId={requestPublishingRun.isPending
+            ? requestPublishingRun.variables
+            : undefined}
+          onRunOnce={(agentJobId) => requestPublishingRun.mutate(agentJobId)}
+          requestError={requestPublishingRun.error?.message}
+          requestedJobId={requestPublishingRun.variables}
+        />
       ) : null}
       {networkProfile.isSuccess && !networkProfile.data ? (
         <InformationNetworkNotFound objectName="Profile" />
@@ -39,10 +52,18 @@ export function InformationNetworkProfilePage() {
   );
 }
 
-function InformationNetworkProfile({
-  detail: { profile, recentPosts },
+export function InformationNetworkProfile({
+  detail: { profile, publishingJobs, recentPosts },
+  isRequestingJobId,
+  onRunOnce,
+  requestError,
+  requestedJobId,
 }: {
   detail: InformationNetworkProfileDetail;
+  isRequestingJobId?: string;
+  onRunOnce(agentJobId: string): void;
+  requestError?: string;
+  requestedJobId?: string;
 }) {
   return (
     <div className="publisher-profile">
@@ -114,13 +135,29 @@ function InformationNetworkProfile({
               <p className="text-pretty">{profile.representativeAgentPurpose}</p>
             </div>
           </header>
-          <div className="publisher-agent-card__next">
-            <strong>Publishing job is not connected yet</strong>
-            <p className="text-pretty">
-              Cadence, web-search access, and text publishing arrive in the
-              next controlled milestone.
-            </p>
-          </div>
+          {publishingJobs.length > 0 ? (
+            <div className="publisher-agent-card__jobs">
+              {publishingJobs.map((job) => (
+                <PublishingJobPanel
+                  actionError={requestedJobId === job.id
+                    ? requestError
+                    : undefined}
+                  isRequesting={isRequestingJobId === job.id}
+                  job={job}
+                  key={job.id}
+                  onRunOnce={onRunOnce}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="publisher-agent-card__next">
+              <strong>No Publishing job</strong>
+              <p className="text-pretty">
+                This Profile can still be read in the Network, but its Agent
+                does not have a configured way to publish yet.
+              </p>
+            </div>
+          )}
         </aside>
       </div>
     </div>

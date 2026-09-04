@@ -24,6 +24,7 @@ export type CapabilityClaimOverrides = {
   runtimeSessionId?: string;
   invocationId?: string;
   allowedTools?: readonly string[];
+  runtimeToolPolicy?: Readonly<{ allow: readonly string[] }>;
   workflow?: 'conversation-turn' | 'heartbeat-task';
 };
 
@@ -63,7 +64,8 @@ export class McpCapabilitySignerFixture {
   }
 
   async sign(overrides: CapabilityClaimOverrides = {}): Promise<string> {
-    const issued = await this.authority.issue({
+    const workflow = overrides.workflow ?? 'conversation-turn';
+    const authorityInput = {
       scope: {
         tenantId: overrides.tenantId ?? 'tenant-a',
         subjectId: overrides.subjectId ?? 'subject-a',
@@ -73,12 +75,20 @@ export class McpCapabilitySignerFixture {
       runtimeSessionId: overrides.runtimeSessionId
         ?? `runtime-session:${'a'.repeat(40)}`,
       invocationId: overrides.invocationId ?? 'invocation-001',
-      workflow: overrides.workflow ?? 'conversation-turn',
       mcp: {
         allowedTools: overrides.allowedTools
           ?? [READ_WORKSPACE_SNAPSHOT_TOOL],
       },
-    });
+    };
+    const issued = await this.authority.issue(workflow === 'heartbeat-task'
+      ? {
+          ...authorityInput,
+          workflow,
+          runtimeToolPolicy: {
+            allow: [...(overrides.runtimeToolPolicy?.allow ?? [])],
+          },
+        }
+      : { ...authorityInput, workflow });
     const capability = issued.mcpCapability();
     if (!capability) {
       throw new Error('The MCP test authority did not issue a capability.');

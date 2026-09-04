@@ -78,6 +78,8 @@ browser security controls.
 | `app-shell.tsx` | Own the persistent rail, route map, global status, and Cowork trigger without projecting new product identities |
 | `workspace-foundation-pages.tsx` | Render the five reviewable page contracts using real snapshot summaries and explicit unpopulated states |
 | `network-findings-library.tsx` | Test the Finding/Evidence vocabulary through one read-only list/detail surface over existing `FindingView` data; it does not define Reports or mutate findings |
+| `information-network-profile-page.tsx` | Render a public Profile plus its safe Publishing-job projection and connect the local controlled Run-once intent |
+| `publishing-job-panel.tsx` | Present Publishing preferences, durable job outcome, and accessible Run-once control without exposing provider task vocabulary |
 | `cowork-drawer.tsx` | Provide the accessible responsive drawer frame and route-level context preview; it deliberately does not execute a turn yet |
 | `App.tsx` | Preserve authentication, onboarding/access gates, authoritative snapshot loading, and service-unavailable handling before entering the shell |
 | `main.tsx` | Own shared React Query, router, authentication, and notification providers |
@@ -95,6 +97,7 @@ browser security controls.
 | `hosted-conversation-answer.tsx` | Render live and durable public summaries through one safe Markdown policy |
 | `use-hosted-conversation-history.ts` | Synchronize the authenticated user's durable turn projection and isolated retry state |
 | `use-discovery-workspace.ts` | Own the scoped tRPC query, mutations, cache, polling, and notifications |
+| `use-information-network.ts` | Own Information Network reads, active Publishing-run polling, Run-once mutation, and affected cache invalidation |
 | `network-request-progress.ts` | Give every user-facing surface consistent language for the server-derived request phase |
 
 ## Data and mutation rules

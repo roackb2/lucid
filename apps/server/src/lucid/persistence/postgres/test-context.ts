@@ -11,6 +11,9 @@ import {
   PostgresAgentCommunicationStore,
 } from '../../agent/communication/postgres-store.js';
 import { PostgresAgentWakeStore } from '../../agent/postgres-store.js';
+import { PostgresAgentJobStore } from '../../agent/jobs/postgres-store.js';
+import { AgentJobService } from '../../agent/jobs/service.js';
+import { LOCAL_AGENT_ID } from '../../local-user.js';
 import { PostgresDiscoveryWorkspaceStore } from '../../workspace/postgres-store.js';
 import {
   PostgresHostedConversationHistoryStore,
@@ -30,6 +33,7 @@ export type PostgresTestStores = {
     network: PostgresUserNetworkStore;
     informationNetwork: PostgresInformationNetworkStore;
     agent: PostgresAgentWakeStore;
+    agentJobs: PostgresAgentJobStore;
     communication: PostgresAgentCommunicationStore;
     conversationHistory: PostgresHostedConversationHistoryStore;
     conversationLifecycle: HostedConversationTurnLifecycleStore;
@@ -57,11 +61,17 @@ export async function createPostgresTestStores(options: {
       await database.orm.delete(postgresExecutionHostConversationTurns);
       await agent.reset({ backgroundChecksEnabled: true });
     }
+    const agentJobs = new PostgresAgentJobStore(database);
+    await new AgentJobService(agentJobs).ensureInterestDiscoveryJob(
+      LOCAL_AGENT_ID,
+      60_000,
+    );
     const stores = {
       workspace,
       network: new PostgresUserNetworkStore(database),
       informationNetwork: new PostgresInformationNetworkStore(database),
       agent,
+      agentJobs,
       communication: new PostgresAgentCommunicationStore(database),
       conversationHistory: new PostgresHostedConversationHistoryStore(
         database,

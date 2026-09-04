@@ -132,6 +132,8 @@ describe('hosted execution composition', () => {
       },
       heartbeatAdmission: readyHeartbeatAdmission(),
       agentWork: unusedAgentWork(),
+      agentJobs: unusedAgentJobs(),
+      publishingJobWork: unusedPublishingJobWork(),
       informationNetworkPublishing: unusedInformationNetworkPublishing(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
@@ -261,6 +263,8 @@ describe('hosted execution composition', () => {
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
       heartbeatAdmission: readyHeartbeatAdmission(),
       agentWork: unusedAgentWork(),
+      agentJobs: unusedAgentJobs(),
+      publishingJobWork: unusedPublishingJobWork(),
       informationNetworkPublishing: unusedInformationNetworkPublishing(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
@@ -360,6 +364,22 @@ describe('hosted execution composition', () => {
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
       heartbeatAdmission: readyHeartbeatAdmission(),
       agentWork,
+      agentJobs: {
+        readAgentJob: async (agentJobId: string) => ({
+          id: agentJobId,
+          workspaceId: 'lucid-workspace',
+          agentId: 'agent-1',
+          kind: 'interest-discovery' as const,
+          name: 'Discover current Interest',
+          instructions: 'Review the current Interest.',
+          cadenceMs: 10_800_000,
+          enabled: true,
+          scheduleMode: 'scheduled' as const,
+          createdAt: '2026-09-04T00:00:00.000Z',
+          updatedAt: '2026-09-04T00:00:00.000Z',
+        }),
+      },
+      publishingJobWork: unusedPublishingJobWork(),
       informationNetworkPublishing: unusedInformationNetworkPublishing(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
@@ -376,7 +396,7 @@ describe('hosted execution composition', () => {
       lucidOrigin,
       HOSTED_HEARTBEAT_EXECUTION_PATHS.prepare,
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         taskId,
         executionId,
       },
@@ -388,6 +408,7 @@ describe('hosted execution composition', () => {
     expect(preparation).toMatchObject({
       kind: 'execute',
       delegation: {
+        schemaVersion: 2,
         taskId,
         executionId,
         scope: {
@@ -486,7 +507,7 @@ describe('hosted execution composition', () => {
       lucidOrigin,
       HOSTED_HEARTBEAT_EXECUTION_PATHS.settle,
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         kind: 'completed',
         taskId,
         executionId,
@@ -503,7 +524,7 @@ describe('hosted execution composition', () => {
 
     expect(settlementResponse.status).toBe(200);
     expect(settlement).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       taskId,
       executionId,
       disposition: { kind: 'accepted' },
@@ -562,6 +583,23 @@ function unusedAgentWork() {
     executeTool: async () => {
       throw new Error('Agent work is disabled in this fixture.');
     },
+  };
+}
+
+function unusedAgentJobs() {
+  return {
+    readAgentJob: async () => undefined,
+  };
+}
+
+function unusedPublishingJobWork() {
+  return {
+    claimWork: async () => {
+      throw new Error('Publishing Agent work is disabled in this fixture.');
+    },
+    completeWork: async () => ({ kind: 'accepted' as const }),
+    failWork: async () => undefined,
+    interruptWork: async () => undefined,
   };
 }
 
@@ -633,7 +671,7 @@ async function handleFakeExecutionHost(
     const timestamp = new Date().toISOString();
     const events: ExecutionHostStreamEvent[] = [
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         invocationId: body.invocationId,
         runId,
         timestamp,
@@ -641,7 +679,7 @@ async function handleFakeExecutionHost(
         kind: 'accepted',
       },
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         invocationId: body.invocationId,
         runId,
         timestamp,
@@ -653,7 +691,7 @@ async function handleFakeExecutionHost(
         },
       },
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         invocationId: body.invocationId,
         runId,
         timestamp,
@@ -689,7 +727,7 @@ async function respondWithInterruptedStream(
   const body = await readJsonRequest(request) as { invocationId: string };
   response.writeHead(200, { 'Content-Type': 'text/event-stream' });
   response.end(toSseFrame({
-    schemaVersion: 1,
+    schemaVersion: 2,
     invocationId: body.invocationId,
     runId: 'interrupted-run',
     timestamp: new Date().toISOString(),

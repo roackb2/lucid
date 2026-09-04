@@ -11,6 +11,7 @@ import { createLucidLogger } from '../../logger.js';
 import {
   LUCID_BACKGROUND_WORK_GROUP_ID,
 } from '../../lucid/agent/heartbeat-task-identity.js';
+import type { AgentJob } from '../../lucid/agent/jobs/types.js';
 import { CoordinatorAgentHeartbeatService } from './agent-heartbeat-service.js';
 
 const TASK_ID = 'lucid-representative-agent-a';
@@ -24,6 +25,7 @@ describe('coordinator agent heartbeat service', () => {
     const coordinator = coordinatorApi([task({ enabled: false })]);
     const service = new CoordinatorAgentHeartbeatService(
       productStore(),
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -74,6 +76,7 @@ describe('coordinator agent heartbeat service', () => {
     ], 'paused');
     const service = new CoordinatorAgentHeartbeatService(
       productStore(),
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -102,6 +105,7 @@ describe('coordinator agent heartbeat service', () => {
     );
     const service = new CoordinatorAgentHeartbeatService(
       productStore(),
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -114,10 +118,51 @@ describe('coordinator agent heartbeat service', () => {
     });
   });
 
+  it('keeps publishing jobs out of an Agent Interest-check status', async () => {
+    const interestJob = (await agentJobs().readAgentJob('agent-a'))!;
+    const publishingJob: AgentJob = {
+      ...interestJob,
+      id: 'publisher-job-a',
+      kind: 'information-network-publishing',
+      name: 'Regional fashion publisher',
+      scheduleMode: 'manual',
+    };
+    const publishingTaskId = 'lucid-representative-publisher-job-a';
+    const service = new CoordinatorAgentHeartbeatService(
+      productStore(),
+      agentJobs(interestJob, publishingJob),
+      coordinatorApi([
+        task({ enabled: false }),
+        task({
+          id: publishingTaskId,
+          taskId: publishingTaskId,
+          state: { status: 'running' },
+        }),
+      ]),
+      immediateMutationLock,
+      policy(),
+      createLucidLogger('silent'),
+    );
+
+    const view = await service.snapshotForAgent('agent-a');
+
+    expect(view).toMatchObject({
+      enabled: false,
+      running: false,
+      tasks: [{
+        agentJobId: interestJob.id,
+        kind: 'interest-discovery',
+        enabled: false,
+      }],
+    });
+    expect(view.tasks).toHaveLength(1);
+  });
+
   it('keeps the provider namespace ready when Lucid background work is paused', async () => {
     const coordinator = coordinatorApi([task()]);
     const service = new CoordinatorAgentHeartbeatService(
       productStore(false),
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -142,6 +187,7 @@ describe('coordinator agent heartbeat service', () => {
     coordinator.resumeAdmission.mockResolvedValueOnce(admissionView('blocked'));
     const service = new CoordinatorAgentHeartbeatService(
       store,
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -155,6 +201,43 @@ describe('coordinator agent heartbeat service', () => {
     expect(coordinator.pauseAdmission).toHaveBeenCalledWith(
       BACKGROUND_ADMISSION_TARGET,
       expect.any(AbortSignal),
+    );
+  });
+
+  it('requests a run only for the publishing workflow that consumes it', async () => {
+    const publishingJob = {
+      ...(await agentJobs().readAgentJob('agent-a'))!,
+      id: 'publisher-job-a',
+      kind: 'information-network-publishing' as const,
+      scheduleMode: 'manual' as const,
+    };
+    const jobs = agentJobs(publishingJob);
+    const coordinator = coordinatorApi([task({
+      id: 'lucid-representative-publisher-job-a',
+      taskId: 'lucid-representative-publisher-job-a',
+    })]);
+    const service = new CoordinatorAgentHeartbeatService(
+      productStore(),
+      jobs,
+      coordinator,
+      immediateMutationLock,
+      policy(),
+      createLucidLogger('silent'),
+    );
+
+    await expect(service.requestAgentJobRunOnce(publishingJob.id))
+      .resolves.toMatchObject({ outcome: 'requested' });
+    await expect(service.requestAgentJobRunOnce('missing-job'))
+      .rejects.toThrow('does not exist');
+    await expect(new CoordinatorAgentHeartbeatService(
+      productStore(),
+      agentJobs(),
+      coordinator,
+      immediateMutationLock,
+      policy(),
+      createLucidLogger('silent'),
+    ).requestAgentJobRunOnce('agent-a')).rejects.toThrow(
+      'only for an Information Network publishing job',
     );
   });
 });
@@ -291,6 +374,34 @@ function productStore(backgroundChecksEnabled = true) {
       createdAt: '2026-08-25T00:00:00.000Z',
       updatedAt: '2026-08-25T00:00:00.000Z',
     }],
+  };
+}
+
+function agentJobs(...jobOverrides: AgentJob[]) {
+  const defaultJob: AgentJob = {
+    id: 'agent-a',
+    workspaceId: 'workspace',
+    agentId: 'agent-a',
+    kind: 'interest-discovery' as const,
+    name: 'Interest discovery',
+    instructions: 'Find relevant connections.',
+    cadenceMs: 60_000,
+    enabled: true,
+    scheduleMode: 'scheduled' as const,
+    createdAt: '2026-08-25T00:00:00.000Z',
+    updatedAt: '2026-08-25T00:00:00.000Z',
+  };
+  const jobs = jobOverrides.length > 0 ? jobOverrides : [defaultJob];
+  return {
+    listAgentJobs: async () => jobs,
+    readAgentJob: async (id: string) => jobs.find((job) => job.id === id),
+    requestRunOnce: async () => ({
+      outcome: 'requested' as const,
+      request: undefined as never,
+    }),
+    ensureInterestDiscoveryJob: async () => (
+      jobs.find(({ kind }) => kind === 'interest-discovery') ?? defaultJob
+    ),
   };
 }
 

@@ -270,6 +270,7 @@ implements AgentWakeStore {
             status: 'idle',
             mailboxFloorSequence: boundaryRow.sequence,
             lastSeenSequence: boundaryRow.sequence,
+            activeJobId: null,
             activeWakeId: null,
             activeWakeClaimToken: null,
             activeWakeNumber: null,
@@ -551,6 +552,7 @@ implements AgentWakeStore {
           await transaction
             .update(agents)
             .set({
+              activeJobId: null,
               activeWakeId: null,
               activeWakeClaimToken: null,
               activeWakeNumber: null,
@@ -731,6 +733,7 @@ implements AgentWakeStore {
       .set({
         status: 'idle',
         lastSeenSequence: Math.max(agent.lastSeenSequence, horizonSequence),
+        activeJobId: null,
         activeWakeId: null,
         activeWakeClaimToken: null,
         activeWakeNumber: null,

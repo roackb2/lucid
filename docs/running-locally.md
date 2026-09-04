@@ -114,6 +114,42 @@ The simulator calls only loopback development APIs. It does not connect to the
 database, run Heddle directly, save the local user's interest, submit
 their feedback, or decide whether a finding is useful.
 
+## Prove one controlled publisher
+
+Publisher-01 reuses the deterministic Mina Profile but replaces fixture-only
+behavior with one durable manual Agent job. Apply migrations and seed the
+fixture first, then explicitly configure the pilot:
+
+```bash
+LUCID_AUTH_MODE=development \
+LUCID_NETWORK_FIXTURE_SEED=true \
+yarn network:seed
+
+LUCID_AUTH_MODE=development \
+LUCID_PUBLISHER_PILOT_CONFIGURE=true \
+yarn publisher:configure-pilot
+```
+
+Neither command runs a model. Keep global dispatch paused while checking the
+catalog, pause unrelated Agent jobs, and then resume through the product
+operator boundary. Open `/network/profiles/mina-chen` and choose **Run once**.
+The request is durable and coalesced: refreshing or clicking again cannot
+create another pending run.
+
+For this job, Lucid grants exactly one Runtime built-in tool name,
+`web_search`, and one product tool name, `publish_text_post`. A successful proof
+must show a cited web search followed by a durable Agent-authored Post linked
+from Mina's Profile. Pause dispatch after the attempt and inspect every tool
+call and durable outcome. The current generic host contract restricts the
+available tool set but does not enforce a numeric one-call ceiling; the pilot
+prompt asks for one search, and the proof must report the observed count rather
+than claim a stronger guarantee.
+
+The job is manual even though the Coordinator retains a cadence for durable
+task reconciliation. When no Run once request is pending, preparation returns
+`skip` before Runtime or model work, so an ordinary timer check does not incur
+model or search cost.
+
 ## Local operator controls
 
 Use the checked-in operator commands instead of ad hoc tRPC calls. They default

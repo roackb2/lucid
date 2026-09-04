@@ -24,6 +24,14 @@ import {
 import type {
   HostedConversationHistoryReader,
 } from './hosted-execution/conversation/history-service.js';
+import type {
+  CoordinatorAgentHeartbeatService,
+} from './hosted-execution/heartbeat/agent-heartbeat-service.js';
+import { AgentJobInputError } from './lucid/agent/jobs/service.js';
+import {
+  AgentJobDisabledError,
+  AgentJobNotFoundError,
+} from './lucid/agent/jobs/store.js';
 import { trpc } from './trpc.js';
 
 const interestInputSchema = z.object({
@@ -91,6 +99,10 @@ const networkPostIdSchema = z.object({
 
 const networkProfileIdSchema = z.object({
   profileId: z.string().trim().min(1).max(160),
+});
+
+const agentJobIdSchema = z.object({
+  agentJobId: z.string().trim().min(1).max(256),
 });
 
 const authenticatedProcedure = trpc.procedure.use(({ ctx, next }) => {
@@ -161,6 +173,10 @@ export function createAppRouter(
   userNetwork: UserNetworkService,
   informationNetwork: InformationNetworkService,
   conversationHistory: HostedConversationHistoryReader,
+  agentJobControl: Pick<
+    CoordinatorAgentHeartbeatService,
+    'requestAgentJobRunOnce'
+  >,
   options: {
     allowSelfEnrollment?: boolean;
     hostedConversation?: {
@@ -285,6 +301,11 @@ export function createAppRouter(
         )),
     }),
     development: trpc.router({
+      requestAgentJobRunOnce: developmentOperatorProcedure
+        .input(agentJobIdSchema)
+        .mutation(({ input }) => resolveAgentJobError(
+          () => agentJobControl.requestAgentJobRunOnce(input.agentJobId),
+        )),
       registerUser: developmentOperatorProcedure
         .input(userRegistrationSchema)
         .mutation(({ input }) => resolveUserNetworkError(
@@ -327,6 +348,26 @@ export function createAppRouter(
 }
 
 export type AppRouter = ReturnType<typeof createAppRouter>;
+
+async function resolveAgentJobError<T>(
+  operation: () => T | Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (
+      error instanceof AgentJobInputError
+      || error instanceof AgentJobDisabledError
+      || error instanceof AgentJobNotFoundError
+    ) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: error.message,
+      });
+    }
+    throw error;
+  }
+}
 
 async function resolveDiscoveryError<T>(
   operation: () => T | Promise<T>,

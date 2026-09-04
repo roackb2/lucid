@@ -60,7 +60,9 @@ export function includeCurrentAgentTaskActivity(
   backgroundChecks: BackgroundChecksView,
   agent: AgentView,
 ): AgentActivityItemView[] {
-  const task = backgroundChecks.tasks.find(({ agentId }) => agentId === agent.id);
+  const task = backgroundChecks.tasks.find(({ agentId, kind }) => (
+    agentId === agent.id && kind === 'interest-discovery'
+  ));
   const needsAttention = agent.status === 'error'
     || task?.status === 'failed'
     || task?.status === 'blocked';

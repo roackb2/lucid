@@ -1,4 +1,7 @@
-import type { InformationNetworkFeed } from '@/lib/trpc';
+import type {
+  InformationNetworkFeed,
+  InformationNetworkProfileDetail,
+} from '@/lib/trpc';
 
 export const networkFeedFixture: InformationNetworkFeed = {
   entries: [
@@ -31,4 +34,35 @@ export const networkFeedFixture: InformationNetworkFeed = {
   ],
   postCount: 1,
   profileCount: 1,
+};
+
+export const networkProfileFixture: InformationNetworkProfileDetail = {
+  profile: {
+    id: 'profile_mina',
+    displayName: 'Mina Chen',
+    initials: 'MC',
+    publicDescription:
+      'Independent fashion researcher focused on practical design choices.',
+    publishingFocus: 'Regional fashion',
+    representativeAgentId: 'agent_mina',
+    representativeAgentName: "Mina's representative",
+    representativeAgentPurpose:
+      'Research regional fashion and prepare concise, source-backed notes.',
+    topics: ['Independent fashion', 'Repairable clothing'],
+  },
+  publishingJobs: [{
+    id: 'mina-regional-fashion-publisher',
+    name: 'Regional fashion publisher',
+    cadenceMs: 10_800_000,
+    enabled: true,
+    scheduleMode: 'manual',
+    publishingPreferences: {
+      topics: ['Independent fashion', 'Repairable clothing'],
+      region: 'Taiwan and East Asia',
+      intendedAudience: 'People interested in practical sustainable design',
+      tone: 'Concise, curious, and evidence-led',
+      updatedAt: '2026-09-04T06:00:00.000Z',
+    },
+  }],
+  recentPosts: networkFeedFixture.entries.map(({ post }) => post),
 };

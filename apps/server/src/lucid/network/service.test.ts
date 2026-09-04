@@ -189,6 +189,9 @@ function peerBackgroundChecks(
 ): BackgroundChecksView {
   const task = (agentId: string): AgentTaskView => ({
     taskId: `lucid-agent:${agentId}`,
+    agentJobId: agentId,
+    kind: 'interest-discovery',
+    name: 'Interest discovery',
     agentId,
     enabled: options.enabled ?? true,
     status: 'waiting',

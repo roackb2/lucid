@@ -290,7 +290,9 @@ export class UserNetworkService {
     tasks: AgentTaskView[],
   ): Promise<void> {
     const taskByAgentId = new Map(
-      tasks.map((task) => [task.agentId, task]),
+      tasks
+        .filter(({ kind }) => kind === 'interest-discovery')
+        .map((task) => [task.agentId, task]),
     );
     const agentIdsToEnable = agentIds.filter((agentId) => {
       const task = taskByAgentId.get(agentId);

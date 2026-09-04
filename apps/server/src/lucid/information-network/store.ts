@@ -5,7 +5,7 @@ import type {
   PublishAgentTextPostReceipt,
   SourceBackedTextPostDraft,
   NetworkPostDetailView,
-  NetworkProfileDetailView,
+  NetworkProfileContentView,
 } from './types.js';
 
 /** Trusted execution identity; never accepted from model-controlled input. */
@@ -43,7 +43,7 @@ export interface InformationNetworkStore extends FindingPostReader {
   readProfile(
     profileId: string,
     recentPostLimit: number,
-  ): Promise<NetworkProfileDetailView | undefined>;
+  ): Promise<NetworkProfileContentView | undefined>;
 }
 
 /** Write port which owns fenced, retry-idempotent Agent publication. */

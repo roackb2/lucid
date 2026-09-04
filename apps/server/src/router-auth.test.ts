@@ -295,6 +295,9 @@ function createCaller(
   }));
   const readInformationNetworkPost = vi.fn(async () => null);
   const readInformationNetworkProfile = vi.fn(async () => null);
+  const requestAgentJobRunOnce = vi.fn(async () => ({
+    outcome: 'requested' as const,
+  }));
   const discoveryWorkspace = {
     snapshot,
   } as unknown as DiscoveryWorkspaceService;
@@ -315,6 +318,7 @@ function createCaller(
     userNetwork,
     informationNetwork,
     { recentForUser: recentConversations },
+    { requestAgentJobRunOnce },
     options,
   ).createCaller(context);
   return {

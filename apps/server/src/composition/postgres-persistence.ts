@@ -25,6 +25,14 @@ import {
 } from '../lucid/agent/postgres-store.js';
 import type { AgentWakeStore } from '../lucid/agent/store.js';
 import {
+  PostgresAgentJobStore,
+} from '../lucid/agent/jobs/postgres-store.js';
+import type {
+  AgentJobStore,
+} from '../lucid/agent/jobs/store.js';
+import { AgentJobService } from '../lucid/agent/jobs/service.js';
+import { LOCAL_AGENT_ID } from '../lucid/local-user.js';
+import {
   PostgresDiscoveryWorkspaceStore,
 } from '../lucid/workspace/postgres-store.js';
 import type { DiscoveryWorkspaceStore } from '../lucid/workspace/store.js';
@@ -53,6 +61,7 @@ export type PostgresPersistence = {
     informationNetwork:
       InformationNetworkStore & InformationNetworkPublicationStore;
     agent: AgentWakeStore;
+    agentJobs: AgentJobStore;
     communication: AgentCommunicationStore;
     conversationHistory: HostedConversationHistoryStore;
     conversationLifecycle: HostedConversationTurnLifecycleStore;
@@ -72,12 +81,18 @@ export async function createPostgresPersistence(
     const workspace = new PostgresDiscoveryWorkspaceStore(database);
     const agent = new PostgresAgentWakeStore(database);
     await agent.initialize();
+    const agentJobs = new PostgresAgentJobStore(database);
+    await new AgentJobService(agentJobs).ensureInterestDiscoveryJob(
+      LOCAL_AGENT_ID,
+      config.heartbeatIntervalMs,
+    );
     return {
       stores: {
         workspace,
         network: new PostgresUserNetworkStore(database),
         informationNetwork: new PostgresInformationNetworkStore(database),
         agent,
+        agentJobs,
         communication: new PostgresAgentCommunicationStore(database),
         conversationHistory: new PostgresHostedConversationHistoryStore(
           database,

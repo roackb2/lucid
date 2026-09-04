@@ -3,6 +3,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
 import { LOCAL_AGENT_ID, LOCAL_USER_ID } from '../local-user.js';
 import {
+  postgresAgentJobPublishingPreferences as publishingPreferences,
+  postgresAgentJobPublishingTopics as publishingTopics,
+  postgresAgentJobs as agentJobs,
   postgresNetworkProfiles as profiles,
 } from '../persistence/postgres/schema.js';
 import {
@@ -10,6 +13,7 @@ import {
   type PostgresTestStores,
 } from '../persistence/postgres/test-context.js';
 import { LUCID_WORKSPACE_ID } from '../workspace/workspace-identity.js';
+import { AgentJobService } from '../agent/jobs/service.js';
 import {
   InformationNetworkPublishingService,
 } from './publishing.js';
@@ -19,11 +23,14 @@ import {
 } from './store.js';
 
 const PROFILE_ID = 'publisher-profile';
+const PUBLISHER_JOB_ID = 'publisher-job';
+const REQUESTED_AT = '2026-09-04T07:00:00.000Z';
 
 describe('PostgreSQL Agent text publication', () => {
   let database: PostgresDatabase;
   let stores: PostgresTestStores['stores'];
   let publishing: InformationNetworkPublishingService;
+  let agentJobsService: AgentJobService;
 
   beforeAll(async () => {
     ({ database, stores } = await createPostgresTestStores({
@@ -33,10 +40,15 @@ describe('PostgreSQL Agent text publication', () => {
     publishing = new InformationNetworkPublishingService(
       stores.informationNetwork,
     );
+    agentJobsService = new AgentJobService(stores.agentJobs, {
+      createId: () => 'publication-run',
+      now: () => REQUESTED_AT,
+    });
   });
 
   beforeEach(async () => {
     await stores.agent.reset({ backgroundChecksEnabled: true });
+    await insertPublisherJob(database);
     await database.orm.insert(profiles).values({
       id: PROFILE_ID,
       workspaceId: LUCID_WORKSPACE_ID,
@@ -99,18 +111,18 @@ describe('PostgreSQL Agent text publication', () => {
       executionId: firstClaim.claimToken,
       draft: sourceBackedDraft(),
     });
-    const recoveredClaim = await stores.agent.beginAgentWake(
-      LOCAL_AGENT_ID,
-      'publication-execution-recovered',
-      firstClaim.claimToken,
-    );
+    const recoveredClaim = await agentJobsService.claimPendingRun({
+      agentJobId: PUBLISHER_JOB_ID,
+      executionId: 'publication-execution-recovered',
+      interruptedExecutionId: firstClaim.claimToken,
+    });
     if (!recoveredClaim) {
       throw new Error('Expected publication wake recovery to transfer ownership.');
     }
 
     await expect(publishing.publishTextPost({
       userId: LOCAL_USER_ID,
-      executionId: recoveredClaim.claimToken,
+      executionId: recoveredClaim.executionId,
       draft: sourceBackedDraft(),
     })).resolves.toEqual({
       ...first,
@@ -140,7 +152,10 @@ describe('PostgreSQL Agent text publication', () => {
 
   it('rejects publication after the durable wake claim is released', async () => {
     const claim = await beginWake('publication-execution-released');
-    await stores.agent.interruptAgentWake(LOCAL_AGENT_ID, claim.claimToken);
+    await agentJobsService.interruptRun({
+      agentJobId: PUBLISHER_JOB_ID,
+      executionId: claim.claimToken,
+    });
 
     await expect(publishing.publishTextPost({
       userId: LOCAL_USER_ID,
@@ -150,16 +165,44 @@ describe('PostgreSQL Agent text publication', () => {
   });
 
   async function beginWake(executionId: string) {
-    const claim = await stores.agent.beginAgentWake(
-      LOCAL_AGENT_ID,
+    await agentJobsService.requestRunOnce(PUBLISHER_JOB_ID);
+    const claim = await agentJobsService.claimPendingRun({
+      agentJobId: PUBLISHER_JOB_ID,
       executionId,
-    );
+    });
     if (!claim) {
       throw new Error('Expected a source-backed publication wake claim.');
     }
-    return claim;
+    return { ...claim, claimToken: claim.executionId };
   }
 });
+
+async function insertPublisherJob(database: PostgresDatabase): Promise<void> {
+  await database.orm.insert(agentJobs).values({
+    id: PUBLISHER_JOB_ID,
+    workspaceId: LUCID_WORKSPACE_ID,
+    agentId: LOCAL_AGENT_ID,
+    kind: 'information-network-publishing',
+    name: 'Local information publisher',
+    instructions: 'Find one current, source-backed item worth publishing.',
+    cadenceMs: 10_800_000,
+    enabled: true,
+    scheduleMode: 'manual',
+    createdAt: REQUESTED_AT,
+    updatedAt: REQUESTED_AT,
+  });
+  await database.orm.insert(publishingPreferences).values({
+    agentJobId: PUBLISHER_JOB_ID,
+    sourceGuidance: 'Prefer primary sources.',
+    createdAt: REQUESTED_AT,
+    updatedAt: REQUESTED_AT,
+  });
+  await database.orm.insert(publishingTopics).values({
+    agentJobId: PUBLISHER_JOB_ID,
+    position: 0,
+    topic: 'Agent systems',
+  });
+}
 
 function sourceBackedDraft() {
   return {

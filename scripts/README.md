@@ -1,6 +1,9 @@
-# Local user-network simulator
+# Local development scripts
 
 This directory is development tooling, not Lucid product code.
+
+Most files exercise the local user-network simulator. Publisher-01 has a
+separate, explicitly guarded PostgreSQL fixture command documented below.
 
 ## Boundary
 
@@ -28,6 +31,9 @@ user can replace the simulator without changing Lucid's network model.
 | `longitudinal-network-experiment.ts` | Phase CLI that advances external inputs without impersonating the local user |
 | `user-input.ts` | Free-form real or synthetic user registration and input |
 | `generate-hosted-execution-key.ts` | Create one ignored, owner-readable ES256 key for the optional local Execution Host authority |
+| `publisher-pilot-configuration.ts` | Deterministic Mina publishing-job fixture and fail-closed PostgreSQL configuration |
+| `configure-publisher-pilot.ts` | Explicit development-only command that applies the Publisher-01 fixture |
+| `publisher-pilot-configuration.integration.test.ts` | Retry-safety and fail-closed drift coverage against disposable PostgreSQL |
 
 ## Hosted execution signing key
 
@@ -86,6 +92,25 @@ yarn user:submit \
 Use `--kind human --context-approved` only when that person explicitly approved
 the supplied private context. Reuse the registration key to keep the same
 user identity; add `--input-key` when a caller needs retry idempotency.
+
+## Publisher-01 fixture
+
+The Publisher-01 scripts configure Mina's seeded development identity with one
+manual publishing Agent job. They are checked in so the local proof remains
+reviewable and reproducible, but they live outside `apps/server/src` and are
+not compiled or copied into the production server image.
+
+After running `yarn network:seed`, configure the pilot explicitly:
+
+```bash
+LUCID_AUTH_MODE=development \
+LUCID_PUBLISHER_PILOT_CONFIGURE=true \
+LUCID_DATABASE_URL='postgresql://...' \
+yarn publisher:configure-pilot
+```
+
+This command only writes deterministic local configuration. It does not wake
+an Agent, search the web, or publish a Post.
 
 ## Longitudinal learning experiment
 

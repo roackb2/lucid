@@ -36,7 +36,6 @@ import {
 import { createLucidProductToolset } from '../hosted-execution/mcp/product-tools.js';
 import {
   LUCID_CONVERSATION_MCP_TOOLS,
-  LUCID_HEARTBEAT_MCP_TOOLS,
   LUCID_PRODUCT_MCP_TOOLS,
   type LucidProductMcpToolName,
 } from '../hosted-execution/mcp/types.js';
@@ -49,9 +48,13 @@ import {
 } from '../hosted-execution/mcp/information-network-publisher.js';
 import type { DiscoveryWorkspaceSnapshot } from '../lucid/discovery-types.js';
 import type { AgentWorkService } from '../lucid/agent/work-service.js';
+import type { AgentJobService } from '../lucid/agent/jobs/service.js';
 import type {
   InformationNetworkPublishingService,
 } from '../lucid/information-network/publishing.js';
+import type {
+  PublishingJobWorkService,
+} from '../lucid/information-network/publishing-job-work-service.js';
 import type { LucidLogger } from '../logger.js';
 
 export type HostedExecutionComposition = {
@@ -76,6 +79,11 @@ export async function createHostedExecutionComposition(input: {
     | 'failWork'
     | 'interruptWork'
     | 'executeTool'
+  >;
+  agentJobs: Pick<AgentJobService, 'readAgentJob'>;
+  publishingJobWork: Pick<
+    PublishingJobWorkService,
+    'claimWork' | 'completeWork' | 'failWork' | 'interruptWork'
   >;
   informationNetworkPublishing: Pick<
     InformationNetworkPublishingService,
@@ -193,11 +201,12 @@ export async function createHostedExecutionComposition(input: {
     executions: new HostedHeartbeatExecutionService({
       authority,
       lifecycle: new LucidHeartbeatExecutionLifecycle(
+        input.agentJobs,
         input.agentWork,
+        input.publishingJobWork,
         {
           tenantId: input.config.tenantId,
           productSessionId: input.config.productSessionId,
-          allowedTools: LUCID_HEARTBEAT_MCP_TOOLS,
         },
       ),
       runtimeSessionNamespace: 'lucid',

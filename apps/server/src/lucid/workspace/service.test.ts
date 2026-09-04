@@ -46,6 +46,9 @@ describe('discovery workspace service', () => {
         intervalMs: 60_000,
         tasks: [{
           taskId: 'lucid-agent-user-agent',
+          agentJobId: LOCAL_AGENT_ID,
+          kind: 'interest-discovery' as const,
+          name: 'Interest discovery',
           agentId: LOCAL_AGENT_ID,
           enabled: true,
           status: 'waiting' as const,

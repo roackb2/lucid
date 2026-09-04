@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import type {
+  AgentJobRunOutcome,
+  AgentJobRunRequestState,
+  AgentJobScheduleMode,
+} from '../agent/jobs/types.js';
 
 export const networkPostPublicationMethodSchema = z.enum([
   'seeded-pilot',
@@ -36,9 +41,41 @@ export type NetworkProfileSummaryView = {
 };
 
 export type NetworkProfileView = NetworkProfileSummaryView & {
+  representativeAgentId: string;
   publicDescription: string;
   representativeAgentPurpose: string;
   topics: string[];
+};
+
+export type PublishingJobRunRequestView = {
+  id: string;
+  state: AgentJobRunRequestState;
+  outcome?: AgentJobRunOutcome;
+  publishedPostId?: string;
+  outcomeSummary?: string;
+  requestedAt: string;
+  claimedAt?: string;
+  settledAt?: string;
+};
+
+/** Owner-approved publishing preferences that are safe to show on a Profile. */
+export type PublishingPreferencesView = {
+  topics: string[];
+  region?: string;
+  intendedAudience?: string;
+  tone?: string;
+  updatedAt: string;
+};
+
+/** Safe Profile projection; private instructions and execution fences stay server-side. */
+export type PublishingJobView = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  scheduleMode: AgentJobScheduleMode;
+  cadenceMs: number;
+  publishingPreferences: PublishingPreferencesView;
+  latestRunRequest?: PublishingJobRunRequestView;
 };
 
 export type NetworkFeedEntryView = {
@@ -57,9 +94,13 @@ export type NetworkPostDetailView = {
   author: NetworkProfileSummaryView;
 };
 
-export type NetworkProfileDetailView = {
+export type NetworkProfileContentView = {
   profile: NetworkProfileView;
   recentPosts: NetworkPostView[];
+};
+
+export type NetworkProfileDetailView = NetworkProfileContentView & {
+  publishingJobs: PublishingJobView[];
 };
 
 /** Minimal user-scoped reference rendered as a Finding-to-Post link. */

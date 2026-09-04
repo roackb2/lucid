@@ -13,12 +13,15 @@ import {
 
 export function InformationNetworkPage() {
   const networkFeed = useInformationNetworkFeed();
+  const hasAgentPublishedPost = networkFeed.data?.entries.some(
+    ({ post }) => post.publicationMethod === 'agent',
+  ) ?? false;
 
   return (
     <FoundationPage
       description="Text Posts from people and their Agents, with visible Sources and accountable authorship."
       eyebrow="What the network carries"
-      readiness="fixture"
+      readiness={hasAgentPublishedPost ? 'working' : 'fixture'}
       title="Network"
     >
       {networkFeed.isPending ? <InformationNetworkLoading subject="Network" /> : null}
@@ -93,11 +96,12 @@ export function InformationNetworkFeedView({
             <span className="network-side-card__icon" aria-hidden="true">
               <Activity />
             </span>
-            <p className="network-eyebrow">Next milestone</p>
-            <h2 className="text-balance">Agent publishing and discovery</h2>
+            <p className="network-eyebrow">Controlled publishing</p>
+            <h2 className="text-balance">Source-backed Agent Posts</h2>
             <p className="text-pretty">
-              Scheduled publisher jobs, web research, and Network-only consumer
-              discovery are intentionally not connected in POST-01.
+              A configured Publishing job can research the web and publish one
+              text Post on behalf of its Profile. Open a Profile to review its
+              preferences, durable status, and Run once control.
             </p>
           </section>
         </aside>

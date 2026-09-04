@@ -554,7 +554,7 @@
 }
 
 .publisher-profile__details {
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
 }
 
 .publisher-profile__main-card,
@@ -643,6 +643,214 @@
   color: var(--muted);
   font-size: 10px;
   line-height: 1.55;
+}
+
+.publisher-agent-card__jobs {
+  display: grid;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.publishing-job {
+  display: grid;
+  gap: 16px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.publishing-job__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.publishing-job__header h3,
+.publishing-preferences h4 {
+  margin: 2px 0 0;
+  color: var(--ink);
+}
+
+.publishing-job__header h3 {
+  font-size: 13px;
+}
+
+.publishing-job__icon {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--green-soft);
+  color: var(--green-dark);
+}
+
+.publishing-job__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.publishing-job__status {
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.publishing-job__status[data-tone='success'],
+.publishing-job__status[data-tone='ready'] {
+  border-color: #c9ddd6;
+  background: var(--green-pale);
+  color: var(--green-dark);
+}
+
+.publishing-job__status[data-tone='working'] {
+  border-color: #e7d5c8;
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+
+.publishing-job__status[data-tone='attention'] {
+  border-color: #e6c6c6;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.publishing-job__outcome {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.publishing-job__outcome strong,
+.publishing-job__action strong {
+  color: var(--ink);
+  font-size: 10px;
+}
+
+.publishing-job__outcome p,
+.publishing-job__action p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.publishing-job__outcome a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  color: var(--green-dark);
+  font-size: 9px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.publishing-job__outcome a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.publishing-job__outcome a svg {
+  width: 11px;
+  height: 11px;
+}
+
+.publishing-preferences {
+  display: grid;
+  gap: 11px;
+}
+
+.publishing-preferences h4 {
+  font-size: 12px;
+}
+
+.publishing-preferences dl,
+.publishing-job__facts {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.publishing-preferences dl > div,
+.publishing-job__facts > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+}
+
+.publishing-preferences dt,
+.publishing-job__facts dt {
+  color: var(--faint);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.publishing-preferences dd,
+.publishing-job__facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.publishing-preferences .network-topic-list {
+  margin: 0;
+}
+
+.publishing-job__facts {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.publishing-job__action {
+  display: grid;
+  gap: 11px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.publishing-job__action .button {
+  width: 100%;
+}
+
+.publishing-job__action .button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.publishing-job__paused-note,
+.publishing-job__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.publishing-job__paused-note {
+  color: var(--muted);
+}
+
+.publishing-job__error {
+  color: var(--danger);
+}
+
+.publishing-job__paused-note svg,
+.publishing-job__error svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
 }
 
 .information-network-loading {

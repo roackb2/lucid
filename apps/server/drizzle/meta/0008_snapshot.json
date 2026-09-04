@@ -1,0 +1,2189 @@
+{
+  "id": "ccfc6e42-3306-499f-a778-dfe2138dda18",
+  "prevId": "b00b8582-c54c-448b-bbf3-acd8e9140a56",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "lucid.agent_job_publishing_preferences": {
+      "name": "agent_job_publishing_preferences",
+      "schema": "lucid",
+      "columns": {
+        "agent_job_id": {
+          "name": "agent_job_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "region": {
+          "name": "region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "intended_audience": {
+          "name": "intended_audience",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tone": {
+          "name": "tone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_guidance": {
+          "name": "source_guidance",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "agent_job_publishing_preferences_agent_job_id_agent_jobs_id_fk": {
+          "name": "agent_job_publishing_preferences_agent_job_id_agent_jobs_id_fk",
+          "tableFrom": "agent_job_publishing_preferences",
+          "tableTo": "agent_jobs",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "agent_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "agent_job_publishing_preferences_region_valid": {
+          "name": "agent_job_publishing_preferences_region_valid",
+          "value": "\"lucid\".\"agent_job_publishing_preferences\".\"region\" is null or (char_length(\"lucid\".\"agent_job_publishing_preferences\".\"region\") between 1 and 240 and \"lucid\".\"agent_job_publishing_preferences\".\"region\" = btrim(\"lucid\".\"agent_job_publishing_preferences\".\"region\"))"
+        },
+        "agent_job_publishing_preferences_audience_valid": {
+          "name": "agent_job_publishing_preferences_audience_valid",
+          "value": "\"lucid\".\"agent_job_publishing_preferences\".\"intended_audience\" is null or (char_length(\"lucid\".\"agent_job_publishing_preferences\".\"intended_audience\") between 1 and 1000 and \"lucid\".\"agent_job_publishing_preferences\".\"intended_audience\" = btrim(\"lucid\".\"agent_job_publishing_preferences\".\"intended_audience\"))"
+        },
+        "agent_job_publishing_preferences_tone_valid": {
+          "name": "agent_job_publishing_preferences_tone_valid",
+          "value": "\"lucid\".\"agent_job_publishing_preferences\".\"tone\" is null or (char_length(\"lucid\".\"agent_job_publishing_preferences\".\"tone\") between 1 and 1000 and \"lucid\".\"agent_job_publishing_preferences\".\"tone\" = btrim(\"lucid\".\"agent_job_publishing_preferences\".\"tone\"))"
+        },
+        "agent_job_publishing_preferences_source_guidance_valid": {
+          "name": "agent_job_publishing_preferences_source_guidance_valid",
+          "value": "\"lucid\".\"agent_job_publishing_preferences\".\"source_guidance\" is null or (char_length(\"lucid\".\"agent_job_publishing_preferences\".\"source_guidance\") between 1 and 4000 and \"lucid\".\"agent_job_publishing_preferences\".\"source_guidance\" = btrim(\"lucid\".\"agent_job_publishing_preferences\".\"source_guidance\"))"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.agent_job_publishing_topics": {
+      "name": "agent_job_publishing_topics",
+      "schema": "lucid",
+      "columns": {
+        "agent_job_id": {
+          "name": "agent_job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "topic": {
+          "name": "topic",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "agent_job_publishing_topics_position_idx": {
+          "name": "agent_job_publishing_topics_position_idx",
+          "columns": [
+            {
+              "expression": "agent_job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agent_job_publishing_topics_agent_job_id_agent_job_publishing_preferences_agent_job_id_fk": {
+          "name": "agent_job_publishing_topics_agent_job_id_agent_job_publishing_preferences_agent_job_id_fk",
+          "tableFrom": "agent_job_publishing_topics",
+          "tableTo": "agent_job_publishing_preferences",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "agent_job_id"
+          ],
+          "columnsTo": [
+            "agent_job_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "agent_job_publishing_topics_pk": {
+          "name": "agent_job_publishing_topics_pk",
+          "columns": [
+            "agent_job_id",
+            "topic"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "agent_job_publishing_topics_position_nonnegative": {
+          "name": "agent_job_publishing_topics_position_nonnegative",
+          "value": "\"lucid\".\"agent_job_publishing_topics\".\"position\" >= 0"
+        },
+        "agent_job_publishing_topics_topic_valid": {
+          "name": "agent_job_publishing_topics_topic_valid",
+          "value": "char_length(\"lucid\".\"agent_job_publishing_topics\".\"topic\") between 1 and 120 and \"lucid\".\"agent_job_publishing_topics\".\"topic\" = btrim(\"lucid\".\"agent_job_publishing_topics\".\"topic\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.agent_job_run_requests": {
+      "name": "agent_job_run_requests",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "agent_job_id": {
+          "name": "agent_job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_execution_id": {
+          "name": "current_execution_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome_summary": {
+          "name": "outcome_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requested_at": {
+          "name": "requested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settled_at": {
+          "name": "settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "agent_job_run_requests_history_idx": {
+          "name": "agent_job_run_requests_history_idx",
+          "columns": [
+            {
+              "expression": "agent_job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "requested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agent_job_run_requests_active_idx": {
+          "name": "agent_job_run_requests_active_idx",
+          "columns": [
+            {
+              "expression": "agent_job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"lucid\".\"agent_job_run_requests\".\"state\" in ('requested', 'claimed')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agent_job_run_requests_agent_job_id_agent_jobs_id_fk": {
+          "name": "agent_job_run_requests_agent_job_id_agent_jobs_id_fk",
+          "tableFrom": "agent_job_run_requests",
+          "tableTo": "agent_jobs",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "agent_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "agent_job_run_requests_state_valid": {
+          "name": "agent_job_run_requests_state_valid",
+          "value": "\"lucid\".\"agent_job_run_requests\".\"state\" in ('requested', 'claimed', 'settled')"
+        },
+        "agent_job_run_requests_outcome_valid": {
+          "name": "agent_job_run_requests_outcome_valid",
+          "value": "\"lucid\".\"agent_job_run_requests\".\"outcome\" is null or \"lucid\".\"agent_job_run_requests\".\"outcome\" in ('published', 'no-post', 'failed')"
+        },
+        "agent_job_run_requests_lifecycle_valid": {
+          "name": "agent_job_run_requests_lifecycle_valid",
+          "value": "(\n        \"lucid\".\"agent_job_run_requests\".\"state\" = 'requested'\n        and \"lucid\".\"agent_job_run_requests\".\"current_execution_id\" is null\n        and \"lucid\".\"agent_job_run_requests\".\"claimed_at\" is null\n        and \"lucid\".\"agent_job_run_requests\".\"outcome\" is null\n        and \"lucid\".\"agent_job_run_requests\".\"outcome_summary\" is null\n        and \"lucid\".\"agent_job_run_requests\".\"settled_at\" is null\n      ) or (\n        \"lucid\".\"agent_job_run_requests\".\"state\" = 'claimed'\n        and \"lucid\".\"agent_job_run_requests\".\"current_execution_id\" is not null\n        and \"lucid\".\"agent_job_run_requests\".\"claimed_at\" is not null\n        and \"lucid\".\"agent_job_run_requests\".\"outcome\" is null\n        and \"lucid\".\"agent_job_run_requests\".\"outcome_summary\" is null\n        and \"lucid\".\"agent_job_run_requests\".\"settled_at\" is null\n      ) or (\n        \"lucid\".\"agent_job_run_requests\".\"state\" = 'settled'\n        and \"lucid\".\"agent_job_run_requests\".\"current_execution_id\" is not null\n        and \"lucid\".\"agent_job_run_requests\".\"claimed_at\" is not null\n        and \"lucid\".\"agent_job_run_requests\".\"outcome\" is not null\n        and \"lucid\".\"agent_job_run_requests\".\"settled_at\" is not null\n      )"
+        },
+        "agent_job_run_requests_outcome_summary_valid": {
+          "name": "agent_job_run_requests_outcome_summary_valid",
+          "value": "\"lucid\".\"agent_job_run_requests\".\"outcome_summary\" is null or (char_length(\"lucid\".\"agent_job_run_requests\".\"outcome_summary\") between 1 and 2000 and \"lucid\".\"agent_job_run_requests\".\"outcome_summary\" = btrim(\"lucid\".\"agent_job_run_requests\".\"outcome_summary\"))"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.agent_jobs": {
+      "name": "agent_jobs",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "agent_id": {
+          "name": "agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instructions": {
+          "name": "instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cadence_ms": {
+          "name": "cadence_ms",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "schedule_mode": {
+          "name": "schedule_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "agent_jobs_workspace_idx": {
+          "name": "agent_jobs_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agent_jobs_agent_idx": {
+          "name": "agent_jobs_agent_idx",
+          "columns": [
+            {
+              "expression": "agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agent_jobs_workspace_id_discovery_workspaces_id_fk": {
+          "name": "agent_jobs_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "agent_jobs",
+          "tableTo": "discovery_workspaces",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_jobs_agent_id_agents_id_fk": {
+          "name": "agent_jobs_agent_id_agents_id_fk",
+          "tableFrom": "agent_jobs",
+          "tableTo": "agents",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "agent_jobs_kind_valid": {
+          "name": "agent_jobs_kind_valid",
+          "value": "\"lucid\".\"agent_jobs\".\"kind\" in ('interest-discovery', 'information-network-publishing')"
+        },
+        "agent_jobs_name_valid": {
+          "name": "agent_jobs_name_valid",
+          "value": "char_length(\"lucid\".\"agent_jobs\".\"name\") between 1 and 120 and \"lucid\".\"agent_jobs\".\"name\" = btrim(\"lucid\".\"agent_jobs\".\"name\")"
+        },
+        "agent_jobs_instructions_valid": {
+          "name": "agent_jobs_instructions_valid",
+          "value": "char_length(\"lucid\".\"agent_jobs\".\"instructions\") between 1 and 12000 and \"lucid\".\"agent_jobs\".\"instructions\" = btrim(\"lucid\".\"agent_jobs\".\"instructions\")"
+        },
+        "agent_jobs_cadence_positive": {
+          "name": "agent_jobs_cadence_positive",
+          "value": "\"lucid\".\"agent_jobs\".\"cadence_ms\" > 0"
+        },
+        "agent_jobs_schedule_mode_valid": {
+          "name": "agent_jobs_schedule_mode_valid",
+          "value": "\"lucid\".\"agent_jobs\".\"schedule_mode\" in ('manual', 'scheduled')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.agents": {
+      "name": "agents",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instructions": {
+          "name": "instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_count": {
+          "name": "run_count",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mailbox_floor_sequence": {
+          "name": "mailbox_floor_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "last_seen_sequence": {
+          "name": "last_seen_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active_job_id": {
+          "name": "active_job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_wake_id": {
+          "name": "active_wake_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_wake_claim_token": {
+          "name": "active_wake_claim_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_wake_number": {
+          "name": "active_wake_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active_wake_horizon": {
+          "name": "active_wake_horizon",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_run_at": {
+          "name": "last_run_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "agents_workspace_sort_idx": {
+          "name": "agents_workspace_sort_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sort_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_user_idx": {
+          "name": "agents_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agents_workspace_id_discovery_workspaces_id_fk": {
+          "name": "agents_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "discovery_workspaces",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agents_user_id_users_id_fk": {
+          "name": "agents_user_id_users_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "users",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agents_active_job_id_agent_jobs_id_fk": {
+          "name": "agents_active_job_id_agent_jobs_id_fk",
+          "tableFrom": "agents",
+          "tableTo": "agent_jobs",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "active_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "agents_status_valid": {
+          "name": "agents_status_valid",
+          "value": "\"lucid\".\"agents\".\"status\" in ('idle', 'running', 'error')"
+        },
+        "agents_counters_nonnegative": {
+          "name": "agents_counters_nonnegative",
+          "value": "\"lucid\".\"agents\".\"sort_order\" >= 0 and \"lucid\".\"agents\".\"run_count\" >= 0 and \"lucid\".\"agents\".\"mailbox_floor_sequence\" >= 0 and \"lucid\".\"agents\".\"last_seen_sequence\" >= 0"
+        },
+        "agents_wake_claim_complete": {
+          "name": "agents_wake_claim_complete",
+          "value": "(\n        \"lucid\".\"agents\".\"active_wake_id\" is null\n        and \"lucid\".\"agents\".\"active_wake_claim_token\" is null\n        and \"lucid\".\"agents\".\"active_wake_number\" is null\n        and \"lucid\".\"agents\".\"active_wake_horizon\" is null\n      ) or (\n        \"lucid\".\"agents\".\"active_wake_id\" is not null\n        and \"lucid\".\"agents\".\"active_wake_claim_token\" is not null\n        and \"lucid\".\"agents\".\"active_wake_number\" is not null\n        and \"lucid\".\"agents\".\"active_wake_horizon\" is not null\n      )"
+        },
+        "agents_active_job_requires_wake": {
+          "name": "agents_active_job_requires_wake",
+          "value": "\"lucid\".\"agents\".\"active_job_id\" is null or \"lucid\".\"agents\".\"active_wake_id\" is not null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.discovery_events": {
+      "name": "discovery_events",
+      "schema": "lucid",
+      "columns": {
+        "sequence": {
+          "name": "sequence",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wake_number": {
+          "name": "wake_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_agent_id": {
+          "name": "actor_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_agent_id": {
+          "name": "target_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_user_id": {
+          "name": "target_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reply_to_sequence": {
+          "name": "reply_to_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "discovery_events_id_idx": {
+          "name": "discovery_events_id_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_idempotency_idx": {
+          "name": "discovery_events_idempotency_idx",
+          "columns": [
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_workspace_sequence_idx": {
+          "name": "discovery_events_workspace_sequence_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_actor_idx": {
+          "name": "discovery_events_actor_idx",
+          "columns": [
+            {
+              "expression": "actor_agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_target_agent_idx": {
+          "name": "discovery_events_target_agent_idx",
+          "columns": [
+            {
+              "expression": "target_agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_target_user_idx": {
+          "name": "discovery_events_target_user_idx",
+          "columns": [
+            {
+              "expression": "target_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_reply_idx": {
+          "name": "discovery_events_reply_idx",
+          "columns": [
+            {
+              "expression": "reply_to_sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_kind_sequence_idx": {
+          "name": "discovery_events_kind_sequence_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "discovery_events_metadata_gin_idx": {
+          "name": "discovery_events_metadata_gin_idx",
+          "columns": [
+            {
+              "expression": "metadata",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "discovery_events_workspace_id_discovery_workspaces_id_fk": {
+          "name": "discovery_events_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "discovery_events",
+          "tableTo": "discovery_workspaces",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "discovery_events_wake_nonnegative": {
+          "name": "discovery_events_wake_nonnegative",
+          "value": "\"lucid\".\"discovery_events\".\"wake_number\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.discovery_workspaces": {
+      "name": "discovery_workspaces",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "singleton": {
+          "name": "singleton",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "version_id": {
+          "name": "version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "current_wake": {
+          "name": "current_wake",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "background_checks_enabled": {
+          "name": "background_checks_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "discovery_workspaces_single_generation_idx": {
+          "name": "discovery_workspaces_single_generation_idx",
+          "columns": [
+            {
+              "expression": "singleton",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "discovery_workspaces_singleton_true": {
+          "name": "discovery_workspaces_singleton_true",
+          "value": "\"lucid\".\"discovery_workspaces\".\"singleton\" = true"
+        },
+        "discovery_workspaces_current_wake_nonnegative": {
+          "name": "discovery_workspaces_current_wake_nonnegative",
+          "value": "\"lucid\".\"discovery_workspaces\".\"current_wake\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.finding_posts": {
+      "name": "finding_posts",
+      "schema": "lucid",
+      "columns": {
+        "finding_sequence": {
+          "name": "finding_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "finding_posts_position_idx": {
+          "name": "finding_posts_position_idx",
+          "columns": [
+            {
+              "expression": "finding_sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "finding_posts_post_idx": {
+          "name": "finding_posts_post_idx",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "finding_sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "finding_posts_finding_sequence_discovery_events_sequence_fk": {
+          "name": "finding_posts_finding_sequence_discovery_events_sequence_fk",
+          "tableFrom": "finding_posts",
+          "tableTo": "discovery_events",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "finding_sequence"
+          ],
+          "columnsTo": [
+            "sequence"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "finding_posts_post_id_network_posts_id_fk": {
+          "name": "finding_posts_post_id_network_posts_id_fk",
+          "tableFrom": "finding_posts",
+          "tableTo": "network_posts",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "finding_posts_pk": {
+          "name": "finding_posts_pk",
+          "columns": [
+            "finding_sequence",
+            "post_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "finding_posts_position_nonnegative": {
+          "name": "finding_posts_position_nonnegative",
+          "value": "\"lucid\".\"finding_posts\".\"position\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.network_post_sources": {
+      "name": "network_post_sources",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_name": {
+          "name": "source_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "retrieved_at": {
+          "name": "retrieved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "network_post_sources_position_idx": {
+          "name": "network_post_sources_position_idx",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "network_post_sources_url_idx": {
+          "name": "network_post_sources_url_idx",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "url",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "network_post_sources_post_id_network_posts_id_fk": {
+          "name": "network_post_sources_post_id_network_posts_id_fk",
+          "tableFrom": "network_post_sources",
+          "tableTo": "network_posts",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "network_post_sources_position_nonnegative": {
+          "name": "network_post_sources_position_nonnegative",
+          "value": "\"lucid\".\"network_post_sources\".\"position\" >= 0"
+        },
+        "network_post_sources_title_valid": {
+          "name": "network_post_sources_title_valid",
+          "value": "char_length(\"lucid\".\"network_post_sources\".\"title\") between 1 and 500 and \"lucid\".\"network_post_sources\".\"title\" = btrim(\"lucid\".\"network_post_sources\".\"title\")"
+        },
+        "network_post_sources_name_valid": {
+          "name": "network_post_sources_name_valid",
+          "value": "char_length(\"lucid\".\"network_post_sources\".\"source_name\") between 1 and 200 and \"lucid\".\"network_post_sources\".\"source_name\" = btrim(\"lucid\".\"network_post_sources\".\"source_name\")"
+        },
+        "network_post_sources_url_valid": {
+          "name": "network_post_sources_url_valid",
+          "value": "char_length(\"lucid\".\"network_post_sources\".\"url\") between 1 and 2048 and \"lucid\".\"network_post_sources\".\"url\" = btrim(\"lucid\".\"network_post_sources\".\"url\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.network_post_topics": {
+      "name": "network_post_topics",
+      "schema": "lucid",
+      "columns": {
+        "post_id": {
+          "name": "post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "topic": {
+          "name": "topic",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "network_post_topics_position_idx": {
+          "name": "network_post_topics_position_idx",
+          "columns": [
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "network_post_topics_topic_idx": {
+          "name": "network_post_topics_topic_idx",
+          "columns": [
+            {
+              "expression": "topic",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "network_post_topics_post_id_network_posts_id_fk": {
+          "name": "network_post_topics_post_id_network_posts_id_fk",
+          "tableFrom": "network_post_topics",
+          "tableTo": "network_posts",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "network_post_topics_pk": {
+          "name": "network_post_topics_pk",
+          "columns": [
+            "post_id",
+            "topic"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "network_post_topics_position_nonnegative": {
+          "name": "network_post_topics_position_nonnegative",
+          "value": "\"lucid\".\"network_post_topics\".\"position\" >= 0"
+        },
+        "network_post_topics_topic_valid": {
+          "name": "network_post_topics_topic_valid",
+          "value": "char_length(\"lucid\".\"network_post_topics\".\"topic\") between 1 and 120 and \"lucid\".\"network_post_topics\".\"topic\" = btrim(\"lucid\".\"network_post_topics\".\"topic\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.network_posts": {
+      "name": "network_posts",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_profile_id": {
+          "name": "author_profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_agent_id": {
+          "name": "author_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_agent_job_id": {
+          "name": "created_by_agent_job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_agent_job_run_request_id": {
+          "name": "created_by_agent_job_run_request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "publication_method": {
+          "name": "publication_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by_execution_id": {
+          "name": "created_by_execution_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "network_posts_feed_idx": {
+          "name": "network_posts_feed_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "network_posts_profile_idx": {
+          "name": "network_posts_profile_idx",
+          "columns": [
+            {
+              "expression": "author_profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "network_posts_idempotency_idx": {
+          "name": "network_posts_idempotency_idx",
+          "columns": [
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "network_posts_agent_job_run_request_idx": {
+          "name": "network_posts_agent_job_run_request_idx",
+          "columns": [
+            {
+              "expression": "created_by_agent_job_run_request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "network_posts_workspace_id_discovery_workspaces_id_fk": {
+          "name": "network_posts_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "network_posts",
+          "tableTo": "discovery_workspaces",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "network_posts_author_profile_id_network_profiles_id_fk": {
+          "name": "network_posts_author_profile_id_network_profiles_id_fk",
+          "tableFrom": "network_posts",
+          "tableTo": "network_profiles",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "author_profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "network_posts_author_agent_id_agents_id_fk": {
+          "name": "network_posts_author_agent_id_agents_id_fk",
+          "tableFrom": "network_posts",
+          "tableTo": "agents",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "author_agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "network_posts_created_by_agent_job_id_agent_jobs_id_fk": {
+          "name": "network_posts_created_by_agent_job_id_agent_jobs_id_fk",
+          "tableFrom": "network_posts",
+          "tableTo": "agent_jobs",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "created_by_agent_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "network_posts_created_by_agent_job_run_request_id_agent_job_run_requests_id_fk": {
+          "name": "network_posts_created_by_agent_job_run_request_id_agent_job_run_requests_id_fk",
+          "tableFrom": "network_posts",
+          "tableTo": "agent_job_run_requests",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "created_by_agent_job_run_request_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "network_posts_publication_method_valid": {
+          "name": "network_posts_publication_method_valid",
+          "value": "\"lucid\".\"network_posts\".\"publication_method\" in ('seeded-pilot', 'agent')"
+        },
+        "network_posts_publication_provenance_valid": {
+          "name": "network_posts_publication_provenance_valid",
+          "value": "(\n        \"lucid\".\"network_posts\".\"publication_method\" = 'agent'\n        and \"lucid\".\"network_posts\".\"author_agent_id\" is not null\n        and \"lucid\".\"network_posts\".\"created_by_execution_id\" is not null\n      ) or (\n        \"lucid\".\"network_posts\".\"publication_method\" = 'seeded-pilot'\n        and \"lucid\".\"network_posts\".\"author_agent_id\" is null\n        and \"lucid\".\"network_posts\".\"created_by_execution_id\" is null\n      )"
+        },
+        "network_posts_title_valid": {
+          "name": "network_posts_title_valid",
+          "value": "char_length(\"lucid\".\"network_posts\".\"title\") between 1 and 240 and \"lucid\".\"network_posts\".\"title\" = btrim(\"lucid\".\"network_posts\".\"title\")"
+        },
+        "network_posts_body_valid": {
+          "name": "network_posts_body_valid",
+          "value": "char_length(\"lucid\".\"network_posts\".\"body\") between 1 and 20000 and \"lucid\".\"network_posts\".\"body\" = btrim(\"lucid\".\"network_posts\".\"body\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.network_profile_topics": {
+      "name": "network_profile_topics",
+      "schema": "lucid",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "topic": {
+          "name": "topic",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "network_profile_topics_position_idx": {
+          "name": "network_profile_topics_position_idx",
+          "columns": [
+            {
+              "expression": "profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "network_profile_topics_topic_idx": {
+          "name": "network_profile_topics_topic_idx",
+          "columns": [
+            {
+              "expression": "topic",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "profile_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "network_profile_topics_profile_id_network_profiles_id_fk": {
+          "name": "network_profile_topics_profile_id_network_profiles_id_fk",
+          "tableFrom": "network_profile_topics",
+          "tableTo": "network_profiles",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "profile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "network_profile_topics_pk": {
+          "name": "network_profile_topics_pk",
+          "columns": [
+            "profile_id",
+            "topic"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "network_profile_topics_position_nonnegative": {
+          "name": "network_profile_topics_position_nonnegative",
+          "value": "\"lucid\".\"network_profile_topics\".\"position\" >= 0"
+        },
+        "network_profile_topics_topic_valid": {
+          "name": "network_profile_topics_topic_valid",
+          "value": "char_length(\"lucid\".\"network_profile_topics\".\"topic\") between 1 and 120 and \"lucid\".\"network_profile_topics\".\"topic\" = btrim(\"lucid\".\"network_profile_topics\".\"topic\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.network_profiles": {
+      "name": "network_profiles",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public_description": {
+          "name": "public_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "publishing_focus": {
+          "name": "publishing_focus",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "network_profiles_workspace_idx": {
+          "name": "network_profiles_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "network_profiles_user_idx": {
+          "name": "network_profiles_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "network_profiles_workspace_id_discovery_workspaces_id_fk": {
+          "name": "network_profiles_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "network_profiles",
+          "tableTo": "discovery_workspaces",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "network_profiles_user_id_users_id_fk": {
+          "name": "network_profiles_user_id_users_id_fk",
+          "tableFrom": "network_profiles",
+          "tableTo": "users",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "network_profiles_description_valid": {
+          "name": "network_profiles_description_valid",
+          "value": "char_length(\"lucid\".\"network_profiles\".\"public_description\") between 1 and 2000 and \"lucid\".\"network_profiles\".\"public_description\" = btrim(\"lucid\".\"network_profiles\".\"public_description\")"
+        },
+        "network_profiles_focus_valid": {
+          "name": "network_profiles_focus_valid",
+          "value": "char_length(\"lucid\".\"network_profiles\".\"publishing_focus\") between 1 and 120 and \"lucid\".\"network_profiles\".\"publishing_focus\" = btrim(\"lucid\".\"network_profiles\".\"publishing_focus\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.user_identity_bindings": {
+      "name": "user_identity_bindings",
+      "schema": "lucid",
+      "columns": {
+        "issuer": {
+          "name": "issuer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "user_identity_bindings_user_idx": {
+          "name": "user_identity_bindings_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "user_identity_bindings_user_id_users_id_fk": {
+          "name": "user_identity_bindings_user_id_users_id_fk",
+          "tableFrom": "user_identity_bindings",
+          "tableTo": "users",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "user_identity_bindings_pk": {
+          "name": "user_identity_bindings_pk",
+          "columns": [
+            "issuer",
+            "subject"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "user_identity_bindings_issuer_valid": {
+          "name": "user_identity_bindings_issuer_valid",
+          "value": "char_length(\"lucid\".\"user_identity_bindings\".\"issuer\") between 1 and 512 and \"lucid\".\"user_identity_bindings\".\"issuer\" = btrim(\"lucid\".\"user_identity_bindings\".\"issuer\")"
+        },
+        "user_identity_bindings_subject_valid": {
+          "name": "user_identity_bindings_subject_valid",
+          "value": "char_length(\"lucid\".\"user_identity_bindings\".\"subject\") between 1 and 512 and \"lucid\".\"user_identity_bindings\".\"subject\" = btrim(\"lucid\".\"user_identity_bindings\".\"subject\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "lucid.users": {
+      "name": "users",
+      "schema": "lucid",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registration_key": {
+          "name": "registration_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "private_context": {
+          "name": "private_context",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "context_consent_at": {
+          "name": "context_consent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "users_workspace_idx": {
+          "name": "users_workspace_idx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "users_registration_key_idx": {
+          "name": "users_registration_key_idx",
+          "columns": [
+            {
+              "expression": "registration_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "users_workspace_id_discovery_workspaces_id_fk": {
+          "name": "users_workspace_id_discovery_workspaces_id_fk",
+          "tableFrom": "users",
+          "tableTo": "discovery_workspaces",
+          "schemaTo": "lucid",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "users_kind_valid": {
+          "name": "users_kind_valid",
+          "value": "\"lucid\".\"users\".\"kind\" in ('human', 'synthetic')"
+        },
+        "users_status_valid": {
+          "name": "users_status_valid",
+          "value": "\"lucid\".\"users\".\"status\" in ('active', 'disabled', 'retired')"
+        },
+        "users_human_consent_required": {
+          "name": "users_human_consent_required",
+          "value": "\"lucid\".\"users\".\"kind\" <> 'human' or \"lucid\".\"users\".\"context_consent_at\" is not null"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "lucid": "lucid",
+    "heddle": "heddle"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

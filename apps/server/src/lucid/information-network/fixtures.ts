@@ -375,6 +375,8 @@ async function assertFixtureState(
       workspaceId: LUCID_WORKSPACE_ID,
       authorProfileId: profile.profileId,
       authorAgentId: null,
+      createdByAgentJobId: null,
+      createdByAgentJobRunRequestId: null,
       publicationMethod: 'seeded-pilot',
       title: post.title,
       body: post.body,
