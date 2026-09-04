@@ -100,6 +100,36 @@ describe('PostgreSQL Information Network store', () => {
       .resolves.toBeUndefined();
   });
 
+  it('searches title, body, and topics with a bounded newest-first result', async () => {
+    await database.orm.insert(posts).values({
+      id: 'newer-durable-post',
+      workspaceId: LUCID_WORKSPACE_ID,
+      authorProfileId: TEST_PROFILE_ID,
+      publicationMethod: 'seeded-pilot',
+      title: 'A newer durable Agent note',
+      body: 'A compact second result used to prove ordering and limits.',
+      publishedAt: '2026-08-31T00:00:00.000Z',
+      createdAt: '2026-08-31T00:00:00.000Z',
+      idempotencyKey: 'test:newer-durable-post',
+    });
+
+    await expect(stores.informationNetwork.searchPosts('DURABLE', 1))
+      .resolves.toEqual([expect.objectContaining({
+        postId: 'newer-durable-post',
+        title: 'A newer durable Agent note',
+        author: { id: TEST_PROFILE_ID, displayName: 'You' },
+      })]);
+    await expect(stores.informationNetwork.searchPosts('reusable runtime', 10))
+      .resolves.toEqual([expect.objectContaining({ postId: TEST_POST_ID })]);
+    await expect(stores.informationNetwork.searchPosts('ARCHITECTURE', 10))
+      .resolves.toEqual([expect.objectContaining({
+        postId: TEST_POST_ID,
+        topics: ['Architecture', 'Persistence'],
+      })]);
+    await expect(stores.informationNetwork.searchPosts('%', 10))
+      .resolves.toEqual([]);
+  });
+
   it('permits a general Post with zero Sources without fabricating provenance', async () => {
     await database.orm.insert(posts).values({
       id: 'source-free-general-post',

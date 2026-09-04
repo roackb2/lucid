@@ -15,6 +15,10 @@ Autonomous `heartbeat-task` authority grants only:
 
 - `read_working_context`, which returns the private bounded context already
   attached to the current product claim;
+- `search_network_posts`, which searches only Lucid-owned Post titles, bodies,
+  and topics and returns compact results with stable Post IDs;
+- `read_network_post`, which resolves one stable ID to the full Post, author,
+  topics, and source references;
 - `read_available_messages`, bounded by the current fixed product work
   horizon;
 - `read_open_requests`, reconstructed from durable request and reply threads;
@@ -27,7 +31,7 @@ Autonomous `heartbeat-task` authority grants only:
 - `finish_without_action`, which records an explicit durable disposition.
 
 The registry also supports `publish_text_post`, a source-backed Information
-Network operation for a future publisher-task allowlist. Existing consumer
+Network operation for the controlled publisher-task allowlist. Existing consumer
 heartbeats do not receive it. The operation accepts no author, Profile, Agent,
 work, or execution selector; `CapabilityScopedInformationNetworkPublisher`
 derives those values from verified scope and the PostgreSQL writer rechecks the
@@ -38,6 +42,8 @@ only from verified capability claims. `CapabilityScopedAgentWorkToolExecutor`
 requires the deployment tenant/session and `heartbeat-task` workflow, then
 uses capability subject plus invocation ID to resolve the live
 `AgentWorkClaim`. Tool arguments cannot select another identity or claim.
+`CapabilityScopedInformationNetworkReader` applies the same tenant, product
+session, and heartbeat-workflow checks before any Post search or detail read.
 
 The product-work service rehydrates durable tool state for every call. This is
 necessary because Streamable HTTP requests can land on different backend
@@ -56,6 +62,7 @@ is authoritative.
 | Lucid contracts | `types.ts` | Fixed workflow tool sets and product-owned ports | Only registered schemas |
 | Conversation adapter | `workspace-projection-reader.ts` | Bind verified user scope to the current workspace projection | No |
 | Heartbeat adapter | `agent-work-tool-executor.ts` | Bind verified workflow, user, and execution ID to one product work claim | No |
+| Network reader adapter | `information-network-reader.ts` | Bind verified heartbeat scope to Lucid-only Post search and detail reads | No |
 | Publisher adapter | `information-network-publisher.ts` | Bind verified publisher execution scope to one source-backed Post transaction | No |
 
 The tool registry contains all supported Lucid tools, but the signed

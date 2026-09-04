@@ -9,6 +9,7 @@ import type {
 import type {
   InformationNetworkFeedView,
   NetworkPostDetailView,
+  NetworkPostSearchView,
   NetworkProfileDetailView,
   PublishingPreferencesView,
   PublishingJobRunRequestView,
@@ -16,6 +17,8 @@ import type {
 } from './types.js';
 
 const NETWORK_FEED_LIMIT = 50;
+const NETWORK_POST_SEARCH_LIMIT = 10;
+const NETWORK_POST_SEARCH_MAX_LIMIT = 20;
 const PROFILE_RECENT_POST_LIMIT = 12;
 
 export class InformationNetworkInputError extends Error {}
@@ -31,6 +34,19 @@ export class InformationNetworkService {
 
   async feed(): Promise<InformationNetworkFeedView> {
     return await this.store.readFeed(NETWORK_FEED_LIMIT);
+  }
+
+  /** Searches only Lucid-owned Posts; external discovery is a separate capability. */
+  async searchPosts(input: {
+    query: string;
+    limit?: number;
+  }): Promise<NetworkPostSearchView> {
+    const query = normalizeSearchQuery(input.query);
+    const limit = normalizeSearchLimit(input.limit);
+    return {
+      query,
+      results: await this.store.searchPosts(query, limit),
+    };
   }
 
   async post(postId: string): Promise<NetworkPostDetailView | null> {
@@ -127,4 +143,28 @@ function normalizeRouteId(value: string, label: string): string {
     );
   }
   return normalized;
+}
+
+function normalizeSearchQuery(value: string): string {
+  const normalized = value.trim().replace(/\s+/gu, ' ');
+  if (!normalized || normalized.length > 200) {
+    throw new InformationNetworkInputError(
+      'Network Post search query must contain 1 to 200 characters.',
+    );
+  }
+  return normalized;
+}
+
+function normalizeSearchLimit(value: number | undefined): number {
+  const limit = value ?? NETWORK_POST_SEARCH_LIMIT;
+  if (
+    !Number.isSafeInteger(limit)
+    || limit < 1
+    || limit > NETWORK_POST_SEARCH_MAX_LIMIT
+  ) {
+    throw new InformationNetworkInputError(
+      `Network Post search limit must be between 1 and ${NETWORK_POST_SEARCH_MAX_LIMIT}.`,
+    );
+  }
+  return limit;
 }

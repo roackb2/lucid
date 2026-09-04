@@ -56,6 +56,14 @@ describe('Lucid hosted conversation control-plane round trip', () => {
             throw new Error('Information Network publishing is unavailable in this fixture.');
           },
         },
+        {
+          searchPosts: async () => {
+            throw new Error('Information Network reading is unavailable in this fixture.');
+          },
+          readPost: async () => {
+            throw new Error('Information Network reading is unavailable in this fixture.');
+          },
+        },
         { now: () => MCP_TEST_NOW },
       ),
     });

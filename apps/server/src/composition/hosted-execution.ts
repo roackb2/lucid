@@ -46,12 +46,18 @@ import {
 import {
   CapabilityScopedInformationNetworkPublisher,
 } from '../hosted-execution/mcp/information-network-publisher.js';
+import {
+  CapabilityScopedInformationNetworkReader,
+} from '../hosted-execution/mcp/information-network-reader.js';
 import type { DiscoveryWorkspaceSnapshot } from '../lucid/discovery-types.js';
 import type { AgentWorkService } from '../lucid/agent/work-service.js';
 import type { AgentJobService } from '../lucid/agent/jobs/service.js';
 import type {
   InformationNetworkPublishingService,
 } from '../lucid/information-network/publishing.js';
+import type {
+  InformationNetworkService,
+} from '../lucid/information-network/service.js';
 import type {
   PublishingJobWorkService,
 } from '../lucid/information-network/publishing-job-work-service.js';
@@ -88,6 +94,10 @@ export async function createHostedExecutionComposition(input: {
   informationNetworkPublishing: Pick<
     InformationNetworkPublishingService,
     'publishTextPost'
+  >;
+  informationNetwork: Pick<
+    InformationNetworkService,
+    'searchPosts' | 'post'
   >;
   executionHost?: ExecutionHost;
 }): Promise<HostedExecutionComposition> {
@@ -135,12 +145,17 @@ export async function createHostedExecutionComposition(input: {
       tenantId: input.config.tenantId,
       productSessionId: input.config.productSessionId,
     }, input.informationNetworkPublishing);
+  const informationNetworkReader = new CapabilityScopedInformationNetworkReader({
+    tenantId: input.config.tenantId,
+    productSessionId: input.config.productSessionId,
+  }, input.informationNetwork);
   const mcp = new NodeStreamableHttpMcpService({
     capabilityVerifier,
     toolset: createLucidProductToolset(
       workspaceReader,
       agentWork,
       informationNetworkPublisher,
+      informationNetworkReader,
     ),
   });
   let ownedAgentCoreHost: AgentCoreExecutionHost | undefined;

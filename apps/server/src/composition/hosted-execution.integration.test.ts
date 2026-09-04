@@ -134,6 +134,7 @@ describe('hosted execution composition', () => {
       agentWork: unusedAgentWork(),
       agentJobs: unusedAgentJobs(),
       publishingJobWork: unusedPublishingJobWork(),
+      informationNetwork: unusedInformationNetwork(),
       informationNetworkPublishing: unusedInformationNetworkPublishing(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
@@ -265,6 +266,7 @@ describe('hosted execution composition', () => {
       agentWork: unusedAgentWork(),
       agentJobs: unusedAgentJobs(),
       publishingJobWork: unusedPublishingJobWork(),
+      informationNetwork: unusedInformationNetwork(),
       informationNetworkPublishing: unusedInformationNetworkPublishing(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
@@ -380,6 +382,7 @@ describe('hosted execution composition', () => {
         }),
       },
       publishingJobWork: unusedPublishingJobWork(),
+      informationNetwork: unusedInformationNetwork(),
       informationNetworkPublishing: unusedInformationNetworkPublishing(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
@@ -608,6 +611,13 @@ function unusedInformationNetworkPublishing() {
     publishTextPost: async () => {
       throw new Error('Information Network publishing is disabled in this fixture.');
     },
+  };
+}
+
+function unusedInformationNetwork() {
+  return {
+    searchPosts: async () => ({ query: '', results: [] }),
+    post: async () => null,
   };
 }
 

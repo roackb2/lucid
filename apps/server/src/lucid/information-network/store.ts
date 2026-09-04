@@ -5,6 +5,7 @@ import type {
   PublishAgentTextPostReceipt,
   SourceBackedTextPostDraft,
   NetworkPostDetailView,
+  NetworkPostSearchResultView,
   NetworkProfileContentView,
 } from './types.js';
 
@@ -39,6 +40,10 @@ export interface FindingPostReader {
 
 export interface InformationNetworkStore extends FindingPostReader {
   readFeed(limit: number): Promise<InformationNetworkFeedView>;
+  searchPosts(
+    query: string,
+    limit: number,
+  ): Promise<NetworkPostSearchResultView[]>;
   readPost(postId: string): Promise<NetworkPostDetailView | undefined>;
   readProfile(
     profileId: string,

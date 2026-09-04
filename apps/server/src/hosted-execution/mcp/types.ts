@@ -18,6 +18,8 @@ import {
   PUBLISH_TEXT_POST_TOOL,
 } from '../../lucid/information-network/publishing.js';
 import type {
+  NetworkPostDetailView,
+  NetworkPostSearchView,
   PublishAgentTextPostReceipt,
   SourceBackedTextPostDraft,
 } from '../../lucid/information-network/types.js';
@@ -36,6 +38,8 @@ export {
 /** Stable workflow-specific product tool names exposed through signed MCP. */
 export const READ_WORKSPACE_SNAPSHOT_TOOL = 'read_workspace_snapshot';
 export const READ_WORKING_CONTEXT_TOOL = READ_AGENT_WORKING_CONTEXT_TOOL;
+export const SEARCH_NETWORK_POSTS_TOOL = 'search_network_posts';
+export const READ_NETWORK_POST_TOOL = 'read_network_post';
 
 export const LUCID_CONVERSATION_MCP_TOOLS = Object.freeze([
   READ_WORKSPACE_SNAPSHOT_TOOL,
@@ -43,6 +47,8 @@ export const LUCID_CONVERSATION_MCP_TOOLS = Object.freeze([
 
 export const LUCID_HEARTBEAT_MCP_TOOLS = Object.freeze([
   READ_WORKING_CONTEXT_TOOL,
+  SEARCH_NETWORK_POSTS_TOOL,
+  READ_NETWORK_POST_TOOL,
   ...AGENT_WORK_COMMUNICATION_TOOLS,
 ] as const);
 
@@ -102,6 +108,21 @@ export interface ScopedAgentWorkToolExecutor {
     arguments: unknown;
     signal: AbortSignal;
   }): Promise<unknown>;
+}
+
+/** Network reads resolve the Lucid boundary only from verified capability scope. */
+export interface ScopedInformationNetworkReader {
+  searchPosts(input: {
+    scope: McpInvocationScope;
+    query: string;
+    limit?: number;
+    signal: AbortSignal;
+  }): Promise<NetworkPostSearchView>;
+  readPost(input: {
+    scope: McpInvocationScope;
+    postId: string;
+    signal: AbortSignal;
+  }): Promise<NetworkPostDetailView | null>;
 }
 
 /** Source-backed publication resolves authorship from verified execution scope. */

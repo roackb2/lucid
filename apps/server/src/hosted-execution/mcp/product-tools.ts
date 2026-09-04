@@ -20,6 +20,7 @@ import {
   POST_SHARED_MESSAGE_TOOL,
   READ_AVAILABLE_MESSAGES_TOOL,
   READ_OPEN_REQUESTS_TOOL,
+  READ_NETWORK_POST_TOOL,
   READ_WORKSPACE_SNAPSHOT_TOOL,
   READ_WORKING_CONTEXT_TOOL,
   REPORT_FINDING_TOOL,
@@ -29,9 +30,23 @@ import {
   type LucidProductMcpToolName,
   PUBLISH_TEXT_POST_TOOL,
   type ScopedAgentWorkToolExecutor,
+  type ScopedInformationNetworkReader,
   type ScopedInformationNetworkPublisher,
   type ScopedWorkspaceProjectionReader,
+  SEARCH_NETWORK_POSTS_TOOL,
 } from './types.js';
+
+const searchNetworkPostsInputSchema = z.object({
+  query: z.string().trim().min(1).max(200),
+  limit: z.number().int().min(1).max(20).optional(),
+}).strict();
+
+const readNetworkPostInputSchema = z.object({
+  postId: z.string().trim().regex(
+    /^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,159}$/,
+    'Post ID must be a stable Lucid identifier.',
+  ),
+}).strict();
 
 /**
  * Builds the exact model-visible Lucid capabilities exposed to the Execution
@@ -43,6 +58,7 @@ export function createLucidProductToolset(
   workspaceReader: ScopedWorkspaceProjectionReader,
   agentWork: ScopedAgentWorkToolExecutor,
   informationNetworkPublisher: ScopedInformationNetworkPublisher,
+  informationNetworkReader: ScopedInformationNetworkReader,
   options: { now?: () => Date } = {},
 ): NodeMcpJsonToolset<LucidProductMcpToolName> {
   return new NodeMcpJsonToolset({
@@ -89,6 +105,47 @@ export function createLucidProductToolset(
             scope: capability.scope,
             toolName: READ_WORKING_CONTEXT_TOOL,
             arguments: {},
+            signal,
+          })
+        ),
+      }),
+      defineNodeMcpJsonTool({
+        name: SEARCH_NETWORK_POSTS_TOOL,
+        description:
+          'Search only Posts already published inside the Lucid Information Network. Returns compact results with stable Post IDs; it does not search the broader internet.',
+        inputSchema: searchNetworkPostsInputSchema,
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        failureMessage: 'Lucid Network Post search is unavailable.',
+        execute: async ({ query, limit }, { capability, signal }) => (
+          await informationNetworkReader.searchPosts({
+            scope: capability.scope,
+            query,
+            limit,
+            signal,
+          })
+        ),
+      }),
+      defineNodeMcpJsonTool({
+        name: READ_NETWORK_POST_TOOL,
+        description:
+          'Read one full Lucid Information Network Post by its stable Post ID, including author, topics, and source references.',
+        inputSchema: readNetworkPostInputSchema,
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        failureMessage: 'The Lucid Network Post is unavailable.',
+        execute: async ({ postId }, { capability, signal }) => (
+          await informationNetworkReader.readPost({
+            scope: capability.scope,
+            postId,
             signal,
           })
         ),

@@ -135,6 +135,7 @@ const hostedExecution = await createHostedExecutionComposition({
   agentWork,
   agentJobs,
   publishingJobWork,
+  informationNetwork,
   informationNetworkPublishing,
 });
 const staticSpaRequestHandler = config.webRoot

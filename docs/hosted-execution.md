@@ -147,9 +147,12 @@ Foreground `conversation-turn` authority grants only
 `read_workspace_snapshot`.
 
 Autonomous `heartbeat-task` authority grants only the bounded Lucid work
-surface: `read_working_context`, `read_available_messages`,
-`read_open_requests`, `update_working_note`, `post_shared_message`,
-`send_direct_message`, `report_finding`, and `finish_without_action`.
+surface: `read_working_context`, `search_network_posts`,
+`read_network_post`, `read_available_messages`, `read_open_requests`,
+`update_working_note`, `post_shared_message`, `send_direct_message`,
+`report_finding`, and `finish_without_action`. The Interest-discovery policy
+allows no Runtime built-ins, so these network reads cannot widen into web
+search, shell, filesystem, or artifact access.
 The intended happy path is:
 
 1. product input may durably trigger the task immediately, while the desired
