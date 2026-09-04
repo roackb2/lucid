@@ -7,7 +7,10 @@ import {
   count,
   desc,
   eq,
+  exists,
+  ilike,
   inArray,
+  or,
 } from 'drizzle-orm';
 import isEqual from 'lodash/isEqual.js';
 import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
@@ -37,6 +40,7 @@ import {
   type PublishAgentTextPostReceipt,
   type SourceBackedTextPostDraft,
   type NetworkPostDetailView,
+  type NetworkPostSearchResultView,
   type NetworkPostView,
   type NetworkProfileContentView,
   type NetworkProfileSummaryView,
@@ -51,6 +55,8 @@ type NetworkPostWithAuthorRow = {
   publishingFocus: string;
   representativeAgentName: string;
 };
+
+const NETWORK_POST_SEARCH_EXCERPT_LENGTH = 400;
 
 export class PostgresInformationNetworkStore
 implements InformationNetworkStore, InformationNetworkPublicationStore {
@@ -292,6 +298,64 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
     };
   }
 
+  async searchPosts(
+    query: string,
+    limit: number,
+  ): Promise<NetworkPostSearchResultView[]> {
+    assertReadLimit(limit);
+    const pattern = `%${escapeLikePattern(query)}%`;
+    const rows = await this.database.orm
+      .select({
+        post: posts,
+        profileId: profiles.id,
+        displayName: users.displayName,
+        publishingFocus: profiles.publishingFocus,
+        representativeAgentName: agents.name,
+      })
+      .from(posts)
+      .innerJoin(profiles, eq(profiles.id, posts.authorProfileId))
+      .innerJoin(users, eq(users.id, profiles.userId))
+      .innerJoin(agents, eq(agents.userId, users.id))
+      .where(and(
+        eq(posts.workspaceId, LUCID_WORKSPACE_ID),
+        eq(profiles.workspaceId, LUCID_WORKSPACE_ID),
+        eq(users.workspaceId, LUCID_WORKSPACE_ID),
+        eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+        or(
+          ilike(posts.title, pattern),
+          ilike(posts.body, pattern),
+          exists(
+            this.database.orm
+              .select({ postId: postTopics.postId })
+              .from(postTopics)
+              .where(and(
+                eq(postTopics.postId, posts.id),
+                ilike(postTopics.topic, pattern),
+              )),
+          ),
+        ),
+      ))
+      .orderBy(desc(posts.publishedAt), desc(posts.id))
+      .limit(limit);
+    const postById = await this.readPostViews(rows.map(({ post }) => post));
+
+    return rows.map((row) => {
+      const post = requirePostView(postById, row.post.id);
+      return {
+        postId: post.id,
+        title: post.title,
+        excerpt: excerptForBody(post.body),
+        publishedAt: post.publishedAt,
+        publicationMethod: post.publicationMethod,
+        topics: post.topics,
+        author: {
+          id: row.profileId,
+          displayName: row.displayName,
+        },
+      };
+    });
+  }
+
   async readProfile(
     profileId: string,
     recentPostLimit: number,
@@ -502,4 +566,15 @@ function assertReadLimit(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
     throw new Error('Information Network read limit must be between 1 and 100.');
   }
+}
+
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/gu, '\\$&');
+}
+
+function excerptForBody(body: string): string {
+  if (body.length <= NETWORK_POST_SEARCH_EXCERPT_LENGTH) {
+    return body;
+  }
+  return `${body.slice(0, NETWORK_POST_SEARCH_EXCERPT_LENGTH - 1).trimEnd()}…`;
 }

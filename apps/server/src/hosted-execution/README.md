@@ -36,6 +36,7 @@ Lucid-owned behavior is:
 | `mcp/product-tools.ts` | Declare exact product tool names, schemas, descriptions, and operations |
 | `mcp/workspace-projection-reader.ts` | Bind foreground capability scope to a user workspace projection |
 | `mcp/agent-work-tool-executor.ts` | Bind heartbeat capability scope and execution ID to one active product work claim |
+| `mcp/information-network-reader.ts` | Bind heartbeat capability scope to Lucid-only Post search and detail reads |
 | `http-router.ts` | Mount package-owned JWKS, conversation, MCP, and heartbeat-lifecycle services beside tRPC |
 
 Do not recreate public SDK wrappers in Lucid. Composition imports generic
@@ -51,12 +52,16 @@ tokens and ambient model credentials. The browser never receives either form.
 `conversation-turn` grants only `read_workspace_snapshot`.
 
 `heartbeat-task` grants only the bounded Lucid work tools: claimed working
-context, mailbox and open-request reads, working-note update, shared and direct
-replies, Finding delivery, and explicit no-action settlement. Preparation
+context, Lucid Network Post search/detail reads, mailbox and open-request reads,
+working-note update, shared and direct replies, Finding delivery, and explicit
+no-action settlement. Preparation
 claims a fixed Lucid event horizon before the model runs. Every tool call
 re-resolves that claim from verified capability scope, and every mutation
 checks the live execution fence in the insert transaction. Completion advances
 the Lucid cursor only after required durable effects exist.
+
+The Interest-discovery policy allows no Runtime built-in tools. Network search
+therefore cannot widen into web search, shell, filesystem, or artifact access.
 
 The Coordinator decides when an attempt runs. `AgentWorkService` decides what
 product work that attempt owns and whether its product effects are complete.

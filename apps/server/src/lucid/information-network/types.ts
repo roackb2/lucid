@@ -94,6 +94,22 @@ export type NetworkPostDetailView = {
   author: NetworkProfileSummaryView;
 };
 
+/** Compact search result; the Agent can request the full Post by stable ID. */
+export type NetworkPostSearchResultView = {
+  postId: string;
+  title: string;
+  excerpt: string;
+  publishedAt: string;
+  publicationMethod: NetworkPostPublicationMethod;
+  topics: string[];
+  author: Pick<NetworkProfileSummaryView, 'id' | 'displayName'>;
+};
+
+export type NetworkPostSearchView = {
+  query: string;
+  results: NetworkPostSearchResultView[];
+};
+
 export type NetworkProfileContentView = {
   profile: NetworkProfileView;
   recentPosts: NetworkPostView[];

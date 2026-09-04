@@ -42,6 +42,8 @@ describe('LucidHeartbeatExecutionLifecycle', () => {
         runtimeToolPolicy: { allow: [] },
         allowedTools: [
           'read_working_context',
+          'search_network_posts',
+          'read_network_post',
           'read_available_messages',
           'read_open_requests',
           'update_working_note',

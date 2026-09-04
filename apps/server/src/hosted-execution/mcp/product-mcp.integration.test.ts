@@ -22,10 +22,13 @@ import {
 import {
   LUCID_HEARTBEAT_MCP_TOOLS,
   PUBLISH_TEXT_POST_TOOL,
+  READ_NETWORK_POST_TOOL,
   READ_WORKING_CONTEXT_TOOL,
   READ_WORKSPACE_SNAPSHOT_TOOL,
+  SEARCH_NETWORK_POSTS_TOOL,
   type LucidProductMcpToolName,
   type ScopedAgentWorkToolExecutor,
+  type ScopedInformationNetworkReader,
   type ScopedInformationNetworkPublisher,
   type ScopedWorkspaceProjectionReader,
 } from './types.js';
@@ -264,6 +267,86 @@ describe('Lucid product tools over the generic MCP HTTP edge', () => {
     expect(informationNetworkPublisher.publishTextPost).toHaveBeenCalledOnce();
   });
 
+  it('exposes exact claim-scoped Network Post search and detail reads', async () => {
+    const informationNetworkReader = {
+      searchPosts: vi.fn(async () => ({
+        query: 'durable agents',
+        results: [{
+          postId: 'post-1',
+          title: 'Durable Agent work',
+          excerpt: 'A compact search result.',
+          publishedAt: '2026-09-04T00:00:00.000Z',
+          publicationMethod: 'agent' as const,
+          topics: ['Agent systems'],
+          author: { id: 'profile-1', displayName: 'Mina Chen' },
+        }],
+      })),
+      readPost: vi.fn(async () => ({
+        post: {
+          id: 'post-1',
+          title: 'Durable Agent work',
+          body: 'The complete source-backed Post.',
+          publishedAt: '2026-09-04T00:00:00.000Z',
+          publicationMethod: 'agent' as const,
+          topics: ['Agent systems'],
+          sources: [],
+        },
+        author: {
+          id: 'profile-1',
+          displayName: 'Mina Chen',
+          initials: 'MC',
+          publishingFocus: 'Agent systems',
+          representativeAgentName: "Mina's representative",
+        },
+      })),
+    } satisfies ScopedInformationNetworkReader;
+    const assertion = await signer.sign({
+      workflow: 'heartbeat-task',
+      allowedTools: [SEARCH_NETWORK_POSTS_TOOL, READ_NETWORK_POST_TOOL],
+    });
+    const endpoint = await startService(createProductMcpService(
+      signer.verifier(),
+      { readWorkspaceProjection: vi.fn(async () => workspaceSnapshot()) },
+      { informationNetworkReader, now: () => MCP_TEST_NOW },
+    ));
+    client = await connectClient(endpoint, assertion);
+
+    expect((await client.listTools()).tools.map(({ name }) => name)).toEqual([
+      SEARCH_NETWORK_POSTS_TOOL,
+      READ_NETWORK_POST_TOOL,
+    ]);
+    await expect(client.callTool({
+      name: SEARCH_NETWORK_POSTS_TOOL,
+      arguments: { query: 'durable agents', limit: 4 },
+    })).resolves.not.toMatchObject({ isError: true });
+    await expect(client.callTool({
+      name: READ_NETWORK_POST_TOOL,
+      arguments: { postId: 'post-1' },
+    })).resolves.not.toMatchObject({ isError: true });
+
+    expect(informationNetworkReader.searchPosts).toHaveBeenCalledWith({
+      scope: expect.objectContaining({
+        subjectId: 'subject-a',
+        invocationId: 'invocation-001',
+        workflow: 'heartbeat-task',
+      }),
+      query: 'durable agents',
+      limit: 4,
+      signal: expect.any(AbortSignal),
+    });
+    expect(informationNetworkReader.readPost).toHaveBeenCalledWith({
+      scope: expect.objectContaining({ invocationId: 'invocation-001' }),
+      postId: 'post-1',
+      signal: expect.any(AbortSignal),
+    });
+
+    await expect(client.callTool({
+      name: SEARCH_NETWORK_POSTS_TOOL,
+      arguments: { query: 'durable agents', tenantId: 'another-tenant' },
+    })).resolves.toMatchObject({ isError: true });
+    expect(informationNetworkReader.searchPosts).toHaveBeenCalledOnce();
+  });
+
   it('denies a cross-scope projection without leaking product data', async () => {
     const source = {
       snapshot: vi.fn(async (_userId: string) => workspaceSnapshot()),
@@ -444,6 +527,7 @@ function createProductMcpService(
   workspaceReader: ScopedWorkspaceProjectionReader,
   options: {
     agentWork?: ScopedAgentWorkToolExecutor;
+    informationNetworkReader?: ScopedInformationNetworkReader;
     informationNetworkPublisher?: ScopedInformationNetworkPublisher;
     maxBodyBytes?: number;
     now?: () => Date;
@@ -461,6 +545,14 @@ function createProductMcpService(
       options.informationNetworkPublisher ?? {
         publishTextPost: async () => {
           throw new Error('Information Network publishing is unavailable in this fixture.');
+        },
+      },
+      options.informationNetworkReader ?? {
+        searchPosts: async () => {
+          throw new Error('Information Network reading is unavailable in this fixture.');
+        },
+        readPost: async () => {
+          throw new Error('Information Network reading is unavailable in this fixture.');
         },
       },
       { now: options.now },

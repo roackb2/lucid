@@ -29,6 +29,41 @@ describe('information network service', () => {
     await expect(service.profile('missing-profile')).resolves.toBeNull();
   });
 
+  it('normalizes and bounds Network Post search', async () => {
+    const store = createStore();
+    const service = new InformationNetworkService(store, createAgentJobs());
+
+    await expect(service.searchPosts({
+      query: '  durable   agent systems ',
+    })).resolves.toEqual({
+      query: 'durable agent systems',
+      results: [],
+    });
+    await service.searchPosts({ query: 'architecture', limit: 4 });
+
+    expect(store.searchPosts).toHaveBeenNthCalledWith(
+      1,
+      'durable agent systems',
+      10,
+    );
+    expect(store.searchPosts).toHaveBeenNthCalledWith(2, 'architecture', 4);
+  });
+
+  it.each([
+    { query: '', limit: undefined },
+    { query: 'x'.repeat(201), limit: undefined },
+    { query: 'valid', limit: 0 },
+    { query: 'valid', limit: 21 },
+    { query: 'valid', limit: 1.5 },
+  ])('rejects malformed Post search input %#', async (input) => {
+    const store = createStore();
+    const service = new InformationNetworkService(store, createAgentJobs());
+
+    await expect(service.searchPosts(input)).rejects
+      .toBeInstanceOf(InformationNetworkInputError);
+    expect(store.searchPosts).not.toHaveBeenCalled();
+  });
+
   it('rejects malformed identifiers before persistence', async () => {
     const store = createStore();
     const service = new InformationNetworkService(store, createAgentJobs());
@@ -108,6 +143,7 @@ function createStore() {
       postCount: 0,
       profileCount: 0,
     })),
+    searchPosts: vi.fn(async () => []),
     readPost: vi.fn(async () => undefined),
     readProfile: vi.fn(async () => undefined),
     readFindingPosts: vi.fn(async () => new Map()),

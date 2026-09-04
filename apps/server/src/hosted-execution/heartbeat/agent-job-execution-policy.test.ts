@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import {
+  READ_NETWORK_POST_TOOL,
+  SEARCH_NETWORK_POSTS_TOOL,
+} from '../mcp/types.js';
 import { AGENT_JOB_EXECUTION_POLICIES } from './agent-job-execution-policy.js';
 
 describe('AGENT_JOB_EXECUTION_POLICIES', () => {
@@ -14,6 +18,10 @@ describe('AGENT_JOB_EXECUTION_POLICIES', () => {
   it('keeps Interest discovery inside Lucid without broad Runtime tools', () => {
     const policy = AGENT_JOB_EXECUTION_POLICIES['interest-discovery'];
     expect(policy.runtimeToolPolicy).toEqual({ allow: [] });
+    expect(policy.allowedProductTools).toEqual(expect.arrayContaining([
+      SEARCH_NETWORK_POSTS_TOOL,
+      READ_NETWORK_POST_TOOL,
+    ]));
     expect(policy.allowedProductTools).not.toContain('publish_text_post');
   });
 });
