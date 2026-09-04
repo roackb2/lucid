@@ -26,6 +26,13 @@ Autonomous `heartbeat-task` authority grants only:
   recipient and provenance policies; and
 - `finish_without_action`, which records an explicit durable disposition.
 
+The registry also supports `publish_text_post`, a source-backed Information
+Network operation for a future publisher-task allowlist. Existing consumer
+heartbeats do not receive it. The operation accepts no author, Profile, Agent,
+work, or execution selector; `CapabilityScopedInformationNetworkPublisher`
+derives those values from verified scope and the PostgreSQL writer rechecks the
+active wake fence inside the publication transaction.
+
 Tenant, user, product session, Runtime session, execution ID, and workflow come
 only from verified capability claims. `CapabilityScopedAgentWorkToolExecutor`
 requires the deployment tenant/session and `heartbeat-task` workflow, then
@@ -49,6 +56,7 @@ is authoritative.
 | Lucid contracts | `types.ts` | Fixed workflow tool sets and product-owned ports | Only registered schemas |
 | Conversation adapter | `workspace-projection-reader.ts` | Bind verified user scope to the current workspace projection | No |
 | Heartbeat adapter | `agent-work-tool-executor.ts` | Bind verified workflow, user, and execution ID to one product work claim | No |
+| Publisher adapter | `information-network-publisher.ts` | Bind verified publisher execution scope to one source-backed Post transaction | No |
 
 The tool registry contains all supported Lucid tools, but the signed
 capability filters discovery and calls to the exact workflow allowlist. A

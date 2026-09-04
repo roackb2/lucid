@@ -11,6 +11,7 @@ import {
   PostgresInformationNetworkStore,
 } from '../lucid/information-network/postgres-store.js';
 import type {
+  InformationNetworkPublicationStore,
   InformationNetworkStore,
 } from '../lucid/information-network/store.js';
 import {
@@ -49,7 +50,8 @@ export type PostgresPersistence = {
   stores: {
     workspace: DiscoveryWorkspaceStore;
     network: UserNetworkStore;
-    informationNetwork: InformationNetworkStore;
+    informationNetwork:
+      InformationNetworkStore & InformationNetworkPublicationStore;
     agent: AgentWakeStore;
     communication: AgentCommunicationStore;
     conversationHistory: HostedConversationHistoryStore;

@@ -21,10 +21,12 @@ import {
 } from './test-support.js';
 import {
   LUCID_HEARTBEAT_MCP_TOOLS,
+  PUBLISH_TEXT_POST_TOOL,
   READ_WORKING_CONTEXT_TOOL,
   READ_WORKSPACE_SNAPSHOT_TOOL,
   type LucidProductMcpToolName,
   type ScopedAgentWorkToolExecutor,
+  type ScopedInformationNetworkPublisher,
   type ScopedWorkspaceProjectionReader,
 } from './types.js';
 import {
@@ -187,6 +189,79 @@ describe('Lucid product tools over the generic MCP HTTP edge', () => {
       arguments: {},
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it('publishes through trusted heartbeat scope without identity arguments', async () => {
+    const informationNetworkPublisher = {
+      publishTextPost: vi.fn(async () => ({
+        outcome: 'published' as const,
+        postId: 'post-1',
+        publishedAt: '2026-09-04T00:00:00.000Z',
+      })),
+    } satisfies ScopedInformationNetworkPublisher;
+    const assertion = await signer.sign({
+      workflow: 'heartbeat-task',
+      allowedTools: [PUBLISH_TEXT_POST_TOOL],
+    });
+    const endpoint = await startService(createProductMcpService(
+      signer.verifier(),
+      { readWorkspaceProjection: vi.fn(async () => workspaceSnapshot()) },
+      { informationNetworkPublisher, now: () => MCP_TEST_NOW },
+    ));
+    client = await connectClient(endpoint, assertion);
+
+    expect((await client.listTools()).tools.map(({ name }) => name))
+      .toEqual([PUBLISH_TEXT_POST_TOOL]);
+    const result = await client.callTool({
+      name: PUBLISH_TEXT_POST_TOOL,
+      arguments: {
+        title: 'A useful update',
+        body: 'A source-backed explanation.',
+        topics: ['Agent systems'],
+        sources: [{
+          title: 'Original report',
+          sourceName: 'Example News',
+          url: 'https://example.com/report',
+        }],
+      },
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(JSON.stringify(result)).toContain('post-1');
+    expect(informationNetworkPublisher.publishTextPost).toHaveBeenCalledWith({
+      scope: expect.objectContaining({
+        subjectId: 'subject-a',
+        invocationId: 'invocation-001',
+        workflow: 'heartbeat-task',
+      }),
+      draft: {
+        title: 'A useful update',
+        body: 'A source-backed explanation.',
+        topics: ['Agent systems'],
+        sources: [{
+          title: 'Original report',
+          sourceName: 'Example News',
+          url: 'https://example.com/report',
+        }],
+      },
+      signal: expect.any(AbortSignal),
+    });
+
+    await expect(client.callTool({
+      name: PUBLISH_TEXT_POST_TOOL,
+      arguments: {
+        userId: 'model-selected-user',
+        title: 'A forged publication',
+        body: 'The schema must reject model-selected identity.',
+        topics: ['Security'],
+        sources: [{
+          title: 'Original report',
+          sourceName: 'Example News',
+          url: 'https://example.com/report',
+        }],
+      },
+    })).resolves.toMatchObject({ isError: true });
+    expect(informationNetworkPublisher.publishTextPost).toHaveBeenCalledOnce();
   });
 
   it('denies a cross-scope projection without leaking product data', async () => {
@@ -369,6 +444,7 @@ function createProductMcpService(
   workspaceReader: ScopedWorkspaceProjectionReader,
   options: {
     agentWork?: ScopedAgentWorkToolExecutor;
+    informationNetworkPublisher?: ScopedInformationNetworkPublisher;
     maxBodyBytes?: number;
     now?: () => Date;
   } = {},
@@ -380,6 +456,11 @@ function createProductMcpService(
       options.agentWork ?? {
         executeAgentWorkTool: async () => {
           throw new Error('Agent work is unavailable in this fixture.');
+        },
+      },
+      options.informationNetworkPublisher ?? {
+        publishTextPost: async () => {
+          throw new Error('Information Network publishing is unavailable in this fixture.');
         },
       },
       { now: options.now },

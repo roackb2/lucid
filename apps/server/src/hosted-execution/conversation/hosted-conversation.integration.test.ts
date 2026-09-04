@@ -51,6 +51,11 @@ describe('Lucid hosted conversation control-plane round trip', () => {
             throw new Error('Agent work is unavailable in this fixture.');
           },
         },
+        {
+          publishTextPost: async () => {
+            throw new Error('Information Network publishing is unavailable in this fixture.');
+          },
+        },
         { now: () => MCP_TEST_NOW },
       ),
     });

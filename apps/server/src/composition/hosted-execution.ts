@@ -44,8 +44,14 @@ import { UserWorkspaceProjectionReader } from '../hosted-execution/mcp/workspace
 import {
   CapabilityScopedAgentWorkToolExecutor,
 } from '../hosted-execution/mcp/agent-work-tool-executor.js';
+import {
+  CapabilityScopedInformationNetworkPublisher,
+} from '../hosted-execution/mcp/information-network-publisher.js';
 import type { DiscoveryWorkspaceSnapshot } from '../lucid/discovery-types.js';
 import type { AgentWorkService } from '../lucid/agent/work-service.js';
+import type {
+  InformationNetworkPublishingService,
+} from '../lucid/information-network/publishing.js';
 import type { LucidLogger } from '../logger.js';
 
 export type HostedExecutionComposition = {
@@ -70,6 +76,10 @@ export async function createHostedExecutionComposition(input: {
     | 'failWork'
     | 'interruptWork'
     | 'executeTool'
+  >;
+  informationNetworkPublishing: Pick<
+    InformationNetworkPublishingService,
+    'publishTextPost'
   >;
   executionHost?: ExecutionHost;
 }): Promise<HostedExecutionComposition> {
@@ -112,9 +122,18 @@ export async function createHostedExecutionComposition(input: {
     tenantId: input.config.tenantId,
     productSessionId: input.config.productSessionId,
   }, input.agentWork);
+  const informationNetworkPublisher =
+    new CapabilityScopedInformationNetworkPublisher({
+      tenantId: input.config.tenantId,
+      productSessionId: input.config.productSessionId,
+    }, input.informationNetworkPublishing);
   const mcp = new NodeStreamableHttpMcpService({
     capabilityVerifier,
-    toolset: createLucidProductToolset(workspaceReader, agentWork),
+    toolset: createLucidProductToolset(
+      workspaceReader,
+      agentWork,
+      informationNetworkPublisher,
+    ),
   });
   let ownedAgentCoreHost: AgentCoreExecutionHost | undefined;
   let executionHost = input.executionHost;

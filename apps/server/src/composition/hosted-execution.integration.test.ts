@@ -132,6 +132,7 @@ describe('hosted execution composition', () => {
       },
       heartbeatAdmission: readyHeartbeatAdmission(),
       agentWork: unusedAgentWork(),
+      informationNetworkPublishing: unusedInformationNetworkPublishing(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
@@ -260,6 +261,7 @@ describe('hosted execution composition', () => {
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
       heartbeatAdmission: readyHeartbeatAdmission(),
       agentWork: unusedAgentWork(),
+      informationNetworkPublishing: unusedInformationNetworkPublishing(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
@@ -358,6 +360,7 @@ describe('hosted execution composition', () => {
       discoveryWorkspace: { snapshot: async () => workspaceSnapshot() },
       heartbeatAdmission: readyHeartbeatAdmission(),
       agentWork,
+      informationNetworkPublishing: unusedInformationNetworkPublishing(),
       conversationLifecycle: memoryConversationLifecycle(),
       logger: createLucidLogger('silent'),
     });
@@ -558,6 +561,14 @@ function unusedAgentWork() {
     interruptWork: async () => undefined,
     executeTool: async () => {
       throw new Error('Agent work is disabled in this fixture.');
+    },
+  };
+}
+
+function unusedInformationNetworkPublishing() {
+  return {
+    publishTextPost: async () => {
+      throw new Error('Information Network publishing is disabled in this fixture.');
     },
   };
 }

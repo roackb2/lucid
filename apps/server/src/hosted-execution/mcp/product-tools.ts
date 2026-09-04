@@ -13,6 +13,9 @@ import {
   workingNoteInputSchema,
 } from '../../lucid/agent/communication/tool-service.js';
 import {
+  sourceBackedTextPostDraftSchema,
+} from '../../lucid/information-network/publishing.js';
+import {
   FINISH_WITHOUT_ACTION_TOOL,
   POST_SHARED_MESSAGE_TOOL,
   READ_AVAILABLE_MESSAGES_TOOL,
@@ -24,7 +27,9 @@ import {
   UPDATE_WORKING_NOTE_TOOL,
   type HostedWorkspaceProjection,
   type LucidProductMcpToolName,
+  PUBLISH_TEXT_POST_TOOL,
   type ScopedAgentWorkToolExecutor,
+  type ScopedInformationNetworkPublisher,
   type ScopedWorkspaceProjectionReader,
 } from './types.js';
 
@@ -37,6 +42,7 @@ import {
 export function createLucidProductToolset(
   workspaceReader: ScopedWorkspaceProjectionReader,
   agentWork: ScopedAgentWorkToolExecutor,
+  informationNetworkPublisher: ScopedInformationNetworkPublisher,
   options: { now?: () => Date } = {},
 ): NodeMcpJsonToolset<LucidProductMcpToolName> {
   return new NodeMcpJsonToolset({
@@ -209,6 +215,26 @@ export function createLucidProductToolset(
             scope: capability.scope,
             toolName: REPORT_FINDING_TOOL,
             arguments: arguments_,
+            signal,
+          })
+        ),
+      }),
+      defineNodeMcpJsonTool({
+        name: PUBLISH_TEXT_POST_TOOL,
+        description:
+          'Publish one source-backed text Post as the Profile represented by the current claimed Lucid Agent wake.',
+        inputSchema: sourceBackedTextPostDraftSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        failureMessage: 'Lucid could not publish the text Post.',
+        execute: async (draft, { capability, signal }) => (
+          await informationNetworkPublisher.publishTextPost({
+            scope: capability.scope,
+            draft,
             signal,
           })
         ),
