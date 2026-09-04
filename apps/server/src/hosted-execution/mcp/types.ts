@@ -14,6 +14,13 @@ import {
   READ_AGENT_WORKING_CONTEXT_TOOL,
   type AgentWorkToolName,
 } from '../../lucid/agent/work-service.js';
+import {
+  PUBLISH_TEXT_POST_TOOL,
+} from '../../lucid/information-network/publishing.js';
+import type {
+  PublishAgentTextPostReceipt,
+  SourceBackedTextPostDraft,
+} from '../../lucid/information-network/types.js';
 
 export {
   FINISH_WITHOUT_ACTION_TOOL,
@@ -23,6 +30,7 @@ export {
   REPORT_FINDING_TOOL,
   SEND_DIRECT_MESSAGE_TOOL,
   UPDATE_WORKING_NOTE_TOOL,
+  PUBLISH_TEXT_POST_TOOL,
 };
 
 /** Stable workflow-specific product tool names exposed through signed MCP. */
@@ -45,6 +53,7 @@ export const LUCID_HEARTBEAT_MCP_TOOLS = Object.freeze([
 export const LUCID_PRODUCT_MCP_TOOLS = Object.freeze([
   ...LUCID_CONVERSATION_MCP_TOOLS,
   ...LUCID_HEARTBEAT_MCP_TOOLS,
+  PUBLISH_TEXT_POST_TOOL,
 ] as const);
 
 export type LucidProductMcpToolName =
@@ -93,4 +102,13 @@ export interface ScopedAgentWorkToolExecutor {
     arguments: unknown;
     signal: AbortSignal;
   }): Promise<unknown>;
+}
+
+/** Source-backed publication resolves authorship from verified execution scope. */
+export interface ScopedInformationNetworkPublisher {
+  publishTextPost(input: {
+    scope: McpInvocationScope;
+    draft: SourceBackedTextPostDraft;
+    signal: AbortSignal;
+  }): Promise<PublishAgentTextPostReceipt>;
 }

@@ -20,6 +20,9 @@ import {
   InformationNetworkService,
 } from './lucid/information-network/service.js';
 import {
+  InformationNetworkPublishingService,
+} from './lucid/information-network/publishing.js';
+import {
   CoordinatorAgentHeartbeatService,
 } from './hosted-execution/heartbeat/agent-heartbeat-service.js';
 import {
@@ -93,6 +96,9 @@ const discoveryWorkspace = new DiscoveryWorkspaceService(
 const informationNetwork = new InformationNetworkService(
   stores.informationNetwork,
 );
+const informationNetworkPublishing = new InformationNetworkPublishingService(
+  stores.informationNetwork,
+);
 const userNetwork = new UserNetworkService(
   stores.network,
   heartbeats,
@@ -119,6 +125,7 @@ const hostedExecution = await createHostedExecutionComposition({
     stores.agent,
   ),
   agentWork,
+  informationNetworkPublishing,
 });
 const staticSpaRequestHandler = config.webRoot
   ? await createStaticSpaRequestHandler(config.webRoot)

@@ -10,8 +10,11 @@ trusted user ingress, private context, user lifecycle, and mailbox routing.
   minimal Finding Post-reference views.
 - `service.ts` validates stable route identities and owns bounded feed/Profile
   limits.
+- `publishing.ts` validates source-backed Agent drafts and owns the publication
+  use case without accepting author or execution identity from tool input.
 - `store.ts` defines the primary read port and the secondary
-  `FindingPostReader` projection port consumed by the workspace service.
+  `FindingPostReader` projection port consumed by the workspace service, plus
+  the fenced publication write port.
 - `postgres-store.ts` implements bounded, workspace-scoped aggregate reads over
   normalized Profile, topic, Post, Source, and Finding-link records.
 - `fixtures.ts` owns one deterministic pilot manifest and an explicit,
@@ -45,16 +48,28 @@ the existing one-user/one-Agent relation.
 Posts and Sources are first-class records; the old reply-oriented
 `post_shared_message` event is not reinterpreted. Profile and Post topics are
 ordered normalized rows. A general Post may have zero Sources. A future
-autonomous publishing operation must enforce its stronger source requirement
-inside the same transaction as Post creation.
+human-authored operation may retain that flexibility, while autonomous Agent
+publication requires at least one HTTP(S) Source.
 
 `publicationMethod` is explicit and checked as either:
 
 - `seeded-pilot`, with no Agent execution provenance; or
 - `agent`, which requires both an author Agent and creator execution ID.
 
-There is intentionally no Publisher/Consumer account role and no model, search,
-publisher-job, or product-tool write path in POST-01.
+`publish_text_post` is a model-visible product operation but is not included in
+the existing consumer heartbeat allowlist. Its signed heartbeat capability
+supplies tenant, user, product session, and execution identity; its arguments
+contain only title, body, topics, and Sources. PostgreSQL verifies the active
+Agent wake and owning Profile, then atomically inserts the Post, ordered topics,
+and ordered Sources. The retry-stable wake ID owns idempotency while the current
+execution ID remains recorded as provenance. Replaying identical content after
+recovery returns the first Post; attempting different content under the same
+wake fails closed.
+
+There is intentionally no Publisher/Consumer account role, model selection,
+web-search implementation, or publisher-job policy in this slice. A following
+job-policy slice must explicitly grant `publish_text_post` only to controlled
+publisher tasks.
 
 `finding_posts` is an ordered normalized join from the existing immutable
 `finding_reported` event to stable Posts. PostgreSQL enforces referential

@@ -1,4 +1,6 @@
 /** PostgreSQL read adapter for first-class Network Profiles and Posts. */
+import { randomUUID } from 'node:crypto';
+import dayjs from 'dayjs';
 import {
   and,
   asc,
@@ -7,6 +9,7 @@ import {
   eq,
   inArray,
 } from 'drizzle-orm';
+import isEqual from 'lodash/isEqual.js';
 import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
 import {
   postgresAgents as agents,
@@ -20,11 +23,19 @@ import {
   postgresUsers as users,
 } from '../persistence/postgres/schema.js';
 import { LUCID_WORKSPACE_ID } from '../workspace/workspace-identity.js';
-import type { InformationNetworkStore } from './store.js';
+import {
+  InformationNetworkPublicationClaimError,
+  InformationNetworkPublicationConflictError,
+  type AgentTextPostPublicationClaim,
+  type InformationNetworkPublicationStore,
+  type InformationNetworkStore,
+} from './store.js';
 import {
   networkPostPublicationMethodSchema,
   type FindingNetworkPostView,
   type InformationNetworkFeedView,
+  type PublishAgentTextPostReceipt,
+  type SourceBackedTextPostDraft,
   type NetworkPostDetailView,
   type NetworkPostView,
   type NetworkProfileDetailView,
@@ -42,8 +53,149 @@ type NetworkPostWithAuthorRow = {
 };
 
 export class PostgresInformationNetworkStore
-implements InformationNetworkStore {
-  constructor(private readonly database: PostgresDatabase) {}
+implements InformationNetworkStore, InformationNetworkPublicationStore {
+  readonly #now: () => Date;
+  readonly #createId: () => string;
+
+  constructor(
+    private readonly database: PostgresDatabase,
+    options: {
+      now?: () => Date;
+      createId?: () => string;
+    } = {},
+  ) {
+    this.#now = options.now ?? (() => new Date());
+    this.#createId = options.createId ?? randomUUID;
+  }
+
+  /**
+   * Commits one source-backed Post under the active Agent wake fence.
+   *
+   * The retry-stable wake ID, rather than the rotating execution attempt ID,
+   * owns idempotency. A recovered attempt therefore observes the first commit
+   * instead of duplicating its Post.
+   */
+  async publishAgentTextPost(
+    claim: AgentTextPostPublicationClaim,
+    draft: SourceBackedTextPostDraft,
+  ): Promise<PublishAgentTextPostReceipt> {
+    return await this.database.orm.transaction(async (transaction) => {
+      const [agent] = await transaction
+        .select({
+          id: agents.id,
+          userId: agents.userId,
+          activeWakeId: agents.activeWakeId,
+          activeWakeNumber: agents.activeWakeNumber,
+        })
+        .from(agents)
+        .where(and(
+          eq(agents.workspaceId, LUCID_WORKSPACE_ID),
+          eq(agents.userId, claim.userId),
+          eq(agents.status, 'running'),
+          eq(agents.activeWakeClaimToken, claim.executionId),
+        ))
+        .for('update')
+        .limit(1);
+      if (
+        !agent
+        || !agent.activeWakeId
+        || agent.activeWakeNumber === null
+      ) {
+        throw new InformationNetworkPublicationClaimError();
+      }
+
+      const [activeUser] = await transaction
+        .select({ id: users.id })
+        .from(users)
+        .where(and(
+          eq(users.workspaceId, LUCID_WORKSPACE_ID),
+          eq(users.id, claim.userId),
+          eq(users.status, 'active'),
+        ))
+        .limit(1);
+      const [profile] = await transaction
+        .select({ id: profiles.id })
+        .from(profiles)
+        .where(and(
+          eq(profiles.workspaceId, LUCID_WORKSPACE_ID),
+          eq(profiles.userId, claim.userId),
+        ))
+        .limit(1);
+      if (!activeUser || !profile) {
+        throw new InformationNetworkPublicationClaimError();
+      }
+
+      const idempotencyKey = `${agent.activeWakeId}:publish-text-post`;
+      const [existing] = await transaction
+        .select()
+        .from(posts)
+        .where(eq(posts.idempotencyKey, idempotencyKey))
+        .limit(1);
+      if (existing) {
+        const existingTopics = await transaction
+          .select({ topic: postTopics.topic })
+          .from(postTopics)
+          .where(eq(postTopics.postId, existing.id))
+          .orderBy(asc(postTopics.position));
+        const existingSources = await transaction
+          .select({
+            title: postSources.title,
+            sourceName: postSources.sourceName,
+            url: postSources.url,
+          })
+          .from(postSources)
+          .where(eq(postSources.postId, existing.id))
+          .orderBy(asc(postSources.position));
+        const matchesOriginalPublication = (
+          existing.workspaceId === LUCID_WORKSPACE_ID
+          && existing.authorProfileId === profile.id
+          && existing.authorAgentId === agent.id
+          && existing.publicationMethod === 'agent'
+          && existing.title === draft.title
+          && existing.body === draft.body
+          && isEqual(existingTopics.map(({ topic }) => topic), draft.topics)
+          && isEqual(existingSources, draft.sources)
+        );
+        if (!matchesOriginalPublication) {
+          throw new InformationNetworkPublicationConflictError();
+        }
+        return {
+          outcome: 'already-published',
+          postId: existing.id,
+          publishedAt: dayjs(existing.publishedAt).toISOString(),
+        };
+      }
+
+      const publishedAt = dayjs(this.#now()).toISOString();
+      const postId = `post_${this.#createId()}`;
+      await transaction.insert(posts).values({
+        id: postId,
+        workspaceId: LUCID_WORKSPACE_ID,
+        authorProfileId: profile.id,
+        authorAgentId: agent.id,
+        publicationMethod: 'agent',
+        title: draft.title,
+        body: draft.body,
+        publishedAt,
+        createdAt: publishedAt,
+        createdByExecutionId: claim.executionId,
+        idempotencyKey,
+      });
+      await transaction.insert(postTopics).values(draft.topics.map(
+        (topic, position) => ({ postId, position, topic }),
+      ));
+      await transaction.insert(postSources).values(draft.sources.map(
+        (source, position) => ({
+          id: `source_${this.#createId()}`,
+          postId,
+          position,
+          ...source,
+          retrievedAt: publishedAt,
+        }),
+      ));
+      return { outcome: 'published', postId, publishedAt };
+    });
+  }
 
   async readFeed(limit: number): Promise<InformationNetworkFeedView> {
     assertReadLimit(limit);

@@ -70,3 +70,23 @@ export type FindingNetworkPostView = {
   publicationMethod: NetworkPostPublicationMethod;
   author: Pick<NetworkProfileSummaryView, 'id' | 'displayName'>;
 };
+
+export type TextPostSourceDraft = {
+  title: string;
+  sourceName: string;
+  url: string;
+};
+
+/** Agent-authored text prepared from at least one visible external source. */
+export type SourceBackedTextPostDraft = {
+  title: string;
+  body: string;
+  topics: string[];
+  sources: TextPostSourceDraft[];
+};
+
+export type PublishAgentTextPostReceipt = {
+  outcome: 'published' | 'already-published';
+  postId: string;
+  publishedAt: string;
+};
