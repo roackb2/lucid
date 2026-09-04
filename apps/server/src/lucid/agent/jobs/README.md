@@ -28,8 +28,11 @@ The migration backfills one `interest-discovery` job per existing Agent, using
 the Agent ID as the job ID so deployed task IDs remain stable. Agents created
 after migrations must pass through `ensureInterestDiscoveryJob`; it is an
 idempotent, deliberately narrow initializer rather than a general job-creation
-API. Reconciliation may safely call it repeatedly and never overwrites an
-existing job's cadence or enablement.
+API. Interest cadence remains owned by `LUCID_HEARTBEAT_INTERVAL_MS`: the SQL
+migration seeds the application default because it cannot read process
+configuration, then startup synchronizes the configured cadence before task
+reconciliation. Repeated initialization preserves enablement, instructions,
+and every other durable job field.
 
 ## Manual run lifecycle
 

@@ -11,6 +11,7 @@ import { createLucidLogger } from '../../logger.js';
 import {
   LUCID_BACKGROUND_WORK_GROUP_ID,
 } from '../../lucid/agent/heartbeat-task-identity.js';
+import type { AgentJob } from '../../lucid/agent/jobs/types.js';
 import { CoordinatorAgentHeartbeatService } from './agent-heartbeat-service.js';
 
 const TASK_ID = 'lucid-representative-agent-a';
@@ -115,6 +116,46 @@ describe('coordinator agent heartbeat service', () => {
       enabled: true,
       dispatchEnabled: false,
     });
+  });
+
+  it('keeps publishing jobs out of an Agent Interest-check status', async () => {
+    const interestJob = (await agentJobs().readAgentJob('agent-a'))!;
+    const publishingJob: AgentJob = {
+      ...interestJob,
+      id: 'publisher-job-a',
+      kind: 'information-network-publishing',
+      name: 'Regional fashion publisher',
+      scheduleMode: 'manual',
+    };
+    const publishingTaskId = 'lucid-representative-publisher-job-a';
+    const service = new CoordinatorAgentHeartbeatService(
+      productStore(),
+      agentJobs(interestJob, publishingJob),
+      coordinatorApi([
+        task({ enabled: false }),
+        task({
+          id: publishingTaskId,
+          taskId: publishingTaskId,
+          state: { status: 'running' },
+        }),
+      ]),
+      immediateMutationLock,
+      policy(),
+      createLucidLogger('silent'),
+    );
+
+    const view = await service.snapshotForAgent('agent-a');
+
+    expect(view).toMatchObject({
+      enabled: false,
+      running: false,
+      tasks: [{
+        agentJobId: interestJob.id,
+        kind: 'interest-discovery',
+        enabled: false,
+      }],
+    });
+    expect(view.tasks).toHaveLength(1);
   });
 
   it('keeps the provider namespace ready when Lucid background work is paused', async () => {
@@ -336,20 +377,8 @@ function productStore(backgroundChecksEnabled = true) {
   };
 }
 
-function agentJobs(jobOverride?: {
-  id: string;
-  workspaceId: string;
-  agentId: string;
-  kind: 'interest-discovery' | 'information-network-publishing';
-  name: string;
-  instructions: string;
-  cadenceMs: number;
-  enabled: boolean;
-  scheduleMode: 'manual' | 'scheduled';
-  createdAt: string;
-  updatedAt: string;
-}) {
-  const job = jobOverride ?? {
+function agentJobs(...jobOverrides: AgentJob[]) {
+  const defaultJob: AgentJob = {
     id: 'agent-a',
     workspaceId: 'workspace',
     agentId: 'agent-a',
@@ -362,14 +391,17 @@ function agentJobs(jobOverride?: {
     createdAt: '2026-08-25T00:00:00.000Z',
     updatedAt: '2026-08-25T00:00:00.000Z',
   };
+  const jobs = jobOverrides.length > 0 ? jobOverrides : [defaultJob];
   return {
-    listAgentJobs: async () => [job],
-    readAgentJob: async (id: string) => id === job.id ? job : undefined,
+    listAgentJobs: async () => jobs,
+    readAgentJob: async (id: string) => jobs.find((job) => job.id === id),
     requestRunOnce: async () => ({
       outcome: 'requested' as const,
       request: undefined as never,
     }),
-    ensureInterestDiscoveryJob: async () => job,
+    ensureInterestDiscoveryJob: async () => (
+      jobs.find(({ kind }) => kind === 'interest-discovery') ?? defaultJob
+    ),
   };
 }
 

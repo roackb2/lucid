@@ -126,7 +126,9 @@ export class CoordinatorAgentHeartbeatService {
 
   async snapshotForAgent(agentId: string): Promise<BackgroundChecksView> {
     const network = await this.snapshot();
-    const tasks = network.tasks.filter((task) => task.agentId === agentId);
+    const tasks = network.tasks.filter((task) => (
+      task.agentId === agentId && task.kind === 'interest-discovery'
+    ));
     const enabledTasks = tasks.filter(({ enabled }) => enabled);
     return {
       enabled: enabledTasks.length > 0,

@@ -110,7 +110,10 @@ SELECT
 		nullif(btrim("instructions"), ''),
 		'Review new Lucid Network activity against the owner''s current Interest.'
 	),
-	10800000,
+	-- SQL migrations cannot read LUCID_HEARTBEAT_INTERVAL_MS. Seed the
+	-- application default; startup synchronizes this code-owned Interest cadence
+	-- from the actual deployment configuration before task reconciliation.
+	900000,
 	true,
 	'scheduled',
 	"created_at",

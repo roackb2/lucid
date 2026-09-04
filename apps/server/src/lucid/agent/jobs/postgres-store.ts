@@ -89,6 +89,14 @@ export class PostgresAgentJobStore implements AgentJobStore {
             'The Agent ID is already owned by an incompatible Agent job.',
           );
         }
+        if (existingJobRow.cadenceMs !== input.cadenceMs) {
+          // Interest cadence remains application-configured. Synchronize only
+          // that field; enablement and the remaining job policy stay durable.
+          await transaction.update(agentJobs).set({
+            cadenceMs: input.cadenceMs,
+            updatedAt: input.createdAt,
+          }).where(eq(agentJobs.id, existingJobRow.id));
+        }
         const existingJob = await readAgentJob(transaction, existingJobRow.id);
         if (!existingJob) {
           throw new Error('Lucid could not reload the existing Interest job.');

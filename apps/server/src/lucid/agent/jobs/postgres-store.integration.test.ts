@@ -65,7 +65,7 @@ describe('PostgreSQL Agent job store', () => {
       });
   });
 
-  it('initializes one stable Interest job without overwriting existing policy', async () => {
+  it('refreshes configured Interest cadence without changing enablement', async () => {
     const primaryService = serviceFor(stores);
     const secondaryService = serviceFor(stores);
     const [first, second] = await Promise.all([
@@ -102,7 +102,7 @@ describe('PostgreSQL Agent job store', () => {
       LOCAL_AGENT_ID,
       120_000,
     )).resolves.toMatchObject({
-      cadenceMs: 60_000,
+      cadenceMs: 120_000,
       enabled: false,
     });
   });
