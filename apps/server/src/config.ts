@@ -25,7 +25,7 @@ const environmentSchema = z.object({
   LUCID_ALLOW_SELF_ENROLLMENT: z.enum(['true', 'false']).default('false'),
   LUCID_DATABASE_URL: z.string().trim().min(1),
   LUCID_MODEL: z.string().trim().min(1).default('gpt-5.4-mini'),
-  LUCID_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(7),
+  LUCID_MAX_STEPS: z.coerce.number().int().min(1).max(20).default(8),
   LUCID_HEARTBEAT_INTERVAL_MS: z.coerce
     .number()
     .int()

@@ -53,6 +53,9 @@ describe('readLucidHeartbeatTaskCatalog', () => {
       }],
       backgroundAdmissionReady: true,
     });
+    expect(input.desiredTasks[0]!.input.systemContext).toContain(
+      'the current Interest, check request, and your own network request are not Finding evidence',
+    );
   });
 });
 
