@@ -153,6 +153,9 @@ function backgroundChecks(
     lastRunAt: '2026-08-28T09:01:00.000Z',
     tasks: [{
       taskId: 'lucid-agent-user-agent',
+      agentJobId: AGENT.id,
+      kind: 'interest-discovery',
+      name: 'Interest discovery',
       agentId: AGENT.id,
       enabled: true,
       status,

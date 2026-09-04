@@ -25,6 +25,7 @@ export function toAgent(row: AgentRow): Agent {
   return {
     ...row,
     status: agentStatusSchema.parse(row.status),
+    activeJobId: row.activeJobId ?? undefined,
     activeWakeId: row.activeWakeId ?? undefined,
     activeWakeClaimToken: row.activeWakeClaimToken ?? undefined,
     activeWakeNumber: row.activeWakeNumber ?? undefined,

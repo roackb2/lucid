@@ -21,6 +21,8 @@ trusted user ingress, private context, user lifecycle, and mailbox routing.
   transactionally idempotent PostgreSQL installer.
 - `seed.ts` is a guarded development-only command. Migrations and server startup
   never install scenario content.
+- `publisher-pilot.ts` activates Mina's existing fixture identity and installs
+  one durable manual publishing job through a separate explicit command.
 
 The public read contract is authenticated through tRPC:
 
@@ -66,10 +68,21 @@ execution ID remains recorded as provenance. Replaying identical content after
 recovery returns the first Post; attempting different content under the same
 wake fails closed.
 
-There is intentionally no Publisher/Consumer account role, model selection,
-web-search implementation, or publisher-job policy in this slice. A following
-job-policy slice must explicitly grant `publish_text_post` only to controlled
-publisher tasks.
+There is intentionally no Publisher/Consumer account role. Lucid instead maps
+each durable Agent job kind to an exact execution policy. The controlled
+publishing job grants the Runtime only `web_search` and grants the product MCP
+surface only `publish_text_post`; ordinary Interest discovery gets neither
+broad web search nor publishing authority.
+
+Publishing preferences shown on a Network Profile are an explicit public
+projection: topics, region, audience, and tone. Agent instructions, preferred
+source guidance, execution fences, credentials, and traces remain private.
+
+The first pilot job uses `scheduleMode: 'manual'`. Its task remains durable in
+the Coordinator catalog, but a timer-due preparation with no saved Run once
+request returns `skip` before Runtime or model work. A coalesced Run once
+request is the retry-stable unit that may claim, research, and settle as one
+published Post, a truthful no-Post outcome, or a failure.
 
 `finding_posts` is an ordered normalized join from the existing immutable
 `finding_reported` event to stable Posts. PostgreSQL enforces referential
@@ -99,3 +112,16 @@ reconciliation cannot turn fixtures into autonomous model work.
 The command is deliberately not a migration, startup hook, tRPC mutation, or
 deployment contract. Hosted fixture installation requires a separately
 reviewed operator boundary in a later milestone.
+
+To install the controlled Publisher-01 job after the fixture:
+
+```bash
+LUCID_AUTH_MODE=development \
+LUCID_PUBLISHER_PILOT_INSTALL=true \
+LUCID_DATABASE_URL='postgresql://...' \
+yarn publisher:install-pilot
+```
+
+The installer is advisory-locked and idempotent. It validates the complete
+saved identity, job, preferences, and topic set and fails closed on drift. It
+does not request a run or open global dispatch.

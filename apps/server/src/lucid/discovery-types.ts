@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AgentJobKind } from './agent/jobs/types.js';
 import type {
   FindingNetworkPostView,
 } from './information-network/types.js';
@@ -106,6 +107,8 @@ export type Agent = {
   runCount: number;
   mailboxFloorSequence: number;
   lastSeenSequence: number;
+  /** Product job bound to the active execution fence, when job-driven. */
+  activeJobId?: string;
   activeWakeId?: string;
   /** Rotates for every execution attempt while activeWakeId stays retry-stable. */
   activeWakeClaimToken?: string;
@@ -121,6 +124,7 @@ export type AgentView = Omit<
   | 'instructions'
   | 'mailboxFloorSequence'
   | 'lastSeenSequence'
+  | 'activeJobId'
   | 'activeWakeId'
   | 'activeWakeClaimToken'
   | 'activeWakeNumber'
@@ -300,6 +304,9 @@ export type AgentTaskStatus =
 
 export type AgentTaskView = {
   taskId: string;
+  agentJobId: string;
+  kind: AgentJobKind;
+  name: string;
   agentId: string;
   enabled: boolean;
   status: AgentTaskStatus;

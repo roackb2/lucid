@@ -24,6 +24,11 @@ describe('readLucidHeartbeatTaskCatalog', () => {
         agent('agent-b', 'user-b'),
       ],
     }, {
+      listAgentJobs: async () => [
+        job('agent-a', 'agent-a'),
+        job('agent-b', 'agent-b'),
+      ],
+    }, {
       intervalMs: 60_000,
       model: 'test-model',
       maxSteps: 4,
@@ -35,6 +40,8 @@ describe('readLucidHeartbeatTaskCatalog', () => {
         input: expect.objectContaining({
           workspaceId: 'workspace-v1',
           admissionGroupId: LUCID_BACKGROUND_WORK_GROUP_ID,
+          name: 'agent-a: Interest discovery',
+          task: 'Review the current Interest.',
           enabled: true,
           intervalMs: 60_000,
           model: 'test-model',
@@ -76,6 +83,22 @@ function agent(id: string, userId: string) {
     runCount: 0,
     mailboxFloorSequence: 0,
     lastSeenSequence: 0,
+    createdAt: '2026-08-23T00:00:00.000Z',
+    updatedAt: '2026-08-23T00:00:00.000Z',
+  };
+}
+
+function job(id: string, agentId: string) {
+  return {
+    id,
+    workspaceId: 'workspace',
+    agentId,
+    kind: 'interest-discovery' as const,
+    name: 'Interest discovery',
+    instructions: 'Review the current Interest.',
+    cadenceMs: 60_000,
+    enabled: true,
+    scheduleMode: 'scheduled' as const,
     createdAt: '2026-08-23T00:00:00.000Z',
     updatedAt: '2026-08-23T00:00:00.000Z',
   };

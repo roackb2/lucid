@@ -23,11 +23,20 @@ import type {
 } from '../../lucid/discovery-types.js';
 import type { AgentWakeStore } from '../../lucid/agent/store.js';
 import {
-  AGENT_TASK_ID_PREFIX,
+  AGENT_JOB_TASK_ID_PREFIX,
   LUCID_BACKGROUND_WORK_GROUP_ID,
-  agentIdFromTask,
-  taskIdForAgent,
+  agentJobIdFromTaskId,
+  taskIdForAgentJob,
 } from '../../lucid/agent/heartbeat-task-identity.js';
+import {
+  AgentJobInputError,
+  type AgentJobService,
+} from '../../lucid/agent/jobs/service.js';
+import { AgentJobNotFoundError } from '../../lucid/agent/jobs/store.js';
+import type {
+  AgentJob,
+  RequestAgentJobRunOnceReceipt,
+} from '../../lucid/agent/jobs/types.js';
 import { readLucidHeartbeatTaskCatalog } from './desired-task-catalog.js';
 import type {
   BackgroundChecksMutationLock,
@@ -61,6 +70,13 @@ export class CoordinatorAgentHeartbeatService {
 
   constructor(
     private readonly store: HeartbeatProductStore,
+    private readonly agentJobs: Pick<
+      AgentJobService,
+      | 'listAgentJobs'
+      | 'readAgentJob'
+      | 'requestRunOnce'
+      | 'ensureInterestDiscoveryJob'
+    >,
     private readonly coordinator: HostedHeartbeatCoordinatorTaskApi,
     private readonly mutationLock: BackgroundChecksMutationLock,
     private readonly policy: Readonly<HeartbeatTaskPolicy>,
@@ -82,6 +98,7 @@ export class CoordinatorAgentHeartbeatService {
       workspace,
       users,
       agents,
+      agentJobs,
       taskViews,
       coordinatorState,
       backgroundAdmission,
@@ -90,6 +107,7 @@ export class CoordinatorAgentHeartbeatService {
         this.store.readWorkspace(),
         this.store.listUsers(),
         this.store.listAgents(),
+        this.agentJobs.listAgentJobs(),
         this.coordinator.listTasks(),
         this.coordinator.readState(),
         this.coordinator.readAdmission(BACKGROUND_ADMISSION_TARGET),
@@ -98,6 +116,7 @@ export class CoordinatorAgentHeartbeatService {
       workspace.backgroundChecksEnabled,
       users,
       agents,
+      agentJobs,
       taskViews,
       coordinatorState,
       backgroundAdmission,
@@ -128,11 +147,30 @@ export class CoordinatorAgentHeartbeatService {
     if (!(await this.store.readWorkspace()).backgroundChecksEnabled) {
       return;
     }
-    const task = await this.#requireTask(agentId);
+    const job = await this.#requireInterestJob(agentId);
+    const task = await this.#requireTask(job.id);
     if (!task.enabled || task.state.status === 'blocked') {
       return;
     }
     await this.coordinator.triggerTask(task.id);
+  }
+
+  /** Persists one coalesced publishing intent before asking the Coordinator. */
+  async requestAgentJobRunOnce(
+    agentJobId: string,
+  ): Promise<RequestAgentJobRunOnceReceipt> {
+    const job = await this.agentJobs.readAgentJob(agentJobId);
+    if (!job) {
+      throw new AgentJobNotFoundError();
+    }
+    if (job.kind !== 'information-network-publishing') {
+      throw new AgentJobInputError(
+        'Run once is available only for an Information Network publishing job.',
+      );
+    }
+    const receipt = await this.agentJobs.requestRunOnce(agentJobId);
+    await this.coordinator.triggerTask(taskIdForAgentJob(agentJobId));
+    return receipt;
   }
 
   async setGlobalBackgroundChecksEnabled(enabled: boolean): Promise<void> {
@@ -179,8 +217,9 @@ export class CoordinatorAgentHeartbeatService {
   }
 
   async enableAgentTask(agentId: string): Promise<void> {
+    const job = await this.#requireInterestJob(agentId);
     await this.#runMutation((signal) => this.#reconcileTasks(
-      new Map([[taskIdForAgent(agentId), true]]),
+      new Map([[taskIdForAgentJob(job.id), true]]),
       true,
       signal,
     ));
@@ -190,12 +229,12 @@ export class CoordinatorAgentHeartbeatService {
     if (agentIds.length === 0) {
       return;
     }
-    const overrides = new Map(
-      [...new Set(agentIds)].map((agentId) => [
-        taskIdForAgent(agentId),
-        false,
-      ] as const),
-    );
+    const agentIdSet = new Set(agentIds);
+    const overrides = new Map((await this.agentJobs.listAgentJobs())
+      .filter((job) => (
+        job.kind === 'interest-discovery' && agentIdSet.has(job.agentId)
+      ))
+      .map((job) => [taskIdForAgentJob(job.id), false] as const));
     await this.#runMutation((signal) => this.#reconcileTasks(
       overrides,
       true,
@@ -208,12 +247,15 @@ export class CoordinatorAgentHeartbeatService {
     preservePreferences = true,
     signal?: AbortSignal,
   ): Promise<void> {
+    await Promise.all((await this.store.listAgents()).map(({ id }) => (
+      this.agentJobs.ensureInterestDiscoveryJob(id, this.policy.intervalMs)
+    )));
     const existing = preservePreferences
       ? await this.coordinator.listTasks(signal)
       : [];
     const enabledByTaskId = new Map(
       existing
-        .filter(({ id }) => id.startsWith(AGENT_TASK_ID_PREFIX))
+        .filter(({ id }) => id.startsWith(AGENT_JOB_TASK_ID_PREFIX))
         .map(({ id, enabled }) => [id, enabled] as const),
     );
     overrides.forEach((enabled, taskId) => {
@@ -221,6 +263,7 @@ export class CoordinatorAgentHeartbeatService {
     });
     const catalog = await readLucidHeartbeatTaskCatalog(
       this.store,
+      this.agentJobs,
       this.policy,
       { enabledByTaskId },
     );
@@ -284,15 +327,26 @@ export class CoordinatorAgentHeartbeatService {
   }
 
   async #requireTask(
-    agentId: string,
+    agentJobId: string,
   ): Promise<HostedHeartbeatCoordinatorTaskView> {
-    const taskId = taskIdForAgent(agentId);
+    const taskId = taskIdForAgentJob(agentJobId);
     const task = (await this.coordinator.listTasks())
       .find(({ id }) => id === taskId);
     if (!task) {
-      throw new Error(`Heartbeat task not found for agent: ${agentId}`);
+      throw new Error(`Heartbeat task not found for Agent job: ${agentJobId}`);
     }
     return task;
+  }
+
+  async #requireInterestJob(agentId: string): Promise<AgentJob> {
+    const job = (await this.agentJobs.listAgentJobs()).find((candidate) => (
+      candidate.agentId === agentId
+      && candidate.kind === 'interest-discovery'
+    ));
+    if (!job) {
+      throw new Error(`Interest-discovery job not found for Agent: ${agentId}`);
+    }
+    return job;
   }
 }
 
@@ -300,6 +354,7 @@ function toBackgroundChecksView(
   productGate: boolean,
   users: User[],
   agents: Agent[],
+  agentJobs: AgentJob[],
   taskViews: HostedHeartbeatCoordinatorTaskView[],
   coordinatorState: HostedHeartbeatCoordinatorState,
   backgroundAdmission: HostedHeartbeatAdmissionView,
@@ -309,16 +364,19 @@ function toBackgroundChecksView(
   const visibleAgents = agents.filter((agent) => (
     usersById.get(agent.userId)?.status !== 'retired'
   ));
+  const visibleAgentIds = new Set(visibleAgents.map(({ id }) => id));
   const activeAgentIds = new Set(visibleAgents
     .filter((agent) => usersById.get(agent.userId)?.status === 'active')
     .map(({ id }) => id));
-  const taskByAgentId = new Map(taskViews.flatMap((task) => {
-    const agentId = agentIdFromTask(task.id);
-    return agentId ? [[agentId, task] as const] : [];
+  const taskByAgentJobId = new Map(taskViews.flatMap((task) => {
+    const agentJobId = agentJobIdFromTaskId(task.id);
+    return agentJobId ? [[agentJobId, task] as const] : [];
   }));
-  const tasks = visibleAgents.flatMap((agent) => {
-    const task = taskByAgentId.get(agent.id);
-    return task ? [toAgentTaskView(agent.id, task)] : [];
+  const tasks = agentJobs.flatMap((job) => {
+    const task = taskByAgentJobId.get(job.id);
+    return task && visibleAgentIds.has(job.agentId)
+      ? [toAgentTaskView(job, task)]
+      : [];
   });
   const activeTasks = tasks.filter(({ agentId }) => activeAgentIds.has(agentId));
   const enabledTasks = activeTasks.filter(({ enabled }) => enabled);
@@ -341,12 +399,15 @@ function toBackgroundChecksView(
 }
 
 function toAgentTaskView(
-  agentId: string,
+  job: AgentJob,
   task: HostedHeartbeatCoordinatorTaskView,
 ): AgentTaskView {
   return {
     taskId: task.id,
-    agentId,
+    agentJobId: job.id,
+    kind: job.kind,
+    name: job.name,
+    agentId: job.agentId,
     enabled: task.enabled,
     status: task.state.status,
     progress: task.state.progress ?? '',

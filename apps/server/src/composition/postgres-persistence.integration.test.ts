@@ -36,8 +36,9 @@ import {
 import { PostgresAgentWakeStore } from '../lucid/agent/postgres-store.js';
 import {
   LUCID_BACKGROUND_WORK_GROUP_ID,
-  taskIdForAgent,
+  taskIdForAgentJob,
 } from '../lucid/agent/heartbeat-task-identity.js';
+import { AgentJobService } from '../lucid/agent/jobs/service.js';
 import {
   AgentCommunicationClaimError,
 } from '../lucid/agent/communication/store.js';
@@ -52,6 +53,9 @@ import {
 import {
   LucidHeartbeatExecutionLifecycle,
 } from '../hosted-execution/heartbeat/execution-lifecycle.js';
+import {
+  PublishingJobWorkService,
+} from '../lucid/information-network/publishing-job-work-service.js';
 import {
   PostgresBackgroundChecksMutationLock,
 } from '../hosted-execution/heartbeat/mutation-lock.js';
@@ -461,11 +465,16 @@ describe('PostgreSQL persistence integration', () => {
         createLucidLogger('silent'),
         { retryDelayMs: 10_000 },
       );
-      const productLifecycle = new LucidHeartbeatExecutionLifecycle(work, {
-        tenantId: 'lucid-integration',
-        productSessionId: 'lucid-integration-session',
-        allowedTools: ['post_shared_message'],
-      });
+      const agentJobs = new AgentJobService(primary.agentJobs);
+      const productLifecycle = new LucidHeartbeatExecutionLifecycle(
+        agentJobs,
+        work,
+        new PublishingJobWorkService(agentJobs),
+        {
+          tenantId: 'lucid-integration',
+          productSessionId: 'lucid-integration-session',
+        },
+      );
       const executionService = new HostedHeartbeatExecutionService({
         authority: integrationExecutionAuthority(),
         lifecycle: productLifecycle,
@@ -497,7 +506,7 @@ describe('PostgreSQL persistence integration', () => {
           }),
         },
       });
-      const taskId = taskIdForAgent(LOCAL_AGENT_ID);
+      const taskId = taskIdForAgentJob(LOCAL_AGENT_ID);
       const retainedRecovery = {
         interruptedExecutionId: 'execution-before-provider-recovery',
         replacementStatus: 'claimed' as const,
@@ -584,13 +593,13 @@ describe('PostgreSQL persistence integration', () => {
       });
       expect(preparationRequests).toEqual([
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           taskId,
           executionId: retainedRecovery.replacementExecutionId,
           interruptedExecutionId: retainedRecovery.interruptedExecutionId,
         },
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           taskId,
           executionId: 'execution-after-retained-recovery-diagnostics',
         },
@@ -613,6 +622,7 @@ describe('PostgreSQL persistence integration', () => {
       };
       const firstService = new CoordinatorAgentHeartbeatService(
         primary.agent,
+        new AgentJobService(primary.agentJobs),
         coordinator.forReplica('primary'),
         new PostgresBackgroundChecksMutationLock(primaryDatabase!, 5_000),
         policy,
@@ -620,6 +630,7 @@ describe('PostgreSQL persistence integration', () => {
       );
       const secondService = new CoordinatorAgentHeartbeatService(
         secondary.agent,
+        new AgentJobService(secondary.agentJobs),
         coordinator.forReplica('secondary'),
         new PostgresBackgroundChecksMutationLock(secondaryDatabase!, 5_000),
         policy,
@@ -1003,6 +1014,7 @@ function integrationExecutionAuthority(): ExecutionAuthorityIssuer {
         runtimeSessionId: input.runtimeSessionId,
         invocationId: input.invocationId,
         workflow: input.workflow,
+        runtimeToolPolicy: input.runtimeToolPolicy,
         issuedAt,
         executionExpiresAt: expiresAt,
         mcp: {

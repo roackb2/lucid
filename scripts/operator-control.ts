@@ -117,9 +117,10 @@ function printPeerResult(
 }
 
 function printDiagnostics(snapshot: NetworkDiagnosticsSnapshot): void {
-  const taskByAgentId = new Map(
-    snapshot.backgroundChecks.tasks.map((task) => [task.agentId, task]),
-  );
+  const tasksByAgentId = snapshot.backgroundChecks.tasks.reduce((index, task) => {
+    index.set(task.agentId, [...(index.get(task.agentId) ?? []), task]);
+    return index;
+  }, new Map<string, NetworkDiagnosticsSnapshot['backgroundChecks']['tasks']>());
   console.log(
     `Global dispatch: ${snapshot.backgroundChecks.dispatchEnabled ? 'enabled' : 'paused'}`,
   );
@@ -127,12 +128,18 @@ function printDiagnostics(snapshot: NetworkDiagnosticsSnapshot): void {
     .slice()
     .sort((left, right) => left.sortOrder - right.sortOrder)
     .forEach((agent) => {
-      const task = taskByAgentId.get(agent.id);
-      const taskState = task
-        ? `${task.enabled ? 'enabled' : 'paused'}, ${task.status}`
-        : 'missing task';
-      console.log(
-        `- ${agent.user.displayName} / ${agent.name} (${agent.user.kind}): ${taskState}`,
-      );
+      const tasks = tasksByAgentId.get(agent.id) ?? [];
+      if (!tasks.length) {
+        console.log(
+          `- ${agent.user.displayName} / ${agent.name} (${agent.user.kind}): missing task`,
+        );
+        return;
+      }
+      tasks.forEach((task) => {
+        const taskState = `${task.enabled ? 'enabled' : 'paused'}, ${task.status}`;
+        console.log(
+          `- ${agent.user.displayName} / ${agent.name} (${agent.user.kind}) / ${task.name} [${task.kind}]: ${taskState}`,
+        );
+      });
     });
 }

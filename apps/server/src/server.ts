@@ -29,6 +29,10 @@ import {
   LucidBackgroundChecksAdmissionLifecycle,
 } from './hosted-execution/heartbeat/admission-lifecycle.js';
 import { AgentWorkService } from './lucid/agent/work-service.js';
+import { AgentJobService } from './lucid/agent/jobs/service.js';
+import {
+  PublishingJobWorkService,
+} from './lucid/information-network/publishing-job-work-service.js';
 import { createLucidLogger } from './logger.js';
 import { createAppRouter } from './router.js';
 import {
@@ -64,8 +68,10 @@ const coordinator = new HostedHeartbeatCoordinatorClient({
   baseUrl: hostedExecutionConfig.heartbeatCoordinator.baseUrl,
   apiToken: hostedExecutionConfig.heartbeatCoordinator.apiToken,
 });
+const agentJobs = new AgentJobService(stores.agentJobs);
 const heartbeats = new CoordinatorAgentHeartbeatService(
   stores.agent,
+  agentJobs,
   coordinator,
   backgroundChecksMutationLock,
   {
@@ -95,10 +101,12 @@ const discoveryWorkspace = new DiscoveryWorkspaceService(
 );
 const informationNetwork = new InformationNetworkService(
   stores.informationNetwork,
+  agentJobs,
 );
 const informationNetworkPublishing = new InformationNetworkPublishingService(
   stores.informationNetwork,
 );
+const publishingJobWork = new PublishingJobWorkService(agentJobs);
 const userNetwork = new UserNetworkService(
   stores.network,
   heartbeats,
@@ -125,6 +133,8 @@ const hostedExecution = await createHostedExecutionComposition({
     stores.agent,
   ),
   agentWork,
+  agentJobs,
+  publishingJobWork,
   informationNetworkPublishing,
 });
 const staticSpaRequestHandler = config.webRoot
@@ -137,6 +147,7 @@ const server = createHTTPServer({
     userNetwork,
     informationNetwork,
     conversationHistory,
+    heartbeats,
     {
       allowSelfEnrollment: config.authentication.mode === 'supabase'
         && config.authentication.allowSelfEnrollment,

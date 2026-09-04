@@ -29,6 +29,7 @@
     "server:db:migrate": "yarn workspace @lucid/server db:migrate",
     "server:db:migrate:production": "yarn workspace @lucid/server db:migrate:production",
     "network:seed": "yarn workspace @lucid/server network:seed",
+    "publisher:install-pilot": "yarn workspace @lucid/server publisher:install-pilot",
     "web:dev": "yarn workspace @lucid/web dev",
     "web:build": "yarn workspace @lucid/web build"
   },

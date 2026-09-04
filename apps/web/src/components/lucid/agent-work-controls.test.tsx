@@ -31,6 +31,9 @@ const INTEREST = {
 
 const BASE_TASK = {
   taskId: 'task-001',
+  agentJobId: 'agent-job-001',
+  kind: 'interest-discovery',
+  name: 'Interest discovery',
   agentId: 'agent-001',
   enabled: true,
   status: 'waiting',

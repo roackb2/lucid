@@ -18,10 +18,11 @@
     "db:migrate": "tsx src/migrate.ts",
     "db:migrate:production": "node dist/migrate.js",
     "network:seed": "tsx src/lucid/information-network/seed.ts",
+    "publisher:install-pilot": "tsx src/lucid/information-network/install-publisher-pilot.ts",
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
-    "@heddleagent/execution-host-client": "8.2.1",
+    "@heddleagent/execution-host-client": "9.0.0",
     "@heddleagent/postgres": "7.0.0",
     "@heddleagent/runtime": "7.0.0",
     "@trpc/server": "11.16.0",

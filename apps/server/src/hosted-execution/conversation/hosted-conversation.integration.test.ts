@@ -161,7 +161,7 @@ describe('Lucid hosted conversation control-plane round trip', () => {
       expect(source.snapshot).toHaveBeenCalledOnce();
       expect(modelCredentials.resolveModelCredential).toHaveBeenCalledOnce();
       expect(safeInvocationMetadata).toBe(JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         kind: 'conversation-turn',
         invocationId: 'invocation-001',
         runtimeSessionId: `runtime-session:${'a'.repeat(40)}`,

@@ -7,6 +7,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   bigint,
   bigserial,
   boolean,
@@ -145,6 +146,11 @@ export const postgresAgents = lucidPostgresSchema.table(
       .default(0),
     lastSeenSequence: bigint('last_seen_sequence', { mode: 'number' })
       .notNull(),
+    /** The product job currently bound to the Agent's execution fence. */
+    activeJobId: text('active_job_id')
+      .references((): AnyPgColumn => postgresAgentJobs.id, {
+        onDelete: 'set null',
+      }),
     activeWakeId: text('active_wake_id'),
     activeWakeClaimToken: text('active_wake_claim_token'),
     activeWakeNumber: bigint('active_wake_number', { mode: 'number' }),
@@ -181,6 +187,185 @@ export const postgresAgents = lucidPostgresSchema.table(
         and ${table.activeWakeNumber} is not null
         and ${table.activeWakeHorizon} is not null
       )`,
+    ),
+    check(
+      'agents_active_job_requires_wake',
+      sql`${table.activeJobId} is null or ${table.activeWakeId} is not null`,
+    ),
+  ],
+);
+
+/** Product-owned intent for one durable representative-Agent workflow. */
+export const postgresAgentJobs = lucidPostgresSchema.table(
+  'agent_jobs',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => postgresDiscoveryWorkspaces.id, {
+        onDelete: 'cascade',
+      }),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => postgresAgents.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    name: text('name').notNull(),
+    instructions: text('instructions').notNull(),
+    cadenceMs: bigint('cadence_ms', { mode: 'number' }).notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    scheduleMode: text('schedule_mode').notNull(),
+    createdAt: timestampColumn('created_at').notNull(),
+    updatedAt: timestampColumn('updated_at').notNull(),
+  },
+  (table) => [
+    index('agent_jobs_workspace_idx').on(table.workspaceId, table.id),
+    index('agent_jobs_agent_idx').on(table.agentId, table.id),
+    check(
+      'agent_jobs_kind_valid',
+      sql`${table.kind} in ('interest-discovery', 'information-network-publishing')`,
+    ),
+    check(
+      'agent_jobs_name_valid',
+      sql`char_length(${table.name}) between 1 and 120 and ${table.name} = btrim(${table.name})`,
+    ),
+    check(
+      'agent_jobs_instructions_valid',
+      sql`char_length(${table.instructions}) between 1 and 12000 and ${table.instructions} = btrim(${table.instructions})`,
+    ),
+    check(
+      'agent_jobs_cadence_positive',
+      sql`${table.cadenceMs} > 0`,
+    ),
+    check(
+      'agent_jobs_schedule_mode_valid',
+      sql`${table.scheduleMode} in ('manual', 'scheduled')`,
+    ),
+  ],
+);
+
+/** Private publishing direction owned by one publishing job. */
+export const postgresAgentJobPublishingPreferences = lucidPostgresSchema.table(
+  'agent_job_publishing_preferences',
+  {
+    agentJobId: text('agent_job_id')
+      .primaryKey()
+      .references(() => postgresAgentJobs.id, { onDelete: 'cascade' }),
+    region: text('region'),
+    intendedAudience: text('intended_audience'),
+    tone: text('tone'),
+    sourceGuidance: text('source_guidance'),
+    createdAt: timestampColumn('created_at').notNull(),
+    updatedAt: timestampColumn('updated_at').notNull(),
+  },
+  (table) => [
+    check(
+      'agent_job_publishing_preferences_region_valid',
+      sql`${table.region} is null or (char_length(${table.region}) between 1 and 240 and ${table.region} = btrim(${table.region}))`,
+    ),
+    check(
+      'agent_job_publishing_preferences_audience_valid',
+      sql`${table.intendedAudience} is null or (char_length(${table.intendedAudience}) between 1 and 1000 and ${table.intendedAudience} = btrim(${table.intendedAudience}))`,
+    ),
+    check(
+      'agent_job_publishing_preferences_tone_valid',
+      sql`${table.tone} is null or (char_length(${table.tone}) between 1 and 1000 and ${table.tone} = btrim(${table.tone}))`,
+    ),
+    check(
+      'agent_job_publishing_preferences_source_guidance_valid',
+      sql`${table.sourceGuidance} is null or (char_length(${table.sourceGuidance}) between 1 and 4000 and ${table.sourceGuidance} = btrim(${table.sourceGuidance}))`,
+    ),
+  ],
+);
+
+export const postgresAgentJobPublishingTopics = lucidPostgresSchema.table(
+  'agent_job_publishing_topics',
+  {
+    agentJobId: text('agent_job_id')
+      .notNull()
+      .references(() => postgresAgentJobPublishingPreferences.agentJobId, {
+        onDelete: 'cascade',
+      }),
+    position: integer('position').notNull(),
+    topic: text('topic').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'agent_job_publishing_topics_pk',
+      columns: [table.agentJobId, table.topic],
+    }),
+    uniqueIndex('agent_job_publishing_topics_position_idx')
+      .on(table.agentJobId, table.position),
+    check(
+      'agent_job_publishing_topics_position_nonnegative',
+      sql`${table.position} >= 0`,
+    ),
+    check(
+      'agent_job_publishing_topics_topic_valid',
+      sql`char_length(${table.topic}) between 1 and 120 and ${table.topic} = btrim(${table.topic})`,
+    ),
+  ],
+);
+
+/** Durable, coalesced intent for one explicitly requested Agent-job run. */
+export const postgresAgentJobRunRequests = lucidPostgresSchema.table(
+  'agent_job_run_requests',
+  {
+    id: text('id').primaryKey(),
+    agentJobId: text('agent_job_id')
+      .notNull()
+      .references(() => postgresAgentJobs.id, { onDelete: 'cascade' }),
+    state: text('state').notNull(),
+    outcome: text('outcome'),
+    currentExecutionId: text('current_execution_id'),
+    outcomeSummary: text('outcome_summary'),
+    requestedAt: timestampColumn('requested_at').notNull(),
+    claimedAt: timestampColumn('claimed_at'),
+    settledAt: timestampColumn('settled_at'),
+  },
+  (table) => [
+    index('agent_job_run_requests_history_idx').on(
+      table.agentJobId,
+      table.requestedAt,
+      table.id,
+    ),
+    uniqueIndex('agent_job_run_requests_active_idx')
+      .on(table.agentJobId)
+      .where(sql`${table.state} in ('requested', 'claimed')`),
+    check(
+      'agent_job_run_requests_state_valid',
+      sql`${table.state} in ('requested', 'claimed', 'settled')`,
+    ),
+    check(
+      'agent_job_run_requests_outcome_valid',
+      sql`${table.outcome} is null or ${table.outcome} in ('published', 'no-post', 'failed')`,
+    ),
+    check(
+      'agent_job_run_requests_lifecycle_valid',
+      sql`(
+        ${table.state} = 'requested'
+        and ${table.currentExecutionId} is null
+        and ${table.claimedAt} is null
+        and ${table.outcome} is null
+        and ${table.outcomeSummary} is null
+        and ${table.settledAt} is null
+      ) or (
+        ${table.state} = 'claimed'
+        and ${table.currentExecutionId} is not null
+        and ${table.claimedAt} is not null
+        and ${table.outcome} is null
+        and ${table.outcomeSummary} is null
+        and ${table.settledAt} is null
+      ) or (
+        ${table.state} = 'settled'
+        and ${table.currentExecutionId} is not null
+        and ${table.claimedAt} is not null
+        and ${table.outcome} is not null
+        and ${table.settledAt} is not null
+      )`,
+    ),
+    check(
+      'agent_job_run_requests_outcome_summary_valid',
+      sql`${table.outcomeSummary} is null or (char_length(${table.outcomeSummary}) between 1 and 2000 and ${table.outcomeSummary} = btrim(${table.outcomeSummary}))`,
     ),
   ],
 );
@@ -314,6 +499,12 @@ export const postgresNetworkPosts = lucidPostgresSchema.table(
       .references(() => postgresNetworkProfiles.id, { onDelete: 'cascade' }),
     authorAgentId: text('author_agent_id')
       .references(() => postgresAgents.id, { onDelete: 'restrict' }),
+    createdByAgentJobId: text('created_by_agent_job_id')
+      .references(() => postgresAgentJobs.id, { onDelete: 'restrict' }),
+    createdByAgentJobRunRequestId: text('created_by_agent_job_run_request_id')
+      .references(() => postgresAgentJobRunRequests.id, {
+        onDelete: 'restrict',
+      }),
     publicationMethod: text('publication_method').notNull(),
     title: text('title').notNull(),
     body: text('body').notNull(),
@@ -334,6 +525,8 @@ export const postgresNetworkPosts = lucidPostgresSchema.table(
       table.id,
     ),
     uniqueIndex('network_posts_idempotency_idx').on(table.idempotencyKey),
+    uniqueIndex('network_posts_agent_job_run_request_idx')
+      .on(table.createdByAgentJobRunRequestId),
     check(
       'network_posts_publication_method_valid',
       sql`${table.publicationMethod} in ('seeded-pilot', 'agent')`,
@@ -459,6 +652,10 @@ export const lucidPostgresTables = {
   users: postgresUsers,
   userIdentityBindings: postgresUserIdentityBindings,
   agents: postgresAgents,
+  agentJobs: postgresAgentJobs,
+  agentJobPublishingPreferences: postgresAgentJobPublishingPreferences,
+  agentJobPublishingTopics: postgresAgentJobPublishingTopics,
+  agentJobRunRequests: postgresAgentJobRunRequests,
   discoveryEvents: postgresDiscoveryEvents,
   networkProfiles: postgresNetworkProfiles,
   networkProfileTopics: postgresNetworkProfileTopics,

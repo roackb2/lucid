@@ -38,7 +38,7 @@ import {
   type SourceBackedTextPostDraft,
   type NetworkPostDetailView,
   type NetworkPostView,
-  type NetworkProfileDetailView,
+  type NetworkProfileContentView,
   type NetworkProfileSummaryView,
 } from './types.js';
 
@@ -84,6 +84,7 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
         .select({
           id: agents.id,
           userId: agents.userId,
+          activeJobId: agents.activeJobId,
           activeWakeId: agents.activeWakeId,
           activeWakeNumber: agents.activeWakeNumber,
         })
@@ -98,6 +99,7 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
         .limit(1);
       if (
         !agent
+        || !agent.activeJobId
         || !agent.activeWakeId
         || agent.activeWakeNumber === null
       ) {
@@ -150,6 +152,8 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
           existing.workspaceId === LUCID_WORKSPACE_ID
           && existing.authorProfileId === profile.id
           && existing.authorAgentId === agent.id
+          && existing.createdByAgentJobId === agent.activeJobId
+          && existing.createdByAgentJobRunRequestId === agent.activeWakeId
           && existing.publicationMethod === 'agent'
           && existing.title === draft.title
           && existing.body === draft.body
@@ -173,6 +177,8 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
         workspaceId: LUCID_WORKSPACE_ID,
         authorProfileId: profile.id,
         authorAgentId: agent.id,
+        createdByAgentJobId: agent.activeJobId,
+        createdByAgentJobRunRequestId: agent.activeWakeId,
         publicationMethod: 'agent',
         title: draft.title,
         body: draft.body,
@@ -195,6 +201,20 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
       ));
       return { outcome: 'published', postId, publishedAt };
     });
+  }
+
+  async readAgentJobRunPublication(
+    agentJobRunRequestId: string,
+  ): Promise<{ postId: string } | undefined> {
+    const [post] = await this.database.orm
+      .select({ postId: posts.id })
+      .from(posts)
+      .where(and(
+        eq(posts.workspaceId, LUCID_WORKSPACE_ID),
+        eq(posts.createdByAgentJobRunRequestId, agentJobRunRequestId),
+      ))
+      .limit(1);
+    return post;
   }
 
   async readFeed(limit: number): Promise<InformationNetworkFeedView> {
@@ -275,7 +295,7 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
   async readProfile(
     profileId: string,
     recentPostLimit: number,
-  ): Promise<NetworkProfileDetailView | undefined> {
+  ): Promise<NetworkProfileContentView | undefined> {
     assertReadLimit(recentPostLimit);
     const [profile] = await this.database.orm
       .select({
@@ -283,6 +303,7 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
         displayName: users.displayName,
         publicDescription: profiles.publicDescription,
         publishingFocus: profiles.publishingFocus,
+        representativeAgentId: agents.id,
         representativeAgentName: agents.name,
         representativeAgentPurpose: agents.purpose,
       })

@@ -24,6 +24,7 @@ describe('coordinator agent heartbeat service', () => {
     const coordinator = coordinatorApi([task({ enabled: false })]);
     const service = new CoordinatorAgentHeartbeatService(
       productStore(),
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -74,6 +75,7 @@ describe('coordinator agent heartbeat service', () => {
     ], 'paused');
     const service = new CoordinatorAgentHeartbeatService(
       productStore(),
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -102,6 +104,7 @@ describe('coordinator agent heartbeat service', () => {
     );
     const service = new CoordinatorAgentHeartbeatService(
       productStore(),
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -118,6 +121,7 @@ describe('coordinator agent heartbeat service', () => {
     const coordinator = coordinatorApi([task()]);
     const service = new CoordinatorAgentHeartbeatService(
       productStore(false),
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -142,6 +146,7 @@ describe('coordinator agent heartbeat service', () => {
     coordinator.resumeAdmission.mockResolvedValueOnce(admissionView('blocked'));
     const service = new CoordinatorAgentHeartbeatService(
       store,
+      agentJobs(),
       coordinator,
       immediateMutationLock,
       policy(),
@@ -155,6 +160,43 @@ describe('coordinator agent heartbeat service', () => {
     expect(coordinator.pauseAdmission).toHaveBeenCalledWith(
       BACKGROUND_ADMISSION_TARGET,
       expect.any(AbortSignal),
+    );
+  });
+
+  it('requests a run only for the publishing workflow that consumes it', async () => {
+    const publishingJob = {
+      ...(await agentJobs().readAgentJob('agent-a'))!,
+      id: 'publisher-job-a',
+      kind: 'information-network-publishing' as const,
+      scheduleMode: 'manual' as const,
+    };
+    const jobs = agentJobs(publishingJob);
+    const coordinator = coordinatorApi([task({
+      id: 'lucid-representative-publisher-job-a',
+      taskId: 'lucid-representative-publisher-job-a',
+    })]);
+    const service = new CoordinatorAgentHeartbeatService(
+      productStore(),
+      jobs,
+      coordinator,
+      immediateMutationLock,
+      policy(),
+      createLucidLogger('silent'),
+    );
+
+    await expect(service.requestAgentJobRunOnce(publishingJob.id))
+      .resolves.toMatchObject({ outcome: 'requested' });
+    await expect(service.requestAgentJobRunOnce('missing-job'))
+      .rejects.toThrow('does not exist');
+    await expect(new CoordinatorAgentHeartbeatService(
+      productStore(),
+      agentJobs(),
+      coordinator,
+      immediateMutationLock,
+      policy(),
+      createLucidLogger('silent'),
+    ).requestAgentJobRunOnce('agent-a')).rejects.toThrow(
+      'only for an Information Network publishing job',
     );
   });
 });
@@ -291,6 +333,43 @@ function productStore(backgroundChecksEnabled = true) {
       createdAt: '2026-08-25T00:00:00.000Z',
       updatedAt: '2026-08-25T00:00:00.000Z',
     }],
+  };
+}
+
+function agentJobs(jobOverride?: {
+  id: string;
+  workspaceId: string;
+  agentId: string;
+  kind: 'interest-discovery' | 'information-network-publishing';
+  name: string;
+  instructions: string;
+  cadenceMs: number;
+  enabled: boolean;
+  scheduleMode: 'manual' | 'scheduled';
+  createdAt: string;
+  updatedAt: string;
+}) {
+  const job = jobOverride ?? {
+    id: 'agent-a',
+    workspaceId: 'workspace',
+    agentId: 'agent-a',
+    kind: 'interest-discovery' as const,
+    name: 'Interest discovery',
+    instructions: 'Find relevant connections.',
+    cadenceMs: 60_000,
+    enabled: true,
+    scheduleMode: 'scheduled' as const,
+    createdAt: '2026-08-25T00:00:00.000Z',
+    updatedAt: '2026-08-25T00:00:00.000Z',
+  };
+  return {
+    listAgentJobs: async () => [job],
+    readAgentJob: async (id: string) => id === job.id ? job : undefined,
+    requestRunOnce: async () => ({
+      outcome: 'requested' as const,
+      request: undefined as never,
+    }),
+    ensureInterestDiscoveryJob: async () => job,
   };
 }
 
