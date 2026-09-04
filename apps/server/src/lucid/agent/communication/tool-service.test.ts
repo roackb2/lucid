@@ -20,6 +20,9 @@ import {
   buildAgentWakePrompt,
   buildAgentInstructions,
 } from '../../agent-prompts.js';
+import {
+  PostgresInformationNetworkFixtureSeeder,
+} from '../../information-network/fixtures.js';
 
 describe('agent communication', () => {
   let database: PostgresDatabase;
@@ -61,6 +64,16 @@ describe('agent communication', () => {
       writeScope: {
         kind: 'domain',
         resources: ['lucid:discovery-events'],
+      },
+    });
+    expect(toolsByName.get('report_finding')?.hostPolicy).toMatchObject({
+      operations: ['write'],
+      writeScope: {
+        kind: 'domain',
+        resources: [
+          'lucid:discovery-events',
+          'lucid:information-network:finding-posts',
+        ],
       },
     });
   });
@@ -842,6 +855,69 @@ You represent an explicitly simulated test user, not a real person or external s
         })],
       }),
     ]);
+  });
+
+  it('reports a published Network Post once with durable Post provenance', async () => {
+    await new PostgresInformationNetworkFixtureSeeder(database).seed();
+    const tools = toolsByName(await createUserTools(
+      stores,
+      'wake_network_post_finding',
+      2,
+    ));
+
+    expect(await tools.get('report_finding')!.execute({
+      content: 'A Finding without provenance must be rejected.',
+      source_event_ids: [],
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('must cite at least one source'),
+    });
+    expect(await tools.get('report_finding')!.execute({
+      content:
+        'The room-sound recording notes may connect to your interest in human performances.',
+      source_event_ids: [],
+      source_post_ids: ['fingerstyle-room-sound'],
+    })).toMatchObject({
+      ok: true,
+      output: { event: { kind: 'finding_reported' } },
+    });
+
+    const finding = (await stores.workspace.readSnapshot(LOCAL_USER_ID))
+      .findings.find(({ finding: candidate }) => (
+        candidate.content.startsWith('The room-sound recording notes')
+      ));
+    expect(finding).toBeDefined();
+    expect((await stores.informationNetwork.readFindingPosts(
+      LOCAL_USER_ID,
+      [finding!.finding.sequence],
+    )).get(finding!.finding.sequence)).toEqual([
+      expect.objectContaining({
+        id: 'fingerstyle-room-sound',
+        title: 'Five fingerstyle covers that keep the rough room sound',
+      }),
+    ]);
+
+    const laterWake = toolsByName(await createUserTools(
+      stores,
+      'wake_network_post_duplicate',
+      3,
+    ));
+    expect(await laterWake.get('report_finding')!.execute({
+      content: 'The same Post should not become another Finding.',
+      source_event_ids: [],
+      source_post_ids: ['fingerstyle-room-sound'],
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('already used'),
+    });
+    expect(await laterWake.get('report_finding')!.execute({
+      content: 'An unknown Post cannot support a Finding.',
+      source_event_ids: [],
+      source_post_ids: ['not-a-real-post'],
+    })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('Unknown Post IDs'),
+    });
   });
 
   it('allows one agent contribution per principal-initiated request thread', async () => {

@@ -20,9 +20,11 @@ import type {
   NetworkMessageRole,
   User,
 } from '../../discovery-types.js';
+import { networkPostIdSchema } from '../../information-network/types.js';
 import type {
   AgentCommunicationEventWriter,
   AgentCommunicationStore,
+  AppendFindingEventInput,
 } from './store.js';
 import { AGENT_PRINCIPAL_EVENT_KINDS } from '../mailbox-policy.js';
 
@@ -46,8 +48,17 @@ export const directMessageInputSchema = z.object({
 }).strict();
 export const findingInputSchema = z.object({
   content: z.string().trim().min(1).max(1_200),
-  source_event_ids: z.array(z.number().int().positive()).min(1).max(8),
-}).strict();
+  source_event_ids: z.array(z.number().int().positive()).max(8),
+  source_post_ids: z.array(networkPostIdSchema).max(8).default([]),
+}).strict().refine(
+  ({ source_event_ids: eventIds, source_post_ids: postIds }) => (
+    eventIds.length + postIds.length > 0
+  ),
+  {
+    message: 'A Finding must cite at least one source event or Network Post.',
+    path: ['source_post_ids'],
+  },
+);
 export const workingNoteInputSchema = z.object({
   content: z.string().trim().min(1).max(2_400),
 }).strict();
@@ -95,6 +106,18 @@ const WRITE_DISCOVERY_STATE_POLICY = {
   writeScope: {
     kind: 'domain',
     resources: ['lucid:discovery-events'],
+  },
+} satisfies ToolPolicyHostContext;
+
+const WRITE_FINDING_STATE_POLICY = {
+  ...READ_DISCOVERY_STATE_POLICY,
+  operations: ['write'],
+  writeScope: {
+    kind: 'domain',
+    resources: [
+      'lucid:discovery-events',
+      'lucid:information-network:finding-posts',
+    ],
   },
 } satisfies ToolPolicyHostContext;
 
@@ -369,20 +392,31 @@ export class AgentCommunicationToolService {
     return {
       name: 'report_finding',
       description:
-        'Deliver one specific peer-sourced connection privately to this agent’s own user. This does not reply to the source agent. State what the source contributed and why it may relate, without declaring it useful, validated, or a successful match. Sources prove delivery, not truth.',
+        'Deliver one specific source-backed connection privately to this agent’s own user. Cite at least one peer message with source_event_ids or Lucid Information Network Post with source_post_ids. This does not reply to another Agent. State what the source contributed and why it may relate, without declaring it useful, validated, or a successful match. Sources establish provenance, not truth.',
       capabilities: ['lucid.discovery.write'],
-      hostPolicy: WRITE_DISCOVERY_STATE_POLICY,
+      hostPolicy: WRITE_FINDING_STATE_POLICY,
       parameters: {
         type: 'object',
         properties: {
           content: { type: 'string', minLength: 1, maxLength: 1_200 },
           source_event_ids: {
             type: 'array',
-            minItems: 1,
+            minItems: 0,
             maxItems: 8,
             items: { type: 'integer', minimum: 1 },
             description:
-              'Visible peer-authored event sequences that caused this finding.',
+              'Visible peer-authored event sequences that caused this Finding. Use an empty array when only Network Posts support it.',
+          },
+          source_post_ids: {
+            type: 'array',
+            minItems: 0,
+            maxItems: 8,
+            items: {
+              type: 'string',
+              pattern: '^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,159}$',
+            },
+            description:
+              'Stable Post IDs returned by search_network_posts or read_network_post that support this Finding.',
           },
         },
         required: ['content', 'source_event_ids'],
@@ -674,6 +708,7 @@ export class AgentCommunicationToolService {
       return outboundPriorityFailure;
     }
     const sourceEventIds = uniq(parsed.data.source_event_ids);
+    const sourcePostIds = uniq(parsed.data.source_post_ids);
     const sourceFailure = await this.validateSources(sourceEventIds);
     if (sourceFailure) {
       return sourceFailure;
@@ -686,8 +721,9 @@ export class AgentCommunicationToolService {
     if (referenceFailure) {
       return referenceFailure;
     }
-    // Provenance must be both visible and peer-authored. This proves the network
-    // path that produced a finding, not the truth of the underlying message.
+    // Event provenance must be both visible and peer-authored. Post provenance
+    // is checked independently against Lucid's public-inside-the-network store.
+    // Either path proves delivery lineage, not the truth of the content.
     const visibleSources = await this.store.readVisibleEventsBySequence(
       this.agent.id,
       sourceEventIds,
@@ -705,6 +741,19 @@ export class AgentCommunicationToolService {
           'A finding may cite only peer-authored responses or contributions, never private principal input or a network request.',
       };
     }
+    const existingPostIds = new Set(
+      await this.store.readExistingNetworkPostIds(sourcePostIds),
+    );
+    const missingPostIds = sourcePostIds.filter(
+      (postId) => !existingPostIds.has(postId),
+    );
+    if (missingPostIds.length) {
+      return {
+        ok: false,
+        error:
+          `A Finding may cite only Posts published in this Lucid Information Network. Unknown Post IDs: ${missingPostIds.join(', ')}`,
+      };
+    }
     if (await this.store.hasUserFindingUsingAnyOrigin(
       this.user.id,
       sourceEventIds,
@@ -714,12 +763,21 @@ export class AgentCommunicationToolService {
         error: 'A finding already used one or more of these source messages.',
       };
     }
+    if (await this.store.hasUserFindingUsingAnyPost(
+      this.user.id,
+      sourcePostIds,
+    )) {
+      return {
+        ok: false,
+        error: 'A Finding already used one or more of these source Posts.',
+      };
+    }
     const actionIndex = this.reserveMutation();
     if (typeof actionIndex !== 'number') {
       return actionIndex;
     }
 
-    return eventResult(await this.eventWriter.appendCommunicationEvent({
+    const finding = {
       wakeNumber: this.wakeNumber,
       kind: 'finding_reported',
       actorAgentId: this.agent.id,
@@ -732,7 +790,13 @@ export class AgentCommunicationToolService {
         wakeId: this.wakeId,
         sourceEventIds,
       },
-    }));
+    } satisfies AppendFindingEventInput;
+    return eventResult(sourcePostIds.length
+      ? await this.eventWriter.appendNetworkPostFinding(
+        finding,
+        sourcePostIds,
+      )
+      : await this.eventWriter.appendCommunicationEvent(finding));
   }
 
   private async finishWithoutAction(input: unknown): Promise<ToolResult> {

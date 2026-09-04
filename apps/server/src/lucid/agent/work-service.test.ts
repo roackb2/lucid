@@ -536,13 +536,30 @@ function createFixture(
       _agentId: string,
       sequences: number[],
     ) => triggerKind && sequences.includes(trigger.sequence) ? [trigger] : [],
+    readExistingNetworkPostIds: async (postIds: readonly string[]) => [
+      ...postIds,
+    ],
     countAgentWakeCommunicationActions: async () => communicationActions.length,
     findAgentPublishedRequestForTrigger: async () => sharedMessage,
     hasAgentUpdatedWorkingNoteThrough: async () => workingNoteUpdated,
     hasUserFindingUsingAnyOrigin: async () => false,
+    hasUserFindingUsingAnyPost: async () => false,
     hasAgentContributedToRequestThread: async () => false,
     appendCommunicationEvent: async (input) => appendCommunication(input),
+    appendNetworkPostFinding: async (input) => appendCommunication(input),
     appendClaimedCommunicationEvent: async (ownedClaim, input) => {
+      if (
+        !activeClaim
+        || ownedClaim.agentId !== agent.id
+        || ownedClaim.workId !== claim.wakeId
+        || ownedClaim.executionId !== claim.claimToken
+        || ownedClaim.workNumber !== claim.wakeNumber
+      ) {
+        throw new AgentCommunicationClaimError();
+      }
+      return appendCommunication(input);
+    },
+    appendClaimedNetworkPostFinding: async (ownedClaim, input) => {
       if (
         !activeClaim
         || ownedClaim.agentId !== agent.id

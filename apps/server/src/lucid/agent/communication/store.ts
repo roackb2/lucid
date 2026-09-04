@@ -19,6 +19,11 @@ export type AppendCommunicationEventInput = {
   > & { kind: Kind };
 }[CommunicationEventKind];
 
+export type AppendFindingEventInput = Extract<
+  AppendCommunicationEventInput,
+  { kind: 'finding_reported' }
+>;
+
 /** Retry-stable work identity plus the attempt token that currently owns it. */
 export type AgentCommunicationClaim = {
   agentId: string;
@@ -38,6 +43,10 @@ export class AgentCommunicationClaimError extends Error {
 export interface AgentCommunicationEventWriter {
   appendCommunicationEvent(
     input: AppendCommunicationEventInput,
+  ): Promise<DiscoveryEvent>;
+  appendNetworkPostFinding(
+    input: AppendFindingEventInput,
+    sourcePostIds: readonly string[],
   ): Promise<DiscoveryEvent>;
 }
 
@@ -71,6 +80,11 @@ extends AgentCommunicationEventWriter {
     userId: string,
     sourceEventIds: number[],
   ): Promise<boolean>;
+  readExistingNetworkPostIds(postIds: readonly string[]): Promise<string[]>;
+  hasUserFindingUsingAnyPost(
+    userId: string,
+    sourcePostIds: readonly string[],
+  ): Promise<boolean>;
   hasAgentContributedToRequestThread(
     agentId: string,
     replyToSequence: number,
@@ -79,5 +93,10 @@ extends AgentCommunicationEventWriter {
   appendClaimedCommunicationEvent(
     claim: AgentCommunicationClaim,
     input: AppendCommunicationEventInput,
+  ): Promise<DiscoveryEvent>;
+  appendClaimedNetworkPostFinding(
+    claim: AgentCommunicationClaim,
+    input: AppendFindingEventInput,
+    sourcePostIds: readonly string[],
   ): Promise<DiscoveryEvent>;
 }
