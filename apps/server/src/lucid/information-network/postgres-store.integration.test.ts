@@ -130,6 +130,27 @@ describe('PostgreSQL Information Network store', () => {
       .resolves.toEqual([]);
   });
 
+  it('finds a relevant Post from an agent-authored natural-language query', async () => {
+    await database.orm.insert(posts).values({
+      id: 'taiwan-repair-policy-post',
+      workspaceId: LUCID_WORKSPACE_ID,
+      authorProfileId: TEST_PROFILE_ID,
+      publicationMethod: 'seeded-pilot',
+      title: 'Taiwan is building repair culture into fashion policy',
+      body: 'Textile research and repairable garments can help clothing last longer.',
+      publishedAt: '2026-09-01T00:00:00.000Z',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      idempotencyKey: 'test:taiwan-repair-policy-post',
+    });
+
+    await expect(stores.informationNetwork.searchPosts(
+      'clothing sustainability in Taiwan and East Asia, focusing on repairable clothing policy',
+      10,
+    )).resolves.toEqual([
+      expect.objectContaining({ postId: 'taiwan-repair-policy-post' }),
+    ]);
+  });
+
   it('permits a general Post with zero Sources without fabricating provenance', async () => {
     await database.orm.insert(posts).values({
       id: 'source-free-general-post',

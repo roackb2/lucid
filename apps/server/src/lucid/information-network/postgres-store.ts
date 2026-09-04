@@ -8,9 +8,9 @@ import {
   desc,
   eq,
   exists,
-  ilike,
   inArray,
   or,
+  sql,
 } from 'drizzle-orm';
 import isEqual from 'lodash/isEqual.js';
 import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
@@ -303,7 +303,14 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
     limit: number,
   ): Promise<NetworkPostSearchResultView[]> {
     assertReadLimit(limit);
-    const pattern = `%${escapeLikePattern(query)}%`;
+    const searchQuery = sql`websearch_to_tsquery(
+      'english',
+      ${toAnyTermWebSearchExpression(query)}
+    )`;
+    const postSearchDocument = sql`(
+      setweight(to_tsvector('english', coalesce(${posts.title}, '')), 'A')
+      || setweight(to_tsvector('english', coalesce(${posts.body}, '')), 'B')
+    )`;
     const rows = await this.database.orm
       .select({
         post: posts,
@@ -322,20 +329,23 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
         eq(users.workspaceId, LUCID_WORKSPACE_ID),
         eq(agents.workspaceId, LUCID_WORKSPACE_ID),
         or(
-          ilike(posts.title, pattern),
-          ilike(posts.body, pattern),
+          sql`${postSearchDocument} @@ ${searchQuery}`,
           exists(
             this.database.orm
               .select({ postId: postTopics.postId })
               .from(postTopics)
               .where(and(
                 eq(postTopics.postId, posts.id),
-                ilike(postTopics.topic, pattern),
+                sql`to_tsvector('english', ${postTopics.topic}) @@ ${searchQuery}`,
               )),
           ),
         ),
       ))
-      .orderBy(desc(posts.publishedAt), desc(posts.id))
+      .orderBy(
+        desc(sql`ts_rank(${postSearchDocument}, ${searchQuery})`),
+        desc(posts.publishedAt),
+        desc(posts.id),
+      )
       .limit(limit);
     const postById = await this.readPostViews(rows.map(({ post }) => post));
 
@@ -531,6 +541,14 @@ implements InformationNetworkStore, InformationNetworkPublicationStore {
   }
 }
 
+/**
+ * Turns an agent's natural-language query into a safe any-term expression.
+ * PostgreSQL still owns parsing, stop-word removal, and English stemming.
+ */
+function toAnyTermWebSearchExpression(query: string): string {
+  return (query.match(/[\p{L}\p{N}]+/gu) ?? []).join(' OR ');
+}
+
 function toProfileSummary(
   row: Omit<NetworkPostWithAuthorRow, 'post'>,
 ): NetworkProfileSummaryView {
@@ -566,10 +584,6 @@ function assertReadLimit(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
     throw new Error('Information Network read limit must be between 1 and 100.');
   }
-}
-
-function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/gu, '\\$&');
 }
 
 function excerptForBody(body: string): string {

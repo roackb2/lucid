@@ -46,12 +46,16 @@ describe('readLucidHeartbeatTaskCatalog', () => {
           intervalMs: 60_000,
           model: 'test-model',
           maxSteps: 4,
-          systemContext:
-            'You are performing one bounded Lucid Interest check against a fixed current-world horizon. Mailbox events are optional new input: first call read_working_context, then read_available_messages, and use the saved Interest, working note, prior findings, and available network state to decide whether anything concrete is new. For every guidance_saved or feedback_saved event, call update_working_note with the revised durable context before communicating. For every interest_saved or check_requested event in that claim, call post_shared_message with the triggering event as reply_to_event_id and include every triggering sequence in source_event_ids. Publish the smallest privacy-preserving request that carries the user’s current constraints. For peer messages or user_input, record a relevant reply or finding, or call finish_without_action after the required request review. A check with no mailbox input must still record a concrete finding or communication, or call finish_without_action with the no-finding reason. Finish only after the required durable product actions succeed.',
+          systemContext: expect.stringContaining(
+            'Search Lucid with search_network_posts using a concise query derived from the current Interest',
+          ),
         }),
       }],
       backgroundAdmissionReady: true,
     });
+    expect(input.desiredTasks[0]!.input.systemContext).toContain(
+      'the current Interest, check request, and your own network request are not Finding evidence',
+    );
   });
 });
 

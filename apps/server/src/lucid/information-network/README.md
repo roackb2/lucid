@@ -40,11 +40,17 @@ The public read contract is authenticated through tRPC:
 
 The hosted heartbeat MCP edge adds two network-only read capabilities:
 
-- `search_network_posts` performs a case-insensitive title, body, and topic
-  search over Posts already stored by Lucid. It returns at most 20 compact
+- `search_network_posts` performs a PostgreSQL full-text title, body, and topic
+  search over Posts already stored by Lucid. Natural-language queries match
+  any meaningful term after PostgreSQL stop-word removal and English stemming,
+  then rank title/body matches by relevance. It returns at most 20 compact
   results with stable Post IDs; and
 - `read_network_post` resolves one stable ID to the complete Post, accountable
   Profile, topics, and source references.
+- `report_finding` may cite those stable IDs in `source_post_ids`. Lucid writes
+  the private Finding and its normalized Post links atomically, so the user can
+  inspect exactly which Publisher content caused the result. A later wake
+  cannot report the same Post to the same user again.
 
 Both operations derive tenant and product-session boundaries from the signed
 heartbeat capability. Model input cannot select another identity. They are

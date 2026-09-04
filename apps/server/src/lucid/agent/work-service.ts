@@ -127,17 +127,28 @@ export class AgentWorkService {
         kind === 'guidance_saved' || kind === 'feedback_saved'
       ))
       .map(({ sequence }) => sequence);
+    const communicationClaim = {
+      agentId: work.agent.id,
+      workId: work.workId,
+      executionId: input.executionId,
+      workNumber: work.workNumber,
+    };
     try {
       return await new AgentCommunicationToolService(
         this.communication,
         {
           appendCommunicationEvent: async (event) => (
-            await this.communication.appendClaimedCommunicationEvent({
-              agentId: work.agent.id,
-              workId: work.workId,
-              executionId: input.executionId,
-              workNumber: work.workNumber,
-            }, event)
+            await this.communication.appendClaimedCommunicationEvent(
+              communicationClaim,
+              event,
+            )
+          ),
+          appendNetworkPostFinding: async (event, sourcePostIds) => (
+            await this.communication.appendClaimedNetworkPostFinding(
+              communicationClaim,
+              event,
+              sourcePostIds,
+            )
           ),
         },
         work.agent,

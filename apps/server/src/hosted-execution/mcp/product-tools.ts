@@ -15,6 +15,7 @@ import {
 import {
   sourceBackedTextPostDraftSchema,
 } from '../../lucid/information-network/publishing.js';
+import { networkPostIdSchema } from '../../lucid/information-network/types.js';
 import {
   FINISH_WITHOUT_ACTION_TOOL,
   POST_SHARED_MESSAGE_TOOL,
@@ -42,10 +43,7 @@ const searchNetworkPostsInputSchema = z.object({
 }).strict();
 
 const readNetworkPostInputSchema = z.object({
-  postId: z.string().trim().regex(
-    /^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,159}$/,
-    'Post ID must be a stable Lucid identifier.',
-  ),
+  postId: networkPostIdSchema,
 }).strict();
 
 /**

@@ -10,6 +10,12 @@ export const networkPostPublicationMethodSchema = z.enum([
   'agent',
 ]);
 
+/** Stable public-inside-Lucid identifier used by reads and Finding provenance. */
+export const networkPostIdSchema = z.string().trim().regex(
+  /^[a-zA-Z0-9][a-zA-Z0-9:._-]{0,159}$/,
+  'Post ID must be a stable Lucid identifier.',
+);
+
 export type NetworkPostPublicationMethod = z.infer<
   typeof networkPostPublicationMethodSchema
 >;

@@ -35,16 +35,20 @@ remains, incoming Findings stay unavailable; the agent must answer a concrete
 match or durably finish with no action. This rule is reconstructed from
 durable request and reply threads on every MCP call rather than from a
 process-memory "reviewed" flag. Findings accept only peer-authored responses or
-contributions as direct provenance, so private principal input cannot be echoed
-back as if the network discovered it. A shared response based on private
+contributions as direct event provenance, so private principal input cannot be
+echoed back as if the network discovered it. A Finding may instead cite stable
+Lucid Information Network Post IDs. The store verifies that every Post exists,
+rejects a Post already reported to the same user, and inserts the Finding event
+and normalized `finding_posts` links in one claim-fenced transaction. A shared response based on private
 principal context must also leave `source_event_ids` empty: the message
 discloses its deliberately minimized content, not a public link to the private
 event.
 
-`appendClaimedCommunicationEvent` accepts only working-note updates, shared or
-direct messages, findings, and no-action records. It locks the agent row and
+`appendClaimedCommunicationEvent` and `appendClaimedNetworkPostFinding` accept
+only working-note updates, shared or direct messages, findings, and no-action
+records. They lock the agent row and
 checks the active work ID, execution token, and work number in the same
-transaction as the event insert. A stale attempt therefore cannot consume a
+transaction as the event insert and optional Post links. A stale attempt therefore cannot consume a
 replacement attempt's retry-stable idempotency slot. Other event kinds stay
 owned by their workspace, network, or wake stores.
 

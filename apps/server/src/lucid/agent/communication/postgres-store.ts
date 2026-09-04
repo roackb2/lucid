@@ -30,6 +30,8 @@ import {
 import {
   postgresDiscoveryEvents as discoveryEvents,
   postgresDiscoveryWorkspaces as discoveryWorkspaces,
+  postgresFindingPosts as findingPosts,
+  postgresNetworkPosts as networkPosts,
   postgresUsers as users,
   postgresAgents as agents,
 } from '../../persistence/postgres/schema.js';
@@ -39,6 +41,7 @@ import type {
   AgentCommunicationStore,
   AgentCommunicationClaim,
   AppendCommunicationEventInput,
+  AppendFindingEventInput,
 } from './store.js';
 import { AgentCommunicationClaimError } from './store.js';
 
@@ -212,6 +215,43 @@ implements AgentCommunicationStore {
     ));
   }
 
+  async readExistingNetworkPostIds(
+    postIds: readonly string[],
+  ): Promise<string[]> {
+    if (!postIds.length) {
+      return [];
+    }
+    return (await this.database.orm
+      .select({ id: networkPosts.id })
+      .from(networkPosts)
+      .where(inArray(networkPosts.id, [...postIds])))
+      .map(({ id }) => id);
+  }
+
+  async hasUserFindingUsingAnyPost(
+    userId: string,
+    sourcePostIds: readonly string[],
+  ): Promise<boolean> {
+    if (!sourcePostIds.length) {
+      return false;
+    }
+    const [existing] = await this.database.orm
+      .select({ findingSequence: findingPosts.findingSequence })
+      .from(findingPosts)
+      .innerJoin(
+        discoveryEvents,
+        eq(discoveryEvents.sequence, findingPosts.findingSequence),
+      )
+      .where(and(
+        eq(discoveryEvents.workspaceId, LUCID_WORKSPACE_ID),
+        eq(discoveryEvents.kind, 'finding_reported'),
+        eq(discoveryEvents.targetUserId, userId),
+        inArray(findingPosts.postId, [...sourcePostIds]),
+      ))
+      .limit(1);
+    return Boolean(existing);
+  }
+
   async findAgentPublishedRequestForTrigger(
     agentId: string,
     triggerSequence: number,
@@ -316,6 +356,13 @@ implements AgentCommunicationStore {
     return await this.appendEvent(input);
   }
 
+  async appendNetworkPostFinding(
+    input: AppendFindingEventInput,
+    sourcePostIds: readonly string[],
+  ): Promise<DiscoveryEvent> {
+    return await this.appendEvent(input, undefined, sourcePostIds);
+  }
+
   async appendClaimedCommunicationEvent(
     claim: AgentCommunicationClaim,
     input: AppendCommunicationEventInput,
@@ -323,9 +370,18 @@ implements AgentCommunicationStore {
     return await this.appendEvent(input, claim);
   }
 
+  async appendClaimedNetworkPostFinding(
+    claim: AgentCommunicationClaim,
+    input: AppendFindingEventInput,
+    sourcePostIds: readonly string[],
+  ): Promise<DiscoveryEvent> {
+    return await this.appendEvent(input, claim, sourcePostIds);
+  }
+
   private async appendEvent(
     input: AppendDiscoveryEventInput,
     claim?: AgentCommunicationClaim,
+    sourcePostIds: readonly string[] = [],
   ): Promise<DiscoveryEvent> {
     return await this.database.orm.transaction(async (transaction) => {
       // This workspace row is the commit-order boundary for the append-only
@@ -385,23 +441,48 @@ implements AgentCommunicationStore {
         })
         .onConflictDoNothing({ target: discoveryEvents.idempotencyKey })
         .returning();
-      if (inserted) {
-        return toDiscoveryEvent(inserted);
+      let event = inserted;
+      if (!event) {
+        if (!input.idempotencyKey) {
+          throw new Error('PostgreSQL did not return the appended event.');
+        }
+        const [existing] = await transaction
+          .select()
+          .from(discoveryEvents)
+          .where(eq(discoveryEvents.idempotencyKey, input.idempotencyKey))
+          .limit(1);
+        if (!existing) {
+          throw new Error(
+            `Idempotent event is missing after a concurrent insert: ${input.idempotencyKey}`,
+          );
+        }
+        event = existing;
       }
-      if (!input.idempotencyKey) {
-        throw new Error('PostgreSQL did not return the appended event.');
+      const uniqueSourcePostIds = [...new Set(sourcePostIds)];
+      if (uniqueSourcePostIds.length) {
+        const existingLinks = await transaction
+          .select({ postId: findingPosts.postId })
+          .from(findingPosts)
+          .where(eq(findingPosts.findingSequence, event.sequence))
+          .orderBy(asc(findingPosts.position));
+        if (!existingLinks.length) {
+          await transaction.insert(findingPosts).values(
+            uniqueSourcePostIds.map((postId, position) => ({
+              findingSequence: event.sequence,
+              postId,
+              position,
+            })),
+          );
+        } else if (
+          existingLinks.map(({ postId }) => postId).join('\n')
+          !== uniqueSourcePostIds.join('\n')
+        ) {
+          throw new Error(
+            'An idempotent Finding cannot change its source Posts.',
+          );
+        }
       }
-      const [existing] = await transaction
-        .select()
-        .from(discoveryEvents)
-        .where(eq(discoveryEvents.idempotencyKey, input.idempotencyKey))
-        .limit(1);
-      if (!existing) {
-        throw new Error(
-          `Idempotent event is missing after a concurrent insert: ${input.idempotencyKey}`,
-        );
-      }
-      return toDiscoveryEvent(existing);
+      return toDiscoveryEvent(event);
     });
   }
 
