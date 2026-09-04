@@ -9,8 +9,9 @@
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"yarn server:dev\" \"yarn web:dev\"",
     "build": "yarn server:build && yarn web:build",
-    "test": "yarn workspace @lucid/server test && yarn workspace @lucid/web test && yarn test:simulator",
-    "test:simulator": "tsx --test scripts/**/*.test.ts",
+    "test": "yarn workspace @lucid/server test && yarn workspace @lucid/web test && yarn test:simulator && yarn test:publisher-pilot",
+    "test:simulator": "tsx --test scripts/network-simulator-core.test.ts",
+    "test:publisher-pilot": "tsx --test scripts/publisher-pilot-configuration.integration.test.ts",
     "typecheck": "yarn workspace @lucid/server typecheck && yarn workspace @lucid/web typecheck && tsc -p tsconfig.scripts.json --noEmit",
     "simulate:network": "tsx scripts/network-simulator.ts",
     "simulate:learning": "tsx scripts/longitudinal-network-experiment.ts",
@@ -29,18 +30,23 @@
     "server:db:migrate": "yarn workspace @lucid/server db:migrate",
     "server:db:migrate:production": "yarn workspace @lucid/server db:migrate:production",
     "network:seed": "yarn workspace @lucid/server network:seed",
-    "publisher:install-pilot": "yarn workspace @lucid/server publisher:install-pilot",
+    "publisher:configure-pilot": "tsx scripts/configure-publisher-pilot.ts",
     "web:dev": "yarn workspace @lucid/web dev",
     "web:build": "yarn workspace @lucid/web build"
   },
   "devDependencies": {
     "@trpc/client": "11.16.0",
+    "@types/lodash": "^4.17.24",
     "@types/node": "^22.13.10",
     "@types/seedrandom": "^3.0.8",
     "concurrently": "^9.2.1",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.2",
+    "lodash": "^4.18.1",
     "seedrandom": "^3.0.5",
     "superjson": "^2.2.2",
     "tsx": "^4.19.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "zod": "^4.3.6"
   }
 }

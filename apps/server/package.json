@@ -18,7 +18,6 @@
     "db:migrate": "tsx src/migrate.ts",
     "db:migrate:production": "node dist/migrate.js",
     "network:seed": "tsx src/lucid/information-network/seed.ts",
-    "publisher:install-pilot": "tsx src/lucid/information-network/install-publisher-pilot.ts",
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {

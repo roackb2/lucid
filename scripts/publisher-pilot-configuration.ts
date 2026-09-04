@@ -1,7 +1,11 @@
-/** Explicit, deterministic local installer for the first real publisher Agent. */
+/**
+ * Deterministic development fixture for configuring the first publisher Agent.
+ */
 import { and, asc, eq, sql } from 'drizzle-orm';
 import isEqual from 'lodash/isEqual.js';
-import type { PostgresDatabase } from '../../infrastructure/postgres/database.js';
+import type {
+  PostgresDatabase,
+} from '../apps/server/src/infrastructure/postgres/database.js';
 import {
   postgresAgentJobPublishingPreferences as publishingPreferences,
   postgresAgentJobPublishingTopics as publishingTopics,
@@ -9,8 +13,10 @@ import {
   postgresAgents as agents,
   postgresNetworkProfiles as profiles,
   postgresUsers as users,
-} from '../persistence/postgres/schema.js';
-import { LUCID_WORKSPACE_ID } from '../workspace/workspace-identity.js';
+} from '../apps/server/src/lucid/persistence/postgres/schema.js';
+import {
+  LUCID_WORKSPACE_ID,
+} from '../apps/server/src/lucid/workspace/workspace-identity.js';
 
 const PUBLISHER_PILOT_ID = 'publisher-01-mina-regional-fashion';
 const PILOT_USER_ID = 'fixture-user-mina-chen';
@@ -51,7 +57,7 @@ const PILOT_PREFERENCES = {
   updatedAt: PILOT_CONFIGURED_AT,
 } as const;
 
-export type InformationPublisherPilotReceipt = {
+export type PublisherPilotConfigurationReceipt = {
   pilotId: string;
   profileId: string;
   agentJobId: string;
@@ -60,14 +66,14 @@ export type InformationPublisherPilotReceipt = {
 };
 
 /**
- * Activates Mina's deterministic fixture identity and installs one manual job.
+ * Activates Mina's fixture identity and configures one manual publishing job.
  * Nothing runs here: the Coordinator still needs Lucid admission plus an
  * explicit run request before the Runtime receives any model authority.
  */
-export class PostgresInformationPublisherPilotInstaller {
+export class PostgresPublisherPilotConfigurator {
   constructor(private readonly database: PostgresDatabase) {}
 
-  async install(): Promise<InformationPublisherPilotReceipt> {
+  async configure(): Promise<PublisherPilotConfigurationReceipt> {
     return await this.database.orm.transaction(async (transaction) => {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtext(${PUBLISHER_PILOT_ID}))`,
@@ -105,7 +111,7 @@ export class PostgresInformationPublisherPilotInstaller {
         userId: PILOT_USER_ID,
       })) {
         throw new Error(
-          'Publisher pilot requires the unchanged deterministic Mina Network fixture. Run network:seed first.',
+          'Publisher pilot configuration requires the unchanged deterministic Mina Network fixture. Run network:seed first.',
         );
       }
 
@@ -128,8 +134,12 @@ export class PostgresInformationPublisherPilotInstaller {
         eq(users.registrationKey, PILOT_REGISTRATION_KEY),
       ));
 
-      const [[installedJob], [installedPreferences], installedTopics, [status]] =
-        await Promise.all([
+      const [
+        [configuredJob],
+        [configuredPreferences],
+        configuredTopics,
+        [status],
+      ] = await Promise.all([
           transaction.select({
             id: agentJobs.id,
             workspaceId: agentJobs.workspaceId,
@@ -185,13 +195,13 @@ export class PostgresInformationPublisherPilotInstaller {
         sourceGuidance: PILOT_PREFERENCES.sourceGuidance,
       };
       if (
-        !isEqual(installedJob, expectedJob)
-        || !isEqual(installedPreferences, expectedPreferences)
-        || !isEqual(installedTopics, expectedTopics)
+        !isEqual(configuredJob, expectedJob)
+        || !isEqual(configuredPreferences, expectedPreferences)
+        || !isEqual(configuredTopics, expectedTopics)
         || status?.status !== 'active'
       ) {
         throw new Error(
-          'Publisher pilot conflicts with the saved Mina job configuration.',
+          'Publisher pilot configuration conflicts with the saved Mina job configuration.',
         );
       }
 

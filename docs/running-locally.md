@@ -117,8 +117,8 @@ their feedback, or decide whether a finding is useful.
 ## Prove one controlled publisher
 
 Publisher-01 reuses the deterministic Mina Profile but replaces fixture-only
-behavior with one durable manual Agent job. Apply migrations and install the
-fixture first, then explicitly activate the pilot:
+behavior with one durable manual Agent job. Apply migrations and seed the
+fixture first, then explicitly configure the pilot:
 
 ```bash
 LUCID_AUTH_MODE=development \
@@ -126,8 +126,8 @@ LUCID_NETWORK_FIXTURE_SEED=true \
 yarn network:seed
 
 LUCID_AUTH_MODE=development \
-LUCID_PUBLISHER_PILOT_INSTALL=true \
-yarn publisher:install-pilot
+LUCID_PUBLISHER_PILOT_CONFIGURE=true \
+yarn publisher:configure-pilot
 ```
 
 Neither command runs a model. Keep global dispatch paused while checking the

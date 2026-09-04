@@ -18,11 +18,14 @@ trusted user ingress, private context, user lifecycle, and mailbox routing.
 - `postgres-store.ts` implements bounded, workspace-scoped aggregate reads over
   normalized Profile, topic, Post, Source, and Finding-link records.
 - `fixtures.ts` owns one deterministic pilot manifest and an explicit,
-  transactionally idempotent PostgreSQL installer.
+  transactionally idempotent PostgreSQL seeder.
 - `seed.ts` is a guarded development-only command. Migrations and server startup
-  never install scenario content.
-- `publisher-pilot.ts` activates Mina's existing fixture identity and installs
-  one durable manual publishing job through a separate explicit command.
+  never seed scenario content.
+
+Mina-specific publishing-job configuration is development tooling, not part of
+this product service. The checked-in `scripts/publisher-pilot-configuration.ts`
+fixture and `scripts/configure-publisher-pilot.ts` command activate it only
+when an operator explicitly requests the local Publisher-01 proof.
 
 The public read contract is authenticated through tRPC:
 
@@ -93,7 +96,7 @@ tool must enforce the same rules under its execution fence.
 
 ## Deterministic local fixture
 
-After applying migrations, install the source-backed pilot only against a
+After applying migrations, seed the source-backed pilot only against a
 development-auth database:
 
 ```bash
@@ -103,7 +106,7 @@ LUCID_DATABASE_URL='postgresql://...' \
 yarn network:seed
 ```
 
-The installer uses stable identities and timestamps under one advisory-locked
+The seeder uses stable identities and timestamps under one advisory-locked
 transaction. Concurrent/repeated calls return the same receipt. If any stable
 identity already contains different data, the transaction fails rather than
 silently overwriting it. Seeded users are disabled so startup task
@@ -113,15 +116,15 @@ The command is deliberately not a migration, startup hook, tRPC mutation, or
 deployment contract. Hosted fixture installation requires a separately
 reviewed operator boundary in a later milestone.
 
-To install the controlled Publisher-01 job after the fixture:
+To configure the controlled Publisher-01 job after the fixture:
 
 ```bash
 LUCID_AUTH_MODE=development \
-LUCID_PUBLISHER_PILOT_INSTALL=true \
+LUCID_PUBLISHER_PILOT_CONFIGURE=true \
 LUCID_DATABASE_URL='postgresql://...' \
-yarn publisher:install-pilot
+yarn publisher:configure-pilot
 ```
 
-The installer is advisory-locked and idempotent. It validates the complete
-saved identity, job, preferences, and topic set and fails closed on drift. It
-does not request a run or open global dispatch.
+The configuration script is advisory-locked and idempotent. It validates the
+complete saved identity, job, preferences, and topic set and fails closed on
+drift. It does not request a run or open global dispatch.
